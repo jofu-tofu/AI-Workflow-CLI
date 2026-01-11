@@ -1,0 +1,82 @@
+# Execution Plan - Phase {{PHASE_NUMBER}}
+
+## Overview
+
+**Phase:** {{PHASE_NAME}}
+**Created:** {{DATE}}
+**Status:** Draft
+
+## Context
+
+[Why are we doing this? What's the goal of this phase?]
+
+## Tasks
+
+### Task 1: [Task Name]
+
+**Objective:** [What this task accomplishes]
+
+**Implementation:**
+```xml
+<task>
+  <action>Specific action to take</action>
+  <verification>How to verify completion</verification>
+  <rollback>How to undo if needed</rollback>
+</task>
+```
+
+**Acceptance Criteria:**
+- [ ] Criterion 1
+- [ ] Criterion 2
+
+---
+
+### Task 2: [Task Name]
+
+**Objective:** [What this task accomplishes]
+
+**Implementation:**
+```xml
+<task>
+  <action>Specific action to take</action>
+  <verification>How to verify completion</verification>
+  <rollback>How to undo if needed</rollback>
+</task>
+```
+
+**Acceptance Criteria:**
+- [ ] Criterion 1
+- [ ] Criterion 2
+
+---
+
+### Task 3: [Task Name]
+
+**Objective:** [What this task accomplishes]
+
+**Implementation:**
+```xml
+<task>
+  <action>Specific action to take</action>
+  <verification>How to verify completion</verification>
+  <rollback>How to undo if needed</rollback>
+</task>
+```
+
+**Acceptance Criteria:**
+- [ ] Criterion 1
+- [ ] Criterion 2
+
+---
+
+## Verification
+
+**Phase Complete When:**
+- [ ] All tasks completed
+- [ ] All acceptance criteria met
+- [ ] No regressions introduced
+- [ ] Changes committed atomically
+
+---
+
+**Maximum 3 tasks per plan to maintain fresh context**

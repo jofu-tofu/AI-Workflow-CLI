@@ -1,0 +1,46 @@
+# {{PROJECT_NAME}} - Project State
+
+## Current Status
+
+**Phase:** Not Started
+**Last Updated:** {{DATE}}
+**Working On:** Initial setup
+
+## Key Decisions
+
+### Decision 1: [Title]
+- **Date:** {{DATE}}
+- **Decision:** [What was decided]
+- **Rationale:** [Why this decision was made]
+- **Implications:** [What this means for the project]
+
+---
+
+## Active Blockers
+
+[No blockers currently]
+
+---
+
+## Progress Summary
+
+### Completed
+- Project initialization
+
+### In Progress
+- [None]
+
+### Next Steps
+1. Define project vision and goals
+2. Create initial roadmap
+3. Begin Phase 1
+
+---
+
+## Notes
+
+[Important observations, learnings, or context that doesn't fit elsewhere]
+
+---
+
+**Maintained by:** Get Shit Done workflow

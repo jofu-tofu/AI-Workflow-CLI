@@ -1,0 +1,25 @@
+# {{PROJECT_NAME}} - Deferred Issues
+
+## Future Enhancements
+
+### Enhancement 1: [Title]
+- **Priority:** Low | Medium | High
+- **Description:** [What needs to be done]
+- **Rationale:** [Why this should be considered]
+- **Effort:** Small | Medium | Large
+
+---
+
+## Technical Debt
+
+[Items deferred for later cleanup]
+
+---
+
+## Ideas Backlog
+
+[Captured ideas that aren't currently prioritized]
+
+---
+
+**Last Updated:** {{DATE}}

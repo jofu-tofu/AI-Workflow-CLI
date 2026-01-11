@@ -1,0 +1,28 @@
+# {{PROJECT_NAME}} - Roadmap
+
+## Current Position
+
+**Phase:** Not Started
+**Status:** Planning
+
+## Phase Sequence
+
+### Phase 1: [Phase Name]
+- **Status:** ⏳ Pending
+- **Description:** [What this phase accomplishes]
+- **Tasks:**
+  - [ ] Task 1
+  - [ ] Task 2
+- **Verification Criteria:**
+  - [ ] Criterion 1
+  - [ ] Criterion 2
+
+---
+
+## Completed Phases
+
+[Phases will be moved here upon completion]
+
+---
+
+**Last Updated:** {{DATE}}

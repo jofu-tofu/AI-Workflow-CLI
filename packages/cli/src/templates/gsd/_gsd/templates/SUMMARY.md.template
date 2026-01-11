@@ -1,0 +1,20 @@
+# {{PROJECT_NAME}} - Change Summary
+
+## Commit History
+
+[Atomic commits will be tracked here]
+
+---
+
+## Phase Completions
+
+### Phase 1: [Phase Name]
+**Completed:** [Date]
+**Commits:**
+- `abc1234` - Task 1: Description
+- `def5678` - Task 2: Description
+- `ghi9012` - Task 3: Description
+
+---
+
+**Last Updated:** {{DATE}}

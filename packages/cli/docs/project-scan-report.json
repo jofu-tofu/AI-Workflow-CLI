@@ -1,0 +1,48 @@
+{
+  "workflow_version": "1.2.0",
+  "timestamps": {
+    "started": "2026-01-10T19:15:00.000Z",
+    "last_updated": "2026-01-10T19:35:00.000Z",
+    "completed": "2026-01-10T19:35:00.000Z"
+  },
+  "mode": "initial_scan",
+  "scan_level": "quick",
+  "project_root": "C:\\Users\\fujos\\.pai\\pai-cli",
+  "output_folder": "C:\\Users\\fujos\\.pai\\pai-cli\\docs",
+  "completed_steps": [
+    {
+      "step": "step_1",
+      "status": "completed",
+      "timestamp": "2026-01-10T19:30:00.000Z",
+      "summary": "Classified as monolith with 1 part"
+    },
+    {
+      "step": "step_2",
+      "status": "completed",
+      "timestamp": "2026-01-10T19:32:00.000Z",
+      "summary": "Found 4 existing docs"
+    }
+  ],
+  "current_step": "completed",
+  "findings": {
+    "project_classification": "Monolith, 1 part, TypeScript",
+    "user_context": "Focus on: 1) Command dependencies and what they do, 2) What is modifiable vs foundational, 3) Inherent/founding principles of the project",
+    "technology_stack": "TypeScript + Oclif"
+  },
+  "project_types": [
+    {
+      "part_id": "pai-cli",
+      "project_type_id": "cli",
+      "display_name": "PAI CLI"
+    }
+  ],
+  "outputs_generated": [
+    "project-scan-report.json",
+    "index.md",
+    "project-overview.md",
+    "architecture.md",
+    "source-tree-analysis.md",
+    "development-guide.md"
+  ],
+  "resume_instructions": "Continue from step 2"
+}
