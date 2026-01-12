@@ -16,13 +16,19 @@ npm install -g aiwcli
 
 ```bash
 # Launch Claude Code with AI Workflow CLI context
-aiwcli launch
+aiw launch
 
 # Initialize BMAD workflow in a project
-aiwcli init bmad
+aiw init --method bmad
+
+# Initialize with specific IDE (e.g., Windsurf)
+aiw init --method bmad --ide windsurf
+
+# Initialize with multiple IDEs
+aiw init --method bmad --ide claude --ide windsurf
 
 # Get help
-aiwcli help
+aiw help
 ```
 
 ## Features
@@ -40,12 +46,13 @@ aiwcli help
 
 ## Environment Variables
 
-- `AIWCLI_HOME` - Main installation directory (default: `~/.aiwcli`)
-- `AIWCLI_CONFIG` - Configuration file path (optional)
-- `AIWCLI_DIR` - Root directory for hooks and scripts (optional)
+- `AIW_DIR` - Main installation directory (default: `~/.aiw`)
+- `AIW_CONFIG` - Configuration file path (optional)
 - `DA` - Assistant name (optional)
 
 See [.env.example](./.env.example) for a complete list.
+
+**Note:** Legacy environment variables (`AIWCLI_HOME`, `AIWCLI_CONFIG`, `AIWCLI_DIR`, `PAI_HOME`, `PAI_CONFIG`, `PAI_DIR`) are still supported with deprecation warnings.
 
 ## Migration from PAI CLI
 
@@ -56,8 +63,6 @@ If you're migrating from PAI CLI, see the comprehensive [Migration Guide](./MIGR
 npm uninstall -g pai-cli
 npm install -g aiwcli
 ```
-
-Legacy environment variables (`PAI_HOME`, `PAI_DIR`) are still supported with deprecation warnings.
 
 ## Status
 
