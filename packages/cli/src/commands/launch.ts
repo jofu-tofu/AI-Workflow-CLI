@@ -1,4 +1,4 @@
-import BaseCommand from './base.js'
+import BaseCommand from '../lib/base-command.js'
 import {ProcessSpawnError} from '../lib/errors.js'
 import {spawnProcess} from '../lib/spawn.js'
 import {checkVersionCompatibility, getClaudeCodeVersion} from '../lib/version.js'

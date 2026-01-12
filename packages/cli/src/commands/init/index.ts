@@ -8,7 +8,7 @@ import {updateGitignore} from '../../lib/gitignore-manager.js'
 import {installTemplate} from '../../lib/template-installer.js'
 import {getAvailableTemplates, getTemplatePath} from '../../lib/template-resolver.js'
 import {EXIT_CODES} from '../../types/exit-codes.js'
-import BaseCommand from '../base.js'
+import BaseCommand from '../../lib/base-command.js'
 
 /**
  * Detect if a template is already installed in the given directory.
