@@ -105,6 +105,19 @@ desktop.ini
 *.swp
 *~
 
+# Temporary test directories (created by Claude Code)
+**/tmpclaude-*-cwd
+tmpclaude-*-cwd
+
+# ============================================
+# BUILD ARTIFACTS
+# ============================================
+# TypeScript build info
+**/tsconfig.tsbuildinfo
+
+# Oclif generated manifest
+**/oclif.manifest.json
+
 # Windows artifacts
 nul
 NUL
