@@ -27,6 +27,8 @@ export default class LaunchCommand extends BaseCommand {
   ]
 
   async run(): Promise<void> {
+    let exitCode: number
+
     try {
       // Check Claude Code version compatibility (non-blocking)
       const version = await getClaudeCodeVersion()
@@ -44,10 +46,7 @@ export default class LaunchCommand extends BaseCommand {
       // Spawn Claude Code with sandbox permissions disabled
       // PAI hook system provides safety guardrails
       // Continue launch regardless of version check result (graceful degradation)
-      const exitCode = await spawnProcess('claude', ['--dangerously-skip-permissions'])
-
-      // Pass through Claude Code's exit code
-      this.exit(exitCode)
+      exitCode = await spawnProcess('claude', ['--dangerously-skip-permissions'])
     } catch (error) {
       if (error instanceof ProcessSpawnError) {
         // Actionable error message (already includes installation link)
@@ -57,5 +56,8 @@ export default class LaunchCommand extends BaseCommand {
       // Unexpected error
       this.error('Unexpected launch failure.', {exit: EXIT_CODES.GENERAL_ERROR})
     }
+
+    // Pass through Claude Code's exit code (outside try-catch to avoid catching exit)
+    this.exit(exitCode)
   }
 }
