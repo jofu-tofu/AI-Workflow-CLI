@@ -70,12 +70,7 @@
       "@oclif/plugin-plugins"
     ],
     "repositoryPrefix": "https://github.com/jofu-tofu/AI-Workflow-CLI/blob/main/<%- commandPath %>",
-    "topicSeparator": " ",
-    "topics": {
-      "hello": {
-        "description": "Say hello to the world and others"
-      }
-    }
+    "topicSeparator": " "
   },
   "repository": {
     "type": "git",
