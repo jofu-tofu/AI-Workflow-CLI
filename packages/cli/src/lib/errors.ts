@@ -53,30 +53,41 @@ import {EXIT_CODES, type ExitCode} from '../types/index.js'
  *
  * @example
  * ```typescript
- * throw new PaiError('Unexpected system error occurred. Check logs for details.', EXIT_CODES.GENERAL_ERROR)
+ * throw new AiwError('Unexpected system error occurred. Check logs for details.', EXIT_CODES.GENERAL_ERROR)
  * ```
  */
-export class PaiError extends Error {
+export class AiwError extends Error {
   constructor(
     message: string,
     public readonly exitCode: ExitCode = EXIT_CODES.GENERAL_ERROR,
   ) {
     super(message)
+    this.name = 'AiwError'
+  }
+}
+
+/**
+ * Legacy alias for AiwError
+ * @deprecated Use AiwError instead
+ */
+export class PaiError extends AiwError {
+  constructor(message: string, exitCode: ExitCode = EXIT_CODES.GENERAL_ERROR) {
+    super(message, exitCode)
     this.name = 'PaiError'
   }
 }
 
 /**
- * Error thrown when PAI configuration cannot be found.
- * Indicates AIWCLI_HOME is not set or points to a non-existent directory.
+ * Error thrown when AIW configuration cannot be found.
+ * Indicates AIW_DIR is not set or points to a non-existent directory.
  * Exit code: 3 (ENVIRONMENT_ERROR)
  *
  * @example
  * ```typescript
- * throw new ConfigNotFoundError('AIWCLI_HOME not found. Set AIWCLI_HOME env var or run \'pai setup\'.')
+ * throw new ConfigNotFoundError('AIW_DIR not found. Set AIW_DIR env var or run \'aiw setup\'.')
  * ```
  */
-export class ConfigNotFoundError extends PaiError {
+export class ConfigNotFoundError extends AiwError {
   constructor(message: string) {
     super(message, EXIT_CODES.ENVIRONMENT_ERROR)
     this.name = 'ConfigNotFoundError'
@@ -93,7 +104,7 @@ export class ConfigNotFoundError extends PaiError {
  * throw new EnvironmentError('Claude Code CLI not found in PATH. Install from https://claude.ai.')
  * ```
  */
-export class EnvironmentError extends PaiError {
+export class EnvironmentError extends AiwError {
   constructor(message: string) {
     super(message, EXIT_CODES.ENVIRONMENT_ERROR)
     this.name = 'EnvironmentError'
@@ -110,7 +121,7 @@ export class EnvironmentError extends PaiError {
  * throw new InvalidUsageError('Invalid --format value \'xyz\'. Use \'json\' or \'text\'.')
  * ```
  */
-export class InvalidUsageError extends PaiError {
+export class InvalidUsageError extends AiwError {
   constructor(message: string) {
     super(message, EXIT_CODES.INVALID_USAGE)
     this.name = 'InvalidUsageError'
@@ -127,7 +138,7 @@ export class InvalidUsageError extends PaiError {
  * throw new ProcessSpawnError('Command not found: claude. Install Claude Code from https://claude.ai/download.')
  * ```
  */
-export class ProcessSpawnError extends PaiError {
+export class ProcessSpawnError extends AiwError {
   constructor(
     message: string,
     public readonly code?: string,
@@ -144,10 +155,10 @@ export class ProcessSpawnError extends PaiError {
  * @returns Formatted error message in format: "{what}. {howToFix}."
  * @example
  * formatErrorMessage(
- *   'AIWCLI_HOME directory not found',
- *   'Set AIWCLI_HOME env var or run "aiwcli setup"'
+ *   'AIW_DIR directory not found',
+ *   'Set AIW_DIR env var or run "aiw setup"'
  * )
- * // Returns: "AIWCLI_HOME directory not found. Set AIWCLI_HOME env var or run \"pai setup\"."
+ * // Returns: "AIW_DIR directory not found. Set AIW_DIR env var or run \"aiw setup\"."
  */
 export function formatErrorMessage(what: string, howToFix: string): string {
   return `${what}. ${howToFix}.`

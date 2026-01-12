@@ -39,12 +39,12 @@ export function debug(message: string): void {
 
 /**
  * Log configuration details in debug mode.
- * Only logs AIWCLI_HOME path to avoid accidentally logging sensitive data.
+ * Only logs AIW_DIR path to avoid accidentally logging sensitive data.
  * @param config - Configuration object
- * @param config.aiwcliHome - AIWCLI_HOME path
+ * @param config.aiwDir - AIW_DIR path
  */
-export function debugConfig(config: {[key: string]: unknown; paiHome: string}): void {
-  debug(`AIWCLI_HOME resolved to ${config.aiwcliHome}`)
+export function debugConfig(config: {[key: string]: unknown; aiwDir: string}): void {
+  debug(`AIW_DIR resolved to ${config.aiwDir}`)
   // NOTE: Do NOT log full config - may contain API keys/tokens in future
 }
 

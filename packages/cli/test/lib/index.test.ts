@@ -1,46 +1,46 @@
 import {expect} from 'chai'
 
 import {
+  AiwError,
+  type AiwcliConfig,
   ConfigNotFoundError,
   debug,
   EnvironmentError,
-  getPaiHome,
+  getAiwDir,
   isDebugEnabled,
   isWorkspace,
   loadConfig,
-  type PaiConfig,
-  PaiError,
   resolvePath,
   setDebugEnabled,
-  validatePaiHome,
+  validateAiwDir,
 } from '../../src/lib/index.js'
 
 describe('lib/index barrel exports', () => {
-  it('exports getPaiHome from config', () => {
-    expect(getPaiHome).to.be.a('function')
+  it('exports getAiwDir from config', () => {
+    expect(getAiwDir).to.be.a('function')
   })
 
   it('exports loadConfig from config', () => {
     expect(loadConfig).to.be.a('function')
   })
 
-  it('exports validatePaiHome from config', () => {
-    expect(validatePaiHome).to.be.a('function')
+  it('exports validateAiwDir from config', () => {
+    expect(validateAiwDir).to.be.a('function')
   })
 
-  it('exports PaiConfig interface', () => {
-    const config: PaiConfig = {
+  it('exports AiwcliConfig interface', () => {
+    const config: AiwcliConfig = {
       claudeConfigPath: '/test/.claude',
-      paiHome: '/test',
+      aiwDir: '/test',
       settingsPath: '/test/.claude/settings.json',
     }
-    expect(config.paiHome).to.equal('/test')
+    expect(config.aiwDir).to.equal('/test')
     expect(config.claudeConfigPath).to.equal('/test/.claude')
     expect(config.settingsPath).to.equal('/test/.claude/settings.json')
   })
 
   it('exports error classes', () => {
-    expect(PaiError).to.be.a('function')
+    expect(AiwError).to.be.a('function')
     expect(ConfigNotFoundError).to.be.a('function')
     expect(EnvironmentError).to.be.a('function')
   })

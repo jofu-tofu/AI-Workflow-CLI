@@ -1,39 +1,39 @@
 import {expect} from 'chai'
 
 import {
+  AiwError,
   ConfigNotFoundError,
   EnvironmentError,
   formatErrorMessage,
   InvalidUsageError,
-  PaiError,
   ProcessSpawnError,
 } from '../../src/lib/errors.js'
 import {EXIT_CODES} from '../../src/types/exit-codes.js'
 
 describe('errors', () => {
-  describe('PaiError', () => {
+  describe('AiwError', () => {
     it('has correct name', () => {
-      const error = new PaiError('test message')
-      expect(error.name).to.equal('PaiError')
+      const error = new AiwError('test message')
+      expect(error.name).to.equal('AiwError')
     })
 
     it('stores message correctly', () => {
-      const error = new PaiError('test message')
+      const error = new AiwError('test message')
       expect(error.message).to.equal('test message')
     })
 
     it('defaults to GENERAL_ERROR exit code', () => {
-      const error = new PaiError('test message')
+      const error = new AiwError('test message')
       expect(error.exitCode).to.equal(EXIT_CODES.GENERAL_ERROR)
     })
 
     it('accepts custom exit code', () => {
-      const error = new PaiError('test message', EXIT_CODES.INVALID_USAGE)
+      const error = new AiwError('test message', EXIT_CODES.INVALID_USAGE)
       expect(error.exitCode).to.equal(EXIT_CODES.INVALID_USAGE)
     })
 
     it('extends Error', () => {
-      const error = new PaiError('test message')
+      const error = new AiwError('test message')
       expect(error).to.be.instanceOf(Error)
     })
   })
@@ -49,9 +49,9 @@ describe('errors', () => {
       expect(error.exitCode).to.equal(EXIT_CODES.ENVIRONMENT_ERROR)
     })
 
-    it('extends PaiError', () => {
+    it('extends AiwError', () => {
       const error = new ConfigNotFoundError('config not found')
-      expect(error).to.be.instanceOf(PaiError)
+      expect(error).to.be.instanceOf(AiwError)
     })
   })
 
@@ -66,9 +66,9 @@ describe('errors', () => {
       expect(error.exitCode).to.equal(EXIT_CODES.ENVIRONMENT_ERROR)
     })
 
-    it('extends PaiError', () => {
+    it('extends AiwError', () => {
       const error = new EnvironmentError('environment issue')
-      expect(error).to.be.instanceOf(PaiError)
+      expect(error).to.be.instanceOf(AiwError)
     })
   })
 
@@ -83,9 +83,9 @@ describe('errors', () => {
       expect(error.exitCode).to.equal(EXIT_CODES.INVALID_USAGE)
     })
 
-    it('extends PaiError', () => {
+    it('extends AiwError', () => {
       const error = new InvalidUsageError('invalid argument')
-      expect(error).to.be.instanceOf(PaiError)
+      expect(error).to.be.instanceOf(AiwError)
     })
 
     it('preserves custom message', () => {
@@ -106,9 +106,9 @@ describe('errors', () => {
       expect(error.exitCode).to.equal(EXIT_CODES.ENVIRONMENT_ERROR)
     })
 
-    it('extends PaiError', () => {
+    it('extends AiwError', () => {
       const error = new ProcessSpawnError('spawn failed')
-      expect(error).to.be.instanceOf(PaiError)
+      expect(error).to.be.instanceOf(AiwError)
     })
 
     it('stores error code when provided', () => {
@@ -131,8 +131,8 @@ describe('errors', () => {
 
   describe('formatErrorMessage', () => {
     it('formats message with period separation', () => {
-      const result = formatErrorMessage('PAI_HOME directory not found', 'Set PAI_HOME env var or run "pai setup"')
-      expect(result).to.equal('PAI_HOME directory not found. Set PAI_HOME env var or run "pai setup".')
+      const result = formatErrorMessage('AIW_DIR directory not found', 'Set AIW_DIR env var or run "aiw setup"')
+      expect(result).to.equal('AIW_DIR directory not found. Set AIW_DIR env var or run "aiw setup".')
     })
 
     it('works with short messages', () => {

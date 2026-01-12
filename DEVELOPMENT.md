@@ -2,34 +2,34 @@
 
 ## Context & Motivation
 
-The AI Workflow CLI architecture requires `AIWCLI_DIR` to locate code and data across the entire codebase. Without proper configuration, tests access wrong paths, create files in incorrect locations, and development work pollutes production environments. This guide ensures isolated development with reliable test execution.
+The AI Workflow CLI architecture requires `AIW_DIR` to locate code and data across the entire codebase. Without proper configuration, tests access wrong paths, create files in incorrect locations, and development work pollutes production environments. This guide ensures isolated development with reliable test execution.
 
 ## Critical Environment Setup
 
 Before running ANY tests or development commands, configure your environment. This prevents path errors, wrong file locations, and cross-environment pollution.
 
-### Step 1: Set AIWCLI_DIR
+### Step 1: Set AIW_DIR
 
 Navigate to your development worktree root, then set the environment variable:
 
 **PowerShell (Windows):**
 ```powershell
-$env:AIWCLI_DIR = $PWD.Path
+$env:AIW_DIR = $PWD.Path
 ```
 
 **Bash (Unix/Git Bash):**
 ```bash
-export AIWCLI_DIR="$(pwd)"
+export AIW_DIR="$(pwd)"
 ```
 
 ### Step 2: Verify Configuration
 
 ```bash
 # PowerShell
-echo $env:AIWCLI_DIR
+echo $env:AIW_DIR
 
 # Bash
-echo $AIWCLI_DIR
+echo $AIW_DIR
 ```
 
 **Expected output:** Your current worktree directory path
@@ -41,32 +41,32 @@ bun test
 ```
 
 **Success:** Tests run without path errors
-**Failure:** AIWCLI_DIR not set correctly - repeat Step 1
+**Failure:** AIW_DIR not set correctly - repeat Step 1
 
-## How AIWCLI_DIR Works
+## How AIW_DIR Works
 
-The AI Workflow CLI uses `AIWCLI_DIR` as the root path for all resource location:
+The AI Workflow CLI uses `AIW_DIR` as the root path for all resource location:
 
 **Code locations:**
-- `$AIWCLI_DIR/hooks/` - Git hooks and automation
-- `$AIWCLI_DIR/scripts/` - Utility scripts
-- `$AIWCLI_DIR/skills/` - Skill definitions
+- `$AIW_DIR/hooks/` - Git hooks and automation
+- `$AIW_DIR/scripts/` - Utility scripts
+- `$AIW_DIR/skills/` - Skill definitions
 
 **Data locations:**
-- `$AIWCLI_DIR/mem-store/` - Memory system data
-- `$AIWCLI_DIR/MEMORY/` - Session and state data
-- `$AIWCLI_DIR/agentic_logs/` - Agent execution logs
+- `$AIW_DIR/mem-store/` - Memory system data
+- `$AIW_DIR/MEMORY/` - Session and state data
+- `$AIW_DIR/agentic_logs/` - Agent execution logs
 
 **Environment isolation:**
-- **Development:** `AIWCLI_DIR=$(pwd)` - Your worktree (isolated testing)
-- **Production:** `AIWCLI_DIR=~/.aiwcli` - Global installation (live system)
+- **Development:** `AIW_DIR=$(pwd)` - Your worktree (isolated testing)
+- **Production:** `AIW_DIR=~/.aiw` - Global installation (live system)
 
 ## Development vs Production
 
-| Environment | AIWCLI_DIR Value | Purpose |
+| Environment | AIW_DIR Value | Purpose |
 |-------------|---------------|---------|
 | **Development** | `$(pwd)` (worktree root) | Isolated testing in development branch |
-| **Production** | `~/.aiwcli` or `$HOME\.aiwcli` | Deployed global AI Workflow CLI |
+| **Production** | `~/.aiw` or `$HOME\.aiw` | Deployed global AI Workflow CLI |
 
 ## Working with Hooks
 
@@ -75,8 +75,8 @@ Claude Code uses a **per-directory** hook system. Hooks are only active when Cla
 ### Hook Architecture
 
 **Production AI Workflow CLI:**
-- Location: `$HOME/.aiwcli/.claude/settings.json`
-- Active when: Working in `~/.aiwcli` directory
+- Location: `$HOME/.aiw/.claude/settings.json`
+- Active when: Working in `~/.aiw` directory
 - Purpose: Full AI Workflow CLI hooks (memory, security, context loading)
 
 **Development (this repository):**
@@ -93,9 +93,9 @@ Claude Code uses a **per-directory** hook system. Hooks are only active when Cla
 
 When working on hook code in this repository:
 
-1. **Set AIWCLI_DIR to your worktree** (as per standard workflow):
+1. **Set AIW_DIR to your worktree** (as per standard workflow):
    ```powershell
-   $env:AIWCLI_DIR = $PWD.Path
+   $env:AIW_DIR = $PWD.Path
    ```
 
 2. **Create local .claude/settings.json** (if testing hooks):
@@ -112,8 +112,8 @@ When working on hook code in this repository:
 
 4. **Verify hook behavior**:
    - Check terminal output for hook execution messages
-   - Verify files are written to `$AIWCLI_DIR/history/` (your worktree)
-   - Not writing to production `~/.aiwcli/history/`
+   - Verify files are written to `$AIW_DIR/history/` (your worktree)
+   - Not writing to production `~/.aiw/history/`
 
 5. **When done**, remove `.claude/settings.json` to disable hooks:
    ```powershell
@@ -133,7 +133,7 @@ Each hook serves a specific purpose in the AI Workflow CLI:
    - Sends events to observability
 
 2. **load-core-context.ts** - Context injection
-   - Loads CORE skill from `$AIWCLI_DIR/skills/CORE/SKILL.md`
+   - Loads CORE skill from `$AIW_DIR/skills/CORE/SKILL.md`
    - Injects into Claude's context as `<system-reminder>`
    - Skips for subagent sessions
 
@@ -149,7 +149,7 @@ Each hook serves a specific purpose in the AI Workflow CLI:
 
 4. **capture-all-events.ts** - Universal event logger
    - Captures ALL hook events to JSONL files
-   - Location: `$AIWCLI_DIR/history/raw-outputs/YYYY-MM/YYYY-MM-DD_all-events.jsonl`
+   - Location: `$AIW_DIR/history/raw-outputs/YYYY-MM/YYYY-MM-DD_all-events.jsonl`
    - Tracks agent types and session mapping
    - Runs on: SessionStart, PreToolUse, PostToolUse, Stop, SubagentStop, SessionEnd, UserPromptSubmit
 
@@ -186,7 +186,7 @@ Each hook serves a specific purpose in the AI Workflow CLI:
 
 ### Hook Development Best Practices
 
-1. **Never test hooks in production** - Always use a development worktree with `AIWCLI_DIR=$(pwd)`
+1. **Never test hooks in production** - Always use a development worktree with `AIW_DIR=$(pwd)`
 
 2. **Check hook output** - Hooks write to stderr for logging; Claude sees stdout
 
@@ -195,7 +195,7 @@ Each hook serves a specific purpose in the AI Workflow CLI:
    - `2` - Block operation (security-validator)
    - Non-zero - Error, operation may be blocked
 
-4. **Memory/History writes** - All hooks write to `$AIWCLI_DIR/history/`, verify it's your worktree
+4. **Memory/History writes** - All hooks write to `$AIW_DIR/history/`, verify it's your worktree
 
 5. **Cross-platform** - Hooks must work on Windows (PowerShell) and Unix (bash)
 
@@ -221,7 +221,7 @@ Follow this pattern for all development work:
 
 1. **Create branch/worktree** for your feature or fix
 2. **Navigate to worktree root** in your terminal
-3. **Set AIWCLI_DIR** using commands in Step 1 above
+3. **Set AIW_DIR** using commands in Step 1 above
 4. **Verify configuration** using Step 2 above
 5. **Run initial tests** to confirm environment is correct
 6. **Develop changes** iteratively
@@ -235,22 +235,22 @@ Use this section to resolve common development issues.
 
 ### Issue: Tests fail with "path not found" errors
 
-**Cause:** AIWCLI_DIR environment variable not set
+**Cause:** AIW_DIR environment variable not set
 
 **Solution:**
 1. Navigate to worktree root
-2. Run: `$env:AIWCLI_DIR = $PWD.Path` (PowerShell) or `export AIWCLI_DIR="$(pwd)"` (Bash)
-3. Verify: `echo $env:AIWCLI_DIR` should show your worktree path
+2. Run: `$env:AIW_DIR = $PWD.Path` (PowerShell) or `export AIW_DIR="$(pwd)"` (Bash)
+3. Verify: `echo $env:AIW_DIR` should show your worktree path
 4. Run tests again
 
 ### Issue: Files created in unexpected locations
 
-**Cause:** AIWCLI_DIR points to wrong directory
+**Cause:** AIW_DIR points to wrong directory
 
 **Solution:**
-1. Check current AIWCLI_DIR: `echo $env:AIWCLI_DIR`
+1. Check current AIW_DIR: `echo $env:AIW_DIR`
 2. Compare to current directory: `pwd`
-3. If different, set AIWCLI_DIR to current directory
+3. If different, set AIW_DIR to current directory
 4. Verify configuration
 
 ### Issue: Cannot find types or modules
@@ -264,11 +264,11 @@ Use this section to resolve common development issues.
 
 ### Issue: Tests pass locally but fail in CI
 
-**Cause:** CI environment missing AIWCLI_DIR configuration
+**Cause:** CI environment missing AIW_DIR configuration
 
 **Solution:**
 1. Check CI configuration file
-2. Ensure AIWCLI_DIR is set in CI environment
+2. Ensure AIW_DIR is set in CI environment
 3. Verify CI uses correct directory structure
 
 ## Deployment Checklist
@@ -283,10 +283,10 @@ Complete all items before deploying to production:
 - [ ] All dependencies in package.json are production-ready
 
 **Environment Configuration:**
-- [ ] Set AIWCLI_DIR to production path
-  - PowerShell: `$env:AIWCLI_DIR = "$HOME\.aiwcli"`
-  - Bash: `export AIWCLI_DIR="$HOME/.aiwcli"`
-- [ ] Verify production AIWCLI_DIR: `echo $env:AIWCLI_DIR`
+- [ ] Set AIW_DIR to production path
+  - PowerShell: `$env:AIW_DIR = "$HOME\.aiw"`
+  - Bash: `export AIW_DIR="$HOME/.aiw"`
+- [ ] Verify production AIW_DIR: `echo $env:AIW_DIR`
 
 **Deployment Steps:**
 - [ ] Copy code to production location
@@ -304,17 +304,17 @@ Complete all items before deploying to production:
 
 Development environment is correctly configured when:
 
-✅ AIWCLI_DIR environment variable is set and verified
+✅ AIW_DIR environment variable is set and verified
 ✅ `bun test` runs without path-related errors
-✅ Files are created in worktree, not in global .aiwcli directory
+✅ Files are created in worktree, not in global .aiw directory
 ✅ Changes can be made without affecting production environment
 ✅ All tests pass consistently
 
 ## Development Best Practices
 
-1. **Set AIWCLI_DIR first** - Every development session starts with environment configuration
-2. **Verify before running** - Always check AIWCLI_DIR is correct before tests or code execution
+1. **Set AIW_DIR first** - Every development session starts with environment configuration
+2. **Verify before running** - Always check AIW_DIR is correct before tests or code execution
 3. **Test frequently** - Run tests after each meaningful change
-4. **Isolate environments** - Keep development and production strictly separated via AIWCLI_DIR
+4. **Isolate environments** - Keep development and production strictly separated via AIW_DIR
 5. **Follow patterns** - Match existing code structure and conventions
 6. **Document changes** - Update relevant documentation when modifying behavior

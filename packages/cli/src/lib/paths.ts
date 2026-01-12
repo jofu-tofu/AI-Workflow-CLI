@@ -98,13 +98,13 @@ export function resolvePath(...segments: string[]): string {
 }
 
 /**
- * Check if directory is a PAI workspace (contains .aiwcli directory marker).
+ * Check if directory is an AI Workflow workspace (contains .aiwcli directory marker).
  * Per AC3: The marker must be a directory, not a file.
  */
 export function isWorkspace(dir: string): boolean {
-  const paiPath = join(dir, '.aiwcli')
+  const aiwPath = join(dir, '.aiwcli')
   try {
-    return existsSync(paiPath) && statSync(paiPath).isDirectory()
+    return existsSync(aiwPath) && statSync(aiwPath).isDirectory()
   } catch {
     return false
   }
@@ -135,7 +135,7 @@ export function findWorkspaceRoot(startDir: string): null | string {
 }
 
 /**
- * Get the workspace path if in a PAI workspace, or null otherwise.
+ * Get the workspace path if in an AI Workflow workspace, or null otherwise.
  * Alias for findWorkspaceRoot with current directory as default.
  * @param startDir - Directory to start searching from (defaults to cwd)
  * @returns Path to workspace root, or null if not in a workspace or cwd unavailable

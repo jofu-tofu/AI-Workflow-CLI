@@ -26,22 +26,9 @@ describe('Exit Code Consistency', () => {
       expect(output).to.include('EXIT CODES')
     })
 
-    it('returns 0 when setup help is displayed', () => {
-      const output = execSync(`${bin} setup --help`, {encoding: 'utf8'})
-      expect(output).to.include('Configure PAI hooks')
-      expect(output).to.include('EXIT CODES')
-    })
-
     it('returns 0 when global help is displayed', () => {
       const output = execSync(`${bin} --help`, {encoding: 'utf8'})
-      expect(output).to.include('PAI CLI')
-    })
-
-    it('returns 0 when setup succeeds', () => {
-      // This test may need mocking/cleanup in actual environment
-      // For now, verify --help works (setup itself may fail in CI)
-      const output = execSync(`${bin} setup --help`, {encoding: 'utf8'})
-      expect(output).to.be.a('string')
+      expect(output).to.include('AI Workflow CLI')
     })
   })
 
@@ -116,20 +103,11 @@ describe('Exit Code Consistency', () => {
       expect(output).to.include('2  Invalid usage')
       expect(output).to.include('3  Environment error')
     })
-
-    it('setup command documents exit codes', () => {
-      const output = execSync(`${bin} setup --help`, {encoding: 'utf8'})
-      expect(output).to.include('EXIT CODES')
-      expect(output).to.include('0  Success')
-      expect(output).to.include('1  General error')
-      expect(output).to.include('2  Invalid usage')
-      expect(output).to.include('3  Environment error')
-    })
   })
 
   describe('AC6: Exit Codes Consistent Across All Commands', () => {
     it('all commands use same exit code for invalid flags', () => {
-      const commands = ['launch', 'setup']
+      const commands = ['launch']
 
       for (const cmd of commands) {
         try {
@@ -144,7 +122,7 @@ describe('Exit Code Consistency', () => {
     })
 
     it('all commands use same exit code for help', () => {
-      const commands = ['launch', 'setup']
+      const commands = ['launch']
 
       for (const cmd of commands) {
         // Help should succeed with exit 0

@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "author": "jofu-tofu",
   "bin": {
-    "aiwcli": "./bin/run.js"
+    "aiw": "./bin/run.js"
   },
   "bugs": {
     "url": "https://github.com/jofu-tofu/AI-Workflow-CLI/issues"
@@ -61,8 +61,8 @@
   "main": "dist/index.js",
   "type": "module",
   "oclif": {
-    "bin": "aiwcli",
-    "dirname": "aiwcli",
+    "bin": "aiw",
+    "dirname": "aiw",
     "commands": "./dist/commands",
     "plugins": [
       "@oclif/plugin-autocomplete",

@@ -5,13 +5,12 @@
 
 // Configuration resolution
 export {
-  getAiwcliHomeDir,
-  loadConfig,
   type AiwcliConfig,
-  validateAiwcliHome,
-  // Legacy exports (deprecated)
+  getAiwDir,
   getPaiHome,
+  loadConfig,
   type PaiConfig,
+  validateAiwDir,
   validatePaiHome,
 } from './config.js'
 
@@ -20,6 +19,8 @@ export {debug, debugConfig, debugSpawn, debugVersion, isDebugEnabled, setDebugEn
 
 // Environment variable compatibility
 export {
+  getAiwConfig,
+  getAiwDir as getAiwDirFromEnv,
   getAiwcliConfig,
   getAiwcliDir,
   getAiwcliHome,
@@ -29,10 +30,12 @@ export {
 
 // Custom error classes and utilities
 export {
+  AiwError,
   ConfigNotFoundError,
   EnvironmentError,
   formatErrorMessage,
   InvalidUsageError,
+  // Legacy exports (deprecated)
   PaiError,
   ProcessSpawnError,
 } from './errors.js'

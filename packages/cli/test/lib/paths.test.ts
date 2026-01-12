@@ -90,7 +90,7 @@ describe('paths', () => {
 
     it('returns true for existing file', async () => {
       // Create temp file
-      const tempDir = mkdtempSync(join(tmpdir(), 'pai-test-'))
+      const tempDir = mkdtempSync(join(tmpdir(), 'aiw-test-'))
       const tempFile = join(tempDir, 'test.txt')
       const {writeFileSync} = await import('node:fs')
       writeFileSync(tempFile, 'test')
@@ -126,8 +126,8 @@ describe('paths', () => {
     })
 
     it('expands ~/ with nested paths', () => {
-      const result = expandPath('~/.pai/config')
-      expect(result).to.equal(join(getHomePath(), '.pai', 'config'))
+      const result = expandPath('~/.aiw/config')
+      expect(result).to.equal(join(getHomePath(), '.aiw', 'config'))
     })
 
     it('does not expand ~ in middle of path', () => {
@@ -226,16 +226,16 @@ describe('paths', () => {
 
   describe('isWorkspace', () => {
     it('returns false for non-workspace directory', () => {
-      // Use a directory that definitely doesn't have .pai
+      // Use a directory that definitely doesn't have .aiw
       const result = isWorkspace('/nonexistent/path/that/does/not/exist')
       expect(result).to.be.false
     })
 
-    it('returns true for directory containing .pai marker', () => {
-      // Create temp directory with .pai marker
-      const tempDir = mkdtempSync(join(tmpdir(), 'pai-test-'))
-      const paiMarker = join(tempDir, '.pai')
-      mkdirSync(paiMarker)
+    it('returns true for directory containing .aiw marker', () => {
+      // Create temp directory with .aiw marker
+      const tempDir = mkdtempSync(join(tmpdir(), 'aiw-test-'))
+      const aiwMarker = join(tempDir, '.aiw')
+      mkdirSync(aiwMarker)
 
       try {
         const result = isWorkspace(tempDir)
@@ -251,11 +251,11 @@ describe('paths', () => {
       expect(result).to.be.a('boolean')
     })
 
-    it('returns false when .pai is a file, not a directory', () => {
-      // Create temp directory with .pai as a FILE
-      const tempDir = mkdtempSync(join(tmpdir(), 'pai-test-'))
-      const paiFile = join(tempDir, '.pai')
-      writeFileSync(paiFile, 'not a directory')
+    it('returns false when .aiw is a file, not a directory', () => {
+      // Create temp directory with .aiw as a FILE
+      const tempDir = mkdtempSync(join(tmpdir(), 'aiw-test-'))
+      const aiwFile = join(tempDir, '.aiw')
+      writeFileSync(aiwFile, 'not a directory')
 
       try {
         const result = isWorkspace(tempDir)
@@ -265,23 +265,23 @@ describe('paths', () => {
       }
     })
 
-    it('returns true when .pai is a symlink to a directory', () => {
+    it('returns true when .aiw is a symlink to a directory', () => {
       // Create temp directories
-      const tempDir = mkdtempSync(join(tmpdir(), 'pai-test-'))
-      const targetDir = mkdtempSync(join(tmpdir(), 'pai-target-'))
-      const paiDir = join(targetDir, 'actual-pai')
-      mkdirSync(paiDir)
+      const tempDir = mkdtempSync(join(tmpdir(), 'aiw-test-'))
+      const targetDir = mkdtempSync(join(tmpdir(), 'aiw-target-'))
+      const aiwDir = join(targetDir, 'actual-aiw')
+      mkdirSync(aiwDir)
 
-      const paiLink = join(tempDir, '.pai')
+      const aiwLink = join(tempDir, '.aiw')
 
       try {
         // Create symlink (use 'junction' on Windows for directory symlinks)
         try {
-          symlinkSync(paiDir, paiLink, 'junction')
+          symlinkSync(aiwDir, aiwLink, 'junction')
         } catch {
           // If junction fails, try regular symlink (may require admin on Windows)
           try {
-            symlinkSync(paiDir, paiLink, 'dir')
+            symlinkSync(aiwDir, aiwLink, 'dir')
           } catch {
             // Skip test if symlinks not supported
             return
@@ -299,7 +299,7 @@ describe('paths', () => {
 
   describe('findWorkspaceRoot', () => {
     it('returns null when no workspace found in hierarchy', () => {
-      const tempDir = mkdtempSync(join(tmpdir(), 'pai-test-'))
+      const tempDir = mkdtempSync(join(tmpdir(), 'aiw-test-'))
 
       try {
         const result = findWorkspaceRoot(tempDir)
@@ -312,8 +312,8 @@ describe('paths', () => {
     })
 
     it('finds workspace in current directory', () => {
-      const tempDir = mkdtempSync(join(tmpdir(), 'pai-test-'))
-      mkdirSync(join(tempDir, '.pai'))
+      const tempDir = mkdtempSync(join(tmpdir(), 'aiw-test-'))
+      mkdirSync(join(tempDir, '.aiw'))
 
       try {
         const result = findWorkspaceRoot(tempDir)
@@ -324,10 +324,10 @@ describe('paths', () => {
     })
 
     it('finds workspace in parent directory', () => {
-      const tempDir = mkdtempSync(join(tmpdir(), 'pai-test-'))
+      const tempDir = mkdtempSync(join(tmpdir(), 'aiw-test-'))
       const subDir = join(tempDir, 'subdir', 'nested')
       mkdirSync(subDir, {recursive: true})
-      mkdirSync(join(tempDir, '.pai'))
+      mkdirSync(join(tempDir, '.aiw'))
 
       try {
         const result = findWorkspaceRoot(subDir)
@@ -338,11 +338,11 @@ describe('paths', () => {
     })
 
     it('returns closest workspace when multiple exist', () => {
-      const tempDir = mkdtempSync(join(tmpdir(), 'pai-test-'))
+      const tempDir = mkdtempSync(join(tmpdir(), 'aiw-test-'))
       const subWorkspace = join(tempDir, 'subworkspace')
-      mkdirSync(join(tempDir, '.pai'))
+      mkdirSync(join(tempDir, '.aiw'))
       mkdirSync(subWorkspace)
-      mkdirSync(join(subWorkspace, '.pai'))
+      mkdirSync(join(subWorkspace, '.aiw'))
 
       try {
         const result = findWorkspaceRoot(subWorkspace)
@@ -355,7 +355,7 @@ describe('paths', () => {
 
   describe('getWorkspacePath', () => {
     it('returns null when no workspace found in hierarchy', () => {
-      const tempDir = mkdtempSync(join(tmpdir(), 'pai-test-'))
+      const tempDir = mkdtempSync(join(tmpdir(), 'aiw-test-'))
 
       try {
         const result = getWorkspacePath(tempDir)
@@ -368,8 +368,8 @@ describe('paths', () => {
     })
 
     it('finds workspace when given directory', () => {
-      const tempDir = mkdtempSync(join(tmpdir(), 'pai-test-'))
-      mkdirSync(join(tempDir, '.pai'))
+      const tempDir = mkdtempSync(join(tmpdir(), 'aiw-test-'))
+      mkdirSync(join(tempDir, '.aiw'))
 
       try {
         const result = getWorkspacePath(tempDir)

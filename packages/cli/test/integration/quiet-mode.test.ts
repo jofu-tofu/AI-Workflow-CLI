@@ -64,13 +64,6 @@ describe('Quiet Mode Integration', () => {
       expect(result).to.include('Launch')
     })
 
-    it('setup command respects quiet mode', () => {
-      const result = execSync(`${binPath} setup --help --quiet`, {
-        encoding: 'utf8',
-      })
-      expect(result).to.include('Setup')
-    })
-
     it('hello command respects quiet mode', () => {
       const result = execSync(`${binPath} hello --help --quiet`, {
         encoding: 'utf8',
@@ -86,13 +79,6 @@ describe('Quiet Mode Integration', () => {
       })
       expect(result).to.include('--quiet')
       expect(result).to.include('Suppress informational output')
-    })
-
-    it('--quiet flag documented in setup help', () => {
-      const result = execSync(`${binPath} setup --help`, {
-        encoding: 'utf8',
-      })
-      expect(result).to.include('--quiet')
     })
   })
 
@@ -111,7 +97,7 @@ describe('Quiet Mode Integration', () => {
       const result = execSync(`${binPath} --help --quiet`, {
         encoding: 'utf8',
       })
-      expect(result).to.include('PAI CLI')
+      expect(result).to.include('AI Workflow CLI')
     })
   })
 })

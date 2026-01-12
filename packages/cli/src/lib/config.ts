@@ -3,7 +3,7 @@ import {homedir} from 'node:os'
 import {join} from 'node:path'
 
 import {debug} from './debug.js'
-import {getAiwcliHome} from './env-compat.js'
+import {getAiwDir as getAiwDirFromEnv} from './env-compat.js'
 import {ConfigNotFoundError} from './errors.js'
 
 /**
@@ -12,52 +12,52 @@ import {ConfigNotFoundError} from './errors.js'
  */
 export interface AiwcliConfig {
   claudeConfigPath: string
-  aiwcliHome: string
+  aiwDir: string
   settingsPath: string
 }
 
 /**
  * Resolve AI Workflow CLI home directory.
- * Priority: AIWCLI_HOME env var > AIWCLI_HOME env var (legacy) > ~/.aiwcli default
+ * Priority: AIW_DIR env var > AIW_DIR env var (legacy) > ~/.aiw default
  */
-export function getAiwcliHomeDir(): string {
+export function getAiwDir(): string {
   // Try new env var first, then legacy, then default
-  const envHome = getAiwcliHome()
+  const envHome = getAiwDirFromEnv()
   if (envHome) {
     return envHome
   }
   
-  // Default to ~/.aiwcli (new convention)
-  return join(homedir(), '.aiwcli')
+  // Default to ~/.aiw (new convention)
+  return join(homedir(), '.aiw')
 }
 
 /**
- * Validate that AIWCLI home directory exists.
+ * Validate that AIW home directory exists.
  * @throws {ConfigNotFoundError} When directory does not exist
  */
-export function validateAiwcliHome(aiwcliHome: string): void {
-  if (!existsSync(aiwcliHome)) {
+export function validateAiwDir(aiwDir: string): void {
+  if (!existsSync(aiwDir)) {
     throw new ConfigNotFoundError(
-      `AIWCLI_HOME not found at ${aiwcliHome}. Run 'aiwcli setup' or set AIWCLI_HOME env var.`
+      `AIW_DIR not found at ${aiwDir}. Run 'aiw setup' or set AIW_DIR env var.`
     )
   }
 }
 
 /**
- * Load and validate AIWCLI configuration.
+ * Load and validate AIW configuration.
  * @returns Fully resolved AiwcliConfig with all paths
- * @throws {ConfigNotFoundError} When AIWCLI_HOME does not exist
+ * @throws {ConfigNotFoundError} When AIW_DIR does not exist
  */
 export function loadConfig(): AiwcliConfig {
-  const aiwcliHome = getAiwcliHomeDir()
-  debug(`Resolved AIWCLI_HOME: ${aiwcliHome}`)
+  const aiwDir = getAiwDir()
+  debug(`Resolved AIW_DIR: ${aiwDir}`)
 
-  validateAiwcliHome(aiwcliHome)
+  validateAiwDir(aiwDir)
 
   const config = {
-    aiwcliHome,
+    aiwDir,
     claudeConfigPath: join(homedir(), '.claude'),
-    settingsPath: join(aiwcliHome, '.claude', 'settings.json'),
+    settingsPath: join(aiwDir, '.claude', 'settings.json'),
   }
 
   debug(`claudeConfigPath: ${config.claudeConfigPath}`)
@@ -68,17 +68,17 @@ export function loadConfig(): AiwcliConfig {
 
 // Legacy exports for backward compatibility
 /**
- * @deprecated Use getAiwcliHomeDir() instead
+ * @deprecated Use getAiwDir() instead
  */
 export function getPaiHome(): string {
-  return getAiwcliHomeDir()
+  return getAiwDir()
 }
 
 /**
- * @deprecated Use validateAiwcliHome() instead
+ * @deprecated Use validateAiwDir() instead
  */
 export function validatePaiHome(paiHome: string): void {
-  validateAiwcliHome(paiHome)
+  validateAiwDir(paiHome)
 }
 
 /**

@@ -7,47 +7,47 @@ import {expect} from 'chai'
 import {after, before, describe, it} from 'mocha'
 
 describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', () => {
-  const testPaiHome = join(tmpdir(), 'pai-test-epic-2-validation')
-  const testClaudeDir = join(testPaiHome, '.claude')
-  const originalPaiHome = process.env.PAI_HOME
+  const testAiwHome = join(tmpdir(), 'aiw-test-epic-2-validation')
+  const testClaudeDir = join(testAiwHome, '.claude')
+  const originalAiwDir = process.env.AIW_DIR
 
   before(() => {
     // Setup isolated test environment
-    if (existsSync(testPaiHome)) {
-      rmSync(testPaiHome, {recursive: true, force: true})
+    if (existsSync(testAiwHome)) {
+      rmSync(testAiwHome, {recursive: true, force: true})
     }
 
-    mkdirSync(testPaiHome, {recursive: true})
+    mkdirSync(testAiwHome, {recursive: true})
     mkdirSync(testClaudeDir, {recursive: true})
 
-    // Create test settings.json in test PAI_HOME
+    // Create test settings.json in test AIW_DIR
     const settingsPath = join(testClaudeDir, 'settings.json')
     writeFileSync(
       settingsPath,
       JSON.stringify(
         {
-          'claude-code.statusLine.show': 'pai-statusline',
+          'claude-code.statusLine.show': 'aiw-statusline',
           'claude-code.statusLine.command': 'powershell.exe',
-          'claude-code.statusLine.args': ['-NoProfile', '-File', join(testPaiHome, 'scripts', 'statusline.ps1')],
+          'claude-code.statusLine.args': ['-NoProfile', '-File', join(testAiwHome, 'scripts', 'statusline.ps1')],
         },
         null,
         2,
       ),
     )
 
-    process.env.PAI_HOME = testPaiHome
+    process.env.AIW_DIR = testAiwHome
   })
 
   after(() => {
     // Cleanup test environment
-    if (existsSync(testPaiHome)) {
-      rmSync(testPaiHome, {recursive: true, force: true})
+    if (existsSync(testAiwHome)) {
+      rmSync(testAiwHome, {recursive: true, force: true})
     }
 
-    if (originalPaiHome) {
-      process.env.PAI_HOME = originalPaiHome
+    if (originalAiwDir) {
+      process.env.AIW_DIR = originalAiwDir
     } else {
-      delete process.env.PAI_HOME
+      delete process.env.AIW_DIR
     }
   })
 
@@ -59,7 +59,7 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
       expect(existsSync(testClaudeDir)).to.be.true
     })
 
-    it('validates pai launch integrates all subsystems', () => {
+    it('validates aiw launch integrates all subsystems', () => {
       // Integration validation:
       // - Configuration resolution (Story 2.1)
       // - Path utilities (Story 2.2)
@@ -81,9 +81,9 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
   })
 
   describe('AC2: Setup Command Validation (Task 2)', () => {
-    it('Task 2.1: validates pai setup creates symlink correctly', () => {
-      // Test setup command creates symlink from ~/.claude/settings.json to PAI_HOME/.claude/settings.json
-      // Validates Story 2.7: pai setup command
+    it('Task 2.1: validates aiw setup creates symlink correctly', () => {
+      // Test setup command creates symlink from ~/.claude/settings.json to AIW_DIR/.claude/settings.json
+      // Validates Story 2.7: aiw setup command
       const settingsPath = join(testClaudeDir, 'settings.json')
       expect(existsSync(settingsPath)).to.be.true
     })
@@ -109,7 +109,7 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
       expect(existsSync(settingsPath)).to.be.true
 
       // Idempotent: Can run setup again without error
-      // In real scenario, pai setup would check if symlink exists and skip or confirm
+      // In real scenario, aiw setup would check if symlink exists and skip or confirm
       expect(true).to.be.true
     })
 
@@ -121,7 +121,7 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
     })
 
     it('Task 2.5: validates hooks are active after setup', () => {
-      // After setup, settings.json should contain PAI hook configuration
+      // After setup, settings.json should contain AIW hook configuration
       const settingsPath = join(testClaudeDir, 'settings.json')
       expect(existsSync(settingsPath)).to.be.true
 
@@ -147,9 +147,9 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
 
     it('Task 3.2: validates configuration resolution logging (FR20, FR23)', () => {
       // Test debug output shows configuration resolution
-      // Should log PAI_HOME, resolved paths, configuration sources
+      // Should log AIW_DIR, resolved paths, configuration sources
       // Validates Story 2.4: Debug logging
-      expect(testPaiHome).to.be.a('string')
+      expect(testAiwHome).to.be.a('string')
     })
 
     it('Task 3.3: validates version check logging (FR24)', () => {
@@ -182,7 +182,7 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
   describe('AC4: Functional Requirements Coverage', () => {
     describe('Launch Automation (FR1-5)', () => {
       it('FR1: validates single command launch capability', () => {
-        // pai launch should start Claude Code with one command
+        // aiw launch should start Claude Code with one command
         expect(true).to.be.true
       })
 
@@ -191,18 +191,18 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
         expect(true).to.be.true
       })
 
-      it('FR3: validates automatic PAI hook injection', () => {
+      it('FR3: validates automatic AIW hook injection', () => {
         // Hooks should be injected via symlink
         expect(existsSync(testClaudeDir)).to.be.true
       })
 
       it('FR4: validates parallel session support', () => {
-        // Multiple pai launch sessions should work simultaneously
+        // Multiple aiw launch sessions should work simultaneously
         expect(true).to.be.true
       })
 
       it('FR5: validates zero manual configuration after setup', () => {
-        // After pai setup, no manual config needed
+        // After aiw setup, no manual config needed
         expect(true).to.be.true
       })
     })
@@ -232,12 +232,12 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
     describe('Configuration & Environment (FR15-19)', () => {
       it('FR15: validates CLI flags configuration', () => {
         // Story 2.1: Configuration resolution
-        expect(testPaiHome).to.be.a('string')
+        expect(testAiwHome).to.be.a('string')
       })
 
       it('FR16: validates environment variable overrides', () => {
-        // PAI_HOME should override default ~/.pai
-        expect(process.env.PAI_HOME).to.equal(testPaiHome)
+        // AIW_DIR should override default ~/.aiw
+        expect(process.env.AIW_DIR).to.equal(testAiwHome)
       })
 
       it('FR17: validates workspace context auto-detection', () => {
@@ -251,9 +251,9 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
         expect(normalized).to.be.a('string')
       })
 
-      it('FR19: validates custom PAI home directory', () => {
-        // User can specify custom PAI_HOME
-        expect(process.env.PAI_HOME).to.equal(testPaiHome)
+      it('FR19: validates custom AIW home directory', () => {
+        // User can specify custom AIW_DIR
+        expect(process.env.AIW_DIR).to.equal(testAiwHome)
       })
     })
 
@@ -303,10 +303,10 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
   })
 
   describe('Additional Integration Validations', () => {
-    it('validates configuration resolution with PAI_HOME override', () => {
+    it('validates configuration resolution with AIW_DIR override', () => {
       // Test Story 2.1 integration
-      expect(process.env.PAI_HOME).to.equal(testPaiHome)
-      const claudeDir = join(testPaiHome, '.claude')
+      expect(process.env.AIW_DIR).to.equal(testAiwHome)
+      const claudeDir = join(testAiwHome, '.claude')
       expect(existsSync(claudeDir)).to.be.true
     })
 
@@ -342,7 +342,7 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
     })
 
     it('validates parallel session support', () => {
-      // Multiple pai launch instances should work
+      // Multiple aiw launch instances should work
       expect(true).to.be.true
     })
   })
@@ -394,8 +394,8 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
 
     it('Task 4.5: validates symlink creation on all platforms', () => {
       // Symlinks work differently on Windows vs Unix
-      const testSymlink = join(testPaiHome, 'test-symlink')
-      const testTarget = join(testPaiHome, 'test-target')
+      const testSymlink = join(testAiwHome, 'test-symlink')
+      const testTarget = join(testAiwHome, 'test-target')
 
       try {
         writeFileSync(testTarget, 'test')
@@ -430,9 +430,9 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
       expect(true).to.be.true
     })
 
-    it('Task 5.2: validates PAI_HOME not found error (exit code 3)', () => {
-      // When PAI_HOME is invalid or inaccessible, should show:
-      // - Actionable error message with PAI_HOME instructions
+    it('Task 5.2: validates AIW_DIR not found error (exit code 3)', () => {
+      // When AIW_DIR is invalid or inaccessible, should show:
+      // - Actionable error message with AIW_DIR instructions
       // - Exit code 3 (environment/prerequisite error)
       expect(true).to.be.true
     })
@@ -500,13 +500,13 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
   })
 
   describe('Task 7: Performance Validation (AC1)', () => {
-    it('Task 7.1: measures pai launch startup time (imperceptible)', () => {
+    it('Task 7.1: measures aiw launch startup time (imperceptible)', () => {
       // Target: Imperceptible delay (<100ms ideal, <300ms acceptable)
       // Actual launch requires Claude Code installed
       expect(true).to.be.true
     })
 
-    it('Task 7.2: measures pai --help execution time (<50ms)', () => {
+    it('Task 7.2: measures aiw --help execution time (<50ms)', () => {
       // Target: <50ms for help command
       const start = Date.now()
       try {
@@ -520,13 +520,13 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
     })
 
     it('Task 7.3: validates no perceptible delay in Claude Code launch', () => {
-      // pai launch should add no perceptible delay to Claude Code startup
-      // Validated by comparing pai launch vs direct claude-code launch
+      // aiw launch should add no perceptible delay to Claude Code startup
+      // Validated by comparing aiw launch vs direct claude-code launch
       expect(true).to.be.true
     })
 
     it('Task 7.4: validates parallel session performance (no degradation)', () => {
-      // Multiple pai launch sessions should not degrade performance
+      // Multiple aiw launch sessions should not degrade performance
       expect(true).to.be.true
     })
   })
