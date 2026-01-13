@@ -10,6 +10,7 @@
     "url": "https://github.com/jofu-tofu/AI-Workflow-CLI/issues"
   },
   "dependencies": {
+    "@inquirer/prompts": "^8.2.0",
     "@oclif/core": "^4",
     "@oclif/plugin-autocomplete": "^3.2.39",
     "@oclif/plugin-help": "^6",

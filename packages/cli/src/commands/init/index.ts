@@ -2,6 +2,7 @@ import {promises as fs} from 'node:fs'
 import {basename, join} from 'node:path'
 
 import {Flags} from '@oclif/core'
+import {checkbox, confirm, input, select} from '@inquirer/prompts'
 
 import {detectUsername, generateBmadConfigs} from '../../lib/bmad-installer.js'
 import {updateGitignore} from '../../lib/gitignore-manager.js'
@@ -9,6 +10,15 @@ import {installTemplate} from '../../lib/template-installer.js'
 import {getAvailableTemplates, getTemplatePath} from '../../lib/template-resolver.js'
 import {EXIT_CODES} from '../../types/exit-codes.js'
 import BaseCommand from '../../lib/base-command.js'
+
+/**
+ * Available IDEs for configuration
+ */
+const AVAILABLE_IDES = [
+  {value: 'claude', name: 'Claude Code', description: 'Anthropic Claude Code CLI'},
+  {value: 'windsurf', name: 'Windsurf', description: 'Codeium Windsurf IDE'},
+  {value: 'cursor', name: 'Cursor', description: 'Cursor AI IDE'},
+]
 
 /**
  * Detect if a template is already installed in the given directory.
@@ -55,21 +65,38 @@ function detectProjectName(targetDir: string): string {
 }
 
 /**
+ * Interactive wizard configuration result
+ */
+interface WizardResult {
+  method: string
+  ides: string[]
+  username: string
+  projectName: string
+  confirmed: boolean
+}
+
+/**
  * Initialize PAI tools and integrations with specified template method.
  */
 export default class Init extends BaseCommand {
   static override description = 'Initialize PAI tools and integrations with specified template method'
   static override examples = [
+    '<%= config.bin %> <%= command.id %> --interactive',
     '<%= config.bin %> <%= command.id %> --method bmad',
     '<%= config.bin %> <%= command.id %> --method bmad --ide windsurf',
     '<%= config.bin %> <%= command.id %> --method bmad --ide claude --ide windsurf',
   ]
   static override flags = {
     ...BaseCommand.baseFlags,
+    interactive: Flags.boolean({
+      char: 'I',
+      description: 'Run interactive setup wizard',
+      default: false,
+    }),
     method: Flags.string({
       char: 'm',
       description: 'Template method to initialize',
-      required: true,
+      required: false,
     }),
     ide: Flags.string({
       char: 'i',
@@ -84,12 +111,47 @@ export default class Init extends BaseCommand {
     const targetDir = process.cwd()
 
     try {
-      // Validate template exists
+      // Get available templates for validation
       const availableTemplates = await getAvailableTemplates()
-      if (!availableTemplates.includes(flags.method)) {
-        this.error(`Template '${flags.method}' not found. Available templates: ${availableTemplates.join(', ')}`, {
-          exit: EXIT_CODES.INVALID_USAGE,
-        })
+
+      // Determine configuration: interactive or flags
+      let method: string
+      let ides: string[]
+      let username: string
+      let projectName: string
+
+      if (flags.interactive) {
+        // Run interactive wizard
+        const wizardResult = await this.runInteractiveWizard(targetDir, availableTemplates)
+
+        if (!wizardResult.confirmed) {
+          this.log('Installation cancelled.')
+          return
+        }
+
+        method = wizardResult.method
+        ides = wizardResult.ides
+        username = wizardResult.username
+        projectName = wizardResult.projectName
+      } else {
+        // Use flags (require method in non-interactive mode)
+        if (!flags.method) {
+          this.error('Template method is required. Use --method <template> or --interactive for guided setup.', {
+            exit: EXIT_CODES.INVALID_USAGE,
+          })
+        }
+
+        // Validate template exists
+        if (!availableTemplates.includes(flags.method)) {
+          this.error(`Template '${flags.method}' not found. Available templates: ${availableTemplates.join(', ')}`, {
+            exit: EXIT_CODES.INVALID_USAGE,
+          })
+        }
+
+        method = flags.method
+        ides = flags.ide
+        username = await detectUsername()
+        projectName = detectProjectName(targetDir)
       }
 
       // Check if template already installed
@@ -111,30 +173,27 @@ export default class Init extends BaseCommand {
         })
       }
 
-      // Detect configuration values
-      const username = await detectUsername()
-      const projectName = detectProjectName(targetDir)
       const hasGit = await detectGitRepository(targetDir)
 
-      this.logInfo(`Installing ${flags.method} template for project: ${projectName}`)
+      this.logInfo(`Installing ${method} template for project: ${projectName}`)
       this.logInfo(`Detected user: ${username}`)
-      this.logInfo(`Installing IDEs: ${flags.ide.join(', ')}`)
+      this.logInfo(`Installing IDEs: ${ides.join(', ')}`)
 
       // Get template path
-      const templatePath = await getTemplatePath(flags.method)
+      const templatePath = await getTemplatePath(method)
 
       // Install template with IDE selection
       const result = await installTemplate({
-        templateName: flags.method,
+        templateName: method,
         targetDir,
-        ides: flags.ide,
+        ides,
         username,
         projectName,
         templatePath,
       })
 
       // BMAD-specific post-install: generate custom config files
-      if (flags.method === 'bmad') {
+      if (method === 'bmad') {
         await generateBmadConfigs(targetDir, username, projectName)
         this.logSuccess('✓ Configuration files generated')
       }
@@ -143,7 +202,7 @@ export default class Init extends BaseCommand {
       const foldersForGitignore = [...result.installedFolders]
 
       // BMAD-specific post-install: add output directories to gitignore
-      if (flags.method === 'bmad') {
+      if (method === 'bmad') {
         foldersForGitignore.push('_bmad-output', 'bmad-output', '**/bmad-output')
       }
 
@@ -157,7 +216,7 @@ export default class Init extends BaseCommand {
       }
 
       this.log('')
-      this.logSuccess(`✓ ${flags.method} initialized successfully`)
+      this.logSuccess(`✓ ${method} initialized successfully`)
       this.log('')
       this.logInfo('Next steps:')
       this.logInfo('  pai launch    Start Claude Code with agents')
@@ -181,5 +240,102 @@ export default class Init extends BaseCommand {
         exit: EXIT_CODES.GENERAL_ERROR,
       })
     }
+  }
+
+  /**
+   * Run interactive setup wizard
+   *
+   * @param targetDir - Target directory for installation
+   * @param availableTemplates - List of available template names
+   * @returns Wizard configuration result
+   */
+  private async runInteractiveWizard(targetDir: string, availableTemplates: string[]): Promise<WizardResult> {
+    this.log('')
+    this.log('┌─────────────────────────────────────────┐')
+    this.log('│     PAI Interactive Setup Wizard        │')
+    this.log('└─────────────────────────────────────────┘')
+    this.log('')
+
+    // Detect defaults
+    const detectedUsername = await detectUsername()
+    const detectedProjectName = detectProjectName(targetDir)
+
+    // Step 1: Select template method
+    const method = await select({
+      message: 'Select a template method:',
+      choices: availableTemplates.map((template) => ({
+        value: template,
+        name: template.toUpperCase(),
+        description: this.getTemplateDescription(template),
+      })),
+    })
+
+    this.log('')
+
+    // Step 2: Select IDEs
+    const ides = await checkbox({
+      message: 'Select IDEs to configure:',
+      choices: AVAILABLE_IDES.map((ide) => ({
+        value: ide.value,
+        name: ide.name,
+        checked: ide.value === 'claude', // Default to Claude selected
+      })),
+      required: true,
+    })
+
+    this.log('')
+
+    // Step 3: Confirm/edit username
+    const username = await input({
+      message: 'Username:',
+      default: detectedUsername,
+    })
+
+    // Step 4: Confirm/edit project name
+    const projectName = await input({
+      message: 'Project name:',
+      default: detectedProjectName,
+    })
+
+    this.log('')
+
+    // Step 5: Summary and confirmation
+    this.log('┌─────────────────────────────────────────┐')
+    this.log('│           Installation Summary          │')
+    this.log('├─────────────────────────────────────────┤')
+    this.log(`│  Template:     ${method.padEnd(24)}│`)
+    this.log(`│  IDEs:         ${ides.join(', ').padEnd(24)}│`)
+    this.log(`│  Username:     ${username.padEnd(24)}│`)
+    this.log(`│  Project:      ${projectName.padEnd(24)}│`)
+    this.log(`│  Directory:    ${basename(targetDir).padEnd(24)}│`)
+    this.log('└─────────────────────────────────────────┘')
+    this.log('')
+
+    const confirmed = await confirm({
+      message: 'Proceed with installation?',
+      default: true,
+    })
+
+    return {
+      method,
+      ides,
+      username,
+      projectName,
+      confirmed,
+    }
+  }
+
+  /**
+   * Get description for a template
+   *
+   * @param template - Template name
+   * @returns Template description
+   */
+  private getTemplateDescription(template: string): string {
+    const descriptions: Record<string, string> = {
+      bmad: 'BMAD Method - AI-driven development workflow with agents',
+      gsd: 'GSD Method - Get Stuff Done project management',
+    }
+    return descriptions[template] || 'Custom template'
   }
 }
