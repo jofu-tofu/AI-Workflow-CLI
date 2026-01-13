@@ -101,12 +101,43 @@ bun test
 # Specific file
 bun test path/to/test-file.test.ts
 
-# Watch mode
+# Watch mode (for bun)
 bun test --watch
+
+# Watch mode (npm scripts in packages/cli)
+cd packages/cli
+npm run test:watch
 
 # With coverage (if configured)
 bun test --coverage
 ```
+
+## Watch Mode Development
+
+For continuous development with automatic rebuilding and testing:
+
+```bash
+cd packages/cli
+
+# Combined watch: rebuilds code AND runs tests on changes
+npm run watch
+
+# TypeScript only: watch and rebuild on source changes
+npm run dev:watch
+
+# Tests only: watch and re-run tests on changes
+npm run test:watch
+```
+
+**Available watch scripts:**
+
+| Script | Purpose |
+|--------|---------|
+| `npm run watch` | Runs `dev:watch` + `test:watch` in parallel |
+| `npm run dev:watch` | TypeScript compilation + template sync |
+| `npm run test:watch` | Mocha in watch mode |
+| `npm run build:watch` | TypeScript compiler only |
+| `npm run templates:watch` | Template file sync only |
 
 ## Standard Development Workflow
 
