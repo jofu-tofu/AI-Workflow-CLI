@@ -850,9 +850,887 @@ See `examples/workflow-example.md` for a complete, working example that demonstr
 
 ---
 
+## Pattern 3: Working Set Limitation Pattern for GitHub Copilot
+
+### Problem Statement
+
+**Gap:** GitHub Copilot has severe working set and context limitations that make large-scale refactoring and complex multi-file operations extremely difficult or impossible.
+
+**Reference:** GAP-ANALYSIS.md Gap #GH1 (Working Set and Context Limitations)
+
+**Impact:**
+- Maximum 10 files in working set at once
+- Maximum 20 files for context awareness
+- ~6,000 character context window for fast models
+- Quality degrades on files >782 lines
+- Significant problems on files >5,000 lines
+- Cannot effectively work on larger projects
+- Community considering alternatives due to restrictions
+
+### Standard Format
+
+In the superset schema, a skill designed for large-scale operations looks like this:
+
+```yaml
+---
+name: refactor-authentication
+description: Refactor authentication system across the entire codebase
+version: "1.0.0"
+allowed-tools:
+  - Read
+  - Write
+  - Grep
+  - Glob
+context: inherit
+permissions:
+  allow:
+    - Read(src/**/auth*.ts)
+    - Read(src/**/user*.ts)
+    - Write(src/**/auth*.ts)
+    - Write(src/**/user*.ts)
+---
+
+# Authentication System Refactor
+
+## Scope
+Refactor the authentication system across 25+ files:
+- src/auth/*.ts (8 files)
+- src/api/auth/*.ts (6 files)
+- src/middleware/auth*.ts (3 files)
+- src/models/user*.ts (4 files)
+- src/services/auth*.ts (4 files)
+
+## Objectives
+1. Standardize authentication patterns
+2. Extract shared logic
+3. Update all import references
+4. Ensure tests pass
+```
+
+This would fail on GitHub Copilot due to exceeding the 10-file working set limit.
+
+### Emulation Strategy
+
+GitHub Copilot can handle large operations using a combination of:
+
+1. **Skill Decomposition** - Break large skills into smaller, focused sub-skills that each operate on ≤10 files
+2. **Batch Processing** - Process files in sequential batches with checkpoints
+3. **File Prioritization** - Keep most-referenced/core files in working set, rotate peripheral files
+4. **Skill Chaining** - Create skills that reference and build upon each other
+5. **@workspace Fallback** - Document when to use `@workspace` for discovery vs batching for implementation
+
+### Implementation Example
+
+**Input: Standard Format Skill (Too Large for Copilot)**
+
+```yaml
+---
+name: refactor-authentication
+description: Refactor authentication system across the entire codebase
+version: "1.0.0"
+allowed-tools:
+  - Read
+  - Write
+  - Grep
+context: inherit
+platforms: [claude-code, windsurf, github-copilot]
+---
+
+# Authentication System Refactor
+
+## Scope
+Refactor authentication across 25 files in:
+- src/auth/ (8 files)
+- src/api/auth/ (6 files)
+- src/middleware/ (3 files)
+- src/models/ (4 files)
+- src/services/ (4 files)
+
+## Objectives
+1. Standardize authentication patterns
+2. Extract shared logic
+3. Update all import references
+4. Ensure tests pass
+```
+
+**Output: Decomposed Sub-Skills for GitHub Copilot**
+
+**Decision Tree Applied:**
+
+1. **Count affected files:** 25 files
+2. **Exceeds 10-file limit?** Yes
+3. **Can be logically split?** Yes (by module)
+4. **Strategy:** Decompose into sub-skills
+
+**File 1:** `.github/prompts/refactor-auth-core.prompt.md`
+
+```yaml
+---
+description: Refactor core authentication logic (Part 1 of 4)
+applyTo:
+  - "src/auth/*.ts"
+mode: agent
+---
+
+# Authentication Refactor - Part 1: Core Logic
+
+<!-- Part 1 of 4: Core Authentication Module -->
+<!-- Version: 1.0.0 -->
+
+## Scope
+
+**This prompt handles:** Core authentication files in `src/auth/` (8 files)
+
+**Working Set (8 files):**
+1. src/auth/auth-service.ts
+2. src/auth/jwt-handler.ts
+3. src/auth/password-hash.ts
+4. src/auth/session-manager.ts
+5. src/auth/token-validator.ts
+6. src/auth/auth-middleware.ts
+7. src/auth/auth-types.ts
+8. src/auth/auth-utils.ts
+
+## Objectives
+
+1. Standardize authentication patterns in core module
+2. Extract shared logic within src/auth/
+3. Ensure consistent error handling
+4. Document exported interfaces
+
+## Workflow
+
+### Step 1: Analyze Core Files
+Review all 8 files in src/auth/ for:
+- Duplicate logic
+- Inconsistent patterns
+- Shared utilities that should be extracted
+
+### Step 2: Standardize Patterns
+Apply consistent patterns for:
+- JWT token handling
+- Password hashing
+- Session management
+- Error responses
+
+### Step 3: Extract Shared Logic
+Create new files if needed (within 10-file limit):
+- src/auth/auth-constants.ts (if needed)
+- src/auth/auth-errors.ts (if needed)
+
+### Step 4: Update Internal Imports
+Update imports within src/auth/ module only.
+Do NOT modify external imports yet (handled in Part 4).
+
+### Step 5: Checkpoint
+Create commit: `refactor(auth): part 1 - standardize core auth module`
+
+## Next Steps
+
+After completing this part:
+1. Run tests: `npm test src/auth/`
+2. Verify no regressions
+3. Proceed to Part 2: `/prompt refactor-auth-api`
+
+## Related Files (Not Modified Here)
+
+The following files depend on src/auth/ but are handled in later parts:
+- src/api/auth/*.ts (Part 2)
+- src/middleware/*.ts (Part 3)
+- src/models/*.ts, src/services/*.ts (Part 4)
+```
+
+**File 2:** `.github/prompts/refactor-auth-api.prompt.md`
+
+```yaml
+---
+description: Refactor authentication API routes (Part 2 of 4)
+applyTo:
+  - "src/api/auth/*.ts"
+  - "src/auth/auth-types.ts"
+mode: agent
+---
+
+# Authentication Refactor - Part 2: API Routes
+
+<!-- Part 2 of 4: API Integration -->
+<!-- Version: 1.0.0 -->
+
+## Prerequisites
+
+**IMPORTANT:** Complete Part 1 (`refactor-auth-core`) before starting this part.
+
+Part 1 should have:
+- Standardized core authentication patterns
+- Extracted shared logic
+- Created stable interfaces in src/auth/
+
+## Scope
+
+**This prompt handles:** Authentication API routes (6 files) + core types reference (1 file)
+
+**Working Set (7 files):**
+1. src/api/auth/login-route.ts
+2. src/api/auth/register-route.ts
+3. src/api/auth/logout-route.ts
+4. src/api/auth/refresh-route.ts
+5. src/api/auth/verify-route.ts
+6. src/api/auth/password-reset-route.ts
+7. src/auth/auth-types.ts (reference - core types)
+
+**Rationale:** Keep auth-types.ts in working set as reference for consistent interface usage.
+
+## Objectives
+
+1. Update API routes to use standardized auth patterns from Part 1
+2. Ensure all routes use consistent error handling
+3. Update imports to reference refactored core module
+4. Maintain API contract (no breaking changes)
+
+## Workflow
+
+### Step 1: Review Core Changes
+Read src/auth/auth-types.ts to understand new interfaces from Part 1.
+
+### Step 2: Update API Routes
+For each route file:
+- Update imports from src/auth/
+- Use standardized authentication methods
+- Apply consistent error handling
+- Maintain backward compatibility
+
+### Step 3: Verify API Contracts
+Ensure response formats unchanged (no breaking API changes).
+
+### Step 4: Checkpoint
+Create commit: `refactor(auth): part 2 - update API routes to use core auth`
+
+## Next Steps
+
+After completing this part:
+1. Run tests: `npm test src/api/auth/`
+2. Test API endpoints manually if needed
+3. Proceed to Part 3: `/prompt refactor-auth-middleware`
+
+## Related Files (Not Modified Here)
+
+- src/middleware/*.ts (Part 3)
+- src/models/*.ts, src/services/*.ts (Part 4)
+```
+
+**File 3:** `.github/prompts/refactor-auth-middleware.prompt.md`
+
+```yaml
+---
+description: Refactor authentication middleware (Part 3 of 4)
+applyTo:
+  - "src/middleware/*.ts"
+  - "src/auth/auth-types.ts"
+mode: agent
+---
+
+# Authentication Refactor - Part 3: Middleware
+
+<!-- Part 3 of 4: Middleware Integration -->
+<!-- Version: 1.0.0 -->
+
+## Prerequisites
+
+**IMPORTANT:** Complete Parts 1 and 2 before starting this part.
+
+Previous parts should have:
+- Part 1: Standardized core authentication module
+- Part 2: Updated API routes to use new patterns
+
+## Scope
+
+**This prompt handles:** Authentication middleware (3 files) + core types reference (1 file)
+
+**Working Set (4 files):**
+1. src/middleware/auth-required.ts
+2. src/middleware/role-check.ts
+3. src/middleware/token-refresh.ts
+4. src/auth/auth-types.ts (reference - core types)
+
+**Rationale:** Middleware is tightly coupled to auth-types, keep in working set for reference.
+
+## Objectives
+
+1. Update middleware to use refactored authentication service
+2. Ensure consistent error responses
+3. Update imports to use standardized core module
+4. Maintain middleware interface (no breaking changes to route handlers)
+
+## Workflow
+
+### Step 1: Review Core Interface
+Read src/auth/auth-types.ts and src/auth/auth-service.ts (from Part 1).
+
+### Step 2: Update Middleware
+For each middleware file:
+- Update imports from src/auth/
+- Use standardized authentication methods
+- Apply consistent error handling
+- Ensure middleware signature unchanged
+
+### Step 3: Verify Middleware Contracts
+Test that existing routes using this middleware still work.
+
+### Step 4: Checkpoint
+Create commit: `refactor(auth): part 3 - update middleware to use core auth`
+
+## Next Steps
+
+After completing this part:
+1. Run tests: `npm test src/middleware/`
+2. Test middleware integration with sample routes
+3. Proceed to Part 4: `/prompt refactor-auth-finalize`
+
+## Related Files (Not Modified Here)
+
+- src/models/*.ts, src/services/*.ts (Part 4 - final integration)
+```
+
+**File 4:** `.github/prompts/refactor-auth-finalize.prompt.md`
+
+```yaml
+---
+description: Finalize authentication refactor - update remaining integrations (Part 4 of 4)
+applyTo:
+  - "src/models/user*.ts"
+  - "src/services/auth*.ts"
+  - "src/auth/auth-types.ts"
+mode: agent
+---
+
+# Authentication Refactor - Part 4: Finalization
+
+<!-- Part 4 of 4: Final Integration and Verification -->
+<!-- Version: 1.0.0 -->
+
+## Prerequisites
+
+**IMPORTANT:** Complete Parts 1, 2, and 3 before starting this part.
+
+Previous parts should have:
+- Part 1: Core authentication module standardized
+- Part 2: API routes updated
+- Part 3: Middleware updated
+
+## Scope
+
+**This prompt handles:** Remaining authentication-related files (8 files)
+
+**Working Set (9 files):**
+1. src/models/user.ts
+2. src/models/user-session.ts
+3. src/models/user-token.ts
+4. src/models/user-role.ts
+5. src/services/auth-service.ts
+6. src/services/auth-email-service.ts
+7. src/services/auth-logger.ts
+8. src/services/auth-audit.ts
+9. src/auth/auth-types.ts (reference - ensure consistency)
+
+## Objectives
+
+1. Update models and services to align with refactored auth core
+2. Ensure all cross-references are updated
+3. Remove any deprecated imports or patterns
+4. Run full test suite and verify system-wide consistency
+
+## Workflow
+
+### Step 1: Update Models
+Update user-related models:
+- Align with auth-types.ts interfaces
+- Update imports
+- Ensure database schema compatibility
+
+### Step 2: Update Services
+Update authentication services:
+- Use standardized core authentication methods
+- Update imports
+- Apply consistent error handling
+
+### Step 3: System-Wide Verification
+Run comprehensive tests:
+```bash
+npm test
+```
+
+Check for:
+- No import errors
+- All tests pass
+- No deprecated patterns remain
+
+### Step 4: Final Checkpoint
+Create commit: `refactor(auth): part 4 - finalize integration across all modules`
+
+### Step 5: Integration Test
+Run integration tests to verify:
+- Full authentication flow works
+- All API endpoints function
+- Middleware applies correctly
+- Models integrate properly
+
+## Completion Checklist
+
+- [ ] All 25 files refactored across 4 parts
+- [ ] Full test suite passes
+- [ ] No import errors
+- [ ] No deprecated patterns remain
+- [ ] Integration tests pass
+- [ ] Documentation updated (if needed)
+
+## Rollback Plan
+
+If integration issues discovered:
+1. Review commits from all 4 parts
+2. Identify problematic part
+3. Rollback specific commit: `git revert <commit-hash>`
+4. Fix issues and re-run that part
+
+## Summary
+
+This completes the 4-part authentication refactor:
+- **Part 1:** Core module (8 files)
+- **Part 2:** API routes (6 files)
+- **Part 3:** Middleware (3 files)
+- **Part 4:** Models & services (8 files)
+- **Total:** 25 files refactored within Copilot's 10-file working set limit
+```
+
+**File 5:** `.github/prompts/refactor-auth-coordinator.prompt.md`
+
+```yaml
+---
+description: Coordinate full authentication refactor (use this as entry point)
+mode: agent
+---
+
+# Authentication Refactor - Coordinator
+
+<!-- Master prompt for orchestrating the 4-part refactor -->
+<!-- Version: 1.0.0 -->
+
+## Overview
+
+This refactor has been decomposed into 4 sequential parts to work within GitHub Copilot's 10-file working set limit.
+
+**Original Scope:** 25 files across multiple modules
+**Copilot Limit:** 10 files per working set
+**Solution:** 4 batched sub-tasks, each ≤10 files
+
+## Execution Order
+
+Execute prompts in this order:
+
+### Part 1: Core Authentication Module
+**Prompt:** `/prompt refactor-auth-core`
+**Files:** 8 files in src/auth/
+**Duration:** ~15-20 minutes
+**Checkpoint:** Commit after completion
+
+### Part 2: API Routes
+**Prompt:** `/prompt refactor-auth-api`
+**Files:** 6 API route files + 1 reference file
+**Duration:** ~15-20 minutes
+**Checkpoint:** Commit after completion
+
+### Part 3: Middleware
+**Prompt:** `/prompt refactor-auth-middleware`
+**Files:** 3 middleware files + 1 reference file
+**Duration:** ~10-15 minutes
+**Checkpoint:** Commit after completion
+
+### Part 4: Models & Services
+**Prompt:** `/prompt refactor-auth-finalize`
+**Files:** 8 model/service files + 1 reference file
+**Duration:** ~15-20 minutes
+**Checkpoint:** Final commit
+
+## Total Estimated Time
+
+Approximately 55-75 minutes for complete refactor.
+
+## Progress Tracking
+
+Create `REFACTOR-PROGRESS.md` to track completion:
+
+```markdown
+# Authentication Refactor Progress
+
+- [ ] Part 1: Core module (src/auth/)
+- [ ] Part 2: API routes (src/api/auth/)
+- [ ] Part 3: Middleware (src/middleware/)
+- [ ] Part 4: Models & services (src/models/, src/services/)
+
+## Notes
+- Started: [date]
+- Current part: [1/2/3/4]
+- Issues: [any blockers]
+```
+
+## When to Use @workspace Instead
+
+**Use this decomposed approach when:**
+- You need to MODIFY >10 files
+- Changes are implementation-heavy
+- Files are tightly coupled
+- Need precise control over changes
+
+**Use @workspace when:**
+- You need to SEARCH/ANALYZE many files (read-only)
+- Gathering context about patterns
+- Planning refactor (not implementing yet)
+- Exploring codebase structure
+
+## Alternative: @workspace for Discovery, Prompts for Implementation
+
+**Step 1: Discovery Phase**
+```
+@workspace find all files that import from src/auth/
+```
+
+Use @workspace to understand scope (can reference >10 files for analysis).
+
+**Step 2: Implementation Phase**
+Execute the 4-part prompt sequence to make actual changes (respects 10-file limit).
+
+## Troubleshooting
+
+**If Part N fails:**
+1. Review commit from Part N-1
+2. Ensure previous parts completed successfully
+3. Check test output for specific errors
+4. Fix errors and re-run Part N
+
+**If working set limit hit:**
+- Verify file count in "Working Set" section of prompt
+- Remove non-essential reference files
+- Split part into sub-parts if needed
+
+## Next Steps
+
+1. Review this coordinator prompt to understand full scope
+2. Create `REFACTOR-PROGRESS.md` for tracking
+3. Start with Part 1: `/prompt refactor-auth-core`
+4. Follow the sequence through Part 4
+5. Run final integration tests
+```
+
+### Activation Mechanism
+
+**Skill Chaining:**
+
+Each sub-skill references the next in sequence:
+1. Part 1 → Directs to Part 2
+2. Part 2 → Directs to Part 3
+3. Part 3 → Directs to Part 4
+4. Part 4 → Completion checklist
+
+**Coordinator Pattern:**
+
+The coordinator prompt serves as the entry point and provides:
+- Complete overview
+- Execution order
+- Progress tracking
+- When to use @workspace vs batched prompts
+
+**Manual Invocation:**
+
+User invokes each part sequentially:
+```
+/prompt refactor-auth-coordinator  # Read overview
+/prompt refactor-auth-core          # Part 1
+/prompt refactor-auth-api           # Part 2
+/prompt refactor-auth-middleware    # Part 3
+/prompt refactor-auth-finalize      # Part 4
+```
+
+### Decision Tree: When to Split vs When to Use @workspace
+
+```
+                    Start: Large Operation
+                             |
+                             v
+                    Count affected files
+                             |
+                +-----------+ +------------+
+                |                          |
+                v                          v
+            ≤10 files                  >10 files
+                |                          |
+                v                          v
+        Use single prompt          Is operation read-only
+        with all files             (analysis/search)?
+                                           |
+                                +----------+-----------+
+                                |                      |
+                                v                      v
+                            Yes (read-only)        No (write/modify)
+                                |                      |
+                                v                      v
+                        Use @workspace          Can be logically split?
+                        for discovery                  |
+                        (no 10-file limit)  +----------+-----------+
+                                            |                      |
+                                            v                      v
+                                        Yes (logical splits)   No (tightly coupled)
+                                            |                      |
+                                            v                      v
+                                    Decompose into           File Prioritization:
+                                    sub-skills               1. Keep core files (most-referenced)
+                                    (Pattern 3)              2. Rotate peripheral files
+                                                             3. Process in passes
+                                                             4. May exceed 10-file limit
+                                                                (quality degradation risk)
+```
+
+**Decision Criteria:**
+
+1. **Use Single Prompt (≤10 files):**
+   - Operation affects 10 or fewer files
+   - All files can fit in working set
+   - Example: Refactor single module
+
+2. **Use @workspace (Read-Only, Any Size):**
+   - Discovery and analysis phase
+   - Searching across many files
+   - Planning refactor scope
+   - Understanding dependencies
+   - Example: "Find all usages of deprecated API"
+
+3. **Use Decomposition (>10 files, Logical Splits):**
+   - Operation affects >10 files
+   - Can be divided by module, feature, or layer
+   - Each part can be independent or sequential
+   - Example: Refactor authentication (25 files across modules)
+
+4. **Use File Prioritization (>10 files, Tightly Coupled):**
+   - Operation affects >10 files that must be modified together
+   - Cannot easily split into independent batches
+   - Keep most-referenced files in working set, rotate others
+   - **Risk:** Quality degradation, may not work well
+   - Example: Rename a core interface used in 30 files
+
+### File Prioritization Heuristics
+
+When you MUST work with >10 tightly coupled files, prioritize as follows:
+
+**Priority 1: Core/Root Files (Always in Working Set)**
+- Root type definitions (interfaces, types)
+- Base classes or services
+- Files most frequently imported by others
+- Configuration files that affect all modules
+
+**Priority 2: Direct Dependents (Rotate in Working Set)**
+- Files that directly import from core files
+- Process in groups of 3-5 at a time
+- Keep core files + batch of dependents ≤10 total
+
+**Priority 3: Peripheral Files (Process Last)**
+- Files that import from direct dependents
+- Utility files with minimal cross-references
+- Test files (can often be batch-updated separately)
+
+**Heuristic Algorithm:**
+
+```
+1. Identify core files (≤3 files):
+   - Run: grep -r "import.*from.*{core-file}" src/
+   - Files with most imports = core files
+
+2. Calculate working set:
+   - Core files (3) + Batch of dependents (7) = 10 total
+
+3. Execute in passes:
+   - Pass 1: Core files + Batch 1 dependents (10 files)
+   - Pass 2: Core files + Batch 2 dependents (10 files)
+   - Pass 3: Core files + Batch 3 dependents (10 files)
+   - ...continue until all dependents processed
+
+4. Final pass:
+   - Core files + Peripheral files (verify consistency)
+```
+
+**Example:**
+
+Refactoring `user-types.ts` (core) used by 30 files:
+
+**Working Set Pass 1:**
+1. user-types.ts (core)
+2. user-service.ts (direct dependent)
+3. user-repository.ts (direct dependent)
+4. user-controller.ts (direct dependent)
+5. user-validator.ts (direct dependent)
+6. user-transformer.ts (direct dependent)
+7. auth-service.ts (uses user-types)
+8. profile-service.ts (uses user-types)
+9. admin-controller.ts (uses user-types)
+10. user-dto.ts (direct dependent)
+
+**Working Set Pass 2:**
+1. user-types.ts (core - keep in all passes)
+2. api-user-routes.ts (dependent)
+3. api-profile-routes.ts (dependent)
+4. middleware-user-auth.ts (dependent)
+5. ...continue with next batch
+
+### Known Limitations
+
+1. **Decomposition Overhead:**
+   - Requires manual splitting of large skills
+   - Developer must understand logical boundaries
+   - More prompts to maintain (coordinator + N sub-prompts)
+   - Risk of inconsistency across batches
+
+2. **Coordination Complexity:**
+   - User must manually execute prompts in sequence
+   - No automatic orchestration between batches
+   - Progress tracking is manual (PROGRESS.md file)
+   - Easy to lose context between batches
+
+3. **Not True Parallelization:**
+   - Batches must be sequential (dependencies between parts)
+   - Cannot process batches in parallel
+   - Each batch requires manual checkpoint (commit)
+   - Total time longer than if 10-file limit didn't exist
+
+4. **File Prioritization Risks:**
+   - Quality degradation when >10 tightly coupled files
+   - May miss cross-file dependencies in rotated-out files
+   - Copilot context limited even with prioritization
+   - Not reliable for complex refactors (use decomposition instead)
+
+5. **@workspace Limitations:**
+   - Good for discovery, but cannot make changes to >10 files
+   - Must transition to batched prompts for implementation
+   - Context switching between discovery and implementation phases
+   - @workspace results may exceed Copilot's ability to act on findings
+
+6. **No Enforcement:**
+   - Decomposition pattern is manual (developer-driven)
+   - No system to enforce batch boundaries
+   - Developer can attempt >10 files and hit quality issues
+   - Requires discipline to follow pattern
+
+### Manual Traceability
+
+**Execution Flow: How GitHub Copilot Processes Decomposed Skill**
+
+1. **User Action:** User says "refactor the authentication system"
+
+2. **AI Suggestion:** GitHub Copilot AI:
+   - Recognizes this is a large operation (>10 files)
+   - May suggest: "This affects many files. Use `/prompt refactor-auth-coordinator` to see the batched approach."
+
+3. **User Reads Coordinator:** User types: `/prompt refactor-auth-coordinator`
+
+4. **Coordinator Loaded:** GitHub Copilot:
+   - Loads `.github/prompts/refactor-auth-coordinator.prompt.md`
+   - Displays overview showing 4-part decomposition
+   - Shows execution order and progress tracking guidance
+   - User understands the batched approach
+
+5. **User Starts Part 1:** User types: `/prompt refactor-auth-core`
+
+6. **Part 1 Execution:** GitHub Copilot:
+   - Loads `.github/prompts/refactor-auth-core.prompt.md`
+   - Reads working set: 8 files in src/auth/
+   - Opens files in working set (≤10 file limit)
+   - Analyzes files for duplicate logic
+   - Standardizes patterns across 8 files
+   - Proposes changes
+
+7. **User Reviews and Applies:** User:
+   - Reviews proposed changes
+   - Applies changes
+   - Runs tests: `npm test src/auth/`
+   - Creates checkpoint commit
+
+8. **User Continues to Part 2:** User types: `/prompt refactor-auth-api`
+
+9. **Part 2 Execution:** GitHub Copilot:
+   - Loads `.github/prompts/refactor-auth-api.prompt.md`
+   - Reads working set: 6 API files + 1 reference file (7 total)
+   - Opens files in working set
+   - Updates API routes to use refactored core from Part 1
+   - Proposes changes
+
+10. **Repeat for Parts 3 and 4:**
+    - Part 3: Middleware (4 files)
+    - Part 4: Models & services (9 files)
+    - Each part creates checkpoint commit
+
+11. **Completion:** After Part 4:
+    - User runs full test suite
+    - Verifies all 25 files refactored successfully
+    - Reviews 4 checkpoint commits
+    - Marks REFACTOR-PROGRESS.md as complete
+
+**Verification Points:**
+
+- **Before:** `.github/prompts/refactor-auth-*.prompt.md` files exist (5 files)
+- **During Part 1:** AI works with exactly 8 files from src/auth/
+- **During Part 2:** AI works with exactly 7 files (6 API + 1 reference)
+- **During Part 3:** AI works with exactly 4 files (3 middleware + 1 reference)
+- **During Part 4:** AI works with exactly 9 files (8 models/services + 1 reference)
+- **After Each Part:** Checkpoint commit created, tests pass
+- **After Part 4:** All 25 files refactored, full test suite passes
+
+**Debugging:**
+
+If decomposition doesn't work as expected:
+
+1. **File count exceeds 10 in a part:**
+   - Review working set in that part's prompt
+   - Remove non-essential reference files
+   - Split part into sub-parts (Part 2A, Part 2B)
+
+2. **Cross-part dependencies break:**
+   - Check that earlier parts completed successfully
+   - Review checkpoint commits
+   - Ensure reference files (auth-types.ts) in working sets where needed
+
+3. **Quality degradation even with ≤10 files:**
+   - Files may be too large (>782 lines)
+   - Consider decomposing large files first
+   - Use file prioritization within the part
+
+4. **Coordination overhead too high:**
+   - Consider if @workspace + manual implementation is faster
+   - Evaluate if refactor can be simplified
+   - Check if Claude Code or Windsurf would be better suited
+
+---
+
+## Pattern Summary Table
+
+| Pattern Name | Platform | Gap Addressed | Emulation Approach | Key Limitations |
+|--------------|----------|---------------|-------------------|-----------------|
+| **Skill Emulation** | Windsurf | No skills/subagents (GAP-W1) | Workflows + Model Decision + Persona Rules | No true isolation, no permission enforcement, manual agent activation |
+| **Workflow Emulation** | Claude Code | No AI-driven activation, no automatic multi-file context (GAP-C1) | Rich descriptions + Explicit context gathering (Step 0) | Manual invocation required, sequential context loading, no model decision engine |
+| **Working Set Limitation** | GitHub Copilot | 10-file working set limit, 20-file context limit (GAP-GH1) | Skill decomposition + Batch processing + File prioritization + Skill chaining + @workspace for discovery | Manual decomposition overhead, sequential-only batches, coordination complexity, no enforcement |
+
+---
+
+## Cross-References
+
+- **GAP-ANALYSIS.md** - Gap #W1 (Subagent Spawning), Gap #GH1 (Working Set Limitations), Gap #C1 (AI-Driven Activation)
+- **PLATFORM-ADAPTERS.md** - Section 2.2 (Windsurf Emulation Patterns), Section 3.2 (GitHub Copilot Emulation Patterns), Section 4.1 (Claude Code Adapter)
+- **STANDARD-SCHEMA.md** - Skill field definitions
+- **STANDARD-STRUCTURE.md** - Workflow file organization
+- **examples/workflow-example.md** - Complete working example of workflow emulation
+- **examples/copilot-limited-context.md** - Complete working example of working set limitation pattern
+
+---
+
 ## Sources
 
 - RESEARCH-windsurf.md (Windsurf workflow capabilities, model decision triggers, multi-file context)
 - RESEARCH-claude-code.md (Claude Code skill system, manual invocation)
+- RESEARCH-github-copilot.md (GitHub Copilot working set limits, context constraints, @workspace capabilities)
 - GAP-ANALYSIS.md (Capability gaps)
-- PLATFORM-ADAPTERS.md (Transformation rules, Claude Code adapter)
+- PLATFORM-ADAPTERS.md (Transformation rules, Claude Code adapter, GitHub Copilot adapter)

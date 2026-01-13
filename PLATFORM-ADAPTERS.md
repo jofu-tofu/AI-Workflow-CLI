@@ -797,6 +797,8 @@ You are accessing `.env.production` which has WRITE RESTRICTIONS.
 
 GitHub Copilot has the **most restrictive constraints** (working set limits, context limits), so this adapter focuses on optimization and warnings.
 
+**See Also:** [WORKAROUND-PATTERNS.md Pattern 3](WORKAROUND-PATTERNS.md#pattern-3-working-set-limitation-pattern-for-github-copilot) - Detailed working set limitation pattern with skill decomposition, batch processing, file prioritization, and decision tree for when to split vs use @workspace
+
 ### 3.1 Field Mapping
 
 | Superset Field | Copilot Field | Transformation |

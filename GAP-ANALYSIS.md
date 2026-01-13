@@ -729,6 +729,8 @@ Always include: `file.ts:123` format for clickable links
 - Cannot see full picture in single view
 - Breaks flow state
 
+**See Also:** [WORKAROUND-PATTERNS.md - Pattern 3: Working Set Limitation Pattern](WORKAROUND-PATTERNS.md#pattern-3-working-set-limitation-pattern-for-github-copilot) - Complete implementation guide with skill decomposition, coordinator pattern, file prioritization heuristics, decision tree for split vs @workspace, and working example in [examples/copilot-limited-context.md](examples/copilot-limited-context.md)
+
 ---
 
 ### GAP-GH2: Lifecycle Hooks
