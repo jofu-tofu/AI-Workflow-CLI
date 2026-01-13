@@ -111,9 +111,44 @@ npm run build
 ./bin/run.js launch
 ```
 
-### File Watching (Optional)
+### Watch Mode Development
 
-TypeScript compiler in watch mode:
+AIW CLI includes integrated watch mode scripts for streamlined development:
+
+```bash
+# Combined watch: rebuilds code AND runs tests on changes
+npm run watch
+
+# TypeScript only: watch and rebuild on source changes
+npm run dev:watch
+
+# Tests only: watch and re-run tests on changes
+npm run test:watch
+
+# TypeScript compiler only (no template watching)
+npm run build:watch
+```
+
+**What each watch script does:**
+
+| Script | Purpose |
+|--------|---------|
+| `watch` | Runs both `dev:watch` and `test:watch` in parallel |
+| `dev:watch` | Compiles TypeScript + syncs templates to dist |
+| `test:watch` | Runs Mocha in watch mode, re-tests on changes |
+| `build:watch` | TypeScript compiler in watch mode only |
+| `templates:watch` | Watches `src/templates/` and copies to `dist/templates/` |
+
+**Recommended workflow:**
+
+```bash
+# Terminal: Start watch mode
+npm run watch
+
+# Now edit files - tests and builds update automatically!
+```
+
+**Manual approach (if preferred):**
 
 ```bash
 # Terminal 1: Watch and rebuild on changes
