@@ -24,15 +24,27 @@ This document provides tested, practical workaround patterns for emulating missi
 
 ### Problem Statement
 
-**Gap:** Windsurf does not have Claude Code's "skills" feature - reusable, composable AI instructions that can be invoked by name and support subagent spawning.
+**Gap:** Windsurf does not have Claude Code's "skills" feature - reusable, composable AI instructions that can be invoked by name.
 
-**Reference:** GAP-ANALYSIS.md Gap #W1 (Subagent Spawning)
+**Related Gaps:**
+- **GAP-W1 (Subagent Spawning):** Windsurf cannot spawn parallel subagents like Claude Code's Task tool
+- **GAP-W2 (Granular Permissions):** Windsurf cannot enforce tool restrictions
+- **GAP-W3 (Custom Agent Types):** Windsurf cannot assign specialized agents to workflows
 
-**Impact:**
-- Cannot create reusable command-like AI behaviors
-- Cannot delegate tasks to specialized agents
-- Cannot spawn isolated execution contexts
-- All work must be done in single Cascade session
+**What This Pattern Addresses:**
+- ✅ Creating reusable workflow-based skills in Windsurf
+- ✅ Emulating Claude Code skill structure and activation
+- ✅ Simulating custom agents via persona rules
+- ❌ **Does NOT solve parallel subagent spawning** - Windsurf workflows execute sequentially in single Cascade session
+
+**Impact of Gaps:**
+- Cannot create reusable command-like AI behaviors → **Solved by this pattern**
+- Cannot delegate tasks to specialized agents → **Partially solved** (persona emulation, not true agents)
+- Cannot spawn isolated execution contexts → **NOT solved** (limitation of Windsurf)
+- All work must be done in single Cascade session → **Inherent limitation**
+
+**Scope Clarification:**
+This pattern enables skill-like reusable workflows in Windsurf but does NOT enable parallel subagent spawning (GAP-W1). For true parallel subagent execution, use Claude Code instead.
 
 ### Standard Format
 
@@ -352,7 +364,7 @@ If workflow activates incorrectly:
 - **Multi-File Context:** Windsurf automatically loads all files matching glob patterns into context
 - **Contextual Awareness:** Workflows have access to related files without explicit Read operations
 
-**Reference:** PLATFORM-ADAPTERS.md Section 4.1 (Claude Code Adapter)
+**Reference:** PLATFORM-ADAPTERS.md Section 1 (Claude Code Adapter)
 
 **Impact:**
 - Claude Code skills require manual invocation by user
@@ -843,7 +855,7 @@ See `examples/workflow-example.md` for a complete, working example that demonstr
 
 - **GAP-ANALYSIS.md** - Gap #W1 (Subagent Spawning)
 - **PLATFORM-ADAPTERS.md** - Section 2.2 (Windsurf Emulation Patterns)
-- **PLATFORM-ADAPTERS.md** - Section 4.1 (Claude Code Adapter) - Workflow transformation rules
+- **PLATFORM-ADAPTERS.md** - Section 1 (Claude Code Adapter) - Workflow transformation rules
 - **STANDARD-SCHEMA.md** - Skill field definitions
 - **STANDARD-STRUCTURE.md** - Workflow file organization
 - **examples/workflow-example.md** - Complete working example of workflow emulation
@@ -1386,6 +1398,8 @@ Create `REFACTOR-PROGRESS.md` to track completion:
 - Planning refactor (not implementing yet)
 - Exploring codebase structure
 
+**⚠️ Important:** @workspace also has a 10-file limit on search results (per RESEARCH-github-copilot.md). However, it can perform multiple searches to build understanding across batches, making it useful for discovery despite the limit.
+
 ## Alternative: @workspace for Discovery, Prompts for Implementation
 
 **Step 1: Discovery Phase**
@@ -1393,7 +1407,7 @@ Create `REFACTOR-PROGRESS.md` to track completion:
 @workspace find all files that import from src/auth/
 ```
 
-Use @workspace to understand scope (can reference >10 files for analysis).
+Use @workspace to understand scope. Note: @workspace can analyze patterns across multiple 10-file batches of search results, providing broader understanding than single prompt working sets.
 
 **Step 2: Implementation Phase**
 Execute the 4-part prompt sequence to make actual changes (respects 10-file limit).
@@ -1719,7 +1733,7 @@ If decomposition doesn't work as expected:
 ## Cross-References
 
 - **GAP-ANALYSIS.md** - Gap #W1 (Subagent Spawning), Gap #GH1 (Working Set Limitations), Gap #C1 (AI-Driven Activation)
-- **PLATFORM-ADAPTERS.md** - Section 2.2 (Windsurf Emulation Patterns), Section 3.2 (GitHub Copilot Emulation Patterns), Section 4.1 (Claude Code Adapter)
+- **PLATFORM-ADAPTERS.md** - Section 1 (Claude Code Adapter), Section 2.2 (Windsurf Emulation Patterns), Section 3.2 (GitHub Copilot Emulation Patterns)
 - **STANDARD-SCHEMA.md** - Skill field definitions
 - **STANDARD-STRUCTURE.md** - Workflow file organization
 - **examples/workflow-example.md** - Complete working example of workflow emulation
