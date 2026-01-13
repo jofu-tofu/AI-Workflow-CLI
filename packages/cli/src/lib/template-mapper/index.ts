@@ -48,6 +48,12 @@ export type {
   ClaudeCodeOutput,
   WindsurfOutput,
   GitHubCopilotOutput,
+
+  // Phase 5: Semantic content types
+  SemanticConstructType,
+  ConstructLocation,
+  SemanticConstruct,
+  ContentAnalysis,
 } from './types.js'
 
 // Re-export constants
@@ -80,3 +86,32 @@ export {WindsurfAdapter} from './adapters/windsurf.js'
 
 // GitHub Copilot adapter will be added in future phase
 // export { GitHubCopilotAdapter } from './adapters/github-copilot.js'
+
+// Content parser exports (Phase 5)
+export {
+  parseContent,
+  hasSemanticConstructs,
+  getConstructsByPlatform,
+  getConstructsByType,
+  getConstructTypes,
+  getSourcePlatform,
+  // Individual detection functions
+  detectAgentSpawning,
+  detectToolCalls,
+  detectContextSwitches,
+  detectPermissionReferences,
+  detectModelDecisionTriggers,
+  detectGlobPatterns,
+  detectPersonaRules,
+  detectSkillChaining,
+  detectContextGatheringProtocols,
+  detectActivationInstructions,
+  detectWorkingSetLimits,
+  detectCheckpointCommits,
+  detectProgressTracking,
+  detectWorkspaceCommands,
+  detectTestCommands,
+  detectAdvisoryWarnings,
+  detectVersionComments,
+  detectExecutionFlowSections,
+} from './content-parser.js'

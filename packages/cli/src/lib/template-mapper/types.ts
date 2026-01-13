@@ -480,3 +480,70 @@ export const WINDSURF_TRIGGERS = ['manual', 'always_on', 'model_decision', 'glob
  * Valid modes for GitHub Copilot
  */
 export const COPILOT_MODES = ['agent', 'ask', 'edit'] as const
+
+// =============================================================================
+// Phase 5: Semantic Content Types
+// =============================================================================
+
+/**
+ * Semantic construct types identified in workflow content
+ */
+export type SemanticConstructType =
+  | 'agent-spawn'
+  | 'tool-call'
+  | 'context-switch'
+  | 'permission-reference'
+  | 'model-decision-trigger'
+  | 'glob-pattern'
+  | 'persona-rule'
+  | 'skill-chaining'
+  | 'context-gathering-protocol'
+  | 'activation-instruction'
+  | 'working-set-limit'
+  | 'checkpoint-commit'
+  | 'progress-tracking'
+  | 'workspace-command'
+  | 'test-command'
+  | 'advisory-warning'
+  | 'version-comment'
+  | 'execution-flow-section'
+
+/**
+ * Location information for a semantic construct
+ */
+export interface ConstructLocation {
+  /** Character offset from start of content */
+  start: number
+  /** Character offset of end of match */
+  end: number
+  /** Line number (1-indexed) */
+  line: number
+}
+
+/**
+ * Semantic construct identified in workflow content
+ */
+export interface SemanticConstruct {
+  /** Type of semantic construct */
+  type: SemanticConstructType
+  /** Source platform that uses this syntax */
+  platform: Platform
+  /** Where construct was found (frontmatter or body) */
+  source: 'frontmatter' | 'body'
+  /** Location in content */
+  location: ConstructLocation
+  /** Original matched text */
+  rawText: string
+  /** Extracted data from the match */
+  parsed: Record<string, unknown>
+}
+
+/**
+ * Result of parsing content for semantic constructs
+ */
+export interface ContentAnalysis {
+  /** All semantic constructs found */
+  constructs: SemanticConstruct[]
+  /** Original raw content */
+  rawContent: string
+}
