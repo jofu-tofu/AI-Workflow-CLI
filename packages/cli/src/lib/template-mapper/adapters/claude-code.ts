@@ -147,8 +147,9 @@ function generateFrontmatter(template: ParsedTemplate): string {
     if (metadata.hooks.PostToolUse) {
       lines.push('  PostToolUse:')
       for (const hook of metadata.hooks.PostToolUse) {
-        if (hook.matcher) {
-          lines.push(`    - matcher: "${hook.matcher}"`)
+        lines.push(`    - matcher: "${hook.matcher || '*'}"`)
+        if (hook.once !== undefined) {
+          lines.push(`      once: ${hook.once}`)
         }
 
         lines.push('      hooks:')
