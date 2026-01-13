@@ -5,7 +5,7 @@
  */
 
 export {ClaudeCodeAdapter} from './claude-code.js'
+export {WindsurfAdapter} from './windsurf.js'
 
-// Windsurf and GitHub Copilot adapters will be added in Task 3
-// export { WindsurfAdapter } from './windsurf.js'
+// GitHub Copilot adapter will be added in future phase
 // export { GitHubCopilotAdapter } from './github-copilot.js'

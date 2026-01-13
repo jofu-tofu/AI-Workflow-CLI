@@ -59,8 +59,14 @@ export {
   COPILOT_MODES,
 } from './types.js'
 
-// Parser exports will be added when implemented
-// export { parseTemplate, parseTemplateString } from './parser.js'
+// Parser exports
+export {
+  parseTemplate,
+  parseTemplateString,
+  isValidTemplate,
+  extractFrontmatter,
+  ParseError,
+} from './parser.js'
 
 // Validator exports will be added when implemented
 // export { validateSchema, validateForPlatform } from './validator.js'
@@ -68,7 +74,9 @@ export {
 // Engine exports will be added when implemented
 // export { createMappingEngine } from './engine.js'
 
-// Adapter exports will be added when implemented
-// export { ClaudeCodeAdapter } from './adapters/claude-code.js'
-// export { WindsurfAdapter } from './adapters/windsurf.js'
+// Adapter exports
+export {ClaudeCodeAdapter} from './adapters/claude-code.js'
+export {WindsurfAdapter} from './adapters/windsurf.js'
+
+// GitHub Copilot adapter will be added in future phase
 // export { GitHubCopilotAdapter } from './adapters/github-copilot.js'
