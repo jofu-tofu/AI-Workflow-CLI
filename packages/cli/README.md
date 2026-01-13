@@ -1,20 +1,20 @@
-PAI CLI - Personal AI Infrastructure CLI
+AIW CLI - AI Workflow CLI
 =========================================
 
-Command-line interface for launching and managing Claude Code with Personal AI Infrastructure (PAI) configuration. Provides seamless integration with PAI hooks, automatic sandbox permissions, and scriptable automation support.
+Command-line interface for launching and managing Claude Code with AI Workflow (AIW) configuration. Provides seamless integration with AIW hooks, automatic sandbox permissions, and scriptable automation support.
 
 
 [![oclif](https://img.shields.io/badge/cli-oclif-brightgreen.svg)](https://oclif.io)
-[![Version](https://img.shields.io/npm/v/pai-cli.svg)](https://npmjs.org/package/pai-cli)
-[![Downloads/week](https://img.shields.io/npm/dw/pai-cli.svg)](https://npmjs.org/package/pai-cli)
+[![Version](https://img.shields.io/npm/v/aiwcli.svg)](https://npmjs.org/package/aiwcli)
+[![Downloads/week](https://img.shields.io/npm/dw/aiwcli.svg)](https://npmjs.org/package/aiwcli)
 
 ## Installation
 
 ### Install Globally (Recommended)
 
 ```bash
-# Navigate to the pai-cli directory
-cd ~/.pai/pai-cli  # or C:\Users\YOUR_USERNAME\.pai\pai-cli on Windows
+# Navigate to the aiwcli directory
+cd ~/.aiw/aiwcli  # or C:\Users\YOUR_USERNAME\.aiw\aiwcli on Windows
 
 # Install dependencies
 npm install
@@ -29,16 +29,16 @@ npm install -g .
 **Verify installation:**
 
 ```bash
-pai --version
-pai --help
+aiw --version
+aiw --help
 ```
 
 ### Run Without Global Install
 
-If you prefer not to install globally, you can run commands directly from the pai-cli directory:
+If you prefer not to install globally, you can run commands directly from the aiwcli directory:
 
 ```bash
-cd ~/.pai/pai-cli
+cd ~/.aiw/aiwcli
 ./bin/run.js <command>   # Unix/Mac
 .\bin\run.cmd <command>  # Windows
 ```
@@ -54,11 +54,11 @@ cd ~/.pai/pai-cli
 
 **Minimum Claude Code Version:** 0.1.0 or later
 
-PAI CLI automatically detects your Claude Code version and warns if incompatibilities are detected. The CLI will continue to launch even with version warnings (graceful degradation).
+AIW CLI automatically detects your Claude Code version and warns if incompatibilities are detected. The CLI will continue to launch even with version warnings (graceful degradation).
 
 ### Known Incompatible Versions
 
-- **0.0.9** - Has known issues with PAI CLI integration
+- **0.0.9** - Has known issues with AIW CLI integration
 
 If you encounter version compatibility warnings, upgrade Claude Code to the latest version:
 
@@ -71,7 +71,7 @@ npm install -g @anthropic-ai/claude-code@latest
 
 ### Windows Setup: Symlink Permission Denied
 
-**Symptom:** `pai init` fails with "Permission denied creating symlink" or "EPERM: operation not permitted"
+**Symptom:** `aiw init` fails with "Permission denied creating symlink" or "EPERM: operation not permitted"
 
 **Solution (choose one):**
 
@@ -79,11 +79,11 @@ npm install -g @anthropic-ai/claude-code@latest
 1. Open Windows Settings
 2. Go to "Privacy & Security" → "For developers"
 3. Enable "Developer Mode"
-4. Run `pai init` again
+4. Run `aiw init` again
 
 **Option 2: Run as Administrator**
 1. Open PowerShell or Command Prompt as Administrator
-2. Run `pai init`
+2. Run `aiw init`
 
 Developer Mode is recommended as it allows symlink creation without elevated privileges for all future operations.
 
@@ -101,11 +101,11 @@ Developer Mode is recommended as it allows symlink creation without elevated pri
 Use `--debug` flag to see detailed version information:
 
 ```bash
-pai launch --debug
+aiw launch --debug
 ```
 
 Debug output includes:
-- Resolved PAI_DIR path
+- Resolved AIW_DIR path
 - Claude Code version detection
 - Compatibility check results
 - Spawn arguments and configuration
@@ -117,11 +117,11 @@ If `claude --version` fails or hangs:
 - Check PATH includes Claude Code installation directory
 - Reinstall Claude Code if necessary
 
-PAI CLI assumes compatibility if version cannot be determined and will proceed with launch.
+AIW CLI assumes compatibility if version cannot be determined and will proceed with launch.
 
 ## Environment Variables
 
-PAI CLI respects standard environment variables for controlling output behavior:
+AIW CLI respects standard environment variables for controlling output behavior:
 
 ### NO_COLOR
 
@@ -129,7 +129,7 @@ Disables colored output. Useful for scripts or when colors interfere with output
 
 ```bash
 # Disable all colors
-NO_COLOR=1 pai launch
+NO_COLOR=1 aiw launch
 ```
 
 ### FORCE_COLOR
@@ -138,26 +138,26 @@ Forces colored output even when not in a TTY (terminal). Useful for CI environme
 
 ```bash
 # Force colors (level 1 = basic 16 colors)
-FORCE_COLOR=1 pai launch | less -R
+FORCE_COLOR=1 aiw launch | less -R
 
 # Force 256 colors
-FORCE_COLOR=2 pai launch
+FORCE_COLOR=2 aiw launch
 
 # Force truecolor (16 million colors)
-FORCE_COLOR=3 pai launch
+FORCE_COLOR=3 aiw launch
 ```
 
-### PAI_DIR
+### AIW_DIR
 
-Customize the PAI configuration directory (default: `~/.pai`):
+Customize the AIW configuration directory (default: `~/.aiw`):
 
 ```bash
-PAI_DIR=/custom/path pai launch
+AIW_DIR=/custom/path aiw launch
 ```
 
 ## Output Behavior
 
-PAI CLI automatically adapts its output based on the execution context:
+AIW CLI automatically adapts its output based on the execution context:
 
 ### Interactive Terminal (TTY)
 - Colors enabled
@@ -171,16 +171,16 @@ PAI CLI automatically adapts its output based on the execution context:
 
 ```bash
 # Example: Piping to other commands
-pai launch --help | grep "OPTIONS"
+aiw launch --help | grep "OPTIONS"
 
 # Example: Redirecting to file
-pai launch --help > help.txt
+aiw launch --help > help.txt
 
 # Example: Processing with tools
-pai launch 2>&1 | tee output.log
+aiw launch 2>&1 | tee output.log
 ```
 
-This automatic behavior ensures PAI CLI works seamlessly in both interactive use and automation scripts without requiring manual configuration.
+This automatic behavior ensures AIW CLI works seamlessly in both interactive use and automation scripts without requiring manual configuration.
 
 ### Quiet Mode
 
@@ -188,10 +188,10 @@ For scripting and automation where you want minimal output, use the `--quiet` (o
 
 ```bash
 # Suppress informational output
-pai launch --quiet
+aiw launch --quiet
 
 # Short form
-pai launch -q
+aiw launch -q
 ```
 
 **What Gets Suppressed:**
@@ -208,17 +208,17 @@ pai launch -q
 
 ```bash
 # Silent execution in scripts
-pai launch --quiet
+aiw launch --quiet
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
   echo "Launch failed with code $EXIT_CODE"
 fi
 
 # Combine with piping
-pai launch --quiet 2>&1 | tee log.txt
+aiw launch --quiet 2>&1 | tee log.txt
 
 # CI/CD pipelines
-pai launch --quiet || exit 1
+aiw launch --quiet || exit 1
 ```
 
 **Quiet Mode vs. Piping:**
@@ -228,7 +228,7 @@ pai launch --quiet || exit 1
 
 ## Command Chaining
 
-PAI CLI is designed for seamless integration into command chains and pipelines, enabling complex automation workflows.
+AIW CLI is designed for seamless integration into command chains and pipelines, enabling complex automation workflows.
 
 ### Chaining with && (Success Chains)
 
@@ -236,13 +236,13 @@ Commands can be chained using `&&` to execute multiple operations sequentially, 
 
 ```bash
 # Execute multiple commands - stops if any fails
-pai launch --help && pai init --help
+aiw launch --help && aiw init --help
 
 # Chain with other tools
-pai launch --help && echo "Launch command is available"
+aiw launch --help && echo "Launch command is available"
 
 # Complex chains
-pai init && pai launch --quiet && echo "Setup and launch complete"
+aiw init && aiw launch --quiet && echo "Setup and launch complete"
 ```
 
 **How It Works:**
@@ -252,17 +252,17 @@ pai init && pai launch --quiet && echo "Setup and launch complete"
 
 ### Piping Output
 
-PAI CLI produces clean stdout that works seamlessly with standard Unix tools:
+AIW CLI produces clean stdout that works seamlessly with standard Unix tools:
 
 ```bash
 # Pipe to grep, awk, jq, etc.
-pai launch --help | grep "Launch"
+aiw launch --help | grep "Launch"
 
 # Combine quiet mode for cleanest output
-pai launch --help --quiet | wc -l
+aiw launch --help --quiet | wc -l
 
 # Multi-stage pipelines
-pai launch --help | grep "flags" | sort
+aiw launch --help | grep "flags" | sort
 ```
 
 **Output Separation:**
@@ -275,25 +275,25 @@ pai launch --help | grep "flags" | sort
 **Windows PowerShell:**
 ```powershell
 # && chains work in PowerShell 7+
-pai launch --help && echo "Success"
+aiw launch --help && echo "Success"
 
 # Pipes work universally
-pai launch --help | Select-String "Launch"
+aiw launch --help | Select-String "Launch"
 
 # Legacy CMD/PowerShell 5.1 uses semicolon for sequential execution
-pai launch --help; echo "Runs regardless of success"
+aiw launch --help; echo "Runs regardless of success"
 ```
 
 **Unix/macOS (Bash/Zsh):**
 ```bash
 # Standard && chaining
-pai launch --help && echo "Success"
+aiw launch --help && echo "Success"
 
 # Standard piping
-pai launch --help | grep "Launch"
+aiw launch --help | grep "Launch"
 
 # Complex pipelines
-pai launch --help | grep "flags" | awk '{print $1}'
+aiw launch --help | grep "flags" | awk '{print $1}'
 ```
 
 ### Practical Examples
@@ -301,13 +301,13 @@ pai launch --help | grep "flags" | awk '{print $1}'
 **CI/CD Pipelines:**
 ```bash
 # Stop pipeline on first failure
-pai init && pai launch --quiet && other-command || exit 1
+aiw init && aiw launch --quiet && other-command || exit 1
 ```
 
 **Scripting with Error Handling:**
 ```bash
 #!/bin/bash
-if pai launch --quiet; then
+if aiw launch --quiet; then
   echo "Launch succeeded"
 else
   echo "Launch failed with code $?" >&2
@@ -318,12 +318,12 @@ fi
 **Data Processing:**
 ```bash
 # Extract and process help text
-pai launch --help --quiet | grep -E "^  -" | sort
+aiw launch --help --quiet | grep -E "^  -" | sort
 ```
 
 ## Exit Codes
 
-PAI CLI uses standardized exit codes to enable reliable error handling in scripts and automation pipelines.
+AIW CLI uses standardized exit codes to enable reliable error handling in scripts and automation pipelines.
 
 ### Exit Code Reference
 
@@ -332,7 +332,7 @@ PAI CLI uses standardized exit codes to enable reliable error handling in script
 | `0` | Success | Command completed successfully without errors |
 | `1` | General Error | Unexpected runtime failures, system errors, unhandled exceptions |
 | `2` | Invalid Usage | Invalid arguments, unknown flags, missing required parameters |
-| `3` | Environment Error | Missing prerequisites (Claude Code not installed, PAI_DIR not found, permission denied) |
+| `3` | Environment Error | Missing prerequisites (Claude Code not installed, AIW_DIR not found, permission denied) |
 
 ### Checking Exit Codes
 
@@ -340,54 +340,54 @@ PAI CLI uses standardized exit codes to enable reliable error handling in script
 
 ```bash
 # Check last command's exit code
-pai launch
+aiw launch
 echo $?  # 0 = success, non-zero = error
 
 # Conditional execution with &&
-pai launch && echo "Success!"
+aiw launch && echo "Success!"
 
 # Fallback with ||
-pai launch || echo "Failed with code $?"
+aiw launch || echo "Failed with code $?"
 
 # Store and check exit code
-pai launch
+aiw launch
 EXIT_CODE=$?
 if [ $EXIT_CODE -eq 0 ]; then
   echo "Launch succeeded"
 elif [ $EXIT_CODE -eq 3 ]; then
-  echo "Environment error - run 'pai init' or install Claude Code"
+  echo "Environment error - run 'aiw init' or install Claude Code"
 else
   echo "Command failed with exit code $EXIT_CODE"
 fi
 
 # Chain commands (stops on first failure)
-pai init && pai launch && echo "All commands succeeded"
+aiw init && aiw launch && echo "All commands succeeded"
 ```
 
 **PowerShell (Windows):**
 
 ```powershell
 # Check last command's exit code
-pai launch
+aiw launch
 echo $LASTEXITCODE  # 0 = success, non-zero = error
 
 # Conditional execution
-pai launch
+aiw launch
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Success!"
 } elseif ($LASTEXITCODE -eq 3) {
-    Write-Host "Environment error - run 'pai init' or install Claude Code"
+    Write-Host "Environment error - run 'aiw init' or install Claude Code"
 } else {
     Write-Host "Failed with exit code $LASTEXITCODE"
 }
 
 # Throw on error
 $ErrorActionPreference = "Stop"
-pai launch  # Will throw exception if exit code is non-zero
+aiw launch  # Will throw exception if exit code is non-zero
 
 # Continue on error but check result
 $ErrorActionPreference = "Continue"
-pai launch
+aiw launch
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Launch failed"
     exit $LASTEXITCODE
@@ -398,14 +398,14 @@ if ($LASTEXITCODE -ne 0) {
 
 ```cmd
 REM Check exit code with %ERRORLEVEL%
-pai launch
+aiw launch
 echo %ERRORLEVEL%
 
 REM Conditional execution with &&
-pai init && pai launch && echo Success!
+aiw init && aiw launch && echo Success!
 
 REM Check exit code in batch script
-pai launch
+aiw launch
 if %ERRORLEVEL% EQU 0 (
     echo Success
 ) else if %ERRORLEVEL% EQU 3 (
@@ -418,9 +418,9 @@ if %ERRORLEVEL% EQU 0 (
 ### Common Exit Code Scenarios
 
 **Success (0):**
-- Help displayed: `pai launch --help`
-- Setup completed successfully: `pai init`
-- Claude Code launched and exited normally: `pai launch`
+- Help displayed: `aiwlaunch --help`
+- Setup completed successfully: `aiw init`
+- Claude Code launched and exited normally: `aiwlaunch`
 
 **General Error (1):**
 - Unexpected runtime failures
@@ -429,15 +429,15 @@ if %ERRORLEVEL% EQU 0 (
 - Unknown/unhandled exceptions
 
 **Invalid Usage (2):**
-- Unknown flag: `pai launch --invalid-flag`
-- Unknown command: `pai invalid-command`
-- Missing required argument: `pai hello` (without PERSON arg)
+- Unknown flag: `aiwlaunch --invalid-flag`
+- Unknown command: `aiwinvalid-command`
+- Missing required argument: `aiw init` (without --method arg)
 - Conflicting options
 
 **Environment Error (3):**
-- Claude Code not installed: `pai launch` (when `claude` not in PATH)
-- PAI_DIR not found: `pai init` (when ~/.pai doesn't exist and PAI_DIR not set)
-- Permission denied: `pai init` (on Windows without Developer Mode or admin rights)
+- Claude Code not installed: `aiwlaunch` (when `claude` not in PATH)
+- AIW_DIR not found: `aiw init` (when ~/.aiw doesn't exist and AIW_DIR not set)
+- Permission denied: `aiw init` (on Windows without Developer Mode or admin rights)
 - Version incompatibility blocking operation
 
 ### Exit Codes in CI/CD
@@ -446,14 +446,14 @@ Exit codes enable reliable automation in continuous integration and deployment p
 
 ```yaml
 # GitHub Actions example
-- name: Launch PAI
-  run: pai launch
+- name: Launch AIW
+  run: aiw launch
   # Automatically fails workflow on non-zero exit
 
 # With custom error handling
-- name: Launch PAI with fallback
+- name: Launch AIW with fallback
   run: |
-    pai launch || {
+    aiw launch || {
       EXIT_CODE=$?
       if [ $EXIT_CODE -eq 3 ]; then
         echo "Environment setup needed"
@@ -468,13 +468,13 @@ Exit codes enable reliable automation in continuous integration and deployment p
 Every command documents its exit codes in help text:
 
 ```bash
-pai launch --help  # See EXIT CODES section
-pai init --help   # See EXIT CODES section
+aiw launch --help  # See EXIT CODES section
+aiw init --help   # See EXIT CODES section
 ```
 
 ## Shell Completion
 
-PAI CLI supports tab completion for commands, subcommands, and flags in Bash, Zsh, and PowerShell.
+AIW CLI supports tab completion for commands, subcommands, and flags in Bash, Zsh, and PowerShell.
 
 ### Installation
 
@@ -483,19 +483,19 @@ PAI CLI supports tab completion for commands, subcommands, and flags in Bash, Zs
 Add to your `~/.bashrc`:
 
 ```bash
-eval "$(pai autocomplete:script bash)"
+eval "$(aiw autocomplete:script bash)"
 ```
 
 Or run this one-liner:
 
 ```bash
-printf "eval \"\$(pai autocomplete:script bash)\"" >> ~/.bashrc && source ~/.bashrc
+printf "eval \"\$(aiw autocomplete:script bash)\"" >> ~/.bashrc && source ~/.bashrc
 ```
 
 **Note:** If your terminal starts as a login shell, modify `~/.bash_profile` or `~/.profile` instead:
 
 ```bash
-printf "eval \"\$(pai autocomplete:script bash)\"" >> ~/.bash_profile && source ~/.bash_profile
+printf "eval \"\$(aiw autocomplete:script bash)\"" >> ~/.bash_profile && source ~/.bash_profile
 ```
 
 **Zsh**
@@ -503,13 +503,13 @@ printf "eval \"\$(pai autocomplete:script bash)\"" >> ~/.bash_profile && source 
 Add to your `~/.zshrc`:
 
 ```bash
-eval "$(pai autocomplete:script zsh)"
+eval "$(aiw autocomplete:script zsh)"
 ```
 
 Or run this one-liner:
 
 ```bash
-printf "eval \"\$(pai autocomplete:script zsh)\"" >> ~/.zshrc && source ~/.zshrc
+printf "eval \"\$(aiw autocomplete:script zsh)\"" >> ~/.zshrc && source ~/.zshrc
 ```
 
 **PowerShell**
@@ -517,7 +517,7 @@ printf "eval \"\$(pai autocomplete:script zsh)\"" >> ~/.zshrc && source ~/.zshrc
 Run the autocomplete command and follow the instructions:
 
 ```powershell
-pai autocomplete powershell
+aiw autocomplete powershell
 ```
 
 The command will provide platform-specific setup instructions. Typically:
@@ -527,7 +527,7 @@ The command will provide platform-specific setup instructions. Typically:
 New-Item -Type Directory -Path (Split-Path -Parent $PROFILE) -ErrorAction SilentlyContinue
 
 # Add autocomplete to profile and reload
-Add-Content -Path $PROFILE -Value (Invoke-Expression -Command "pai autocomplete script powershell"); .$PROFILE
+Add-Content -Path $PROFILE -Value (Invoke-Expression -Command "aiw autocomplete script powershell"); .$PROFILE
 ```
 
 **Optional**: Enable menu-style completion in PowerShell:
@@ -542,16 +542,16 @@ After installation, you can use tab completion:
 
 ```bash
 # Command completion
-pai la<TAB>        # Completes to "pai launch"
+aiw la<TAB>        # Completes to "aiw launch"
 
 # Subcommand completion (when available)
-pai init <TAB>     # Shows available subcommands
+aiw init <TAB>     # Shows available subcommands
 
 # Flag completion
-pai launch --<TAB> # Shows available flags
+aiw launch --<TAB> # Shows available flags
 
 # Command listing
-pai <TAB>          # Shows all available commands
+aiw <TAB>          # Shows all available commands
 ```
 
 ### Troubleshooting
@@ -560,7 +560,7 @@ pai <TAB>          # Shows all available commands
 
 If completion doesn't work:
 - Check if `~/.bashrc` is sourced (may need `~/.bash_profile` for login shells)
-- Verify completion script loaded: `type _pai_completion`
+- Verify completion script loaded: `type _aiw_completion`
 - Restart your shell: `exec bash`
 
 **Zsh**
@@ -582,44 +582,44 @@ If completion doesn't work:
 If commands or flags change after updates:
 
 ```bash
-pai autocomplete --refresh-cache
+aiw autocomplete --refresh-cache
 ```
 
 Or use the short form:
 
 ```bash
-pai autocomplete -r
+aiw autocomplete -r
 ```
 
 ## Scripting Examples
 
-PAI CLI is designed for seamless integration into automation scripts, shell pipelines, and CI/CD workflows. All examples work on Windows (PowerShell/CMD/Git Bash), macOS, and Linux.
+AIW CLI is designed for seamless integration into automation scripts, shell pipelines, and CI/CD workflows. All examples work on Windows (PowerShell/CMD/Git Bash), macOS, and Linux.
 
 ### Basic Piping
 
-Pipe PAI CLI output to standard Unix tools for filtering and processing:
+Pipe AIW CLI output to standard Unix tools for filtering and processing:
 
 ```bash
 # Search help for specific command
-pai --help | grep "launch"
+aiw --help | grep "launch"
 
 # Find all available flags
-pai launch --help | grep -E "^  -"
+aiw launch --help | grep -E "^  -"
 
 # Extract version number
-pai --version | cut -d' ' -f2
+aiw --version | cut -d' ' -f2
 
 # Count lines of output
-pai --help | wc -l
+aiw --help | wc -l
 ```
 
 **PowerShell equivalent:**
 ```powershell
 # Search help
-pai --help | Select-String "launch"
+aiw --help | Select-String "launch"
 
 # Find flags
-pai launch --help | Select-String "^  -"
+aiw launch --help | Select-String "^  -"
 ```
 
 ### Command Chaining
@@ -629,16 +629,16 @@ Chain multiple commands together with proper error handling:
 **Bash/Zsh (Unix, macOS, Linux, Git Bash):**
 ```bash
 # Sequential execution - stops on first failure
-pai init && pai launch
+aiw init && aiw launch
 
 # Multiple commands
-pai --version && pai init && pai launch
+aiw --version && aiw init && aiw launch
 
 # Continue on error
-pai init || echo "Setup failed"
+aiw init || echo "Setup failed"
 
 # Error handling with exit codes
-if pai launch; then
+if aiw launch; then
   echo "Launch succeeded"
 else
   EXIT_CODE=$?
@@ -649,10 +649,10 @@ fi
 **PowerShell (Windows):**
 ```powershell
 # Sequential execution (PowerShell 7+)
-pai init && pai launch
+aiw init && aiw launch
 
 # Error handling
-pai launch
+aiw launch
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Success"
 } else {
@@ -663,10 +663,10 @@ if ($LASTEXITCODE -eq 0) {
 **CMD (Windows):**
 ```cmd
 REM Sequential execution
-pai init && pai launch && echo Success
+aiw init && aiw launch && echo Success
 
 REM Error handling
-pai launch
+aiw launch
 if %ERRORLEVEL% EQU 0 (
     echo Success
 ) else (
@@ -680,20 +680,20 @@ Suppress informational output while preserving errors:
 
 ```bash
 # Silent execution in automation
-pai launch --quiet
+aiw launch --quiet
 
 # Short form
-pai launch -q
+aiw launch -q
 
 # Capture exit code
-pai launch --quiet
+aiw launch --quiet
 EXIT_CODE=$?
 
 # Only errors shown (goes to stderr)
-pai launch --quiet 2>errors.log
+aiw launch --quiet 2>errors.log
 
 # Combine with piping for cleanest output
-pai launch --help --quiet | wc -l
+aiw launch --help --quiet | wc -l
 ```
 
 **Use cases for `--quiet`:**
@@ -704,7 +704,7 @@ pai launch --help --quiet | wc -l
 
 ### Exit Code Handling
 
-PAI CLI uses standardized exit codes for reliable automation:
+AIW CLI uses standardized exit codes for reliable automation:
 
 | Code | Meaning | Example Scenarios |
 |------|---------|-------------------|
@@ -716,13 +716,13 @@ PAI CLI uses standardized exit codes for reliable automation:
 **Bash/Zsh examples:**
 ```bash
 # Basic exit code check
-pai launch
+aiw launch
 if [ $? -eq 0 ]; then
   echo "Success"
 fi
 
 # Handle specific exit codes
-pai launch
+aiw launch
 EXIT_CODE=$?
 case $EXIT_CODE in
   0)
@@ -733,7 +733,7 @@ case $EXIT_CODE in
     ;;
   3)
     echo "Environment issue - is Claude Code installed?"
-    pai init  # Try setup
+    aiw init  # Try setup
     ;;
   *)
     echo "Unexpected error: $EXIT_CODE"
@@ -741,7 +741,7 @@ case $EXIT_CODE in
 esac
 
 # Use exit codes in pipelines
-pai init && pai launch || {
+aiw init && aiw launch || {
   echo "Failed at exit code $?"
   exit 1
 }
@@ -750,23 +750,23 @@ pai init && pai launch || {
 **PowerShell examples:**
 ```powershell
 # Check last exit code
-pai launch
+aiw launch
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Success"
 }
 
 # Handle specific codes
-pai launch
+aiw launch
 switch ($LASTEXITCODE) {
     0 { Write-Host "Success" }
     2 { Write-Host "Invalid usage" }
-    3 { Write-Host "Environment issue"; pai init }
+    3 { Write-Host "Environment issue"; aiw init }
     default { Write-Host "Error: $LASTEXITCODE" }
 }
 
 # Fail on error
 $ErrorActionPreference = "Stop"
-pai launch  # Will throw if non-zero exit code
+aiw launch  # Will throw if non-zero exit code
 ```
 
 ### Shell Completion Usage
@@ -775,16 +775,16 @@ After installing shell completion (see [Shell Completion](#shell-completion) sec
 
 ```bash
 # Command completion
-pai la<TAB>        # Completes to "pai launch"
+aiw la<TAB>        # Completes to "aiw launch"
 
 # Show all commands
-pai <TAB>          # Lists: autocomplete, hello, help, launch, setup
+aiw <TAB>          # Lists: autocomplete, convert, help, init, launch
 
 # Flag completion
-pai launch --<TAB> # Shows: --debug, --help, --quiet
+aiw launch --<TAB> # Shows: --debug, --help, --quiet
 
 # Short flag completion
-pai launch -<TAB>  # Shows: -d, -h, -q
+aiw launch -<TAB>  # Shows: -d, -h, -q
 ```
 
 **Benefits:**
@@ -797,7 +797,7 @@ pai launch -<TAB>  # Shows: -d, -h, -q
 
 **GitHub Actions:**
 ```yaml
-name: Deploy with PAI
+name: Deploy with AIW
 
 on: [push]
 
@@ -807,18 +807,18 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Setup PAI
+      - name: Setup AIW
         run: |
-          npm install -g pai-cli
-          pai init
+          npm install -g aiwcli
+          aiw init
 
       - name: Launch Claude Code
-        run: pai launch --quiet || exit $?
+        run: aiw launch --quiet || exit $?
 
       - name: Check exit code
         if: failure()
         run: |
-          echo "PAI launch failed"
+          echo "AIW launch failed"
           echo "Exit code: $?"
 ```
 
@@ -826,8 +826,8 @@ jobs:
 ```yaml
 deploy:
   script:
-    - pai init
-    - pai launch --quiet
+    - aiw init
+    - aiw launch --quiet
   only:
     - main
 ```
@@ -839,12 +839,12 @@ pipeline {
     stages {
         stage('Setup') {
             steps {
-                sh 'pai init'
+                sh 'aiw init'
             }
         }
         stage('Launch') {
             steps {
-                sh 'pai launch --quiet || exit $?'
+                sh 'aiw launch --quiet || exit $?'
             }
         }
     }
@@ -860,20 +860,20 @@ set -e  # Exit on error
 
 echo "Starting deployment..."
 
-# Setup PAI if not configured
-if ! pai --version > /dev/null 2>&1; then
-  echo "PAI CLI not found"
+# Setup AIW if not configured
+if ! aiw --version > /dev/null 2>&1; then
+  echo "AIW CLI not found"
   exit 3
 fi
 
 # Run setup
-pai init || {
+aiw init || {
   echo "Setup failed with code $?"
   exit 1
 }
 
 # Launch with quiet mode
-pai launch --quiet
+aiw launch --quiet
 
 echo "Deployment complete"
 ```
@@ -882,12 +882,12 @@ echo "Deployment complete"
 ```bash
 #!/bin/bash
 
-# Check PAI status every 5 minutes
+# Check AIW status every 5 minutes
 while true; do
-  if pai --version --quiet; then
-    echo "[$(date)] PAI CLI operational"
+  if aiw --version --quiet; then
+    echo "[$(date)] AIW CLI operational"
   else
-    echo "[$(date)] PAI CLI check failed: exit code $?"
+    echo "[$(date)] AIW CLI check failed: exit code $?"
   fi
   sleep 300
 done
@@ -895,13 +895,13 @@ done
 
 **Batch processing (PowerShell):**
 ```powershell
-# Process multiple operations with PAI
+# Process multiple operations with AIW
 $operations = @("setup", "launch")
 
 foreach ($op in $operations) {
-    Write-Host "Running: pai $op"
+    Write-Host "Running: aiw $op"
 
-    & pai $op --quiet
+    & aiw $op --quiet
 
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Operation $op failed with code $LASTEXITCODE"
@@ -917,67 +917,67 @@ Write-Host "All operations completed successfully"
 **1. Always use `--quiet` in scripts:**
 ```bash
 # Good: Clean output
-pai launch --quiet
+aiw launch --quiet
 
 # Avoid: Verbose output pollutes logs
-pai launch
+aiw launch
 ```
 
 **2. Check exit codes explicitly:**
 ```bash
 # Good: Explicit error handling
-pai launch
+aiw launch
 if [ $? -ne 0 ]; then
   handle_error
 fi
 
 # Risky: Assumes success
-pai launch
+aiw launch
 continue_anyway
 ```
 
 **3. Pipe stderr to log files:**
 ```bash
 # Capture errors for debugging
-pai launch 2>errors.log
+aiw launch 2>errors.log
 
 # Capture both stdout and stderr
-pai launch >output.log 2>&1
+aiw launch >output.log 2>&1
 ```
 
 **4. Use timeout for long operations:**
 ```bash
 # Bash: timeout after 60 seconds
-timeout 60 pai launch || echo "Timeout or error"
+timeout 60 aiw launch || echo "Timeout or error"
 
 # PowerShell: timeout after 60 seconds
-Start-Process -Wait -Timeout 60 -NoNewWindow pai -ArgumentList "launch"
+Start-Process -Wait -Timeout 60 -NoNewWindow aiw -ArgumentList "launch"
 ```
 
 **5. Combine with other CLI tools:**
 ```bash
 # Log with timestamp
-pai launch --quiet 2>&1 | while read line; do
+aiw launch --quiet 2>&1 | while read line; do
   echo "$(date -Is) $line"
 done
 
 # Notify on completion (Linux/macOS)
-pai launch --quiet && notify-send "PAI launch complete"
+aiw launch --quiet && notify-send "AIW launch complete"
 
 # Email on failure (with sendmail)
-pai launch --quiet || echo "PAI launch failed" | mail -s "Alert" admin@example.com
+aiw launch --quiet || echo "AIW launch failed" | mail -s "Alert" admin@example.com
 ```
 
 ## Command Development Guide
 
-This section explains how to add new commands to PAI CLI following Oclif best practices and our established patterns.
+This section explains how to add new commands to AIW CLI following Oclif best practices and our established patterns.
 
 ### Command Architecture
 
-PAI CLI uses [Oclif](https://oclif.io) which provides automatic command registration based on file structure:
+AIW CLI uses [Oclif](https://oclif.io) which provides automatic command registration based on file structure:
 
-- **File path = Command name**: `src/commands/launch.ts` → `pai launch`
-- **Subdirectories = Topics**: `src/commands/init/bmad.ts` → `pai init bmad`
+- **File path = Command name**: `src/commands/launch.ts` → `aiwlaunch`
+- **Subdirectories = Topics**: `src/commands/convert/index.ts` → `aiwconvert`
 - **Class names**: PascalCase version of command name (`Launch`, `InitBmad`)
 
 ### Adding a New Top-Level Command
@@ -990,11 +990,12 @@ PAI CLI uses [Oclif](https://oclif.io) which provides automatic command registra
 
 2. **Implement the command**:
    ```typescript
-   import BaseCommand from './base.js'
    import {Flags} from '@oclif/core'
 
+   import BaseCommand from '../lib/base-command.js'
+
    export default class Status extends BaseCommand {
-     static override description = 'Show PAI status'
+     static override description = 'Show AIW status'
 
      static override examples = [
        '<%= config.bin %> <%= command.id %>',
@@ -1040,8 +1041,8 @@ Topics organize related commands under a common namespace:
 
 2. **Add topic commands**:
    ```typescript
-   // src/commands/config/show.ts → pai config show
-   // src/commands/config/edit.ts → pai config edit
+   // src/commands/config/show.ts → aiw config show
+   // src/commands/config/edit.ts → aiw config edit
    ```
 
 ### Standard Flag Patterns
@@ -1072,7 +1073,7 @@ static override flags = {
 |---------|------------|---------|
 | Command files | kebab-case | `launch.ts`, `init/bmad.ts` |
 | Command classes | PascalCase | `Launch`, `InitBmad` |
-| Flags | camelCase | `debug`, `paiDir`, `quiet` |
+| Flags | camelCase | `debug`, `aiwDir`, `quiet` |
 | Constants | UPPER_SNAKE_CASE | `EXIT_CODES.SUCCESS` |
 
 ### Import Organization
@@ -1086,9 +1087,9 @@ import {spawn} from 'node:child_process'
 // 2. External packages
 import {Flags} from '@oclif/core'
 
-// 3. Internal absolute imports
-import BaseCommand from './base.js'
-import {getPaiHome} from '../lib/config.js'
+// 3. Internal imports
+import BaseCommand from '../lib/base-command.js'
+import {getAiwDir} from '../lib/config.js'
 
 // 4. Type imports
 import type {LaunchOptions} from '../types/index.js'
@@ -1103,7 +1104,7 @@ import {EXIT_CODES} from '../types/index.js'
 
 // Actionable error format: {what_wrong}. {how_to_fix}
 this.error(
-  'Configuration file not found. Run `pai init` to initialize.',
+  'Configuration file not found. Run `aiw init` to initialize.',
   {exit: EXIT_CODES.ENVIRONMENT_ERROR}
 )
 ```
@@ -1118,9 +1119,9 @@ this.error(
 
 Oclif provides built-in help:
 
-- `pai <command> --help` - Show command help
-- `pai help <command>` - Alternative help format (same output)
-- `pai help` - List all commands
+- `aiw <command> --help` - Show command help
+- `aiw help <command>` - Alternative help format (same output)
+- `aiw help` - List all commands
 
 Help is automatically generated from command metadata (description, examples, flags).
 
@@ -1151,23 +1152,28 @@ it('executes command', () => {
 ### Project Structure
 
 ```
-pai-cli/
+aiwcli/
 ├── src/
 │   ├── commands/
-│   │   ├── base.ts           # BaseCommand (extend this)
-│   │   ├── launch.ts         # pai launch
-│   │   ├── setup.ts          # pai init
-│   │   └── init/             # Topic: pai init
-│   │       └── bmad.ts       # pai init bmad
+│   │   ├── launch.ts         # aiw launch
+│   │   ├── init/             # Topic: aiw init
+│   │   │   └── index.ts      # aiw init --method <template>
+│   │   └── convert/          # Topic: aiw convert
+│   │       └── index.ts      # aiw convert <source> --to <platform>
 │   ├── lib/                  # Internal libraries
+│   │   ├── base-command.ts   # BaseCommand (extend this)
 │   │   ├── config.ts
 │   │   ├── debug.ts
 │   │   ├── errors.ts
-│   │   └── spawn.ts
+│   │   ├── spawn.ts
+│   │   └── template-mapper/  # Template conversion logic
+│   │       ├── adapters/     # Platform-specific adapters
+│   │       └── parser.ts
 │   └── types/                # Type definitions
 │       └── index.ts
 ├── test/
 │   ├── commands/             # Unit tests
+│   ├── lib/                  # Library tests
 │   └── integration/          # Integration tests
 └── README.md
 ```

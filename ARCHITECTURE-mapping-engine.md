@@ -181,18 +181,18 @@ packages/cli/src/lib/template-mapper/
 ├── index.ts                    # Public API exports
 ├── types.ts                    # Type definitions (TemplateMetadata, etc.)
 ├── parser.ts                   # YAML frontmatter + markdown parser
-├── validator.ts                # Schema validation
-├── engine.ts                   # MappingEngine implementation
-├── emulation/                  # Emulation pattern implementations
-│   ├── index.ts
-│   ├── skill-emulation.ts      # Skill → Windsurf workflow
-│   ├── workflow-emulation.ts   # Workflow → Claude Code skill
-│   └── working-set.ts          # Copilot batching patterns
+├── content-parser.ts           # Semantic construct detection in content body
+├── content-transformers.ts     # Platform-specific content transformation
 └── adapters/                   # Platform-specific adapters
     ├── index.ts
     ├── claude-code.ts          # Claude Code adapter
-    ├── windsurf.ts             # Windsurf adapter
-    └── github-copilot.ts       # GitHub Copilot adapter
+    └── windsurf.ts             # Windsurf adapter
+
+# Planned but not yet implemented:
+# ├── validator.ts              # Schema validation (future)
+# ├── engine.ts                 # MappingEngine orchestration (future)
+# └── adapters/
+#     └── github-copilot.ts     # GitHub Copilot adapter (future)
 ```
 
 ---
@@ -218,21 +218,49 @@ export function parseTemplateString(content: string): ParsedTemplate
 - Missing frontmatter delimiters → `ParseError` with suggestion
 - File not found → `FileNotFoundError`
 
-### 2. Validator (`validator.ts`)
+### 2. Content Parser (`content-parser.ts`)
 
 **Responsibilities:**
+- Detect semantic constructs in markdown body content
+- Identify platform-specific syntax patterns
+- Parse and categorize constructs by type and source platform
+- Support all 18 construct types from CONTENT-SCHEMA.md
+
+**Interface:**
+```typescript
+export function parseContent(content: string): ContentAnalysis
+export function hasSemanticConstructs(content: string): boolean
+export function getConstructsByPlatform(constructs: SemanticConstruct[], platform: Platform): SemanticConstruct[]
+export function getConstructsByType(constructs: SemanticConstruct[], type: SemanticConstructType): SemanticConstruct[]
+```
+
+### 3. Content Transformers (`content-transformers.ts`)
+
+**Responsibilities:**
+- Transform semantic constructs for target platforms
+- Add advisory warnings for unsupported features
+- Rephrase platform-specific syntax
+- Maintain semantic intent during transformation
+
+**Interface:**
+```typescript
+export class ClaudeCodeContentTransformer implements ContentTransformer
+export class WindsurfContentTransformer implements ContentTransformer
+export class CopilotContentTransformer implements ContentTransformer
+export function createContentTransformer(platform: Platform): ContentTransformer
+```
+
+### 4. Validator (`validator.ts`) - PLANNED
+
+> **Note:** This component is planned but not yet implemented. Validation is currently handled within the parser.
+
+**Planned Responsibilities:**
 - Validate metadata against STANDARD-SCHEMA.md specification
 - Check required fields per platform
 - Validate field values (enums, patterns)
 - Generate validation issues with suggestions
 
-**Interface:**
-```typescript
-export function validateSchema(metadata: TemplateMetadata): ValidationIssue[]
-export function validateForPlatform(metadata: TemplateMetadata, platform: Platform): ValidationIssue[]
-```
-
-**Validation Rules:**
+**Planned Validation Rules:**
 - `name`: Required for Claude Code, max 64 chars, alphanumeric + hyphens/underscores
 - `description`: Max 500 chars recommended
 - `trigger`: Must be one of: manual, always_on, model_decision, glob
@@ -240,7 +268,7 @@ export function validateForPlatform(metadata: TemplateMetadata, platform: Platfo
 - `allowed-tools`: Must be valid Claude Code tool names
 - `model`: Must be valid model identifier for target platform
 
-### 3. Platform Adapters
+### 5. Platform Adapters
 
 Each adapter implements the `PlatformAdapter` interface:
 
@@ -307,9 +335,11 @@ interface PlatformAdapter {
 - If exceeded, split at markdown heading boundaries
 - Generate continuation files: `{name}-part-2.md`, etc.
 
-#### GitHub Copilot Adapter (`adapters/github-copilot.ts`)
+#### GitHub Copilot Adapter (`adapters/github-copilot.ts`) - PLANNED
 
-**Field Mapping (per PLATFORM-ADAPTERS.md Section 3.1):**
+> **Note:** This adapter is planned but not yet implemented. See PLATFORM-ADAPTERS.md Section 3 for the specification.
+
+**Planned Field Mapping (per PLATFORM-ADAPTERS.md Section 3.1):**
 | Superset Field | Copilot Field | Action |
 |----------------|---------------|--------|
 | name | *(filename)* | Use as filename |
@@ -322,25 +352,27 @@ interface PlatformAdapter {
 | context | *(emulated)* | → Batch Protocol |
 | agent | *(emulated)* | → Inline Persona |
 
-**Limit Warnings:**
+**Planned Limit Warnings:**
 - Working set: Warn if template may touch >10 files
 - Context: Warn if body >4000 chars
 - Add batching guidance for large operations
 
-**Output Files:**
+**Planned Output Files:**
 - Main: `.github/prompts/{name}.prompt.md`
 - Instructions: `.github/instructions/{name}.instructions.md` (if applyTo)
 - Global: `.github/copilot-instructions.md` (if alwaysApply)
 
-### 4. Mapping Engine (`engine.ts`)
+### 6. Mapping Engine (`engine.ts`) - PLANNED
 
-**Responsibilities:**
+> **Note:** This component is planned but not yet implemented. Currently, adapters are used directly.
+
+**Planned Responsibilities:**
 - Orchestrate the full conversion pipeline
 - Manage adapter registry
 - Coordinate parse → validate → transform → generate flow
 - Aggregate results and warnings
 
-**Interface:**
+**Planned Interface:**
 ```typescript
 class MappingEngineImpl implements MappingEngine {
   parse(filePath: string, options?: ParseOptions): Promise<ParsedTemplate>
@@ -352,6 +384,24 @@ class MappingEngineImpl implements MappingEngine {
 
 export function createMappingEngine(): MappingEngine
 ```
+
+---
+
+## Current Implementation Status
+
+The following components are implemented and exported from `packages/cli/src/lib/template-mapper/`:
+
+| Component | Status | File |
+|-----------|--------|------|
+| Parser | Implemented | `parser.ts` |
+| Content Parser | Implemented | `content-parser.ts` |
+| Content Transformers | Implemented | `content-transformers.ts` |
+| Types | Implemented | `types.ts` |
+| Claude Code Adapter | Implemented | `adapters/claude-code.ts` |
+| Windsurf Adapter | Implemented | `adapters/windsurf.ts` |
+| GitHub Copilot Adapter | Planned | `adapters/github-copilot.ts` |
+| Validator | Planned | `validator.ts` |
+| Mapping Engine | Planned | `engine.ts` |
 
 ---
 

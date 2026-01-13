@@ -8,14 +8,14 @@ These workflows enable you to use BMAD (Building Modern Applications with Discip
 
 ## Installation
 
-When you run `pai init --method bmad --ide windsurf`, this `.windsurf` folder will be copied to your project directory, making all workflows available in Windsurf IDE.
+When you run `aiw init --method bmad --ide windsurf`, this `.windsurf` folder will be copied to your project directory, making all workflows available in Windsurf IDE.
 
 ```bash
 # Install BMAD with Windsurf workflows
-pai init --method bmad --ide windsurf
+aiw init --method bmad --ide windsurf
 
 # Or install for both Claude Code and Windsurf
-pai init --method bmad --ide claude --ide windsurf
+aiw init --method bmad --ide claude --ide windsurf
 ```
 
 ## Usage in Windsurf
@@ -130,4 +130,4 @@ Both reference the same `_bmad/` workflow definitions, ensuring consistency acro
 
 - **BMAD Documentation**: See `_bmad/` directory after installation
 - **Windsurf Workflows**: https://docs.windsurf.com/windsurf/cascade/workflows
-- **PAI CLI**: https://github.com/jofu-tofu/pai-cli
+- **AIW CLI**: https://github.com/jofu-tofu/AI-Workflow-CLI

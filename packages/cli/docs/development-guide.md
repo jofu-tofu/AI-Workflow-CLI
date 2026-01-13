@@ -1,6 +1,7 @@
-# PAI CLI - Development Guide
+# AIW CLI - Development Guide
 
 **Generated:** 2026-01-10
+**Updated:** 2026-01-13
 
 ---
 
@@ -41,14 +42,11 @@
 ### 1. Clone and Install
 
 ```bash
-# Navigate to PAI directory
-cd ~/.pai  # or C:\Users\YOUR_USERNAME\.pai on Windows
+# Clone the repository
+git clone https://github.com/jofu-tofu/AI-Workflow-CLI.git aiwcli
 
-# If pai-cli doesn't exist, clone it
-# git clone <repository-url> pai-cli
-
-# Navigate to pai-cli
-cd pai-cli
+# Navigate to cli package
+cd aiwcli/packages/cli
 
 # Install dependencies
 npm install
@@ -70,8 +68,8 @@ This compiles `src/` → `dist/` using TypeScript compiler.
 npm install -g .
 
 # Verify installation
-pai --version
-pai --help
+aiw --version
+aiw --help
 ```
 
 **Alternative:** Use `./bin/dev.js` for local testing without global install.
@@ -132,7 +130,9 @@ npx tsc -b --watch
 ```
 test/
 ├── commands/       # Unit tests for individual commands
+├── lib/            # Unit tests for library modules
 ├── integration/    # Integration tests for full CLI behavior
+├── types/          # Type tests
 └── index.test.ts   # Main module tests
 ```
 
@@ -181,7 +181,7 @@ import {promisify} from 'util'
 
 const execAsync = promisify(exec)
 
-describe('pai launch integration', () => {
+describe('aiw launch integration', () => {
   it('should execute launch command', async () => {
     const {stdout} = await execAsync('./bin/run.js launch --help')
     expect(stdout).to.include('Launch Claude Code')
@@ -201,7 +201,7 @@ open coverage/index.html  # macOS
 start coverage/index.html # Windows
 ```
 
-**Coverage Target:** 100% for core features (launch, setup, init)
+**Coverage Target:** 100% for core features (launch, init, convert)
 
 ---
 
@@ -263,13 +263,17 @@ dist/
 ├── commands/
 │   ├── launch.js
 │   ├── launch.d.ts
-│   ├── setup.js
-│   ├── setup.d.ts
+│   ├── init/
+│   ├── convert/
 │   └── ...
 ├── lib/
 │   ├── config.js
 │   ├── config.d.ts
+│   ├── template-mapper/
 │   └── ...
+├── templates/
+│   ├── bmad/
+│   └── gsd/
 └── index.js
 ```
 
@@ -362,8 +366,8 @@ DEBUG=* ./bin/dev.js launch
 
 **On Windows:**
 ```cmd
-# Test PAI CLI
-pai launch --help
+# Test AIW CLI
+aiw launch --help
 
 # Check for compatibility
 ```
@@ -371,7 +375,7 @@ pai launch --help
 **On Unix/macOS:**
 ```bash
 # Test the same
-pai launch --help
+aiw launch --help
 ```
 
 ### Updating Dependencies
@@ -423,7 +427,7 @@ npx mocha --inspect-brk test/commands/launch.test.ts
 
 ### Global Install Issues
 
-**Problem:** `pai` command not found after `npm install -g .`
+**Problem:** `aiw` command not found after `npm install -g .`
 
 **Solution:**
 ```bash
@@ -435,7 +439,7 @@ export PATH="$PATH:$(npm config get prefix)/bin"  # Unix/macOS
 set PATH=%PATH%;%npm_prefix%                      # Windows
 
 # Reinstall globally
-npm uninstall -g pai-cli
+npm uninstall -g aiwcli
 npm install -g .
 ```
 
@@ -537,18 +541,6 @@ git push origin feature/my-feature
 
 ---
 
-## Continuous Integration
-
-### GitHub Actions Workflows
-
-Located in `.github/workflows/`:
-
-| Workflow | Trigger | Purpose |
-|----------|---------|---------|
-| `test.yml` | Pull requests | Run tests and linting |
-| `onPushToMain.yml` | Push to main | Deploy/publish |
-| `onRelease.yml` | Release tag | Publish to npm |
-
 ### Local CI Simulation
 
 Run the same checks as CI:
@@ -567,8 +559,7 @@ After setup:
 1. Read [Architecture](./architecture.md) to understand system design
 2. Review [Source Tree](./source-tree-analysis.md) for code organization
 3. Check [Command Dependencies](./architecture.md#command-dependencies) for implementation details
-4. Start with small changes to example commands (`hello/`)
-5. Graduate to core commands (`launch`, `setup`) after familiarization
+4. Start with core commands (`launch`, `init`, `convert`) after familiarization
 
 ---
 
@@ -576,8 +567,8 @@ After setup:
 
 - **Documentation:** `./docs/` directory
 - **Architecture:** [architecture.md](./architecture.md)
-- **Command Reference:** `pai <command> --help`
-- **Issues:** GitHub repository issues
+- **Command Reference:** `aiw <command> --help`
+- **Issues:** GitHub repository issues at https://github.com/jofu-tofu/AI-Workflow-CLI/issues
 
 ---
 

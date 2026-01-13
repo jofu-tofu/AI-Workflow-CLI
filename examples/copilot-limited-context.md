@@ -77,7 +77,9 @@ You need to refactor the database access layer across your application. The refa
 
 ```yaml
 ---
+name: refactor-database
 description: Refactor database access layer across entire application
+version: "1.0.0"
 applyTo:
   - "src/database/**/*.ts"
   - "src/repositories/**/*.ts"
@@ -124,7 +126,9 @@ Refactor database access across 28 files to:
 
 ```yaml
 ---
+name: refactor-database-core
 description: Refactor core database module (Part 1 of 4)
+version: "1.0.0"
 applyTo:
   - "src/database/*.ts"
   - "src/types/database-types.ts"
@@ -243,7 +247,9 @@ Dependencies on core module (handled in later parts):
 
 ```yaml
 ---
+name: refactor-database-repositories
 description: Refactor repository layer to use new query builder (Part 2 of 4)
+version: "1.0.0"
 applyTo:
   - "src/repositories/*.ts"
   - "src/database/query-builder.ts"
@@ -402,7 +408,9 @@ Consumers of repositories (handled in later parts):
 
 ```yaml
 ---
+name: refactor-database-services
 description: Update service layer for new database patterns (Part 3 of 4)
+version: "1.0.0"
 applyTo:
   - "src/services/*.ts"
   - "src/repositories/user-repository.ts"
@@ -563,7 +571,9 @@ Consumers of services (handled in Part 4):
 
 ```yaml
 ---
+name: refactor-database-finalize
 description: Finalize database refactor - update controllers and models (Part 4 of 4)
+version: "1.0.0"
 applyTo:
   - "src/api/controllers/*.ts"
   - "src/models/*.ts"
@@ -765,8 +775,11 @@ This completes the 4-part database refactor:
 
 ```yaml
 ---
+name: refactor-database-coordinator
 description: Coordinate full database refactor (use this as entry point)
+version: "1.0.0"
 mode: agent
+applyTo: []
 ---
 
 # Database Refactor - Coordinator
@@ -1013,6 +1026,235 @@ After completing all 4 parts:
 - Transaction retry logic (improved reliability)
 - Standardized patterns (easier maintenance)
 - Better developer experience (autocomplete for queries)
+```
+
+---
+
+## Manual Traceability Test
+
+**Concrete Scenario:** Developer needs to refactor 28 database files from raw SQL to query builder pattern, but GitHub Copilot's 10-file working set limit makes this impossible in a single operation.
+
+### Step-by-Step Execution Trace
+
+**Discovery Phase**
+
+**Step 1: Initial Assessment**
+```
+Developer: "@workspace show me all files that use database connections"
+GitHub Copilot: [Lists 28 files across src/database/, src/repositories/, src/services/, src/api/controllers/, src/models/]
+```
+- Developer confirms 28 files affected
+- Exceeds 10-file limit → decomposition required
+
+**Step 2: Load Coordinator Prompt**
+```
+Developer: Opens .github/prompts/refactor-database-coordinator.prompt.md
+```
+- AI loads coordinator prompt into context
+- AI understands: 4-part sequential refactor strategy
+- AI knows: Part 1 → Part 2 → Part 3 → Part 4 sequence
+
+**Execution Phase - Part 1: Core Database Module**
+
+**Step 3: Start Part 1**
+```
+Developer: Opens refactor-database-core.prompt.md
+```
+
+**Working Set (4 files loaded):**
+1. src/database/connection.ts
+2. src/database/query-builder.ts
+3. src/database/transaction.ts
+4. src/types/database-types.ts
+
+**Intermediate State:**
+- AI context: Core database infrastructure files only
+- Working set: 4/10 files used
+- Quality: HIGH (well within limits)
+
+**Step 4: Part 1 Execution**
+AI performs refactoring:
+```
+1. Refactor connection.ts → Add connection pooling
+2. Refactor query-builder.ts → Create QueryBuilder class
+3. Refactor transaction.ts → Add retry logic
+4. Update database-types.ts → Add QueryBuilder types
+```
+
+**Step 5: Part 1 Checkpoint**
+```
+Developer commits:
+"refactor(database): part 1 - core module with query builder and pooling"
+
+Tests run: npm test src/database/
+Status: ✅ All core tests passing
+```
+
+**Intermediate State After Part 1:**
+- Core module refactored ✅
+- Repositories still use raw SQL (unchanged)
+- Services still use raw SQL (unchanged)
+- API controllers unchanged
+- System state: Partially migrated (backward compatible)
+
+**Execution Phase - Part 2: Repository Layer**
+
+**Step 6: Start Part 2**
+```
+Developer: Opens refactor-database-repositories.prompt.md
+```
+
+**Working Set (8 files loaded):**
+1. src/repositories/user-repository.ts
+2. src/repositories/product-repository.ts
+3. src/repositories/order-repository.ts
+4. src/repositories/payment-repository.ts
+5. src/repositories/inventory-repository.ts
+6. src/repositories/customer-repository.ts
+7. src/repositories/vendor-repository.ts
+8. src/database/query-builder.ts (reference from Part 1)
+
+**Step 7: Part 2 Execution**
+AI migrates repositories from raw SQL to QueryBuilder:
+```
+- user-repository.ts: findById(id) → this.queryBuilder.select().where({id})
+- product-repository.ts: Similar migration
+- [... 7 repositories total ...]
+```
+
+**Step 8: Part 2 Checkpoint**
+```
+Developer commits:
+"refactor(database): part 2 - migrate repositories to query builder"
+
+Tests run: npm test src/repositories/
+Status: ✅ All repository tests passing
+```
+
+**Intermediate State After Part 2:**
+- Core module: QueryBuilder ready ✅
+- Repositories: Using QueryBuilder ✅
+- Services: Still using repository methods (indirect benefit)
+- Controllers: Unchanged
+- System state: Repositories migrated, fully functional
+
+**Execution Phase - Part 3: Service Layer**
+
+**Step 9: Start Part 3**
+```
+Developer: Opens refactor-database-services.prompt.md
+```
+
+**Working Set (7 files loaded):**
+1. src/services/user-service.ts
+2. src/services/product-service.ts
+3. src/services/order-service.ts
+4. src/services/payment-service.ts
+5. src/services/inventory-service.ts
+6. src/services/analytics-service.ts
+7. src/repositories/user-repository.ts (reference)
+
+**Step 10: Part 3 Execution**
+AI optimizes services to leverage new QueryBuilder features:
+```
+- Add transaction wrappers using retry logic
+- Use batch queries for analytics
+- Implement optimistic locking patterns
+```
+
+**Step 11: Part 3 Checkpoint**
+```
+Developer commits:
+"refactor(database): part 3 - optimize service layer with transactions"
+
+Tests run: npm test src/services/
+Status: ✅ All service tests passing
+```
+
+**Execution Phase - Part 4: API Controllers and Models**
+
+**Step 12: Start Part 4**
+```
+Developer: Opens refactor-database-finalize.prompt.md
+```
+
+**Working Set (9 files loaded):**
+1-5: src/api/controllers/ (5 controller files)
+6-8: src/models/ (3 model files)
+9: src/types/database-types.ts (reference)
+
+**Step 13: Part 4 Execution**
+AI finalizes controller error handling and model validation:
+```
+- Update controllers to handle QueryBuilder errors
+- Add proper HTTP status codes for database errors
+- Migrate model validation to use types from database-types.ts
+```
+
+**Step 14: Part 4 Checkpoint**
+```
+Developer commits:
+"refactor(database): part 4 - finalize controllers and models"
+
+Tests run: npm test
+Status: ✅ ALL 28 files refactored, full test suite passing
+```
+
+**Integration Verification Phase**
+
+**Step 15: Integration Test**
+```
+Developer runs:
+- npm test (unit tests) → ✅ Pass
+- npm run test:integration → ✅ Pass
+- npm run test:e2e → ✅ Pass
+```
+
+**Step 16: Final Summary**
+```
+GitHub Copilot generates summary:
+
+✅ Database Refactor Complete - All 4 Parts
+
+Summary:
+- Part 1: Core module (4 files) - Connection pooling, QueryBuilder, transactions
+- Part 2: Repositories (8 files) - Migrated to QueryBuilder pattern
+- Part 3: Services (7 files) - Transaction wrappers, batch queries
+- Part 4: Controllers & Models (9 files) - Error handling, validation
+
+Total: 28 files refactored across 4 sequential batches
+Working set never exceeded: 9/10 files maximum
+Time: ~90 minutes total (25 min per part + integration)
+
+Results:
+- Type-safe queries throughout application
+- 40% faster queries (connection pooling)
+- Retry logic reduces transient errors by 95%
+- Consistent error handling across all layers
+```
+
+### Verification Checklist
+
+Manual trace verification:
+
+- ✅ Concrete scenario: 28-file database refactor
+- ✅ Step-by-step flow: Discovery → Part 1 → Part 2 → Part 3 → Part 4 → Integration
+- ✅ Intermediate states: System state after each part documented
+- ✅ Working set tracking: Part 1 (4 files), Part 2 (8 files), Part 3 (7 files), Part 4 (9 files)
+- ✅ Quality indicators: All tests passing after each checkpoint
+- ✅ Sequential dependencies: Each part references prior parts correctly
+- ✅ Can mentally execute without running code
+- ✅ Demonstrates pattern addresses 10-file limitation
+
+### Working Set Evolution Chart
+
+```
+Part 1: ████ (4/10 files)
+Part 2: ████████ (8/10 files)
+Part 3: ███████ (7/10 files)
+Part 4: █████████ (9/10 files)
+         ──────────
+         10-file limit never exceeded ✅
 ```
 
 ---

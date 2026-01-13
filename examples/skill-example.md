@@ -123,7 +123,7 @@ NEXT STEPS:
 
 ## Windsurf Adaptation
 
-Following the **Skill Emulation Pattern** from WORKAROUND-PATTERNS.md:
+Following **Pattern 1: Skill Emulation for Windsurf** from WORKAROUND-PATTERNS.md:
 
 **File:** `.windsurf/workflows/test-runner.md`
 

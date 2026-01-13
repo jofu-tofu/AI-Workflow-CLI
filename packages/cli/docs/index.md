@@ -1,14 +1,15 @@
-# PAI CLI - Documentation Index
+# AIW CLI - Documentation Index
 
 **Generated:** 2026-01-10
-**Project:** PAI CLI v0.1.0
+**Updated:** 2026-01-13
+**Project:** AIW CLI (AI Workflow CLI) v1.0.0
 **Type:** CLI Tool (TypeScript + Oclif)
 
 ---
 
 ## Welcome
 
-This is the comprehensive documentation for PAI CLI, a command-line interface for launching and managing Claude Code with Personal AI Infrastructure integration.
+This is the comprehensive documentation for AIW CLI, a command-line interface for managing AI-powered workflows and Claude Code integration.
 
 **Quick Navigation:**
 - New to the project? Start with [Project Overview](#project-overview)
@@ -22,7 +23,7 @@ This is the comprehensive documentation for PAI CLI, a command-line interface fo
 
 | Category | Detail |
 |----------|--------|
-| **Project Type** | CLI Tool (Monolith) |
+| **Project Type** | CLI Tool (Monorepo Package) |
 | **Primary Language** | TypeScript 5 (ESM, Strict Mode) |
 | **Framework** | Oclif v4 |
 | **Runtime** | Node.js 18+ |
@@ -32,9 +33,9 @@ This is the comprehensive documentation for PAI CLI, a command-line interface fo
 
 ### Core Commands
 
-1. **`pai launch`** - Launch Claude Code with PAI configuration
-2. **`pai init`** - Initialize new projects
-3. **`pai init bmad`** - Install BMAD methodology framework
+1. **`aiw launch`** - Launch Claude Code with AIW configuration
+2. **`aiw init`** - Initialize workflow templates (BMAD, GSD)
+3. **`aiw convert`** - Convert Claude Code settings between platforms
 
 ### Key Technologies
 
@@ -76,13 +77,14 @@ Comprehensive project summary including:
 
 ### Command Dependencies
 Detailed breakdown of what each command depends on and how they work:
-- `pai launch` - Core launch mechanism and dependencies
-- `pai init` - Project initialization system
-- `pai init bmad` - BMAD methodology installer
+- `aiw launch` - Core launch mechanism and dependencies
+- `aiw init` - Project initialization system
+- `aiw init bmad` - BMAD methodology installer
 
 ### Shared Library System
 Complete documentation of `src/lib/` utilities:
 - **Foundational Libraries** (Required, cannot be removed)
+  - `base-command.ts` - Base command with common functionality
   - `config.ts` - Configuration resolution
   - `template-resolver.ts` - Bundled template path resolution
   - `paths.ts` - Cross-platform path utilities
@@ -98,6 +100,10 @@ Complete documentation of `src/lib/` utilities:
   - `stdin.ts` - Input handling
   - `version.ts` - Version compatibility
   - `bmad-installer.ts` - BMAD installation
+  - `template-installer.ts` - Generic template installation
+  - `hooks-merger.ts` - Claude hooks merging
+  - `settings-hierarchy.ts` - Settings hierarchy management
+  - `template-mapper/` - Cross-platform template conversion
 
 ### Modifiable vs. Foundational Elements
 Comprehensive table showing:
@@ -165,22 +171,11 @@ Complete development workflow documentation:
 - Troubleshooting guide
 - Quick start guide
 
-### CI/CD Configuration
-
-**GitHub Workflows** (`.github/workflows/`)
-- `test.yml` - Test automation on PRs
-- `onPushToMain.yml` - Main branch deployment
-- `onRelease.yml` - Release automation
-
----
-
 ## For AI Agents & Developers
 
 ### Critical Implementation Rules
 
-When working on this codebase, **always refer to:**
-
-**[🤖 project-context.md](../_bmad-output/project-context.md)**
+When working on this codebase, refer to the architecture documentation for:
 - TypeScript & ESM rules
 - Oclif command patterns
 - Import organization
@@ -188,8 +183,6 @@ When working on this codebase, **always refer to:**
 - Naming conventions
 - Testing requirements
 - Critical anti-patterns
-
-This file contains **unobvious details** that AI agents might otherwise miss.
 
 ---
 
@@ -222,11 +215,15 @@ Common functionality centralized in `src/lib/`:
 
 ```
 src/lib/
-├── config.ts      # 🔒 Foundational
-├── paths.ts       # 🔒 Foundational
-├── errors.ts      # 🔒 Foundational
-├── spawn.ts       # 🔒 Foundational
-└── debug.ts       # ✏️ Modifiable
+├── base-command.ts    # 🔒 Foundational
+├── config.ts          # 🔒 Foundational
+├── paths.ts           # 🔒 Foundational
+├── errors.ts          # 🔒 Foundational
+├── spawn.ts           # 🔒 Foundational
+├── template-resolver.ts # 🔒 Foundational
+├── debug.ts           # ✏️ Modifiable
+├── hooks-merger.ts    # ✏️ Modifiable
+└── template-mapper/   # ✏️ Modifiable
 ```
 
 - **🔒 Foundational:** Required for core functionality
@@ -240,7 +237,7 @@ All path operations use cross-platform utilities:
 import {join} from 'node:path'
 import {homedir} from 'node:os'
 
-const paiHome = join(homedir(), '.pai')  // Works on all platforms
+const aiwHome = join(homedir(), '.aiw')  // Works on all platforms
 ```
 
 ### 4. Transparent Pass-Through
@@ -285,16 +282,14 @@ Every command supports automation:
 2. **Understand:** [Architecture](./architecture.md) (especially Founding Principles)
 3. **Setup:** Follow [Development Guide](./development-guide.md)
 4. **Navigate:** Use [Source Tree](./source-tree-analysis.md) as reference
-5. **Code:** Check [project-context.md](../_bmad-output/project-context.md) for rules
 
 ### For AI Agents
 
 When implementing features for this codebase:
 
 1. **Load:** [architecture.md](./architecture.md) - Understand what can/cannot be changed
-2. **Load:** [project-context.md](../_bmad-output/project-context.md) - Critical implementation rules
-3. **Reference:** [Command Dependencies](./architecture.md#command-dependencies) - Understand what each command needs
-4. **Follow:** [Founding Principles](./architecture.md#founding-principles) - Never violate these
+2. **Reference:** [Command Dependencies](./architecture.md#command-dependencies) - Understand what each command needs
+3. **Follow:** [Founding Principles](./architecture.md#founding-principles) - Never violate these
 
 ### For Feature Planning
 
@@ -325,8 +320,9 @@ This documentation emphasizes:
 ### Related Projects
 
 - **Claude Code:** `@anthropic-ai/claude-code` - The CLI tool this wraps
-- **PAI Infrastructure:** `~/.pai/` - Personal AI configuration system
-- **BMAD Methodology:** Installed via `pai init bmad`
+- **AIW Infrastructure:** `~/.aiw/` - AI Workflow configuration system
+- **BMAD Methodology:** Installed via `aiw init` (select BMAD)
+- **GSD Workflow:** Installed via `aiw init` (select GSD)
 
 ### External Documentation
 
@@ -338,12 +334,11 @@ This documentation emphasizes:
 
 ## Maintenance
 
-This documentation was generated on **2026-01-10** using PAI CLI's document-project workflow.
+This documentation was generated on **2026-01-10** and updated on **2026-01-13**.
 
 **To update this documentation:**
-1. Run `pai-cli` documentation workflow again
-2. Or manually edit relevant `.md` files
-3. Commit changes to version control
+1. Manually edit relevant `.md` files in `docs/`
+2. Commit changes to version control
 
 **To add new documentation:**
 - Create new `.md` files in `docs/`
@@ -357,10 +352,8 @@ This documentation was generated on **2026-01-10** using PAI CLI's document-proj
 - **Architecture questions:** See [architecture.md](./architecture.md)
 - **Setup issues:** Check [development-guide.md](./development-guide.md#troubleshooting)
 - **Code organization:** Refer to [source-tree-analysis.md](./source-tree-analysis.md)
-- **Implementation details:** Check [project-context.md](../_bmad-output/project-context.md)
-
 ---
 
-**Last Updated:** 2026-01-10
-**Documentation Version:** 1.0
-**Project Version:** PAI CLI v0.1.0
+**Last Updated:** 2026-01-13
+**Documentation Version:** 1.1
+**Project Version:** AIW CLI v1.0.0

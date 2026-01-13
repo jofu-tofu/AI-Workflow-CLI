@@ -40,7 +40,8 @@ aiw help
 
 ## Documentation
 
-- [Migration Guide](./MIGRATION_PLAN.md) - Migrating from PAI CLI
+- [Project Overview](./PROJECT.md) - Project vision and goals
+- [Development Roadmap](./ROADMAP.md) - Current progress and planned phases
 - [Development Guide](./DEVELOPMENT.md) - Development setup and guidelines
 - [Claude Instructions](./CLAUDE.md) - Instructions for Claude Code integration
 
@@ -56,7 +57,7 @@ See [.env.example](./.env.example) for a complete list.
 
 ## Migration from PAI CLI
 
-If you're migrating from PAI CLI, see the comprehensive [Migration Guide](./MIGRATION_PLAN.md) for detailed instructions.
+If you're migrating from PAI CLI:
 
 **Quick migration:**
 ```bash
@@ -64,13 +65,15 @@ npm uninstall -g pai-cli
 npm install -g aiwcli
 ```
 
+Environment variables have been renamed from `PAI_*` to `AIW_*`. Legacy environment variables (`AIWCLI_HOME`, `AIWCLI_CONFIG`, `AIWCLI_DIR`, `PAI_HOME`, `PAI_CONFIG`, `PAI_DIR`) are still supported with deprecation warnings.
+
 ## Status
 
 🚧 **Active Development** - This project is currently in active development following the migration from PAI CLI.
 
 ## License
 
-MIT License - see [LICENSE](./LICENSE) for details
+MIT License
 
 ## Repository
 
@@ -84,4 +87,4 @@ Contributions are welcome! Please see the contributing guidelines (coming soon).
 
 ---
 
-**Note:** AI Workflow CLI is the successor to PAI CLI. For migration assistance, see the [Migration Guide](./MIGRATION_PLAN.md).
+**Note:** AI Workflow CLI is the successor to PAI CLI.

@@ -296,6 +296,165 @@ Instead of Windsurf's automatic multi-file loading, this skill uses explicit con
 
 ---
 
+## Manual Traceability Test
+
+**Concrete Scenario:** Developer wants to refactor three component files (ProductCard.tsx, UserCard.tsx, OrderCard.tsx) that share common card layout logic but have inconsistent implementations.
+
+### Step-by-Step Execution Trace
+
+**Step 1: User Invocation**
+```
+User: "/refactor-components"
+```
+- User explicitly invokes the skill (manual activation in Claude Code)
+- AI recognizes the skill name and loads SKILL.md into context
+
+**Step 2: Skill Loaded**
+- AI now has in context:
+  - Skill description: "USE WHEN refactoring React components for better modularity"
+  - All workflow steps (Step 0: Context Gathering, Step 1-4: Process)
+  - Tool permissions: Read, Grep, Edit allowed
+  - Output format templates
+
+**Step 3: Step 0 - Context Gathering (Explicit)**
+AI executes context gathering commands:
+```bash
+# AI runs:
+Glob("src/components/**/*.tsx")
+# Returns: [ProductCard.tsx, UserCard.tsx, OrderCard.tsx, Button.tsx, ...]
+
+Glob("src/components/**/*.ts")
+# Returns: [types.ts, utils.ts, hooks.ts]
+
+Grep("export.*Card", path="src/components", output_mode="files_with_matches")
+# Returns: [ProductCard.tsx, UserCard.tsx, OrderCard.tsx]
+```
+
+**Intermediate State After Step 0:**
+- AI has identified 3 Card components
+- AI has located shared hooks: useCardLayout.ts
+- AI has found type definitions in types.ts
+- AI has built mental model: "Three card components with similar structure"
+
+**Step 4: Step 1 - Component Analysis**
+AI analyzes components:
+```
+- ProductCard.tsx (52 lines): Uses custom layout logic (inline styles)
+- UserCard.tsx (48 lines): Uses CSS classes for layout
+- OrderCard.tsx (55 lines): Uses custom layout logic (inline styles, similar to ProductCard)
+```
+AI identifies:
+- Duplicate pattern: ProductCard and OrderCard have nearly identical layout logic
+- Inconsistency: UserCard uses different approach
+- Opportunity: Extract to shared BaseCard component
+
+**Step 5: Step 2 - Extraction Planning**
+AI creates refactoring plan and asks user:
+```
+AI: "I've analyzed the components and found:
+
+Refactoring Plan:
+1. Create BaseCard component extracting common layout (header, body, footer structure)
+2. Create useCardLayout hook for responsive layout logic
+3. Refactor ProductCard to use BaseCard (reduces from 52 to 28 lines)
+4. Refactor UserCard to use BaseCard (reduces from 48 to 25 lines)
+5. Refactor OrderCard to use BaseCard (reduces from 55 to 30 lines)
+6. Update imports in parent components
+
+Estimated impact:
+- 155 lines → 113 lines (27% reduction)
+- Single source of truth for card layout
+- Consistent styling across all cards
+
+Proceed with this plan? (yes/no)"
+```
+
+**Step 6: User Approval**
+```
+User: "yes"
+```
+
+**Step 7: Step 3 - Implementation**
+AI executes refactoring:
+```
+1. Write(src/components/shared/BaseCard.tsx) - Creates new component
+2. Write(src/hooks/useCardLayout.ts) - Extracts layout hook
+3. Edit(src/components/ProductCard.tsx) - Refactors to use BaseCard
+4. Edit(src/components/UserCard.tsx) - Refactors to use BaseCard
+5. Edit(src/components/OrderCard.tsx) - Refactors to use BaseCard
+6. Grep("import.*ProductCard|UserCard|OrderCard") - Finds parent components
+7. Edit(src/pages/Dashboard.tsx) - Updates imports (if needed)
+```
+
+**Intermediate State After Step 7:**
+- BaseCard.tsx created (30 lines)
+- useCardLayout.ts created (15 lines)
+- All 3 card components refactored and using BaseCard
+- Imports updated in parent components
+
+**Step 8: Step 4 - Verification**
+AI runs verification:
+```bash
+# AI checks:
+- No import errors (all components import BaseCard correctly)
+- Type safety maintained (TypeScript compiles)
+- Props match new API
+```
+
+**Step 9: Completion Report**
+```
+AI: "✅ Refactoring Complete
+
+Summary:
+- Created BaseCard component (src/components/shared/BaseCard.tsx)
+- Created useCardLayout hook (src/hooks/useCardLayout.ts)
+- Refactored 3 components (ProductCard, UserCard, OrderCard)
+- Updated 1 parent component import (Dashboard.tsx)
+- Reduced code from 155 → 113 lines (27% reduction)
+
+Changes:
+- src/components/shared/BaseCard.tsx (new)
+- src/hooks/useCardLayout.ts (new)
+- src/components/ProductCard.tsx (modified)
+- src/components/UserCard.tsx (modified)
+- src/components/OrderCard.tsx (modified)
+- src/pages/Dashboard.tsx (modified)
+
+Next Steps:
+- Run tests to verify functionality
+- Review BaseCard API for further refinements
+- Consider extracting additional patterns if more cards are added
+```
+
+**Step 10: Skill Completes**
+- Skill context released
+- User returns to normal Claude Code session
+- All changes committed to working directory
+
+### Verification Checklist
+
+Manual trace verification:
+
+- ✅ Concrete scenario provided (3 specific card components)
+- ✅ Step-by-step execution flow (Steps 0-4 from workflow)
+- ✅ Intermediate states shown (after context gathering, after analysis, after implementation)
+- ✅ Actual tool calls documented (Glob, Grep, Edit, Write)
+- ✅ User interaction points clear (invocation, approval)
+- ✅ Output format matches template
+- ✅ Can mentally walk through without running code
+
+### Comparison: Windsurf vs Claude Code
+
+| Aspect | Windsurf Workflow | Claude Code Skill (This Example) |
+|--------|-------------------|----------------------------------|
+| **Activation** | AI auto-detects "refactor React components" → triggers workflow | User explicitly invokes `/refactor-components` |
+| **Context Gathering** | Automatic - Windsurf loads all components/hooks when workflow triggers | Explicit - Step 0 runs Glob/Grep to gather context |
+| **Multi-File Awareness** | Native - all `src/components/**/*.tsx` files in context automatically | Simulated - Step 0 checklist ensures all relevant files loaded |
+| **Execution** | Steps 1-4 execute with full context already loaded | Steps 1-4 execute after explicit context gathering |
+| **Outcome** | Same refactoring result | Same refactoring result |
+
+---
+
 ## Verification Steps
 
 **How to verify this emulation pattern works:**

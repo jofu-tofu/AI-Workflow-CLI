@@ -1,7 +1,8 @@
-# PAI CLI - Project Overview
+# AIW CLI - Project Overview
 
 **Generated:** 2026-01-10
-**Project Type:** CLI Tool (Monolith)
+**Updated:** 2026-01-13
+**Project Type:** CLI Tool (Monorepo Package)
 **Primary Language:** TypeScript
 **Framework:** Oclif v4
 
@@ -9,9 +10,9 @@
 
 ## Executive Summary
 
-PAI CLI is a command-line interface for launching and managing Claude Code with Personal AI Infrastructure (PAI) configuration. It provides seamless integration with PAI hooks, automatic sandbox permissions, and scriptable automation support.
+AIW CLI (AI Workflow CLI) is a command-line interface for managing AI-powered workflows and Claude Code integration. It provides seamless workflow template installation, cross-platform Claude Code settings conversion, and scriptable automation support.
 
-**Purpose:** Developer productivity tool that serves as a convenience layer with pre-flight automation, transparent pass-through to Claude Code, and navigation hub for PAI features.
+**Purpose:** Developer productivity tool that serves as a convenience layer with workflow template installation, transparent pass-through to Claude Code, and navigation hub for AI workflow features.
 
 ---
 
@@ -46,8 +47,8 @@ The CLI follows Oclif's command-based architecture where each command is a self-
 
 ## Repository Structure
 
-**Type:** Monolith
-**Parts:** 1 (PAI CLI)
+**Type:** Monorepo Package
+**Location:** `packages/cli/` within the aiwcli monorepo
 
 Single cohesive codebase with clear separation between commands and shared libraries.
 
@@ -64,20 +65,22 @@ Single cohesive codebase with clear separation between commands and shared libra
 
 ## Core Commands
 
-1. **`pai launch`** - Launch Claude Code with PAI configuration
-2. **`pai init`** - Initialize new projects
-3. **`pai init bmad`** - Install BMAD methodology framework
+1. **`aiw launch`** - Launch Claude Code with AIW configuration
+2. **`aiw init`** - Initialize workflow templates (BMAD, GSD)
+3. **`aiw convert`** - Convert Claude Code settings between platforms
 
 ---
 
 ## Key Features
 
-- **Zero-friction Claude Code launch** with automatic PAI config loading
+- **Zero-friction Claude Code launch** with automatic config loading
 - **Cross-platform path handling** (Windows, macOS, Linux)
 - **Scriptable automation** with quiet mode, piping support, exit code consistency
 - **Version compatibility checking** for Claude Code
 - **Debug logging** system
-- **Extensible init system** for project templates
+- **Extensible init system** for workflow templates (BMAD, GSD)
+- **Settings conversion** between different AI IDE platforms
+- **Semantic content transformation** with intelligent parsing
 
 ---
 
@@ -86,12 +89,3 @@ Single cohesive codebase with clear separation between commands and shared libra
 - [Architecture](./architecture.md) - Detailed system architecture
 - [Source Tree](./source-tree-analysis.md) - Annotated directory structure
 - [Development Guide](./development-guide.md) - Setup and development workflow
-- [Command Dependencies](./command-dependencies.md) - What each command needs
-- [Founding Principles](./founding-principles.md) - Core design principles
-
----
-
-## Project Context
-
-For AI agents working on this codebase, refer to:
-- `_bmad-output/project-context.md` - Critical implementation rules and patterns

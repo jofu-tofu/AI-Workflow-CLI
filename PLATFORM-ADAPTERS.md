@@ -293,6 +293,8 @@ Perform security analysis of the codebase...
 
 Windsurf has **fewer native features** than Claude Code, so this adapter uses **emulation patterns** extensively.
 
+**See Also:** [WORKAROUND-PATTERNS.md Pattern 1](WORKAROUND-PATTERNS.md#pattern-1-skill-emulation-for-windsurf) - Detailed skill emulation pattern for converting Claude Code skills to Windsurf workflows
+
 ### 2.1 Field Mapping
 
 | Superset Field | Windsurf Field | Transformation |

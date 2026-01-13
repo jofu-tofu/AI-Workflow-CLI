@@ -42,8 +42,10 @@ References to spawning, creating, or delegating work to subagents or separate ex
 
 ## Detection Pattern
 ```regex
-(?i)(spawn\s+agent|subagent|Task\s+tool|context:\s*fork|parallel\s+agent|delegate\s+to\s+agent|isolated\s+context|separate\s+context|spawn\s+a?\s*(new\s+)?agent)
+(?i)(spawn\s+agent|subagent|Task\s+tool|parallel\s+agent|delegate\s+to\s+agent|separate\s+context|spawn\s+a?\s*(new\s+)?agent)
 ```
+
+**Note:** `context:\s*fork` and `isolated\s+context` are detected as `context-switch` constructs, not `agent-spawn`, since they relate to context management rather than agent creation.
 
 ## Examples
 - Example 1: `spawn agent to handle security review` (from WORKAROUND-PATTERNS.md, Pattern 1)

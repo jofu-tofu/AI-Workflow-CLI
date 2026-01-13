@@ -1,7 +1,8 @@
-# PAI CLI - Architecture Documentation
+# AIW CLI - Architecture Documentation
 
 **Generated:** 2026-01-10
-**For:** PAI CLI v0.1.0
+**Updated:** 2026-01-13
+**For:** AIW CLI v1.0.0
 
 ---
 
@@ -21,21 +22,21 @@
 
 ## Executive Summary
 
-PAI CLI is a TypeScript-based Oclif CLI tool designed to provide zero-friction access to Claude Code with Personal AI Infrastructure integration. It follows a command pattern architecture with shared library utilities, emphasizing cross-platform compatibility, scriptability, and extensibility.
+AIW CLI (AI Workflow CLI) is a TypeScript-based Oclif CLI tool designed to provide zero-friction access to Claude Code with AI Workflow infrastructure integration. It follows a command pattern architecture with shared library utilities, emphasizing cross-platform compatibility, scriptability, and extensibility.
 
 ---
 
 ## Founding Principles
 
-These are the **inherent, foundational** design principles that define PAI CLI:
+These are the **inherent, foundational** design principles that define AIW CLI:
 
 ### 1. Zero-Friction User Experience
 
-**Principle:** The user should be able to launch Claude Code with PAI configuration in a single command without manual setup.
+**Principle:** The user should be able to launch Claude Code with AIW configuration in a single command without manual setup.
 
 **Implementation:**
-- `pai launch` handles all configuration resolution automatically
-- PAI System installation handles hook configuration
+- `aiw launch` handles all configuration resolution automatically
+- AIW System installation handles hook configuration
 - Graceful degradation when optional features are unavailable
 - Clear, actionable error messages
 
@@ -43,7 +44,7 @@ These are the **inherent, foundational** design principles that define PAI CLI:
 
 ### 2. Transparent Pass-Through
 
-**Principle:** PAI CLI should act as a thin wrapper around Claude Code, passing through all arguments and environment variables without modification.
+**Principle:** AIW CLI should act as a thin wrapper around Claude Code, passing through all arguments and environment variables without modification.
 
 **Implementation:**
 - `spawn.ts` uses `child_process.spawn` with `stdio: 'inherit'`
@@ -62,7 +63,7 @@ These are the **inherent, foundational** design principles that define PAI CLI:
 - `path.join()` for all path construction
 - Detects and handles Windows symlink permissions
 
-**Why Foundational:** PAI users are on multiple platforms; the tool must work everywhere.
+**Why Foundational:** AIW users are on multiple platforms; the tool must work everywhere.
 
 ### 4. Scriptability First
 
@@ -82,12 +83,12 @@ These are the **inherent, foundational** design principles that define PAI CLI:
 **Principle:** New project templates can be added without modifying core code.
 
 **Implementation:**
-- `pai init` uses command pattern for extensible subcommands
-- `pai init bmad` demonstrates the pattern
-- `bmad-installer.ts` shows how to integrate external systems
-- Each init subcommand is self-contained
+- `aiw init` uses command pattern for extensible template selection
+- Template installers demonstrate the pattern
+- `bmad-installer.ts` and `template-installer.ts` show how to integrate external systems
+- Each template is self-contained
 
-**Why Foundational:** PAI will support multiple methodologies and frameworks over time.
+**Why Foundational:** AIW supports multiple methodologies and frameworks (BMAD, GSD, etc.).
 
 ---
 
@@ -136,7 +137,7 @@ These are the **inherent, foundational** design principles that define PAI CLI:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                         User Input                           │
-│                    (pai <command> [args])                    │
+│                    (aiw <command> [args])                    │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
@@ -148,9 +149,9 @@ These are the **inherent, foundational** design principles that define PAI CLI:
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                     Command Layer                            │
-│  ┌─────────────┐  ┌──────────┐  ┌──────┐  ┌──────────────┐ │
-│  │   launch    │  │  setup   │  │ init │  │ base/hello   │ │
-│  └─────────────┘  └──────────┘  └──────┘  └──────────────┘ │
+│  ┌─────────────┐  ┌──────────┐  ┌─────────┐               │
+│  │   launch    │  │   init   │  │ convert │               │
+│  └─────────────┘  └──────────┘  └─────────┘               │
 └────────────────────────┬────────────────────────────────────┘
                          │ Uses
                          ▼
@@ -177,15 +178,15 @@ These are the **inherent, foundational** design principles that define PAI CLI:
 
 ## Command Dependencies
 
-### `pai launch` - Main Launch Command
+### `aiw launch` - Main Launch Command
 
-**Purpose:** Launch Claude Code with PAI configuration in current directory.
+**Purpose:** Launch Claude Code with AIW configuration in current directory.
 
 **Dependencies:**
 
 | Module | Usage | Foundational? |
 |--------|-------|---------------|
-| `config.ts` | Resolve PAI_DIR path | **Yes** - Core functionality |
+| `config.ts` | Resolve AIW_DIR path | **Yes** - Core functionality |
 | `paths.ts` | Get Claude Code settings path | **Yes** - Required for launch |
 | `spawn.ts` | Spawn Claude Code process | **Yes** - Core launch mechanism |
 | `version.ts` | Check Claude Code compatibility | No - Warning only |
@@ -195,7 +196,7 @@ These are the **inherent, foundational** design principles that define PAI CLI:
 | `spinner.ts` | Show loading state | No - UI enhancement |
 
 **What It Does:**
-1. Resolves PAI_DIR directory (default: `~/.pai`)
+1. Resolves AIW_DIR directory (default: `~/.aiw`)
 2. Checks Claude Code version compatibility
 3. Verifies Claude Code is installed
 4. Spawns `claude` process with current directory as argument
@@ -209,69 +210,70 @@ These are the **inherent, foundational** design principles that define PAI CLI:
 
 **Cannot Be Modified:**
 - Core launch mechanism (spawn with stdio inherit)
-- PAI_DIR resolution logic
+- AIW_DIR resolution logic
 - Pass-through behavior
 
 ---
 
-### `pai init` - Project Initialization Base Command
+### `aiw init` - Project Initialization Command
 
-**Purpose:** Base command for project initialization system.
-
-**Dependencies:**
-
-| Module | Usage | Foundational? |
-|--------|-------|---------------|
-| Base Oclif Command | Oclif topic command | **Yes** - Framework pattern |
-
-**What It Does:**
-- Serves as parent command for init subcommands
-- Displays available init options
-- Routes to specific init subcommands
-
-**Can Be Modified:**
-- Help text and descriptions
-- Available subcommands (add new init templates)
-
-**Cannot Be Modified:**
-- Command pattern architecture
-- Oclif topic structure
-
----
-
-### `pai init bmad` - BMAD Methodology Installer
-
-**Purpose:** Install BMAD (Build, Measure, Adapt, Deploy) methodology framework into a project.
+**Purpose:** Initialize workflow templates (BMAD, GSD) in a project.
 
 **Dependencies:**
 
 | Module | Usage | Foundational? |
 |--------|-------|---------------|
-| `bmad-installer.ts` | BMAD installation logic | No - Feature-specific |
+| `template-installer.ts` | Generic template installation | No - Feature-specific |
+| `bmad-installer.ts` | BMAD-specific installation | No - Feature-specific |
 | `template-resolver.ts` | Resolve bundled template paths | **Yes** - Path resolution |
 | `paths.ts` | Cross-platform paths | **Yes** - Required |
 | `errors.ts` | Error handling | **Yes** - Error handling |
+| `hooks-merger.ts` | Merge Claude hooks | No - Feature-specific |
 | `output.ts` | Display progress | No - UI enhancement |
 | `spinner.ts` | Loading indicators | No - UI enhancement |
 
 **What It Does:**
-1. Checks if BMAD is already installed in target directory
-2. Resolves bundled BMAD template path from package
-3. Copies BMAD data structure (`_bmad/`) from bundled templates to target project
-4. Copies Claude Code commands (`.claude/commands/bmad/`) from bundled templates
-5. Creates necessary output directories
-6. Generates custom configuration files
+1. Presents available templates (BMAD, GSD) for selection
+2. Checks if template is already installed in target directory
+3. Resolves bundled template path from package
+4. Copies template data structure from bundled templates to target project
+5. Copies Claude Code commands to `.claude/commands/`
+6. Merges hooks with existing Claude settings
+7. Creates necessary output directories
 
 **Can Be Modified:**
+- Available templates
 - Installation steps and checks
 - Output messages
 - Directory structure created
 
-**Cannot Be Modified (within init bmad):**
+**Cannot Be Modified:**
 - Template resolution mechanism (uses bundled templates)
 - File system operations pattern
+- Oclif command structure
 
-**Extensibility:** New init commands can be added following this pattern.
+---
+
+### `aiw convert` - Settings Conversion Command
+
+**Purpose:** Convert Claude Code settings between different AI IDE platforms.
+
+**Dependencies:**
+
+| Module | Usage | Foundational? |
+|--------|-------|---------------|
+| `template-mapper/` | Cross-platform conversion | No - Feature-specific |
+| `paths.ts` | Cross-platform paths | **Yes** - Required |
+| `errors.ts` | Error handling | **Yes** - Error handling |
+| `output.ts` | Display progress | No - UI enhancement |
+
+**What It Does:**
+1. Reads source settings file (Claude Code, Windsurf, GitHub Copilot)
+2. Parses and transforms content semantically
+3. Converts to target platform format
+4. Outputs converted settings
+
+**Extensibility:** New platform adapters can be added to `template-mapper/adapters/`.
 
 ---
 
@@ -281,29 +283,43 @@ The `src/lib/` directory contains foundational utilities used across commands.
 
 ### Foundational Libraries (Cannot Be Removed)
 
-#### `config.ts` - Configuration Resolution
+#### `base-command.ts` - Base Command
 
-**Purpose:** Resolve PAI_DIR directory from environment or default.
+**Purpose:** Base command class with common functionality shared across all commands.
 
 **Exports:**
-- `getPaiHome()` - Returns absolute path to PAI home directory
+- `BaseCommand` - Base class for all CLI commands
+
+**Why Foundational:** Provides consistent behavior and shared utilities across commands.
+
+---
+
+#### `config.ts` - Configuration Resolution
+
+**Purpose:** Resolve AIW_DIR directory from environment or default.
+
+**Exports:**
+- `getAiwDir()` - Returns absolute path to AIW home directory
+- `validateAiwDir()` - Validates directory exists
+- `loadConfig()` - Load and validate full AIW configuration
+- `AiwcliConfig` - Configuration interface
 
 **Logic:**
-1. Check `PAI_DIR` environment variable
-2. Fall back to `~/.pai` (cross-platform)
+1. Check `AIW_DIR` environment variable
+2. Fall back to `~/.aiw` (cross-platform)
 3. Return absolute path
 
-**Why Foundational:** Every command needs to know where PAI is installed.
+**Why Foundational:** Every command needs to know where AIW is installed.
 
 **Modification Allowed:**
-- Default location (currently `~/.pai`)
-- Environment variable name (currently `PAI_DIR`)
+- Default location (currently `~/.aiw`)
+- Environment variable name (currently `AIW_DIR`)
 
 ---
 
 #### `template-resolver.ts` - Bundled Template Path Resolution
 
-**Purpose:** Resolve paths to bundled templates within the pai-cli package.
+**Purpose:** Resolve paths to bundled templates within the aiw-cli package.
 
 **Exports:**
 - `getBmadTemplatePath()` - Returns absolute path to bundled BMAD template root (contains `_bmad/` and `.claude/`)
@@ -330,7 +346,7 @@ The `src/lib/` directory contains foundational utilities used across commands.
 
 **Exports:**
 - `getClaudeSettingsPath()` - Claude Code settings directory
-- `getPaiSettingsPath()` - PAI settings directory
+- `getAiwSettingsPath()` - AIW settings directory
 - `normalizePath()` - Normalize paths for current platform
 
 **Why Foundational:** Cross-platform compatibility is a core principle.
@@ -507,6 +523,44 @@ The `src/lib/` directory contains foundational utilities used across commands.
 
 ---
 
+#### `template-installer.ts` - Generic Template Installation
+
+**Purpose:** Generic template installation utility.
+
+**Exports:**
+- Template installation functions
+
+**Modification Allowed:** Entire implementation (feature-specific)
+
+---
+
+#### `hooks-merger.ts` - Claude Hooks Merging
+
+**Purpose:** Merge Claude Code hooks when installing templates.
+
+**Exports:**
+- Hook merging functions
+
+**Modification Allowed:** Entire implementation (feature-specific)
+
+---
+
+#### `template-mapper/` - Cross-Platform Template Conversion
+
+**Purpose:** Convert templates and settings between different AI IDE platforms.
+
+**Contents:**
+- `index.ts` - Main exports
+- `types.ts` - Type definitions
+- `parser.ts` - Template parsing
+- `content-parser.ts` - Semantic content detection
+- `content-transformers.ts` - Content transformation
+- `adapters/` - Platform-specific adapters
+
+**Modification Allowed:** Entire implementation (feature-specific)
+
+---
+
 ## Modifiable vs. Foundational Elements
 
 ### Summary Table
@@ -514,40 +568,44 @@ The `src/lib/` directory contains foundational utilities used across commands.
 | Element | Type | Modifiable? | Reasoning |
 |---------|------|-------------|-----------|
 | **Core Principles** | | | |
-| Zero-friction launch | Principle | ❌ No | Core value proposition |
-| Transparent pass-through | Principle | ❌ No | Defines user experience |
-| Cross-platform compatibility | Principle | ❌ No | Platform requirement |
-| Scriptability | Principle | ❌ No | Primary use case |
-| Extensibility | Principle | ❌ No | Future growth |
+| Zero-friction launch | Principle | No | Core value proposition |
+| Transparent pass-through | Principle | No | Defines user experience |
+| Cross-platform compatibility | Principle | No | Platform requirement |
+| Scriptability | Principle | No | Primary use case |
+| Extensibility | Principle | No | Future growth |
 | **Architecture** | | | |
-| Oclif framework | Framework | ❌ No | Complete rewrite needed |
-| Command pattern | Pattern | ❌ No | Framework requirement |
-| Shared lib structure | Structure | ⚠️ Limited | Can reorganize, not remove |
-| ESM modules | Module system | ⚠️ Limited | Future-proofing |
+| Oclif framework | Framework | No | Complete rewrite needed |
+| Command pattern | Pattern | No | Framework requirement |
+| Shared lib structure | Structure | Limited | Can reorganize, not remove |
+| ESM modules | Module system | Limited | Future-proofing |
 | **Core Libraries** | | | |
-| config.ts | Library | ⚠️ Logic only | Path/env var names modifiable |
-| template-resolver.ts | Library | ⚠️ Logic only | Template paths modifiable |
-| paths.ts | Library | ⚠️ Logic only | Must stay cross-platform |
-| errors.ts | Library | ⚠️ Messages only | Exit codes are locked |
-| spawn.ts | Library | ⚠️ Limited | Stdio inheritance required |
+| base-command.ts | Library | Limited | Core command behavior |
+| config.ts | Library | Limited | Path/env var names modifiable |
+| template-resolver.ts | Library | Limited | Template paths modifiable |
+| paths.ts | Library | Limited | Must stay cross-platform |
+| errors.ts | Library | Limited | Exit codes are locked |
+| spawn.ts | Library | Limited | Stdio inheritance required |
 | **Feature Libraries** | | | |
-| debug.ts | Library | ✅ Yes | Entire implementation |
-| output.ts | Library | ✅ Yes | UI enhancement |
-| spinner.ts | Library | ✅ Yes | UI enhancement |
-| tty-detection.ts | Library | ✅ Yes | Implementation detail |
-| quiet.ts | Library | ⚠️ Limited | Flag contract is fixed |
-| stdin.ts | Library | ✅ Yes | Implementation detail |
-| version.ts | Library | ✅ Yes | Non-blocking by design |
-| bmad-installer.ts | Library | ✅ Yes | Feature-specific |
+| debug.ts | Library | Yes | Entire implementation |
+| output.ts | Library | Yes | UI enhancement |
+| spinner.ts | Library | Yes | UI enhancement |
+| tty-detection.ts | Library | Yes | Implementation detail |
+| quiet.ts | Library | Limited | Flag contract is fixed |
+| stdin.ts | Library | Yes | Implementation detail |
+| version.ts | Library | Yes | Non-blocking by design |
+| bmad-installer.ts | Library | Yes | Feature-specific |
+| template-installer.ts | Library | Yes | Feature-specific |
+| hooks-merger.ts | Library | Yes | Feature-specific |
+| template-mapper/ | Library | Yes | Feature-specific |
 | **Commands** | | | |
-| pai launch | Command | ⚠️ Limited | Core command, logic modifiable |
-| pai init | Command | ✅ Yes | Can add subcommands |
-| pai init bmad | Command | ✅ Yes | Feature-specific |
+| aiw launch | Command | Limited | Core command, logic modifiable |
+| aiw init | Command | Yes | Can add templates |
+| aiw convert | Command | Yes | Feature-specific |
 
 ### Key:
-- ❌ **No** - Changing this would violate founding principles or require complete rewrite
-- ⚠️ **Limited** - Core behavior is fixed, implementation details can be modified
-- ✅ **Yes** - Can be modified, replaced, or removed without architectural impact
+- **No** - Changing this would violate founding principles or require complete rewrite
+- **Limited** - Core behavior is fixed, implementation details can be modified
+- **Yes** - Can be modified, replaced, or removed without architectural impact
 
 ---
 
@@ -562,19 +620,24 @@ test/
 ├── commands/          # Unit tests for commands
 │   ├── base.test.ts
 │   ├── launch.test.ts
-│   ├── setup.test.ts
-│   ├── init/
-│   │   └── bmad.test.ts
-│   └── hello/
+│   └── init/
+│       └── index.test.ts
+├── lib/               # Unit tests for library modules
+│   ├── config.test.ts
+│   ├── paths.test.ts
+│   ├── hooks-merger.test.ts
+│   └── template-mapper/
 ├── integration/       # Integration tests
 │   ├── cli.test.ts
 │   ├── launch.test.ts
+│   ├── convert-command.test.ts
+│   ├── init-command-hook-merging.test.ts
 │   ├── piping-support.test.ts
 │   ├── exit-codes.test.ts
 │   ├── quiet-mode.test.ts
 │   ├── command-chaining.test.ts
-│   ├── epic-2-validation.test.ts
-│   └── epic-3-validation.test.ts
+│   └── ...
+├── types/             # Type tests
 └── index.test.ts
 ```
 
@@ -598,7 +661,7 @@ test/
 - **Sinon** - Mocks and spies
 - **C8** - Code coverage
 
-**Coverage Target:** 100% for MVP core features (launch, setup, init)
+**Coverage Target:** 100% for MVP core features (launch, init, convert)
 
 ---
 
@@ -652,6 +715,7 @@ npm run format
 | Raw exit code numbers | `EXIT_CODES.SUCCESS`, `EXIT_CODES.GENERAL_ERROR` |
 | `.then().catch()` | `async/await` with `try/catch` |
 | `IConfig` interface | `Config` interface (no I prefix) |
+| `PAI_DIR` or `PAI_` prefix | `AIW_DIR` or `AIW_` prefix |
 
 ---
 
@@ -689,10 +753,10 @@ npm run format
 
 ### Adding New Init Templates
 
-1. Create `src/commands/init/<template>.ts`
-2. Implement installation logic
-3. Follow `bmad.ts` pattern
-4. Add installer utility in `src/lib/` if needed
+1. Add template files to `src/templates/<template-name>/`
+2. Update `src/commands/init/index.ts` to include the new template option
+3. Add installer utility in `src/lib/` if needed
+4. Follow existing template patterns (bmad, gsd)
 
 ### Adding New Shared Utilities
 
@@ -705,7 +769,7 @@ npm run format
 
 ## Conclusion
 
-PAI CLI is built on five founding principles: zero-friction UX, transparent pass-through, cross-platform compatibility, scriptability-first, and extensibility. These principles are non-negotiable and define the tool's identity.
+AIW CLI is built on five founding principles: zero-friction UX, transparent pass-through, cross-platform compatibility, scriptability-first, and extensibility. These principles are non-negotiable and define the tool's identity.
 
 The architecture separates foundational elements (core commands, essential libraries) from modifiable features (UI enhancements, feature-specific logic). This allows for safe evolution while preserving the tool's core value.
 

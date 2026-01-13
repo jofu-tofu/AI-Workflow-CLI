@@ -1,13 +1,14 @@
-# PAI CLI - Source Tree Analysis
+# AIW CLI - Source Tree Analysis
 
 **Generated:** 2026-01-10
+**Updated:** 2026-01-13
 
 ---
 
 ## Annotated Directory Structure
 
 ```
-pai-cli/
+packages/cli/
 ├── bin/                           # Entry point executables
 │   ├── run.js                     # Production entry point
 │   ├── run.cmd                    # Windows wrapper for run.js
@@ -18,20 +19,18 @@ pai-cli/
 │   ├── index.ts                   # Main module export
 │   │
 │   ├── commands/                  # CLI commands (Oclif pattern)
-│   │   ├── base.ts                # Base command with common functionality
-│   │   ├── launch.ts              # 🎯 CORE: Launch Claude Code with PAI config
+│   │   ├── launch.ts              # 🎯 CORE: Launch Claude Code with config
 │   │   ├── init/                  # Init command topic (extensible)
-│   │   │   ├── index.ts           # Init base command
-│   │   │   └── bmad.ts            # Install BMAD methodology
-│   │   └── hello/                 # Example commands (can be removed)
-│   │       ├── index.ts           # Hello command
-│   │       └── world.ts           # Hello world subcommand
+│   │   │   └── index.ts           # Init command with template selection
+│   │   └── convert/               # Settings conversion command
+│   │       └── index.ts           # Convert Claude settings between platforms
 │   │
 │   ├── lib/                       # 🏗️ Shared library utilities
 │   │   ├── index.ts               # Library exports
 │   │   │
 │   │   │ # === FOUNDATIONAL LIBRARIES (Required) ===
-│   │   ├── config.ts              # 🔒 Config resolution (PAI_DIR)
+│   │   ├── base-command.ts        # 🔒 Base command with common functionality
+│   │   ├── config.ts              # 🔒 Config resolution (AIW_DIR)
 │   │   ├── template-resolver.ts   # 🔒 Bundled template path resolution
 │   │   ├── paths.ts               # 🔒 Cross-platform path utilities
 │   │   ├── errors.ts              # 🔒 Error handling + exit codes
@@ -45,36 +44,57 @@ pai-cli/
 │   │   ├── quiet.ts               # ✏️ Quiet mode support
 │   │   ├── stdin.ts               # ✏️ Standard input handling
 │   │   ├── version.ts             # ✏️ Claude Code version checking
-│   │   └── bmad-installer.ts      # ✏️ BMAD installation utility
+│   │   ├── bmad-installer.ts      # ✏️ BMAD installation utility
+│   │   ├── template-installer.ts  # ✏️ Generic template installation
+│   │   ├── gitignore-manager.ts   # ✏️ Gitignore file management
+│   │   ├── env-compat.ts          # ✏️ Environment compatibility utilities
+│   │   ├── hooks-merger.ts        # ✏️ Claude hooks merging utility
+│   │   ├── settings-hierarchy.ts  # ✏️ Settings hierarchy management
+│   │   ├── claude-settings-types.ts # ✏️ Claude settings type definitions
+│   │   │
+│   │   │ # === TEMPLATE MAPPER (Semantic Transformation) ===
+│   │   └── template-mapper/       # ✏️ Cross-platform template conversion
+│   │       ├── index.ts           # Main exports
+│   │       ├── types.ts           # Type definitions
+│   │       ├── parser.ts          # Template parsing
+│   │       ├── content-parser.ts  # Semantic content detection
+│   │       ├── content-transformers.ts # Content transformation
+│   │       └── adapters/          # Platform-specific adapters
 │   │
 │   ├── types/                     # TypeScript type definitions
 │   │   └── (shared interfaces)
 │   │
 │   └── templates/                 # Bundled templates for installation
-│       └── bmad/                  # BMAD methodology framework (335 files)
-│           ├── _bmad/             # BMAD data and configuration (290 files)
-│           │   ├── core/          # Core BMAD module
-│           │   ├── bmm/           # Build-Measure Module
-│           │   └── _config/       # Configuration manifests
-│           └── .claude/           # Claude Code commands (45 files)
-│               └── commands/
-│                   └── bmad/      # BMAD slash commands
-│                       ├── core/  # Core workflows
-│                       └── bmm/   # BMM workflows and agents
+│       ├── bmad/                  # BMAD methodology framework
+│       │   ├── _bmad/             # BMAD data and configuration
+│       │   └── .claude/           # Claude Code commands
+│       └── gsd/                   # GSD (Get Stuff Done) workflow
+│           └── (GSD template files)
 │
 ├── test/                          # Test files (mirrors src/)
 │   ├── commands/                  # Unit tests for commands
 │   │   ├── base.test.ts
 │   │   ├── launch.test.ts
-│   │   ├── setup.test.ts
-│   │   ├── init/
-│   │   │   └── bmad.test.ts
-│   │   └── hello/
-│   │       ├── index.test.ts
-│   │       └── world.test.ts
+│   │   └── init/
+│   │       └── index.test.ts
 │   │
 │   ├── lib/                       # Library unit tests
-│   │   └── template-resolver.test.ts # Template path resolution tests
+│   │   ├── config.test.ts         # Config resolution tests
+│   │   ├── debug.test.ts          # Debug logging tests
+│   │   ├── errors.test.ts         # Error handling tests
+│   │   ├── gitignore-manager.test.ts # Gitignore tests
+│   │   ├── hooks-merger.test.ts   # Hooks merger tests
+│   │   ├── index.test.ts          # Library index tests
+│   │   ├── output.test.ts         # Output formatting tests
+│   │   ├── paths.test.ts          # Path utilities tests
+│   │   ├── spawn.test.ts          # Process spawn tests
+│   │   ├── spinner.test.ts        # Spinner tests
+│   │   ├── stdin.test.ts          # Stdin handling tests
+│   │   ├── template-installer.test.ts # Template installer tests
+│   │   ├── template-resolver.test.ts # Template path resolution tests
+│   │   ├── tty-detection.test.ts  # TTY detection tests
+│   │   ├── version.test.ts        # Version checking tests
+│   │   └── template-mapper/       # Template mapper tests
 │   │
 │   ├── integration/               # Integration tests
 │   │   ├── cli.test.ts            # General CLI behavior
@@ -88,7 +108,13 @@ pai-cli/
 │   │   ├── epic-2-validation.test.ts # Epic 2 feature validation
 │   │   ├── epic-3-validation.test.ts # Epic 3 feature validation
 │   │   ├── bmad-init.test.ts      # BMAD init
-│   │   └── init-command-structure.test.ts # Init structure
+│   │   ├── init-command-structure.test.ts # Init structure
+│   │   ├── init-command-hook-merging.test.ts # Hook merging
+│   │   ├── convert-command.test.ts # Convert command
+│   │   ├── statusline.test.ts     # Status line
+│   │   └── subcommand-architecture.test.ts # Subcommand architecture
+│   │
+│   ├── types/                     # Type tests
 │   │
 │   └── index.test.ts              # Main module tests
 │
@@ -104,23 +130,11 @@ pai-cli/
 │
 ├── node_modules/                  # Dependencies (gitignored)
 │
-├── .github/                       # GitHub CI/CD workflows
-│   └── workflows/
-│       ├── test.yml               # Run tests on PR
-│       ├── onPushToMain.yml       # Deploy on main push
-│       └── onRelease.yml          # Publish on release
-│
-├── .vscode/                       # VS Code workspace settings
-│
 ├── package.json                   # 📋 Project manifest + dependencies
 ├── package-lock.json              # Dependency lock file
 ├── tsconfig.json                  # TypeScript configuration
 ├── .mocharc.json                  # Mocha test runner config
 ├── eslint.config.mjs              # ESLint configuration
-├── .prettierrc.json               # Prettier formatting config
-├── .c8rc.json                     # C8 coverage config
-├── .gitignore                     # Git ignore rules
-├── .prettierignore                # Prettier ignore rules
 └── README.md                      # 📖 Main project documentation
 ```
 
@@ -132,9 +146,9 @@ pai-cli/
 **Purpose:** All CLI commands live here. Filename determines command name.
 
 **Pattern:** Oclif automatically discovers commands based on file structure:
-- `launch.ts` → `pai launch`
-- `init/index.ts` → `pai init`
-- `init/bmad.ts` → `pai init bmad`
+- `launch.ts` → `aiw launch`
+- `init/index.ts` → `aiw init`
+- `convert/index.ts` → `aiw convert`
 
 **Extensibility:** Add new commands by creating new `.ts` files. They auto-register.
 
@@ -195,7 +209,7 @@ pai-cli/
 **Used by:**
 - `npm install -g .`
 - Production execution
-- `pai <command>` (after global install)
+- `aiw <command>` (after global install)
 
 ---
 
@@ -223,12 +237,11 @@ pai-cli/
 - Version checked via `version.ts`
 
 **File System:**
-- PAI_DIR directory (default: `~/.pai`)
+- AIW_DIR directory (default: `~/.aiw`)
 - Claude Code settings directory
-- Symlinks created by `setup` command
 
 **Environment:**
-- `PAI_DIR` - Override PAI home directory
+- `AIW_DIR` - Override AIW home directory
 - `DEBUG` - Enable debug logging
 - CI environment detection
 
@@ -257,7 +270,7 @@ JavaScript Output (dist/)
     ↓ (npm pack / npm publish)
 NPM Package
     ↓ (npm install -g)
-Global Binary (pai)
+Global Binary (aiw)
 ```
 
 ### What Gets Published
@@ -282,9 +295,6 @@ From `package.json` `files` field:
 | `tsconfig.json` | TypeScript compiler options |
 | `.mocharc.json` | Mocha test runner configuration |
 | `eslint.config.mjs` | ESLint code quality rules |
-| `.prettierrc.json` | Prettier code formatting rules |
-| `.c8rc.json` | C8 coverage reporter configuration |
-| `.gitignore` | Git ignore patterns |
 
 ---
 

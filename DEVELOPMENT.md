@@ -45,17 +45,13 @@ bun test
 
 ## How AIW_DIR Works
 
-The AI Workflow CLI uses `AIW_DIR` as the root path for all resource location:
+The AI Workflow CLI uses `AIW_DIR` as the root path for resource location:
 
-**Code locations:**
-- `$AIW_DIR/hooks/` - Git hooks and automation
-- `$AIW_DIR/scripts/` - Utility scripts
-- `$AIW_DIR/skills/` - Skill definitions
-
-**Data locations:**
-- `$AIW_DIR/mem-store/` - Memory system data
-- `$AIW_DIR/MEMORY/` - Session and state data
-- `$AIW_DIR/agentic_logs/` - Agent execution logs
+**This repository locations:**
+- `$AIW_DIR/packages/cli/` - CLI source code
+- `$AIW_DIR/packages/cli/src/templates/` - Template definitions (bmad, gsd)
+- `$AIW_DIR/packages/cli/src/lib/template-mapper/` - Template conversion system
+- `$AIW_DIR/examples/` - Example workflow files
 
 **Environment isolation:**
 - **Development:** `AIW_DIR=$(pwd)` - Your worktree (isolated testing)
@@ -68,136 +64,33 @@ The AI Workflow CLI uses `AIW_DIR` as the root path for all resource location:
 | **Development** | `$(pwd)` (worktree root) | Isolated testing in development branch |
 | **Production** | `~/.aiw` or `$HOME\.aiw` | Deployed global AI Workflow CLI |
 
-## Working with Hooks
+## Project Structure
 
-Claude Code uses a **per-directory** hook system. Hooks are only active when Claude Code finds a `.claude/settings.json` file in the current working directory or parent directories.
+This repository contains the AI Workflow CLI source code:
 
-### Hook Architecture
+```
+aiwcli/
+├── packages/cli/           # CLI package
+│   ├── src/
+│   │   ├── commands/       # CLI commands (launch, init, convert)
+│   │   ├── lib/            # Library code
+│   │   │   └── template-mapper/  # Template conversion system
+│   │   ├── templates/      # Built-in templates (bmad, gsd)
+│   │   └── types/          # TypeScript type definitions
+│   └── test/               # Test files
+├── examples/               # Example workflow files
+└── docs/                   # Project documentation
+```
 
-**Production AI Workflow CLI:**
-- Location: `$HOME/.aiw/.claude/settings.json`
-- Active when: Working in `~/.aiw` directory
-- Purpose: Full AI Workflow CLI hooks (memory, security, context loading)
+### Key Commands
 
-**Development (this repository):**
-- Location: `$(pwd)/.claude/settings.json` (optional, create as needed)
-- Active when: Working in this worktree
-- Purpose: Test hooks in isolation without affecting production AI Workflow CLI
+- `aiw launch` - Launch Claude Code with AI Workflow CLI context
+- `aiw init` - Initialize project with workflow templates
+- `aiw convert` - Convert templates between AI assistant formats
 
-**Other directories:**
-- No hooks active
-- Clean Claude Code experience
-- Perfect for general development work
+### Working with Claude Code Settings
 
-### Developing Hooks
-
-When working on hook code in this repository:
-
-1. **Set AIW_DIR to your worktree** (as per standard workflow):
-   ```powershell
-   $env:AIW_DIR = $PWD.Path
-   ```
-
-2. **Create local .claude/settings.json** (if testing hooks):
-   ```powershell
-   bun run scripts/setup-hooks.ts
-   ```
-   This creates `.claude/settings.json` pointing to hooks in THIS repository.
-
-3. **Launch Claude Code** in this directory:
-   ```bash
-   claude
-   ```
-   Hooks will now execute from your development code, not production.
-
-4. **Verify hook behavior**:
-   - Check terminal output for hook execution messages
-   - Verify files are written to `$AIW_DIR/history/` (your worktree)
-   - Not writing to production `~/.aiw/history/`
-
-5. **When done**, remove `.claude/settings.json` to disable hooks:
-   ```powershell
-   rm .claude/settings.json
-   ```
-
-### Hook Reference
-
-Each hook serves a specific purpose in the AI Workflow CLI:
-
-#### SessionStart Hooks
-
-1. **initialize-session.ts** - Session initialization
-   - Sets terminal tab title with project name
-   - Creates required directory structure
-   - Writes session marker file
-   - Sends events to observability
-
-2. **load-core-context.ts** - Context injection
-   - Loads CORE skill from `$AIW_DIR/skills/CORE/SKILL.md`
-   - Injects into Claude's context as `<system-reminder>`
-   - Skips for subagent sessions
-
-#### PreToolUse Hooks
-
-3. **security-validator.ts** - Security validation (Bash tool only)
-   - Validates Bash commands against attack patterns
-   - Blocks: rm -rf, reverse shells, credential theft, prompt injection
-   - Warns: git force operations, sudo usage
-   - Logs: network operations, system modifications
-
-#### Continuous Capture Hooks
-
-4. **capture-all-events.ts** - Universal event logger
-   - Captures ALL hook events to JSONL files
-   - Location: `$AIW_DIR/history/raw-outputs/YYYY-MM/YYYY-MM-DD_all-events.jsonl`
-   - Tracks agent types and session mapping
-   - Runs on: SessionStart, PreToolUse, PostToolUse, Stop, SubagentStop, SessionEnd, UserPromptSubmit
-
-#### UserPromptSubmit Hooks
-
-5. **update-tab-titles.ts** - UI updates
-   - Updates terminal tab title based on user prompt
-   - Extracts keywords from prompt
-   - Sets dynamic tab title (e.g., "🤖 Fix authentication bug")
-
-#### Stop Hooks
-
-6. **stop-hook.ts** - Main session capture
-   - Captures main agent work summaries
-   - Detects learnings vs regular sessions
-   - Routes to: `history/learnings/` or `history/sessions/`
-   - Extracts summary from final response
-
-7. **subagent-stop-hook.ts** - Subagent output capture
-   - Captures Task tool outputs
-   - Routes by agent type:
-     - `researcher` → `history/research/`
-     - `architect` → `history/decisions/`
-     - `engineer`, `designer` → `history/execution/features/`
-   - Extracts completion message
-
-#### SessionEnd Hooks
-
-8. **capture-session-summary.ts** - Final session summary
-   - Analyzes entire session from raw events
-   - Determines session focus (blog-work, hook-development, etc.)
-   - Lists files changed, commands executed, tools used
-   - Creates comprehensive session summary
-
-### Hook Development Best Practices
-
-1. **Never test hooks in production** - Always use a development worktree with `AIW_DIR=$(pwd)`
-
-2. **Check hook output** - Hooks write to stderr for logging; Claude sees stdout
-
-3. **Exit codes matter**:
-   - `0` - Success, allow operation
-   - `2` - Block operation (security-validator)
-   - Non-zero - Error, operation may be blocked
-
-4. **Memory/History writes** - All hooks write to `$AIW_DIR/history/`, verify it's your worktree
-
-5. **Cross-platform** - Hooks must work on Windows (PowerShell) and Unix (bash)
+This repository includes a `.claude/` directory with project-specific settings. Claude Code uses these settings when working in this directory.
 
 ## Running Tests
 
@@ -289,9 +182,7 @@ Complete all items before deploying to production:
 - [ ] Verify production AIW_DIR: `echo $env:AIW_DIR`
 
 **Deployment Steps:**
-- [ ] Copy code to production location
-- [ ] Create required data directories (mem-store, MEMORY, etc.)
-- [ ] Update `.claude/settings.json` with new hooks/configurations
+- [ ] Build and publish package: `npm publish`
 - [ ] Run production smoke tests
 - [ ] Verify all features work in production environment
 
