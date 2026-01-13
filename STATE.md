@@ -2,9 +2,9 @@
 
 ## Current Status
 
-**Phase:** Phase 4 - Programmatic Mapping System
+**Phase:** Phase 5 - Semantic Content Transformation
 **Last Updated:** 2026-01-12
-**Working On:** Phase 4 Complete - All 3 tasks finished
+**Working On:** Ready to plan Phase 5
 
 ## Key Decisions
 
@@ -65,6 +65,21 @@
   - PLATFORM-ADAPTERS.md: Clarified permission scoping algorithm, added Security Considerations section (Section 6)
 - **Implications:** Documentation now current as of January 2026, ready for Phase 3
 
+### Decision 8: Insert Phase 5 - Semantic Content Transformation
+- **Date:** 2026-01-12
+- **Decision:** Insert new Phase 5 after Phase 4, renumber subsequent phases
+- **Rationale:**
+  - Phase 4 transforms metadata (frontmatter) but passes workflow content through unchanged
+  - Platform-specific constructs in content (e.g., "spawn agent X") become nonsensical on platforms that don't support them
+  - Need semantic parsing to identify constructs like agent spawning, tool calls, context switches
+  - Need content transformers to rewrite constructs for each target platform (inline agents for Windsurf, decompose for Copilot)
+  - This enables true cross-platform portability beyond just metadata transformation
+- **Impact:**
+  - Old Phase 5 (Reference Implementation) → Phase 6
+  - Old Phase 6 (Documentation and Polish) → Phase 7
+  - No files renamed (no PLAN-phase-5.md or PLAN-phase-6.md existed)
+- **Implications:** Roadmap now has 7 phases, ready to plan Phase 5
+
 ---
 
 ## Active Blockers
@@ -117,15 +132,10 @@
 - All Phase 2 verification criteria from PLAN-phase-2.md met
 
 ### Next Steps
-1. ✅ **COMPLETED** - Address Priority 1 fixes from ISSUES.md (completed 2026-01-12):
-   - ✅ Updated model identifiers to full version strings (claude-sonnet-4-5-20250929, etc.)
-   - ✅ Added missing schema fields (disable-model-invocation, argument-hint)
-   - ✅ Fixed 3 structure mapping errors (Windsurf LOCAL.md location, Memories system, Claude global skills)
-   - ✅ Clarified permission scoping and merging algorithm with detailed examples
-   - ✅ Added comprehensive Security Considerations section (Section 6)
-2. Optional: Address Priority 2 recommendations for usability (estimated 1-2 days)
-3. Plan Phase 3 (Workaround Pattern Library) implementation
-4. Consider adding 4 missing GAP-ANALYSIS patterns as Phase 3 enhancements
+1. ✅ **COMPLETED** - Phases 1-4 all complete
+2. Plan Phase 5 (Semantic Content Transformation) - newly inserted phase
+3. Execute Phase 5 implementation
+4. Proceed to Phase 6 (Reference Implementation) and Phase 7 (Documentation)
 
 ---
 
