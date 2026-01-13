@@ -1,8 +1,8 @@
-# Template for Cross AI Assistant Compatibility - Roadmap
+# AI Workflow CLI - Development Roadmap
 
 ## Current Position
 
-**Phase:** Phase 5
+**Phase:** Phase 7
 **Status:** 📋 Ready to Plan
 
 ## Phase Sequence
@@ -97,40 +97,47 @@
   - VERIFICATION-phase-4.md
 
 ### Phase 5: Semantic Content Transformation
-- **Status:** 📋 Not Started
+- **Status:** ✅ Completed (2026-01-12)
 - **Description:** Build semantic parsing and transformation layer that identifies platform-specific constructs in workflow content and transforms them for target platforms
 - **Tasks:**
-  - [ ] Define content schema documenting semantic constructs (agent spawning, tool calls, context switches) with detection patterns
-  - [ ] Implement content parser that extracts semantic constructs from markdown workflow content
-  - [ ] Implement per-platform content transformers (inline agents for Windsurf, decompose for Copilot)
-  - [ ] Integrate semantic transformation into existing `aiw convert` CLI
-  - [ ] Test transformations with real workflow examples
+  - [x] Define content schema documenting semantic constructs (agent spawning, tool calls, context switches) with detection patterns
+  - [x] Implement content parser that extracts semantic constructs from markdown workflow content
+  - [x] Implement per-platform content transformers (inline agents for Windsurf, decompose for Copilot)
+  - [x] Integrate semantic transformation into existing `aiw convert` CLI
+  - [x] Test transformations with real workflow examples
 - **Verification Criteria:**
-  - [ ] Content schema documented with detection patterns for all major constructs
-  - [ ] Parser correctly identifies agent spawning, tool calls, and context patterns
-  - [ ] Windsurf transformer inlines agent prompts instead of spawning references
-  - [ ] Copilot transformer handles decomposition for context limits
-  - [ ] Integration with existing `aiw convert` CLI command
-  - [ ] Unit tests covering parsing and transformation
-- **Rationale for Insertion:**
-  - Phase 4 transforms metadata (frontmatter) but passes content through unchanged
-  - Platform-specific constructs in content (e.g., "spawn agent X") become nonsensical on platforms that don't support them
-  - Semantic content transformation enables true cross-platform portability
+  - [x] Content schema documented with detection patterns for all major constructs
+  - [x] Parser correctly identifies agent spawning, tool calls, and context patterns
+  - [x] Windsurf transformer inlines agent prompts instead of spawning references
+  - [x] Copilot transformer handles decomposition for context limits
+  - [x] Integration with existing `aiw convert` CLI command
+  - [x] Unit tests covering parsing and transformation
+- **Deliverables:**
+  - CONTENT-SCHEMA.md (18 semantic constructs documented)
+  - content-parser.ts (parser with detection engine)
+  - content-transformers.ts (3 platform transformers)
+  - 123 new tests (75 parser + 48 transformer)
+  - VERIFICATION-phase-5-FINAL.md
 
 ### Phase 6: Reference Implementation
-- **Status:** 📋 Not Started
+- **Status:** ✅ Completed (2026-01-13)
 - **Description:** Create example templates demonstrating the system working across both platforms
 - **Tasks:**
-  - [ ] Create 2-3 reference templates in standard format
-  - [ ] Convert to Claude Code format and test
-  - [ ] Convert to Windsurf format and test
-  - [ ] Document any issues or limitations discovered
-  - [ ] Refine mapping system based on findings
+  - [x] Create 2-3 reference templates in standard format
+  - [x] Convert to Claude Code format and test
+  - [x] Convert to Windsurf format and test
+  - [x] Document any issues or limitations discovered
+  - [x] Refine mapping system based on findings
 - **Verification Criteria:**
-  - [ ] Reference templates work in Claude Code
-  - [ ] Reference templates work in Windsurf
-  - [ ] Issues documented and addressed
-  - [ ] Templates demonstrate key features
+  - [x] Reference templates work in Claude Code
+  - [x] Reference templates work in Windsurf
+  - [x] Issues documented and addressed
+  - [x] Templates demonstrate key features
+- **Deliverables:**
+  - .ai-templates/skills/ (3 reference templates: code-review, dependency-updater, api-generator)
+  - .claude-output/ (Claude Code converted output)
+  - .windsurf-output/ (Windsurf converted output with emulation patterns)
+  - VERIFICATION-phase-6.md (comprehensive test results)
 
 ### Phase 7: Documentation and Polish
 - **Status:** 📋 Not Started
@@ -150,6 +157,31 @@
 ---
 
 ## Completed Phases
+
+### Phase 5: Semantic Content Transformation ✅
+**Completed:** 2026-01-12
+**Duration:** 1 day
+**Key Deliverables:**
+- CONTENT-SCHEMA.md with 18 semantic constructs documented
+- Content parser with detection engine for all construct types
+- Three platform-specific content transformers (Claude Code, Windsurf, GitHub Copilot)
+- CLI integration - `aiw convert` now transforms both metadata AND content
+- 123 new tests (75 parser + 48 transformer), 179 total template-mapper tests
+
+**Key Decisions:**
+- 18 semantic construct types identified from existing patterns
+- Code block detection prevents false positives (fenced and inline)
+- Priority-based overlap handling for competing matches
+- Platform transformers generate appropriate warnings for emulated constructs
+- Content transformation integrated into existing adapter architecture
+
+**Constructs Detected:**
+- Agent & Execution: agent-spawn, context-switch
+- Tool & Permission: tool-call, permission-reference
+- Activation: model-decision-trigger, activation-instruction
+- Context & Discovery: glob-pattern, context-gathering-protocol, workspace-command
+- Workflow Orchestration: skill-chaining, working-set-limit, checkpoint-commit, progress-tracking
+- Documentation: advisory-warning, version-comment, execution-flow-section, persona-rule, test-command
 
 ### Phase 4: Programmatic Mapping System ✅
 **Completed:** 2026-01-12
