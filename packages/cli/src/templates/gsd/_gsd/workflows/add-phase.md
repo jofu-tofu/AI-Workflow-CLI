@@ -17,10 +17,10 @@ Use this when:
 ### Step 1: Current State Analysis
 
 Read project state:
-1. `ROADMAP.md` - Current phases and status
-2. `PROJECT.md` - Original goals and vision
-3. `STATE.md` - Recent decisions and context
-4. `ISSUES.md` - Deferred enhancements that might become phases
+1. `_GSD_OUTPUT/ROADMAP.md` - Current phases and status
+2. `_GSD_OUTPUT/PROJECT.md` - Original goals and vision
+3. `_GSD_OUTPUT/STATE.md` - Recent decisions and context
+4. `_GSD_OUTPUT/ISSUES.md` - Deferred enhancements that might become phases
 
 Determine:
 - How many phases currently exist?
@@ -83,10 +83,11 @@ Decide where to add:
 
 Add new phase to ROADMAP.md:
 
-1. Read current ROADMAP.md
+1. Read current `_GSD_OUTPUT/ROADMAP.md`
 2. Find "Phase Sequence" section
 3. Append new phase after last phase
 4. Maintain formatting consistency
+5. Write updated file to `_GSD_OUTPUT/ROADMAP.md`
 
 Example:
 ```markdown
@@ -113,7 +114,8 @@ Example:
 
 If new phase expands original vision:
 
-1. Add to goals if it's a new goal:
+1. Read `_GSD_OUTPUT/PROJECT.md`
+2. Add to goals if it's a new goal:
    ```markdown
    ## Goals
    - ✅ Goal 1 (completed)
@@ -122,23 +124,28 @@ If new phase expands original vision:
    - [ ] Goal 4 - Email notifications (NEW)
    ```
 
-2. Update success criteria if needed
+3. Update success criteria if needed
 
-3. Don't remove old goals - mark them complete
+4. Don't remove old goals - mark them complete
+
+5. Write updated file to `_GSD_OUTPUT/PROJECT.md`
 
 ### Step 7: Update STATE.md
 
 Document the addition:
 
-```markdown
-## Key Decisions
+1. Read `_GSD_OUTPUT/STATE.md`
+2. Add decision entry:
+   ```markdown
+   ## Key Decisions
 
-### Decision: Add Email Notifications Phase
-- **Date:** {Date}
-- **Decision:** Added Phase 6 for email notification system
-- **Rationale:** User feedback requested notification features
-- **Implications:** Extends timeline by estimated {duration}
-```
+   ### Decision: Add Email Notifications Phase
+   - **Date:** {Date}
+   - **Decision:** Added Phase 6 for email notification system
+   - **Rationale:** User feedback requested notification features
+   - **Implications:** Extends timeline by estimated {duration}
+   ```
+3. Write updated file to `_GSD_OUTPUT/STATE.md`
 
 ### Step 8: Confirmation
 
@@ -152,9 +159,9 @@ Ask: "Does this capture the new phase correctly?"
 
 ## Output Files
 
-- Updated `ROADMAP.md` - New phase appended
-- Updated `PROJECT.md` - Goals adjusted if needed
-- Updated `STATE.md` - Decision documented
+- Updated `_GSD_OUTPUT/ROADMAP.md` - New phase appended
+- Updated `_GSD_OUTPUT/PROJECT.md` - Goals adjusted if needed
+- Updated `_GSD_OUTPUT/STATE.md` - Decision documented
 
 ## Success Criteria
 

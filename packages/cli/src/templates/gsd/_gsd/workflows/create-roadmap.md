@@ -2,18 +2,18 @@
 
 ## Purpose
 
-Generate a phased roadmap based on PROJECT.md goals and establish persistent state tracking.
+Generate a phased roadmap based on _GSD_OUTPUT/PROJECT.md goals and establish persistent state tracking.
 
 ## Prerequisites
 
-- PROJECT.md must exist
+- _GSD_OUTPUT/PROJECT.md must exist
 - Read and understand project vision and goals
 
 ## Process
 
 ### Step 1: Analyze Project Scope
 
-Read PROJECT.md and identify:
+Read _GSD_OUTPUT/PROJECT.md and identify:
 1. All stated goals
 2. Success criteria
 3. Technical constraints
@@ -52,11 +52,11 @@ Use `_gsd/templates/ROADMAP.md.template` to create the roadmap:
 2. Replace `{{DATE}}` with current date
 3. Add all phases in sequence
 4. Set first phase status to ⏳ Pending
-5. Create file at project root
+5. Write file to _GSD_OUTPUT/ROADMAP.md
 
 ### Step 5: Initialize STATE.md
 
-Update STATE.md with:
+Update _GSD_OUTPUT/STATE.md with:
 - Current phase: Phase 1
 - Initial decisions made
 - Next steps: Create plan for Phase 1
@@ -74,7 +74,7 @@ Recommend running `/gsd:plan-phase 1` to create detailed execution plan for Phas
 
 ## Success Criteria
 
-- [ ] ROADMAP.md created with all phases
+- [ ] _GSD_OUTPUT/ROADMAP.md created with all phases
 - [ ] Each phase has clear description and tasks
-- [ ] STATE.md initialized
+- [ ] _GSD_OUTPUT/STATE.md initialized
 - [ ] User confirms phase breakdown makes sense

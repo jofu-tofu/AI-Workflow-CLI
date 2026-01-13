@@ -9,11 +9,11 @@ Display current project position, completed work, and recommended next steps.
 ### Step 1: Read Project State
 
 Collect information from:
-1. `PROJECT.md` - Project goals and vision
-2. `ROADMAP.md` - All phases and their status
-3. `STATE.md` - Current position and blockers
-4. `PLAN-phase-*.md` - Any active plans
-5. `SUMMARY.md` - Commit history
+1. `_GSD_OUTPUT/PROJECT.md` - Project goals and vision
+2. `_GSD_OUTPUT/ROADMAP.md` - All phases and their status
+3. `_GSD_OUTPUT/STATE.md` - Current position and blockers
+4. `_GSD_OUTPUT/PLAN-phase-*.md` - Any active plans
+5. `_GSD_OUTPUT/SUMMARY.md` - Commit history
 6. Git log - Recent commits
 
 ### Step 2: Analyze Progress
@@ -34,11 +34,11 @@ Calculate:
 3. **Recent Activity:**
    - Last 5 commits
    - Last updated file
-   - Last modified STATE.md entry
+   - Last modified `_GSD_OUTPUT/STATE.md` entry
 
 ### Step 3: Identify Blockers
 
-From STATE.md:
+From `_GSD_OUTPUT/STATE.md`:
 - Active blockers
 - Blockers resolved
 - Pending decisions needed

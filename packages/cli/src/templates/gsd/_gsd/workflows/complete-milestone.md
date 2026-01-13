@@ -19,18 +19,18 @@ Run this workflow when:
 Before marking complete, verify:
 
 1. **All Phases Complete:**
-   - Read ROADMAP.md
+   - Read _GSD_OUTPUT/ROADMAP.md
    - Confirm all phases marked ✅ Complete
    - All verification reports exist
 
 2. **Quality Checks:**
    - All tests passing
-   - No critical issues in ISSUES.md
+   - No critical issues in _GSD_OUTPUT/ISSUES.md
    - Documentation complete
    - Build succeeds
 
 3. **Project Goals Met:**
-   - Read PROJECT.md
+   - Read _GSD_OUTPUT/PROJECT.md
    - Verify all success criteria achieved
    - Confirm all must-have goals completed
 
@@ -38,7 +38,7 @@ Before marking complete, verify:
 
 Create comprehensive project summary:
 
-**File: `MILESTONE-{version}.md`**
+**File: `_GSD_OUTPUT/MILESTONE-{version}.md`**
 
 ```markdown
 # Milestone Complete - {{PROJECT_NAME}} v{version}
@@ -52,7 +52,7 @@ Create comprehensive project summary:
 
 ## Goals Achieved
 
-{From PROJECT.md - check off all completed goals}
+{From _GSD_OUTPUT/PROJECT.md - check off all completed goals}
 - ✅ Goal 1
 - ✅ Goal 2
 - ✅ Goal 3
@@ -80,7 +80,7 @@ Create comprehensive project summary:
 
 ## Key Decisions
 
-{From STATE.md - major decisions made}
+{From _GSD_OUTPUT/STATE.md - major decisions made}
 
 1. **{Decision Title}**
    - Rationale: {Why}
@@ -88,7 +88,7 @@ Create comprehensive project summary:
 
 ## Outstanding Items
 
-{From ISSUES.md - deferred or future work}
+{From _GSD_OUTPUT/ISSUES.md - deferred or future work}
 
 ### Future Enhancements
 - [ ] Enhancement 1
@@ -136,29 +136,29 @@ git push origin v{version}
 Create archive directory:
 
 ```bash
-mkdir -p archive/v{version}
+mkdir -p _GSD_OUTPUT/archive/v{version}
 ```
 
 Copy final state files:
 ```bash
-cp PROJECT.md archive/v{version}/
-cp ROADMAP.md archive/v{version}/
-cp STATE.md archive/v{version}/
-cp SUMMARY.md archive/v{version}/
-cp ISSUES.md archive/v{version}/
-cp MILESTONE-{version}.md archive/v{version}/
+cp _GSD_OUTPUT/PROJECT.md _GSD_OUTPUT/archive/v{version}/
+cp _GSD_OUTPUT/ROADMAP.md _GSD_OUTPUT/archive/v{version}/
+cp _GSD_OUTPUT/STATE.md _GSD_OUTPUT/archive/v{version}/
+cp _GSD_OUTPUT/SUMMARY.md _GSD_OUTPUT/archive/v{version}/
+cp _GSD_OUTPUT/ISSUES.md _GSD_OUTPUT/archive/v{version}/
+cp _GSD_OUTPUT/MILESTONE-{version}.md _GSD_OUTPUT/archive/v{version}/
 ```
 
 ### Step 5: Update Project Status
 
-**Update PROJECT.md:**
+**Update _GSD_OUTPUT/PROJECT.md:**
 ```markdown
 **Status:** Complete ✅
 **Version:** v{version}
 **Completed:** {Date}
 ```
 
-**Update STATE.md:**
+**Update _GSD_OUTPUT/STATE.md:**
 ```markdown
 ## Project Complete
 
@@ -166,7 +166,7 @@ cp MILESTONE-{version}.md archive/v{version}/
 **Date:** {Date}
 **Final Status:** All goals achieved
 
-See MILESTONE-{version}.md for complete summary.
+See _GSD_OUTPUT/MILESTONE-{version}.md for complete summary.
 ```
 
 ### Step 6: Prepare for Sequel (Optional)
@@ -191,15 +191,15 @@ If continuing with v2/sequel project:
 
    ## Carried Forward
 
-   From ISSUES.md:
+   From _GSD_OUTPUT/ISSUES.md:
    - {Deferred enhancement 1}
    - {Deferred enhancement 2}
    ```
 
 2. **Initialize New Cycle:**
-   - Create PROJECT-v{next}.md
-   - Create fresh ROADMAP-v{next}.md
-   - Create fresh STATE-v{next}.md
+   - Create _GSD_OUTPUT/PROJECT-v{next}.md
+   - Create fresh _GSD_OUTPUT/ROADMAP-v{next}.md
+   - Create fresh _GSD_OUTPUT/STATE-v{next}.md
    - Preserve archive of v{current}
 
 ### Step 7: Celebration & Reflection
@@ -228,11 +228,11 @@ Thank you for using Get Shit Done! 🚀
 
 ## Output Files
 
-- `MILESTONE-{version}.md` - Complete project summary
+- `_GSD_OUTPUT/MILESTONE-{version}.md` - Complete project summary
 - Git tag `v{version}` - Release marker
-- `archive/v{version}/` - Archived state
-- Updated `PROJECT.md` - Marked complete
-- Updated `STATE.md` - Final status
+- `_GSD_OUTPUT/archive/v{version}/` - Archived state
+- Updated `_GSD_OUTPUT/PROJECT.md` - Marked complete
+- Updated `_GSD_OUTPUT/STATE.md` - Final status
 
 ## Success Criteria
 

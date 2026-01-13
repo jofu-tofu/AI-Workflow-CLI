@@ -6,7 +6,7 @@ Execute task plans via fresh subagent contexts to prevent degradation and ensure
 
 ## Prerequisites
 
-- PLAN-phase-{N}.md exists
+- _GSD_OUTPUT/PLAN-phase-{N}.md exists
 - Tasks are well-defined with XML specifications
 - User has confirmed the plan
 
@@ -14,7 +14,7 @@ Execute task plans via fresh subagent contexts to prevent degradation and ensure
 
 ### Step 1: Locate Active Plan
 
-1. Find the most recent PLAN-phase-{N}.md file
+1. Find the most recent _GSD_OUTPUT/PLAN-phase-{N}.md file
 2. Verify it has status: Draft or In Progress
 3. Read all task specifications
 
@@ -33,7 +33,7 @@ For each task in the plan:
 
   <input>
     - Task XML specification
-    - Relevant project files (PROJECT.md, STATE.md, CODEBASE.md)
+    - Relevant project files (_GSD_OUTPUT/PROJECT.md, _GSD_OUTPUT/STATE.md, _GSD_OUTPUT/CODEBASE.md)
     - Current codebase state
   </input>
 
@@ -58,8 +58,8 @@ For each task in the plan:
 For each task (1-3 tasks per plan):
 
 1. **Pre-Execution:**
-   - Update PLAN.md: Mark task as "In Progress"
-   - Update STATE.md: Add "Working on: Task {N}"
+   - Update _GSD_OUTPUT/PLAN-phase-{N}.md: Mark task as "In Progress"
+   - Update _GSD_OUTPUT/STATE.md: Add "Working on: Task {N}"
 
 2. **Execute via Subagent:**
    - Spawn fresh Claude Code agent
@@ -71,13 +71,13 @@ For each task (1-3 tasks per plan):
 3. **Post-Execution:**
    - Verify commit was created
    - Run verification criteria manually if needed
-   - Update PLAN.md: Mark task as "Completed"
-   - Update SUMMARY.md: Add commit details
-   - Update STATE.md: Progress notes
+   - Update _GSD_OUTPUT/PLAN-phase-{N}.md: Mark task as "Completed"
+   - Update _GSD_OUTPUT/SUMMARY.md: Add commit details
+   - Update _GSD_OUTPUT/STATE.md: Progress notes
 
 4. **Error Handling:**
    - If verification fails: Stop execution
-   - Create issue in ISSUES.md
+   - Create issue in _GSD_OUTPUT/ISSUES.md
    - Ask user: Fix now or defer?
    - If defer: Mark remaining tasks as "Blocked"
 
@@ -106,22 +106,22 @@ After each task:
 
 If any verification fails:
 - Do NOT proceed to next task
-- Document failure in STATE.md
+- Document failure in _GSD_OUTPUT/STATE.md
 - Offer to create fix plan
 
 ### Step 6: Phase Completion Check
 
 After all tasks complete:
-1. Review phase completion criteria from ROADMAP.md
+1. Review phase completion criteria from _GSD_OUTPUT/ROADMAP.md
 2. Verify all criteria met
 3. If complete: Recommend `/gsd:verify-work {N}`
 4. If incomplete: Recommend `/gsd:plan-fix`
 
 ## Output Files Updated
 
-- `PLAN-phase-{N}.md` - Task status updates
-- `SUMMARY.md` - Commit history
-- `STATE.md` - Progress tracking
+- `_GSD_OUTPUT/PLAN-phase-{N}.md` - Task status updates
+- `_GSD_OUTPUT/SUMMARY.md` - Commit history
+- `_GSD_OUTPUT/STATE.md` - Progress tracking
 - Git history - Atomic commits per task
 
 ## Success Criteria

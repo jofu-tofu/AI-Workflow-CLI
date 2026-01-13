@@ -6,15 +6,15 @@ Create atomic task plans for specific phases with XML-formatted execution detail
 
 ## Prerequisites
 
-- ROADMAP.md exists with defined phases
-- STATE.md is initialized
+- _GSD_OUTPUT/ROADMAP.md exists with defined phases
+- _GSD_OUTPUT/STATE.md is initialized
 - Phase number specified by user
 
 ## Process
 
 ### Step 1: Phase Validation
 
-1. Read ROADMAP.md
+1. Read _GSD_OUTPUT/ROADMAP.md
 2. Verify requested phase exists
 3. Check if phase is ready to be planned:
    - Previous phases completed (if applicable)
@@ -23,10 +23,10 @@ Create atomic task plans for specific phases with XML-formatted execution detail
 ### Step 2: Context Gathering
 
 Collect relevant context:
-1. Read PROJECT.md for overall goals
-2. Read ROADMAP.md for phase description
-3. Read STATE.md for current decisions and blockers
-4. Read CODEBASE.md if it exists (for brownfield projects)
+1. Read _GSD_OUTPUT/PROJECT.md for overall goals
+2. Read _GSD_OUTPUT/ROADMAP.md for phase description
+3. Read _GSD_OUTPUT/STATE.md for current decisions and blockers
+4. Read _GSD_OUTPUT/CODEBASE.md if it exists (for brownfield projects)
 
 ### Step 3: Task Breakdown
 
@@ -76,10 +76,10 @@ For each task, define:
 Use `_gsd/templates/PLAN.md.template`:
 
 1. Replace `{{PHASE_NUMBER}}` with phase number
-2. Replace `{{PHASE_NAME}}` with phase name from ROADMAP.md
+2. Replace `{{PHASE_NAME}}` with phase name from _GSD_OUTPUT/ROADMAP.md
 3. Replace `{{DATE}}` with current date
 4. Fill in all tasks with complete details
-5. Create file as `PLAN-phase-{N}.md`
+5. Create file as `_GSD_OUTPUT/PLAN-phase-{N}.md`
 
 ### Step 6: Plan Review
 

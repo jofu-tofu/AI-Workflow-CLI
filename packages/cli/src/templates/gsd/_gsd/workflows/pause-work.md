@@ -43,7 +43,7 @@ Gather complete project context:
 
 ### Step 2: Create Handoff Document
 
-Generate `HANDOFF.md`:
+Generate `_GSD_OUTPUT/HANDOFF.md`:
 
 ```markdown
 # Project Handoff - {{PROJECT_NAME}}
@@ -118,10 +118,10 @@ Generate `HANDOFF.md`:
 ## Project Context
 
 **Read these files first:**
-1. `PROJECT.md` - Project vision and goals
-2. `ROADMAP.md` - Phase breakdown
-3. `STATE.md` - Current decisions
-4. `PLAN-phase-{N}.md` - Current execution plan (if exists)
+1. `_GSD_OUTPUT/PROJECT.md` - Project vision and goals
+2. `_GSD_OUTPUT/ROADMAP.md` - Phase breakdown
+3. `_GSD_OUTPUT/STATE.md` - Current decisions
+4. `_GSD_OUTPUT/PLAN-phase-{N}.md` - Current execution plan (if exists)
 
 **Recent important commits:**
 {git log with descriptions of last few major changes}
@@ -200,7 +200,7 @@ echo "WIP branch: wip/{feature-name}-{date}" >> HANDOFF.md
 
 ### Step 4: Update STATE.md
 
-Add pause note to STATE.md:
+Add pause note to `_GSD_OUTPUT/STATE.md`:
 
 ```markdown
 ## Current Status
@@ -222,7 +222,7 @@ Add to HANDOFF.md:
 
 Before continuing work:
 - [ ] Read this entire handoff document
-- [ ] Read PROJECT.md, ROADMAP.md, STATE.md
+- [ ] Read _GSD_OUTPUT/PROJECT.md, _GSD_OUTPUT/ROADMAP.md, _GSD_OUTPUT/STATE.md
 - [ ] Review recent commits (git log)
 - [ ] Restore uncommitted changes (if stashed/branched)
 - [ ] Run tests to verify environment works
@@ -236,7 +236,7 @@ Before continuing work:
 Commit the handoff documentation:
 
 ```bash
-git add HANDOFF.md STATE.md
+git add _GSD_OUTPUT/HANDOFF.md _GSD_OUTPUT/STATE.md
 git commit -m "Pause: Create handoff documentation
 
 Work paused on Phase {N} - {Phase Name}
@@ -252,16 +252,16 @@ Show user:
 ```markdown
 ⏸️ Work Paused Successfully
 
-Handoff documentation created: HANDOFF.md
+Handoff documentation created: `_GSD_OUTPUT/HANDOFF.md`
 
 **Current state preserved:**
 - Handoff document with full context
 - {Committed WIP / Stashed changes / WIP branch created}
-- STATE.md updated
+- `_GSD_OUTPUT/STATE.md` updated
 - All changes committed
 
 **To resume later:**
-Run `/gsd:resume-work` and follow the checklist in HANDOFF.md
+Run `/gsd:resume-work` and follow the checklist in `_GSD_OUTPUT/HANDOFF.md`
 
 {If blockers exist:}
 ⚠️ Active blockers documented - resolve before resuming
@@ -269,8 +269,8 @@ Run `/gsd:resume-work` and follow the checklist in HANDOFF.md
 
 ## Output Files
 
-- `HANDOFF.md` - Complete handoff documentation
-- Updated `STATE.md` - Marked as paused
+- `_GSD_OUTPUT/HANDOFF.md` - Complete handoff documentation
+- Updated `_GSD_OUTPUT/STATE.md` - Marked as paused
 - Git commit - Handoff documentation
 - Optional: WIP commit/stash/branch
 

@@ -15,9 +15,9 @@ User acceptance testing for completed phases or plans to ensure quality before p
 ### Step 1: Read Completion Context
 
 Gather verification materials:
-1. Read `PLAN-phase-{N}.md` - All tasks and acceptance criteria
-2. Read `ROADMAP.md` - Phase completion criteria
-3. Read `SUMMARY.md` - Commits made during phase
+1. Read `_GSD_OUTPUT/PLAN-phase-{N}.md` - All tasks and acceptance criteria
+2. Read `_GSD_OUTPUT/ROADMAP.md` - Phase completion criteria
+3. Read `_GSD_OUTPUT/SUMMARY.md` - Commits made during phase
 4. Review git log for phase commits
 
 ### Step 2: Prepare Verification Checklist
@@ -144,17 +144,17 @@ Create verification report:
 ### Step 6: Handle Verification Outcome
 
 **If ALL verifications pass:**
-1. Update ROADMAP.md:
+1. Update `_GSD_OUTPUT/ROADMAP.md`:
    - Move Phase {N} to "Completed Phases" section
    - Update status to ✅ Complete
    - Add completion date
-2. Update STATE.md:
+2. Update `_GSD_OUTPUT/STATE.md`:
    - Add to completed work
    - Set next phase as current
 3. Recommend: `/gsd:plan-phase {N+1}` to start next phase
 
 **If ANY verifications fail:**
-1. Document issues in ISSUES.md
+1. Document issues in `_GSD_OUTPUT/ISSUES.md`
 2. Create issue descriptions with:
    - What failed
    - Expected vs actual behavior
@@ -162,7 +162,7 @@ Create verification report:
    - Severity (Blocker, Major, Minor)
 3. Ask user: "Fix now or defer?"
    - If fix now: Recommend `/gsd:plan-fix phase-{N}`
-   - If defer: Add to ISSUES.md with "Deferred" tag
+   - If defer: Add to `_GSD_OUTPUT/ISSUES.md` with "Deferred" tag
 
 ### Step 7: Celebration (if passed)
 
@@ -181,10 +181,10 @@ Ready to start Phase {N+1}?
 
 ## Output Files
 
-- `VERIFICATION-phase-{N}.md` - Detailed verification report
-- Updated `ROADMAP.md` - Phase marked complete
-- Updated `STATE.md` - Progress updated
-- Updated `ISSUES.md` - Any new issues found
+- `_GSD_OUTPUT/VERIFICATION-phase-{N}.md` - Detailed verification report
+- Updated `_GSD_OUTPUT/ROADMAP.md` - Phase marked complete
+- Updated `_GSD_OUTPUT/STATE.md` - Progress updated
+- Updated `_GSD_OUTPUT/ISSUES.md` - Any new issues found
 
 ## Success Criteria
 

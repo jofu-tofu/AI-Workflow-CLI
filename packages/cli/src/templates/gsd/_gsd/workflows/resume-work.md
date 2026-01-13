@@ -18,17 +18,17 @@ Find the most recent handoff:
 
 ```bash
 # Check for HANDOFF.md
-if exists HANDOFF.md:
+if exists _GSD_OUTPUT/HANDOFF.md:
   - Read it
   - This is the primary handoff
 
 # Check for dated handoffs
-ls -la HANDOFF-*.md 2>/dev/null
+ls -la _GSD_OUTPUT/HANDOFF-*.md 2>/dev/null
   - If multiple exist, use most recent
 
 # No handoff found
 if no handoff exists:
-  - Offer to reconstruct from STATE.md
+  - Offer to reconstruct from _GSD_OUTPUT/STATE.md
   - Or run /gsd:progress to orient
 ```
 
@@ -36,7 +36,7 @@ if no handoff exists:
 
 Present handoff to user:
 
-1. Show complete HANDOFF.md
+1. Show complete _GSD_OUTPUT/HANDOFF.md
 2. Highlight key sections:
    - Current status
    - What was being done
@@ -118,9 +118,9 @@ Help user reconstruct context:
    ```
 
 2. **Summarize Progress:**
-   - Read ROADMAP.md - show which phases complete
-   - Read STATE.md - show current decisions
-   - Read current PLAN-phase-{N}.md - show task progress
+   - Read _GSD_OUTPUT/ROADMAP.md - show which phases complete
+   - Read _GSD_OUTPUT/STATE.md - show current decisions
+   - Read current _GSD_OUTPUT/PLAN-phase-{N}.md - show task progress
 
 3. **Highlight Changes:**
    ```bash
@@ -131,7 +131,7 @@ Help user reconstruct context:
    ```
 
 4. **Review "Mental Model" Section:**
-   - From HANDOFF.md
+   - From _GSD_OUTPUT/HANDOFF.md
    - Explain the approach that was being taken
    - Refresh understanding of decisions made
 
@@ -139,7 +139,7 @@ Help user reconstruct context:
 
 Check if blockers are resolved:
 
-**For each blocker in HANDOFF.md:**
+**For each blocker in _GSD_OUTPUT/HANDOFF.md:**
 
 ```markdown
 Blocker: {Blocker Title}
@@ -152,7 +152,7 @@ Status: {Still blocked / Resolved / Unknown}
 
 {If resolved:}
 - How was it resolved?
-- Update STATE.md with resolution
+- Update _GSD_OUTPUT/STATE.md with resolution
 - Continue with work
 ```
 
@@ -181,13 +181,13 @@ From "What I Was About To Do Next" section:
 
 ### Step 8: Complete Resumption Checklist
 
-Work through checklist from HANDOFF.md:
+Work through checklist from _GSD_OUTPUT/HANDOFF.md:
 
 ```markdown
 ## Resumption Checklist
 
 - [ ] Read this entire handoff document
-- [ ] Read PROJECT.md, ROADMAP.md, STATE.md
+- [ ] Read _GSD_OUTPUT/PROJECT.md, _GSD_OUTPUT/ROADMAP.md, _GSD_OUTPUT/STATE.md
 - [ ] Review recent commits (git log)
 - [ ] Restore uncommitted changes (if stashed/branched)
 - [ ] Run tests to verify environment works
@@ -198,7 +198,7 @@ Work through checklist from HANDOFF.md:
 
 Show progress on checklist as items complete.
 
-### Step 9: Update STATE.md
+### Step 9: Update _GSD_OUTPUT/STATE.md
 
 Mark work as resumed:
 
@@ -218,11 +218,11 @@ Mark work as resumed:
 Don't delete - move to archive:
 
 ```bash
-mkdir -p .gsd-handoffs
-mv HANDOFF.md .gsd-handoffs/HANDOFF-{date}.md
+mkdir -p _GSD_OUTPUT/.gsd-handoffs
+mv _GSD_OUTPUT/HANDOFF.md _GSD_OUTPUT/.gsd-handoffs/HANDOFF-{date}.md
 
-# Add note to STATE.md
-echo "Handoff archived: .gsd-handoffs/HANDOFF-{date}.md" >> STATE.md
+# Add note to _GSD_OUTPUT/STATE.md
+echo "Handoff archived: _GSD_OUTPUT/.gsd-handoffs/HANDOFF-{date}.md" >> _GSD_OUTPUT/STATE.md
 ```
 
 ### Step 11: Confirmation
@@ -269,7 +269,7 @@ Would you like to:
 
 ## Fallback: No Handoff Document
 
-If HANDOFF.md doesn't exist:
+If _GSD_OUTPUT/HANDOFF.md doesn't exist:
 
 1. **Reconstruct from Git:**
    ```bash
@@ -279,10 +279,10 @@ If HANDOFF.md doesn't exist:
    ```
 
 2. **Read Project Files:**
-   - PROJECT.md
-   - ROADMAP.md
-   - STATE.md
-   - Latest PLAN-phase-{N}.md
+   - _GSD_OUTPUT/PROJECT.md
+   - _GSD_OUTPUT/ROADMAP.md
+   - _GSD_OUTPUT/STATE.md
+   - Latest _GSD_OUTPUT/PLAN-phase-{N}.md
 
 3. **Run Progress:**
    - Use `/gsd:progress` to orient

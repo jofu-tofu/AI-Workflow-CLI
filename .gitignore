@@ -130,3 +130,8 @@ tmpclaude-*-cwd
 nul
 NUL
 _bmad-output/
+
+# PAI Installation
+_gsd/
+_GSD_OUTPUT/
+.claude/

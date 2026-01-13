@@ -1,0 +1,4 @@
+# GSD Workflow Output Directory
+# This directory contains all GSD-generated project documentation
+# and should not be committed to version control
+_GSD_OUTPUT/

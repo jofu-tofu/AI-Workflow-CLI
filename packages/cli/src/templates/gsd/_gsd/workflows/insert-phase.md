@@ -46,10 +46,10 @@ If this work can wait until current phases complete, use `/gsd:add-phase` instea
 ### Step 2: Current State Analysis
 
 Read project state:
-1. `ROADMAP.md` - All current phases
-2. `STATE.md` - Current position
-3. List all PLAN-phase-*.md files
-4. List all VERIFICATION-phase-*.md files
+1. `_GSD_OUTPUT/ROADMAP.md` - All current phases
+2. `_GSD_OUTPUT/STATE.md` - Current position
+3. List all `_GSD_OUTPUT/PLAN-phase-*.md` files
+4. List all `_GSD_OUTPUT/VERIFICATION-phase-*.md` files
 
 Determine impact:
 - Which phases will be renumbered?
@@ -133,14 +133,14 @@ Create execution plan for renumbering:
 **Step 5a: Backup Current State**
 ```bash
 # Create backup
-mkdir -p .gsd-backup
-cp ROADMAP.md .gsd-backup/
-cp STATE.md .gsd-backup/
-cp SUMMARY.md .gsd-backup/
-cp PLAN-phase-*.md .gsd-backup/ 2>/dev/null || true
-cp VERIFICATION-phase-*.md .gsd-backup/ 2>/dev/null || true
+mkdir -p _GSD_OUTPUT/.gsd-backup
+cp _GSD_OUTPUT/ROADMAP.md _GSD_OUTPUT/.gsd-backup/
+cp _GSD_OUTPUT/STATE.md _GSD_OUTPUT/.gsd-backup/
+cp _GSD_OUTPUT/SUMMARY.md _GSD_OUTPUT/.gsd-backup/
+cp _GSD_OUTPUT/PLAN-phase-*.md _GSD_OUTPUT/.gsd-backup/ 2>/dev/null || true
+cp _GSD_OUTPUT/VERIFICATION-phase-*.md _GSD_OUTPUT/.gsd-backup/ 2>/dev/null || true
 
-echo "Backup created in .gsd-backup/"
+echo "Backup created in _GSD_OUTPUT/.gsd-backup/"
 ```
 
 **Step 5b: Rename Files (Reverse Order)**
@@ -152,28 +152,28 @@ Rename from highest to lowest to avoid conflicts:
 # Rename 5→6, then 4→5, then 3→4
 
 {For i from N down to M}:
-  if exists PLAN-phase-{i}.md:
-    mv PLAN-phase-{i}.md PLAN-phase-{i+1}.md
+  if exists _GSD_OUTPUT/PLAN-phase-{i}.md:
+    mv _GSD_OUTPUT/PLAN-phase-{i}.md _GSD_OUTPUT/PLAN-phase-{i+1}.md
 
-  if exists VERIFICATION-phase-{i}.md:
-    mv VERIFICATION-phase-{i}.md VERIFICATION-phase-{i+1}.md
+  if exists _GSD_OUTPUT/VERIFICATION-phase-{i}.md:
+    mv _GSD_OUTPUT/VERIFICATION-phase-{i}.md _GSD_OUTPUT/VERIFICATION-phase-{i+1}.md
 ```
 
 **Step 5c: Update ROADMAP.md**
 
-1. Read current ROADMAP.md
+1. Read current `_GSD_OUTPUT/ROADMAP.md`
 2. Find phase {M} and all subsequent phases
 3. Increment their numbers by 1
 4. Insert new phase {M} before old phase {M}
 5. Update all phase references
-6. Write updated ROADMAP.md
+6. Write updated `_GSD_OUTPUT/ROADMAP.md`
 
 **Step 5d: Update Other Files**
 
 Update phase references in:
-- STATE.md
-- SUMMARY.md
-- All renamed PLAN files (internal references)
+- `_GSD_OUTPUT/STATE.md`
+- `_GSD_OUTPUT/SUMMARY.md`
+- All renamed `_GSD_OUTPUT/PLAN-phase-*.md` files (internal references)
 
 ### Step 6: Verification
 
@@ -181,15 +181,15 @@ After renumbering:
 
 1. **File Check:**
    ```bash
-   ls -la PLAN-phase-*.md
-   ls -la VERIFICATION-phase-*.md
+   ls -la _GSD_OUTPUT/PLAN-phase-*.md
+   ls -la _GSD_OUTPUT/VERIFICATION-phase-*.md
    ```
    Confirm sequential numbering with no gaps
 
 2. **Content Check:**
-   - Open ROADMAP.md - verify phase sequence
-   - Open STATE.md - verify current phase correct
-   - Open renamed PLAN files - verify internal numbers updated
+   - Open `_GSD_OUTPUT/ROADMAP.md` - verify phase sequence
+   - Open `_GSD_OUTPUT/STATE.md` - verify current phase correct
+   - Open renamed `_GSD_OUTPUT/PLAN-phase-*.md` files - verify internal numbers updated
 
 3. **Git Status:**
    ```bash
@@ -239,18 +239,18 @@ After user confirms everything looks correct:
 
 ```bash
 # Remove backup
-rm -rf .gsd-backup/
-git add .gsd-backup/  # Stage deletion
+rm -rf _GSD_OUTPUT/.gsd-backup/
+git add _GSD_OUTPUT/.gsd-backup/  # Stage deletion
 git commit -m "Cleanup: Remove insertion backup"
 ```
 
 ## Output Files
 
-- Updated `ROADMAP.md` - Phases renumbered, new phase inserted
-- Renamed `PLAN-phase-{N+1}.md` files
-- Renamed `VERIFICATION-phase-{N+1}.md` files
-- Updated `STATE.md` - Decision documented
-- Updated `SUMMARY.md` - References updated
+- Updated `_GSD_OUTPUT/ROADMAP.md` - Phases renumbered, new phase inserted
+- Renamed `_GSD_OUTPUT/PLAN-phase-{N+1}.md` files
+- Renamed `_GSD_OUTPUT/VERIFICATION-phase-{N+1}.md` files
+- Updated `_GSD_OUTPUT/STATE.md` - Decision documented
+- Updated `_GSD_OUTPUT/SUMMARY.md` - References updated
 - Git commits documenting changes
 
 ## Success Criteria
@@ -269,9 +269,9 @@ If insertion goes wrong:
 
 ```bash
 # Restore from backup
-cp .gsd-backup/* .
-git checkout -- .
-rm -rf .gsd-backup/
+cp _GSD_OUTPUT/.gsd-backup/* _GSD_OUTPUT/
+git checkout -- _GSD_OUTPUT/
+rm -rf _GSD_OUTPUT/.gsd-backup/
 ```
 
 ## Notes

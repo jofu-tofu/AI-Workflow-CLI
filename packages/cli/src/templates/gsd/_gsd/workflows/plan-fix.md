@@ -7,7 +7,7 @@ Create targeted fix plans to address issues found during UAT (User Acceptance Te
 ## Prerequisites
 
 - Issues have been identified and documented (from `/gsd:verify-work` or user report)
-- ISSUES.md contains issue descriptions
+- _GSD_OUTPUT/ISSUES.md contains issue descriptions
 - User wants to fix issues now (not defer)
 
 ## Process
@@ -15,8 +15,8 @@ Create targeted fix plans to address issues found during UAT (User Acceptance Te
 ### Step 1: Issue Analysis
 
 Read issue documentation from:
-1. `ISSUES.md` - Issue descriptions
-2. `VERIFICATION-phase-{N}.md` - Failed verification criteria
+1. `_GSD_OUTPUT/ISSUES.md` - Issue descriptions
+2. `_GSD_OUTPUT/VERIFICATION-phase-{N}.md` - Failed verification criteria
 3. Recent git log - Commits that may have introduced issues
 
 For each issue, understand:
@@ -62,7 +62,7 @@ Determine fix approach:
 
 ### Step 4: Create Fix Plan (if needed)
 
-For complex fixes, create `PLAN-fix-{issue-id}.md`:
+For complex fixes, create `_GSD_OUTPUT/PLAN-fix-{issue-id}.md`:
 
 ```markdown
 # Fix Plan - Issue {ID}
@@ -137,7 +137,7 @@ For complex fixes, create `PLAN-fix-{issue-id}.md`:
    ```
 
 **For Complex Fixes:**
-1. Create fix plan (PLAN-fix-{id}.md)
+1. Create fix plan (_GSD_OUTPUT/PLAN-fix-{id}.md)
 2. Show plan to user for approval
 3. Execute via `/gsd:execute-plan` pattern
 4. Verify fix resolves issue
@@ -156,9 +156,9 @@ After fix is applied:
    - Ensure nothing else broke
 
 3. **Update Documentation:**
-   - Update ISSUES.md (mark as resolved)
-   - Update VERIFICATION report if it exists
-   - Update STATE.md with fix notes
+   - Update _GSD_OUTPUT/ISSUES.md (mark as resolved)
+   - Update _GSD_OUTPUT/VERIFICATION report if it exists
+   - Update _GSD_OUTPUT/STATE.md with fix notes
 
 ### Step 7: Completion Decision
 
@@ -169,9 +169,9 @@ Ask user:
 
 ## Output Files
 
-- `PLAN-fix-{id}.md` - Fix plan (if complex)
-- Updated `ISSUES.md` - Mark issue as resolved
-- Updated `STATE.md` - Document fix
+- `_GSD_OUTPUT/PLAN-fix-{id}.md` - Fix plan (if complex)
+- Updated `_GSD_OUTPUT/ISSUES.md` - Mark issue as resolved
+- Updated `_GSD_OUTPUT/STATE.md` - Document fix
 - Git commit - Atomic fix commit
 
 ## Success Criteria
