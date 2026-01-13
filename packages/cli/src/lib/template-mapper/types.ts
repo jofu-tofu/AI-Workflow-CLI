@@ -150,6 +150,8 @@ export interface ParsedTemplate {
   content: string
   /** Original file path (if loaded from file) */
   sourcePath?: string
+  /** Phase 5 addition: Parsed semantic constructs from content */
+  contentAnalysis?: ContentAnalysis
 }
 
 // =============================================================================
@@ -546,4 +548,24 @@ export interface ContentAnalysis {
   constructs: SemanticConstruct[]
   /** Original raw content */
   rawContent: string
+}
+
+// =============================================================================
+// Phase 5: Content Transformer Types
+// =============================================================================
+
+/**
+ * Content transformer interface for platform-specific content rewriting
+ */
+export interface ContentTransformer {
+  platform: Platform
+  transform(analysis: ContentAnalysis, content: string): TransformedContent
+}
+
+/**
+ * Result of content transformation
+ */
+export interface TransformedContent {
+  content: string
+  warnings: TransformationWarning[]
 }

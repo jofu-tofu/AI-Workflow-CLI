@@ -15,6 +15,8 @@ import type {
   TransformationWarning,
   TransformOptions,
 } from '../types.js'
+import {parseContent} from '../content-parser.js'
+import {ClaudeCodeContentTransformer} from '../content-transformers.js'
 
 /**
  * Fields that are Claude Code native and passed through directly
@@ -309,9 +311,16 @@ export class ClaudeCodeAdapter implements PlatformAdapter {
       }
     }
 
+    // Phase 5: Transform content using semantic analysis
+    const contentAnalysis = template.contentAnalysis || parseContent(template.content)
+    const transformer = new ClaudeCodeContentTransformer()
+    const contentResult = transformer.transform(contentAnalysis, template.content)
+    const transformedContent = contentResult.content
+    warnings.push(...contentResult.warnings)
+
     // Generate main SKILL.md file
     const frontmatter = generateFrontmatter(template)
-    const skillContent = `${frontmatter}\n\n${template.content}`
+    const skillContent = `${frontmatter}\n\n${transformedContent}`
     const outputPath = this.getOutputPath(template)
     files.set(outputPath, skillContent)
 

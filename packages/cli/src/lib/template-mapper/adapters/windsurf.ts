@@ -16,6 +16,8 @@ import type {
   TransformOptions,
   PLATFORM_LIMITS,
 } from '../types.js'
+import {parseContent} from '../content-parser.js'
+import {WindsurfContentTransformer} from '../content-transformers.js'
 
 /**
  * Fields that are Windsurf native and passed through directly
@@ -335,34 +337,68 @@ ${perms.deny.map((p) => `- \`${p}\``).join('\n')}
 }
 
 /**
- * Generate hooks as manual workflow steps
+ * Generate pre-execution hooks as manual workflow steps (PreToolUse)
  */
-function generateHooksSection(template: ParsedTemplate): string | null {
+function generatePreHooksSection(template: ParsedTemplate): string | null {
   const hooks = template.metadata.hooks
-  if (!hooks) {
+  if (!hooks?.PreToolUse) {
     return null
   }
 
-  const lines: string[] = []
+  const lines = [
+    '## Pre-Execution Checks',
+    '',
+    '**IMPORTANT:** Before making any file changes, run:',
+    '',
+  ]
 
-  // Pre-execution hooks
-  if (hooks.PreToolUse) {
-    lines.push('## Pre-Execution Checks')
-    lines.push('')
-    lines.push('**IMPORTANT:** Before making any file changes, run:')
-    lines.push('')
-
-    for (const hook of hooks.PreToolUse) {
-      for (const h of hook.hooks) {
-        lines.push('```bash')
-        lines.push(h.command)
-        lines.push('```')
-        lines.push('')
-      }
+  for (const hook of hooks.PreToolUse) {
+    for (const h of hook.hooks) {
+      lines.push('```bash')
+      lines.push(h.command)
+      lines.push('```')
+      lines.push('')
     }
   }
 
-  return lines.length > 0 ? lines.join('\n') : null
+  return lines.join('\n')
+}
+
+/**
+ * Generate post-tool-use hooks as manual workflow steps (PostToolUse)
+ * These run after each tool completes, unlike Stop hooks which run at session end.
+ */
+function generatePostToolUseSection(template: ParsedTemplate): string | null {
+  const hooks = template.metadata.hooks
+  if (!hooks?.PostToolUse) {
+    return null
+  }
+
+  const lines = [
+    '## Post-Tool Validation',
+    '',
+    '**IMPORTANT:** After EACH file operation (read/write/edit), run:',
+    '',
+  ]
+
+  for (const hook of hooks.PostToolUse) {
+    // Include matcher info if specified
+    if (hook.matcher && hook.matcher !== '*') {
+      lines.push(`> Applies to: \`${hook.matcher}\` operations`)
+      lines.push('')
+    }
+
+    for (const h of hook.hooks) {
+      lines.push('```bash')
+      lines.push(h.command)
+      lines.push('```')
+      lines.push('')
+    }
+  }
+
+  lines.push('Run these commands after completing each tool operation before proceeding.')
+
+  return lines.join('\n')
 }
 
 /**
@@ -505,6 +541,13 @@ export class WindsurfAdapter implements PlatformAdapter {
     const warnings = this.validate(template)
     const files = new Map<string, string>()
 
+    // Phase 5: Transform content using semantic analysis
+    const contentAnalysis = template.contentAnalysis || parseContent(template.content)
+    const transformer = new WindsurfContentTransformer()
+    const contentResult = transformer.transform(contentAnalysis, template.content)
+    const transformedContent = contentResult.content
+    warnings.push(...contentResult.warnings)
+
     // Build the main workflow content
     const sections: string[] = []
 
@@ -547,10 +590,16 @@ export class WindsurfAdapter implements PlatformAdapter {
       sections.push('\n' + permsSection)
     }
 
-    // Pre-execution hooks
-    const preHooksSection = generateHooksSection(template)
+    // Pre-execution hooks (PreToolUse)
+    const preHooksSection = generatePreHooksSection(template)
     if (preHooksSection) {
       sections.push('\n---\n\n' + preHooksSection)
+    }
+
+    // Post-tool-use hooks (PostToolUse)
+    const postToolUseSection = generatePostToolUseSection(template)
+    if (postToolUseSection) {
+      sections.push('\n---\n\n' + postToolUseSection)
     }
 
     // Context isolation markers
@@ -559,9 +608,9 @@ export class WindsurfAdapter implements PlatformAdapter {
       sections.push('\n---\n\n' + contextSection)
     }
 
-    // Main content
-    if (template.content) {
-      sections.push('\n' + template.content)
+    // Main content (using transformed content from Phase 5)
+    if (transformedContent) {
+      sections.push('\n' + transformedContent)
     }
 
     // Context end marker

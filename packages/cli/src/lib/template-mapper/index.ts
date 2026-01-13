@@ -54,6 +54,10 @@ export type {
   ConstructLocation,
   SemanticConstruct,
   ContentAnalysis,
+
+  // Phase 5: Content transformer types
+  ContentTransformer,
+  TransformedContent,
 } from './types.js'
 
 // Re-export constants
@@ -115,3 +119,11 @@ export {
   detectVersionComments,
   detectExecutionFlowSections,
 } from './content-parser.js'
+
+// Content transformer exports (Phase 5)
+export {
+  ClaudeCodeContentTransformer,
+  WindsurfContentTransformer,
+  CopilotContentTransformer,
+  createContentTransformer,
+} from './content-transformers.js'
