@@ -1,0 +1,74 @@
+/**
+ * Template Mapper Module
+ *
+ * Cross-platform template conversion system for transforming templates
+ * between Claude Code, Windsurf, and GitHub Copilot formats.
+ *
+ * @module template-mapper
+ */
+
+// Re-export all types
+export type {
+  // Platform types
+  Platform,
+  CompatibilityStatus,
+
+  // Schema types
+  PlatformCompatibility,
+  EmulationPattern,
+  Permissions,
+  HookConfig,
+  LifecycleHooks,
+  Handoff,
+  TemplateMetadata,
+  ParsedTemplate,
+
+  // Transformation types
+  WarningCategory,
+  TransformationWarning,
+  TransformationResult,
+
+  // Adapter interface
+  PlatformAdapter,
+
+  // Options
+  TransformOptions,
+  ParseOptions,
+
+  // Engine types
+  ConversionResult,
+  MappingEngine,
+
+  // Validation types
+  ValidationSeverity,
+  ValidationIssue,
+  SchemaValidator,
+
+  // Platform-specific output types
+  ClaudeCodeOutput,
+  WindsurfOutput,
+  GitHubCopilotOutput,
+} from './types.js'
+
+// Re-export constants
+export {
+  PLATFORMS,
+  PLATFORM_LIMITS,
+  CLAUDE_CODE_TOOLS,
+  WINDSURF_TRIGGERS,
+  COPILOT_MODES,
+} from './types.js'
+
+// Parser exports will be added when implemented
+// export { parseTemplate, parseTemplateString } from './parser.js'
+
+// Validator exports will be added when implemented
+// export { validateSchema, validateForPlatform } from './validator.js'
+
+// Engine exports will be added when implemented
+// export { createMappingEngine } from './engine.js'
+
+// Adapter exports will be added when implemented
+// export { ClaudeCodeAdapter } from './adapters/claude-code.js'
+// export { WindsurfAdapter } from './adapters/windsurf.js'
+// export { GitHubCopilotAdapter } from './adapters/github-copilot.js'
