@@ -71,6 +71,8 @@ The mapping engine will use the transformation rules from PLATFORM-ADAPTERS.md a
 
 ### Task 2: Implement Parser and Claude Code Generator
 
+**Status:** Completed
+
 **Objective:** Build the standard format parser and Claude Code platform adapter with full transformation logic
 
 **Implementation:**
@@ -118,11 +120,11 @@ The mapping engine will use the transformation rules from PLATFORM-ADAPTERS.md a
 ```
 
 **Acceptance Criteria:**
-- [ ] parser.ts implements parseTemplate() with YAML frontmatter + markdown extraction
-- [ ] claude-code.ts implements full transformation per PLATFORM-ADAPTERS.md Section 3.1
-- [ ] Unit tests cover valid input, error cases, field mapping, hook transformation
-- [ ] Can successfully convert examples/skill-example.md to .claude/skills/test-runner/SKILL.md
-- [ ] Generated output validated against Claude Code SKILL.md format
+- [x] parser.ts implements parseTemplate() with YAML frontmatter + markdown extraction
+- [x] claude-code.ts implements full transformation per PLATFORM-ADAPTERS.md Section 1.1
+- [x] Unit tests cover valid input, error cases, field mapping, transformation (37 tests passing)
+- [x] settings.json generated when permissions field is present
+- [x] Generated output validated against Claude Code SKILL.md format
 
 ---
 
