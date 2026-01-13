@@ -17,7 +17,6 @@ import BaseCommand from '../../lib/base-command.js'
 const AVAILABLE_IDES = [
   {value: 'claude', name: 'Claude Code', description: 'Anthropic Claude Code CLI'},
   {value: 'windsurf', name: 'Windsurf', description: 'Codeium Windsurf IDE'},
-  {value: 'cursor', name: 'Cursor', description: 'Cursor AI IDE'},
 ]
 
 /**
