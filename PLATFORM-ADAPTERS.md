@@ -32,6 +32,8 @@ This document specifies the **platform adapters** that transform templates writt
 
 Claude Code is the **most feature-complete platform**, so the adapter primarily strips unused fields and restructures output for Claude Code's directory conventions.
 
+**See Also:** [WORKAROUND-PATTERNS.md Pattern 2](WORKAROUND-PATTERNS.md#pattern-2-workflow-emulation-for-claude-code) - Detailed workflow emulation pattern for converting Windsurf workflows with AI-driven activation to Claude Code skills
+
 ### 1.1 Field Mapping
 
 | Superset Field | Claude Code Field | Transformation |
