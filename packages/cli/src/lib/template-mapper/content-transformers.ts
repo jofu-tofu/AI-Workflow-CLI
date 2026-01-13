@@ -118,6 +118,11 @@ export class ClaudeCodeContentTransformer implements ContentTransformer {
     const replacements: Replacement[] = []
 
     for (const construct of analysis.constructs) {
+      // Skip if this construct overlaps with an existing replacement
+      if (overlapsWithExisting(construct.location.start, construct.location.end, replacements)) {
+        continue
+      }
+
       switch (construct.type) {
         case 'model-decision-trigger':
           // Windsurf-specific - convert to description-based discovery

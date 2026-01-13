@@ -6,6 +6,8 @@ import {checkbox, confirm, input, select} from '@inquirer/prompts'
 
 import {detectUsername, generateBmadConfigs} from '../../lib/bmad-installer.js'
 import {updateGitignore} from '../../lib/gitignore-manager.js'
+import {mergeClaudeSettings} from '../../lib/hooks-merger.js'
+import {getTargetSettingsFile, readClaudeSettings, writeClaudeSettings} from '../../lib/settings-hierarchy.js'
 import {installTemplate} from '../../lib/template-installer.js'
 import {getAvailableTemplates, getTemplatePath} from '../../lib/template-resolver.js'
 import {EXIT_CODES} from '../../types/exit-codes.js'
@@ -208,6 +210,11 @@ export default class Init extends BaseCommand {
       this.logSuccess('✓ Template structure installed')
       this.logSuccess(`✓ Installed folders: ${result.installedFolders.join(', ')}`)
 
+      // Merge hooks if Claude IDE is selected
+      if (flags.ide.includes('claude')) {
+        await this.mergeTemplateHooks(targetDir, templatePath)
+      }
+
       // Update .gitignore if git repository exists
       if (hasGit) {
         await updateGitignore(targetDir, foldersForGitignore)
@@ -336,5 +343,43 @@ export default class Init extends BaseCommand {
       gsd: 'GSD Method - Get Stuff Done project management',
     }
     return descriptions[template] || 'Custom template'
+  }
+
+  /**
+   * Merge template hooks into project settings
+   *
+   * @param targetDir - Project directory
+   * @param templatePath - Template source path
+   */
+  private async mergeTemplateHooks(targetDir: string, templatePath: string): Promise<void> {
+    try {
+      // Read template settings
+      const templateSettingsPath = join(templatePath, '.claude', 'settings.json')
+      const templateSettings = await readClaudeSettings(templateSettingsPath)
+
+      // If template has no settings or no hooks, nothing to merge
+      if (!templateSettings || !templateSettings.hooks || Object.keys(templateSettings.hooks).length === 0) {
+        this.logInfo('No hooks in template to merge')
+        return
+      }
+
+      // Get target settings file path
+      const targetSettingsPath = getTargetSettingsFile(targetDir)
+
+      // Read existing project settings
+      const existingSettings = await readClaudeSettings(targetSettingsPath)
+
+      // Merge settings
+      const mergedSettings = mergeClaudeSettings(existingSettings, templateSettings)
+
+      // Write merged settings
+      await writeClaudeSettings(targetSettingsPath, mergedSettings)
+
+      this.logSuccess('✓ Template hooks merged into project settings')
+    } catch (error) {
+      const err = error as Error
+      this.warn(`Failed to merge template hooks: ${err.message}`)
+      // Don't fail the entire installation if hook merging fails
+    }
   }
 }

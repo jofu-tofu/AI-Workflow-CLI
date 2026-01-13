@@ -21,8 +21,8 @@ export async function getTemplatePath(templateName: string): Promise<string> {
   }
 
   // Get the directory of this file
-  // In dev: .../pai-cli/src/lib/
-  // In prod: .../pai-cli/dist/lib/
+  // In dev: .../aiwcli/src/lib/
+  // In prod: .../aiwcli/dist/lib/
   const currentFileUrl = import.meta.url
   const currentFilePath = fileURLToPath(currentFileUrl)
   const currentDir = dirname(currentFilePath)
@@ -62,7 +62,7 @@ export async function getAvailableTemplates(): Promise<string[]> {
     const err = error as NodeJS.ErrnoException
     throw new Error(
       `Failed to read templates directory at ${templatesDir}: ${err.message}. ` +
-      `This indicates a corrupted installation. Please reinstall pai-cli.`
+      `This indicates a corrupted installation. Please reinstall aiwcli.`
     )
   }
 }

@@ -7,7 +7,7 @@ import prettier from 'eslint-config-prettier'
 
 const gitignorePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.gitignore')
 
-// Custom rules for PAI CLI ESM patterns
+// Custom rules for AIW CLI ESM patterns
 const paiCliRules = {
   rules: {
     // Enforce import extensions (ESM requirement)

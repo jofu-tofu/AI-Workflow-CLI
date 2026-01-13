@@ -71,7 +71,7 @@ export function generateManifest(): string {
   version: ${BMAD_VERSION}
   installDate: ${now}
   lastUpdated: ${now}
-  installedBy: pai-cli
+  installedBy: aiwcli
 modules:
   - core
   - bmm

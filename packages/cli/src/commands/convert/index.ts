@@ -4,6 +4,7 @@ import {dirname, join, resolve} from 'node:path'
 import {Args, Flags} from '@oclif/core'
 
 import BaseCommand from '../../lib/base-command.js'
+import {mergeClaudeSettings} from '../../lib/hooks-merger.js'
 import {
   parseTemplate,
   ClaudeCodeAdapter,
@@ -16,6 +17,7 @@ import type {
   TransformationWarning,
 } from '../../lib/template-mapper/types.js'
 import {EXIT_CODES} from '../../types/exit-codes.js'
+import type {ClaudeSettings} from '../../lib/claude-settings-types.js'
 
 /**
  * Supported platform targets for conversion
@@ -194,12 +196,35 @@ export default class Convert extends BaseCommand {
           const fullPath = join(outputDir, relativePath)
           const dir = dirname(fullPath)
 
-          // Ensure directory exists
-          await fs.mkdir(dir, {recursive: true})
+          try {
+            // Ensure directory exists
+            await fs.mkdir(dir, {recursive: true})
 
-          // Write file
-          await fs.writeFile(fullPath, content, 'utf8')
-          this.logDebug(`Wrote: ${fullPath}`)
+            // Special handling for settings.json - merge instead of overwrite
+            if (relativePath.endsWith('settings.json')) {
+              await this.writeSettingsWithMerge(fullPath, content)
+            } else {
+              // Write file normally
+              await fs.writeFile(fullPath, content, 'utf8')
+            }
+
+            this.logDebug(`Wrote: ${fullPath}`)
+          } catch (error) {
+            const err = error as NodeJS.ErrnoException
+            let errorMessage = `Failed to write ${fullPath}: ${err.message}`
+
+            // Provide user-friendly error messages for common file system errors
+            if (err.code === 'EACCES' || err.code === 'EPERM') {
+              errorMessage = `Permission denied: Cannot write to ${fullPath}. Check file/directory permissions.`
+            } else if (err.code === 'ENOSPC') {
+              errorMessage = `Disk full: Cannot write to ${fullPath}. Free up disk space and try again.`
+            } else if (err.code === 'EROFS') {
+              errorMessage = `Read-only filesystem: Cannot write to ${fullPath}.`
+            }
+
+            this.logError(errorMessage)
+            hasErrors = true
+          }
         }
 
         this.logInfo(`Generated ${result.files.size} file(s) for ${platform}`)
@@ -228,6 +253,37 @@ export default class Convert extends BaseCommand {
           this.logInfo(`  [${platform}] ${path}`)
         }
       }
+    }
+  }
+
+  /**
+   * Write settings.json with merge support.
+   * If the file already exists, merges the new settings with existing ones.
+   */
+  private async writeSettingsWithMerge(fullPath: string, newContent: string): Promise<void> {
+    let existingSettings: ClaudeSettings | undefined
+
+    // Try to read existing settings
+    try {
+      const existingContent = await fs.readFile(fullPath, 'utf8')
+      existingSettings = JSON.parse(existingContent) as ClaudeSettings
+      this.logDebug(`Found existing settings at ${fullPath}, merging...`)
+    } catch {
+      // File doesn't exist or isn't valid JSON - that's fine, we'll create it
+      existingSettings = undefined
+    }
+
+    // Parse the new settings
+    const newSettings = JSON.parse(newContent) as ClaudeSettings
+
+    // Merge settings (existing + new, with deduplication)
+    const mergedSettings = mergeClaudeSettings(existingSettings, newSettings)
+
+    // Write the merged settings
+    await fs.writeFile(fullPath, JSON.stringify(mergedSettings, null, 2), 'utf8')
+
+    if (existingSettings) {
+      this.logInfo(`Merged settings into existing ${fullPath}`)
     }
   }
 }

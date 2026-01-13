@@ -72,7 +72,7 @@ export async function installTemplate(config: TemplateInstallConfig): Promise<In
   } catch {
     throw new Error(
       `Template '${templateName}' not found at ${templatePath}. ` +
-        `This indicates a corrupted installation. Please reinstall pai-cli.`,
+        `This indicates a corrupted installation. Please reinstall aiwcli.`,
     )
   }
 
