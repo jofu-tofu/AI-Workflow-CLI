@@ -5,15 +5,15 @@ import {checkVersionCompatibility, getClaudeCodeVersion} from '../lib/version.js
 import {EXIT_CODES} from '../types/index.js'
 
 /**
- * Launch Claude Code with PAI configuration.
+ * Launch Claude Code with AIW configuration.
  *
  * Spawns Claude Code CLI with --dangerously-skip-permissions flag,
- * enabling unattended execution. Designed for PAI hook system safety guardrails
- * (requires pai setup - Story 2.7). Supports multiple parallel sessions.
+ * enabling unattended execution. Designed for AIW hook system safety guardrails
+ * (requires aiw setup). Supports multiple parallel sessions.
  */
 export default class LaunchCommand extends BaseCommand {
   static override description =
-    'Launch Claude Code with PAI configuration (sandbox disabled, supports parallel sessions)\n\n' +
+    'Launch Claude Code with AIW configuration (sandbox disabled, supports parallel sessions)\n\n' +
     'EXIT CODES\n' +
     '  0  Success - Claude Code launched and exited successfully\n' +
     '  1  General error - unexpected runtime failure\n' +
@@ -44,7 +44,7 @@ export default class LaunchCommand extends BaseCommand {
       }
 
       // Spawn Claude Code with sandbox permissions disabled
-      // PAI hook system provides safety guardrails
+      // AIW hook system provides safety guardrails
       // Continue launch regardless of version check result (graceful degradation)
       exitCode = await spawnProcess('claude', ['--dangerously-skip-permissions'])
     } catch (error) {

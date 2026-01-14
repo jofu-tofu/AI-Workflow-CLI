@@ -18,16 +18,16 @@ export interface AiwcliConfig {
 
 /**
  * Resolve AI Workflow CLI home directory.
- * Priority: AIW_DIR env var > AIW_DIR env var (legacy) > ~/.aiw default
+ * Priority: AIW_DIR env var > ~/.aiw default
  */
 export function getAiwDir(): string {
-  // Try new env var first, then legacy, then default
+  // Try env var first, then default
   const envHome = getAiwDirFromEnv()
   if (envHome) {
     return envHome
   }
-  
-  // Default to ~/.aiw (new convention)
+
+  // Default to ~/.aiw
   return join(homedir(), '.aiw')
 }
 
@@ -65,23 +65,3 @@ export function loadConfig(): AiwcliConfig {
 
   return config
 }
-
-// Legacy exports for backward compatibility
-/**
- * @deprecated Use getAiwDir() instead
- */
-export function getPaiHome(): string {
-  return getAiwDir()
-}
-
-/**
- * @deprecated Use validateAiwDir() instead
- */
-export function validatePaiHome(paiHome: string): void {
-  validateAiwDir(paiHome)
-}
-
-/**
- * @deprecated Use AiwcliConfig instead
- */
-export type PaiConfig = AiwcliConfig

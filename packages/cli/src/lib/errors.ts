@@ -67,17 +67,6 @@ export class AiwError extends Error {
 }
 
 /**
- * Legacy alias for AiwError
- * @deprecated Use AiwError instead
- */
-export class PaiError extends AiwError {
-  constructor(message: string, exitCode: ExitCode = EXIT_CODES.GENERAL_ERROR) {
-    super(message, exitCode)
-    this.name = 'PaiError'
-  }
-}
-
-/**
  * Error thrown when AIW configuration cannot be found.
  * Indicates AIW_DIR is not set or points to a non-existent directory.
  * Exit code: 3 (ENVIRONMENT_ERROR)

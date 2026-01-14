@@ -77,10 +77,10 @@ interface WizardResult {
 }
 
 /**
- * Initialize PAI tools and integrations with specified template method.
+ * Initialize AIW tools and integrations with specified template method.
  */
 export default class Init extends BaseCommand {
-  static override description = 'Initialize PAI tools and integrations with specified template method'
+  static override description = 'Initialize AIW tools and integrations with specified template method'
   static override examples = [
     '<%= config.bin %> <%= command.id %> --interactive',
     '<%= config.bin %> <%= command.id %> --method bmad',
@@ -225,7 +225,7 @@ export default class Init extends BaseCommand {
       this.logSuccess(`✓ ${method} initialized successfully`)
       this.log('')
       this.logInfo('Next steps:')
-      this.logInfo('  pai launch    Start Claude Code with agents')
+      this.logInfo('  aiw launch    Start Claude Code with agents')
     } catch (error) {
       const err = error as NodeJS.ErrnoException
 
@@ -258,7 +258,7 @@ export default class Init extends BaseCommand {
   private async runInteractiveWizard(targetDir: string, availableTemplates: string[]): Promise<WizardResult> {
     this.log('')
     this.log('┌─────────────────────────────────────────┐')
-    this.log('│     PAI Interactive Setup Wizard        │')
+    this.log('│     AIW Interactive Setup Wizard        │')
     this.log('└─────────────────────────────────────────┘')
     this.log('')
 

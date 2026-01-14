@@ -3,7 +3,7 @@ import {join} from 'node:path'
 
 import {expect} from 'chai'
 
-import {getPaiHome} from '../../src/lib/config.js'
+import {getAiwDir} from '../../src/lib/config.js'
 
 /**
  * Integration tests for statusLine configuration
@@ -16,7 +16,7 @@ import {getPaiHome} from '../../src/lib/config.js'
 describe('statusLine configuration', () => {
   describe('statusline.ps1 script', () => {
     it('should exist in AIW_DIR/scripts directory', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const scriptPath = join(aiwDir, 'scripts', 'statusline.ps1')
 
       // Verify script exists
@@ -26,7 +26,7 @@ describe('statusLine configuration', () => {
     })
 
     it('should contain model name extraction logic', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const scriptPath = join(aiwDir, 'scripts', 'statusline.ps1')
       const scriptContent = await readFile(scriptPath, 'utf8')
 
@@ -37,7 +37,7 @@ describe('statusLine configuration', () => {
     })
 
     it('should calculate token usage with cache tokens', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const scriptPath = join(aiwDir, 'scripts', 'statusline.ps1')
       const scriptContent = await readFile(scriptPath, 'utf8')
 
@@ -47,7 +47,7 @@ describe('statusLine configuration', () => {
     })
 
     it('should use Floor() for percentage calculation', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const scriptPath = join(aiwDir, 'scripts', 'statusline.ps1')
       const scriptContent = await readFile(scriptPath, 'utf8')
 
@@ -56,7 +56,7 @@ describe('statusLine configuration', () => {
     })
 
     it('should have error handling for JSON parsing', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const scriptPath = join(aiwDir, 'scripts', 'statusline.ps1')
       const scriptContent = await readFile(scriptPath, 'utf8')
 
@@ -68,7 +68,7 @@ describe('statusLine configuration', () => {
 
   describe('settings.json configuration', () => {
     it('should exist in AIW_DIR/.claude directory', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const settingsPath = join(aiwDir, '.claude', 'settings.json')
 
       // Verify settings file exists
@@ -78,7 +78,7 @@ describe('statusLine configuration', () => {
     })
 
     it('should contain statusLine configuration', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const settingsPath = join(aiwDir, '.claude', 'settings.json')
       const settingsContent = await readFile(settingsPath, 'utf8')
       const settings = JSON.parse(settingsContent)
@@ -89,7 +89,7 @@ describe('statusLine configuration', () => {
     })
 
     it('should have statusLine type set to "command"', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const settingsPath = join(aiwDir, '.claude', 'settings.json')
       const settingsContent = await readFile(settingsPath, 'utf8')
       const settings = JSON.parse(settingsContent)
@@ -98,7 +98,7 @@ describe('statusLine configuration', () => {
     })
 
     it('should reference statusline.ps1 script via $env:AIW_DIR', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const settingsPath = join(aiwDir, '.claude', 'settings.json')
       const settingsContent = await readFile(settingsPath, 'utf8')
       const settings = JSON.parse(settingsContent)
@@ -110,7 +110,7 @@ describe('statusLine configuration', () => {
     })
 
     it('should use PowerShell -NoProfile flag', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const settingsPath = join(aiwDir, '.claude', 'settings.json')
       const settingsContent = await readFile(settingsPath, 'utf8')
       const settings = JSON.parse(settingsContent)
@@ -121,7 +121,7 @@ describe('statusLine configuration', () => {
     })
 
     it('should properly escape JSON special characters', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const settingsPath = join(aiwDir, '.claude', 'settings.json')
       const settingsContent = await readFile(settingsPath, 'utf8')
       const settings = JSON.parse(settingsContent)
@@ -137,7 +137,7 @@ describe('statusLine configuration', () => {
 
   describe('documentation', () => {
     it('should have STATUS_LINE_README.md in .claude directory', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const readmePath = join(aiwDir, '.claude', 'STATUS_LINE_README.md')
 
       // Verify README exists
@@ -147,7 +147,7 @@ describe('statusLine configuration', () => {
     })
 
     it('should document input data format', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const readmePath = join(aiwDir, '.claude', 'STATUS_LINE_README.md')
       const readmeContent = await readFile(readmePath, 'utf8')
 
@@ -157,7 +157,7 @@ describe('statusLine configuration', () => {
     })
 
     it('should document output format', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const readmePath = join(aiwDir, '.claude', 'STATUS_LINE_README.md')
       const readmeContent = await readFile(readmePath, 'utf8')
 
@@ -168,7 +168,7 @@ describe('statusLine configuration', () => {
     })
 
     it('should include troubleshooting steps', async () => {
-      const aiwDir = getPaiHome()
+      const aiwDir = getAiwDir()
       const readmePath = join(aiwDir, '.claude', 'STATUS_LINE_README.md')
       const readmeContent = await readFile(readmePath, 'utf8')
 

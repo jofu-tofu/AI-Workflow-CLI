@@ -21,8 +21,8 @@ describe('launch command', () => {
       expect(LaunchCommand.description).to.include('Claude Code')
     })
 
-    it('should reference PAI configuration in description', () => {
-      expect(LaunchCommand.description).to.match(/PAI|configuration|sandbox|parallel/i)
+    it('should reference AIW configuration in description', () => {
+      expect(LaunchCommand.description).to.match(/AIW|configuration|sandbox|parallel/i)
     })
 
     it('should have static examples array', () => {
@@ -103,7 +103,7 @@ describe('launch command', () => {
 
     it('Task 5.6: implementation supports parallel sessions (stdio inherit)', () => {
       // spawnProcess uses stdio: inherit by default, which supports parallel sessions
-      // Each terminal runs independent `pai launch` - no shared state
+      // Each terminal runs independent `aiw launch` - no shared state
       const source = LaunchCommand.prototype.run.toString()
       expect(source).to.include('spawnProcess')
     })

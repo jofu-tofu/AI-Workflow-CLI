@@ -9,7 +9,7 @@ describe('Epic 3: Scripting & Shell Integration - Integration Validation', () =>
 
   describe('AC1: Example Scripts Validation', () => {
     it('Task 1.1: validates piping example works correctly', () => {
-      // Test: pai --help | grep "launch"
+      // Test: aiw --help | grep "launch"
       const output = execSync(`${bin} --help`, {encoding: 'utf8', stdio: 'pipe'})
       expect(output).to.include('launch')
 
@@ -19,16 +19,16 @@ describe('Epic 3: Scripting & Shell Integration - Integration Validation', () =>
     })
 
     it('Task 1.2: validates command chaining example works correctly', () => {
-      // Test: pai --version && pai --help
+      // Test: aiw --version && pai --help
       const versionOutput = execSync(`${bin} --version`, {encoding: 'utf8', stdio: 'pipe'})
-      expect(versionOutput).to.include('pai-cli')
+      expect(versionOutput).to.include('aiwcli')
 
       const helpOutput = execSync(`${bin} --help`, {encoding: 'utf8', stdio: 'pipe'})
       expect(helpOutput).to.include('Launch Claude Code')
     })
 
     it('Task 1.3: validates quiet mode example works correctly', () => {
-      // Test: pai --quiet --help
+      // Test: aiw --quiet --help
       const output = execSync(`${bin} --quiet --help`, {encoding: 'utf8', stdio: 'pipe'})
       expect(output).to.be.a('string')
       expect(output).to.include('Launch Claude Code')
@@ -217,8 +217,8 @@ describe('Epic 3: Scripting & Shell Integration - Integration Validation', () =>
         // Test --debug and -d
         const output1 = execSync(`${bin} --version --debug`, {encoding: 'utf8', stdio: 'pipe'})
         const output2 = execSync(`${bin} --version -d`, {encoding: 'utf8', stdio: 'pipe'})
-        expect(output1).to.include('pai-cli')
-        expect(output2).to.include('pai-cli')
+        expect(output1).to.include('aiwcli')
+        expect(output2).to.include('aiwcli')
 
         // Test --quiet and -q
         execSync(`${bin} --version --quiet`, {stdio: 'pipe'})

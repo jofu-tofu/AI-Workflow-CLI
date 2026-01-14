@@ -4,22 +4,22 @@ import {join} from 'node:path'
 import {expect} from 'chai'
 import {describe, it} from 'mocha'
 
-import {getBmadTemplatePath} from '../../src/lib/template-resolver.js'
+import {getTemplatePath} from '../../src/lib/template-resolver.js'
 
 describe('Template Resolver', () => {
-  it('should resolve to a valid template path', () => {
-    const templatePath = getBmadTemplatePath()
+  it('should resolve to a valid template path', async () => {
+    const templatePath = await getTemplatePath('bmad')
     expect(templatePath).to.be.a('string')
     expect(templatePath.length).to.be.greaterThan(0)
   })
 
-  it('should resolve to an existing directory', () => {
-    const templatePath = getBmadTemplatePath()
+  it('should resolve to an existing directory', async () => {
+    const templatePath = await getTemplatePath('bmad')
     expect(existsSync(templatePath)).to.be.true
   })
 
-  it('should contain required template directories', () => {
-    const templatePath = getBmadTemplatePath()
+  it('should contain required template directories', async () => {
+    const templatePath = await getTemplatePath('bmad')
 
     // Check for _bmad subdirectories
     expect(existsSync(join(templatePath, '_bmad'))).to.be.true
@@ -34,8 +34,8 @@ describe('Template Resolver', () => {
     expect(existsSync(join(templatePath, '.claude', 'commands', 'bmad', 'bmm'))).to.be.true
   })
 
-  it('should contain required template files', () => {
-    const templatePath = getBmadTemplatePath()
+  it('should contain required template files', async () => {
+    const templatePath = await getTemplatePath('bmad')
 
     // Config files in _bmad that will be overwritten
     expect(existsSync(join(templatePath, '_bmad', 'core', 'config.yaml'))).to.be.true

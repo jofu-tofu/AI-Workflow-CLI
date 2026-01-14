@@ -7,11 +7,8 @@
 export {
   type AiwcliConfig,
   getAiwDir,
-  getPaiHome,
   loadConfig,
-  type PaiConfig,
   validateAiwDir,
-  validatePaiHome,
 } from './config.js'
 
 // Debug logging
@@ -21,9 +18,6 @@ export {debug, debugConfig, debugSpawn, debugVersion, isDebugEnabled, setDebugEn
 export {
   getAiwConfig,
   getAiwDir as getAiwDirFromEnv,
-  getAiwcliConfig,
-  getAiwcliDir,
-  getAiwcliHome,
   isUsingLegacyEnvVars,
   loadEnvWithCompatibility,
 } from './env-compat.js'
@@ -35,8 +29,6 @@ export {
   EnvironmentError,
   formatErrorMessage,
   InvalidUsageError,
-  // Legacy exports (deprecated)
-  PaiError,
   ProcessSpawnError,
 } from './errors.js'
 

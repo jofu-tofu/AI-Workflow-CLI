@@ -1,7 +1,7 @@
 /**
  * Command Chaining Integration Tests
  *
- * Tests PAI CLI integration with command chains (&&) and pipes (|).
+ * Tests AIW CLI integration with command chains (&&) and pipes (|).
  * Validates stdout/stderr separation, exit code propagation, and cross-platform behavior.
  */
 
@@ -150,14 +150,14 @@ describe('Command Chaining Integration', () => {
   })
 
   describe('AC5: Output Remains Clean in Complex Chains', () => {
-    it('PAI output works with grep', () => {
+    it('AIW output works with grep', () => {
       const result = execSync(`${binPath} launch --help | ${grepCmd} "Launch"`, {
         encoding: 'utf8',
       }) as string
       expect(result).to.include('Launch')
     })
 
-    it('PAI output pipes cleanly for counting', function () {
+    it('AIW output pipes cleanly for counting', function () {
       // Skip on Windows - cmd.exe has buffer limitations with complex pipes
       if (isWindows) {
         this.skip()

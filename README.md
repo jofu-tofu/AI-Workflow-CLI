@@ -33,10 +33,10 @@ aiw help
 
 ## Features
 
-- 🚀 **Claude Code Integration** - Seamless integration with Claude Code
-- 📋 **BMAD Workflows** - Built-in BMAD (Build, Measure, Analyze, Deploy) templates
-- 🔧 **Project Initialization** - Quickly set up AI-powered workflows
-- ⚡ **Fast & Efficient** - Built on oclif for optimal performance
+- **Claude Code Integration** - Seamless integration with Claude Code
+- **BMAD Workflows** - Built-in BMAD (Build, Measure, Analyze, Deploy) templates
+- **Project Initialization** - Quickly set up AI-powered workflows
+- **Fast & Efficient** - Built on oclif for optimal performance
 
 ## Documentation
 
@@ -53,23 +53,9 @@ aiw help
 
 See [.env.example](./.env.example) for a complete list.
 
-**Note:** Legacy environment variables (`AIWCLI_HOME`, `AIWCLI_CONFIG`, `AIWCLI_DIR`, `PAI_HOME`, `PAI_CONFIG`, `PAI_DIR`) are still supported with deprecation warnings.
-
-## Migration from PAI CLI
-
-If you're migrating from PAI CLI:
-
-**Quick migration:**
-```bash
-npm uninstall -g pai-cli
-npm install -g aiwcli
-```
-
-Environment variables have been renamed from `PAI_*` to `AIW_*`. Legacy environment variables (`AIWCLI_HOME`, `AIWCLI_CONFIG`, `AIWCLI_DIR`, `PAI_HOME`, `PAI_CONFIG`, `PAI_DIR`) are still supported with deprecation warnings.
-
 ## Status
 
-🚧 **Active Development** - This project is currently in active development following the migration from PAI CLI.
+Version 0.0.0 - Initial release.
 
 ## License
 
@@ -84,7 +70,3 @@ MIT License
 ## Contributing
 
 Contributions are welcome! Please see the contributing guidelines (coming soon).
-
----
-
-**Note:** AI Workflow CLI is the successor to PAI CLI.

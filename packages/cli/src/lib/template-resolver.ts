@@ -67,14 +67,3 @@ export async function getAvailableTemplates(): Promise<string[]> {
   }
 }
 
-/**
- * Backward compatibility alias for BMAD template resolution.
- * @deprecated Use getTemplatePath('bmad') instead
- */
-export function getBmadTemplatePath(): string {
-  const currentFileUrl = import.meta.url
-  const currentFilePath = fileURLToPath(currentFileUrl)
-  const currentDir = dirname(currentFilePath)
-
-  return join(currentDir, '..', 'templates', 'bmad')
-}

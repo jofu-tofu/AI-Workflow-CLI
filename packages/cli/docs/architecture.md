@@ -2,7 +2,7 @@
 
 **Generated:** 2026-01-10
 **Updated:** 2026-01-13
-**For:** AIW CLI v1.0.0
+**For:** AIW CLI v0.0.0
 
 ---
 
@@ -322,13 +322,14 @@ The `src/lib/` directory contains foundational utilities used across commands.
 **Purpose:** Resolve paths to bundled templates within the aiw-cli package.
 
 **Exports:**
-- `getBmadTemplatePath()` - Returns absolute path to bundled BMAD template root (contains `_bmad/` and `.claude/`)
+- `getTemplatePath(templateName)` - Returns absolute path to bundled template root (async)
+- `getAvailableTemplates()` - Returns array of available template names (async)
 
 **Logic:**
 1. Uses `import.meta.url` to determine current file location
-2. Resolves relative path to `templates/bmad/` directory
+2. Resolves relative path to `templates/<templateName>/` directory
 3. Works in both development (`src/`) and production (`dist/`) contexts
-4. Returns parent directory containing both `_bmad/` and `.claude/` structures
+4. Validates template exists before returning path
 
 **Why Foundational:** Enables self-contained template distribution without external dependencies.
 
@@ -715,7 +716,6 @@ npm run format
 | Raw exit code numbers | `EXIT_CODES.SUCCESS`, `EXIT_CODES.GENERAL_ERROR` |
 | `.then().catch()` | `async/await` with `try/catch` |
 | `IConfig` interface | `Config` interface (no I prefix) |
-| `PAI_DIR` or `PAI_` prefix | `AIW_DIR` or `AIW_` prefix |
 
 ---
 

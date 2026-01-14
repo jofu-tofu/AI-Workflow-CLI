@@ -25,7 +25,7 @@ describe('Gitignore Manager', () => {
 
   beforeEach(async () => {
     // Create unique temp directory for each test
-    testDir = join(tmpdir(), `pai-gitignore-test-${randomUUID()}`)
+    testDir = join(tmpdir(), `aiw-gitignore-test-${randomUUID()}`)
     await fs.mkdir(testDir, {recursive: true})
   })
 
@@ -58,12 +58,12 @@ describe('Gitignore Manager', () => {
       expect(content).to.include('_bmad-output/')
     })
 
-    it('should add PAI Installation header', async () => {
+    it('should add AIW Installation header', async () => {
       await updateGitignore(testDir, ['_bmad'])
 
       const content = await fs.readFile(join(testDir, '.gitignore'), 'utf8')
 
-      expect(content).to.include('# PAI Installation')
+      expect(content).to.include('# AIW Installation')
     })
 
     it('should append to existing .gitignore', async () => {
@@ -90,13 +90,13 @@ describe('Gitignore Manager', () => {
       await updateGitignore(testDir, ['_bmad', '.claude'])
 
       const firstContent = await fs.readFile(gitignorePath, 'utf8')
-      const firstHeaderCount = (firstContent.match(/# PAI Installation/g) || []).length
+      const firstHeaderCount = (firstContent.match(/# AIW Installation/g) || []).length
 
       // Second installation attempt
       await updateGitignore(testDir, ['_bmad', '.claude'])
 
       const secondContent = await fs.readFile(gitignorePath, 'utf8')
-      const secondHeaderCount = (secondContent.match(/# PAI Installation/g) || []).length
+      const secondHeaderCount = (secondContent.match(/# AIW Installation/g) || []).length
 
       // Header should only appear once
       expect(firstHeaderCount).to.equal(1)
@@ -124,8 +124,8 @@ describe('Gitignore Manager', () => {
       const content = await fs.readFile(join(testDir, '.gitignore'), 'utf8')
 
       // Should create file with header but no patterns
-      expect(content).to.include('# PAI Installation')
-      expect(content.trim()).to.equal('# PAI Installation')
+      expect(content).to.include('# AIW Installation')
+      expect(content.trim()).to.equal('# AIW Installation')
     })
 
     it('should preserve existing .gitignore content structure', async () => {
@@ -156,7 +156,7 @@ node_modules/
       expect(newContent).to.include('.env.local')
 
       // New patterns should be appended
-      expect(newContent).to.include('# PAI Installation')
+      expect(newContent).to.include('# AIW Installation')
       expect(newContent).to.include('_bmad/')
     })
 
@@ -171,8 +171,8 @@ node_modules/
 
       const content = await fs.readFile(gitignorePath, 'utf8')
 
-      // Should have PAI Installation header
-      expect(content).to.include('# PAI Installation')
+      // Should have AIW Installation header
+      expect(content).to.include('# AIW Installation')
 
       // Should have both patterns (may have _bmad twice - once from original, once from update)
       expect(content).to.include('.claude/')
@@ -184,7 +184,7 @@ node_modules/
       const content = await fs.readFile(join(testDir, '.gitignore'), 'utf8')
 
       // Should have proper newline formatting
-      expect(content).to.match(/# PAI Installation\n_bmad\/\n\.claude\/\n/)
+      expect(content).to.match(/# AIW Installation\n_bmad\/\n\.claude\/\n/)
 
       // Should end with newline
       expect(content).to.match(/\n$/)

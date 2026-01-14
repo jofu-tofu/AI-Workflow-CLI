@@ -75,7 +75,7 @@ export interface SpawnProcessOptions {
 /**
  * Spawn an external process and return its exit code.
  *
- * This function wraps Node.js child_process.spawn with PAI-specific
+ * This function wraps Node.js child_process.spawn with AIW-specific
  * error handling, debug logging, and parallel session support.
  *
  * ## Exit Code Mapping
