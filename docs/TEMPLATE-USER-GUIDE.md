@@ -21,38 +21,46 @@ A comprehensive guide to creating and using cross-platform AI assistant template
 
 ### What Are Cross-Platform Templates?
 
-Cross-platform templates are portable instruction files that define skills, workflows, and behaviors for AI coding assistants. A single template can be converted to work with:
+Cross-platform templates are portable instruction files that define skills, workflows, and behaviors for AI coding assistants. Templates work with:
 
 - **Claude Code** - Anthropic's CLI-based AI assistant
 - **Windsurf** - Codeium's IDE with Cascade AI agent
 - **GitHub Copilot** - Microsoft's AI pair programmer
 
-Instead of maintaining separate configuration files for each platform, you write one template in the standard format and convert it to platform-specific formats as needed.
+Instead of maintaining separate configuration files for each platform, you write one template in the standard format for use across all platforms.
 
 ### Why Use the Standard Format?
 
 **Portability** - Write once, deploy everywhere. Your team can use different AI assistants while sharing the same workflows.
 
-**Completeness** - The standard schema is a superset of all three platforms. Nothing is lost in translation.
+**Completeness** - The standard schema is a superset of all three platforms. Nothing is lost when adapting to different platforms.
 
-**Future-Proof** - As platforms evolve, the standard format captures new capabilities. Update templates centrally and regenerate platform outputs.
+**Future-Proof** - As platforms evolve, the standard format captures new capabilities. Update templates centrally for use across all platforms.
 
 **Collaboration** - Share templates across teams regardless of which IDE or assistant they prefer.
 
 ### Quick Start (5-Minute First Template)
 
-Create your first cross-platform template in three steps:
+Create your first cross-platform template in two steps:
 
-**Step 1:** Create the template directory structure:
+**Step 1:** Create the template directory structure for your platform:
 
+For Claude Code:
 ```
-.ai-templates/
+.claude/
   skills/
     my-first-skill/
       SKILL.md
 ```
 
-**Step 2:** Write your template (`.ai-templates/skills/my-first-skill/SKILL.md`):
+For Windsurf:
+```
+.windsurf/
+  workflows/
+    my-first-skill.md
+```
+
+**Step 2:** Write your template:
 
 ```yaml
 ---
@@ -72,15 +80,7 @@ Say hello to the user and ask how you can help them today.
 Be friendly and professional in your greeting.
 ```
 
-**Step 3:** Convert to platform-specific formats using the CLI:
-
-```bash
-aiwcli convert --platform claude-code
-aiwcli convert --platform windsurf
-aiwcli convert --platform github-copilot
-```
-
-That's it! Your template is now ready for all three platforms.
+That's it! Your template is now ready for use.
 
 ---
 
@@ -393,7 +393,7 @@ emulation:
 - **Optional** - Can be omitted
 - **Ignored** - Platform ignores this field
 - **As X** - Maps to equivalent field X
-- **Meta** - Used by converters, not passed to platform
+- **Meta** - Used for documentation, not passed to platform
 
 ### Validation Rules Summary
 
@@ -435,10 +435,10 @@ platforms:
   - github-copilot  # Microsoft's AI programmer
 ```
 
-When you run `aiwcli convert`:
-- Templates without a `platforms` field convert to all platforms
-- Templates with `platforms` only convert to listed platforms
-- Omitting a platform from the list skips conversion for that platform
+The `platforms` field indicates:
+- Templates without a `platforms` field are intended for all platforms
+- Templates with `platforms` are optimized for the listed platforms
+- Omitting a platform from the list indicates limited support for that platform
 
 ### Understanding Compatibility Markers
 
@@ -464,17 +464,17 @@ compatibility:
 
 ### What Happens on Unsupported Platforms
 
-When converting a template to a platform where some features are not supported:
+When using a template on a platform where some features are not supported:
 
-1. **Platform-specific fields are stripped** - Fields like `allowed-tools` are removed for Windsurf since it cannot enforce them.
+1. **Platform-specific fields may be ignored** - Fields like `allowed-tools` may not be enforced on platforms that don't support them.
 
-2. **Advisory notes are injected** - Permission restrictions become instructional text: "Do not access .env files" instead of enforced rules.
+2. **Advisory notes should be included** - Permission restrictions become instructional text: "Do not access .env files" instead of enforced rules.
 
-3. **Emulation patterns apply** - Features like subagents become sequential workflows with context markers.
+3. **Emulation patterns may be needed** - Features like subagents may need to become sequential workflows with context markers.
 
-4. **Warnings are logged** - The conversion tool reports which features could not be fully translated.
+4. **Compatibility should be documented** - Use the `compatibility` field to indicate which features work on each platform.
 
-**Example conversion behavior:**
+**Example platform adaptation:**
 
 Original template:
 ```yaml
@@ -484,7 +484,7 @@ permissions:
     - Write(config/production.json)
 ```
 
-Converted for Windsurf (permissions not enforceable):
+For Windsurf (permissions not enforceable):
 ```markdown
 **Access Restrictions (Advisory):**
 - Do not read .env files
@@ -548,7 +548,7 @@ If failures exist, list the failing test names and file locations.
 
 This template:
 - Uses Claude Code-specific fields (`allowed-tools`, `model`)
-- Only converts to Claude Code
+- Is optimized for Claude Code
 - Has simple, focused functionality
 
 ### Example 2: Cross-Platform Code Review Skill
@@ -934,8 +934,7 @@ For feature comparison:
 Cross-platform templates enable you to:
 
 1. **Write once** - Create templates in the standard format
-2. **Convert anywhere** - Generate platform-specific outputs
-3. **Document differences** - Use compatibility and emulation fields
-4. **Stay portable** - Share workflows across teams using different tools
+2. **Document differences** - Use compatibility and emulation fields
+3. **Stay portable** - Share workflows across teams using different tools
 
 Start with the [Quick Start](#quick-start-5-minute-first-template) example, then expand to cross-platform templates as your needs grow. The standard schema ensures nothing is lost as you target multiple platforms.

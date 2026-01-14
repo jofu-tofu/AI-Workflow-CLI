@@ -236,7 +236,7 @@ open coverage/index.html  # macOS
 start coverage/index.html # Windows
 ```
 
-**Coverage Target:** 100% for core features (launch, init, convert)
+**Coverage Target:** 100% for core features (launch, init)
 
 ---
 
@@ -299,12 +299,10 @@ dist/
 │   ├── launch.js
 │   ├── launch.d.ts
 │   ├── init/
-│   ├── convert/
 │   └── ...
 ├── lib/
 │   ├── config.js
 │   ├── config.d.ts
-│   ├── template-mapper/
 │   └── ...
 ├── templates/
 │   ├── bmad/
@@ -594,7 +592,7 @@ After setup:
 1. Read [Architecture](./architecture.md) to understand system design
 2. Review [Source Tree](./source-tree-analysis.md) for code organization
 3. Check [Command Dependencies](./architecture.md#command-dependencies) for implementation details
-4. Start with core commands (`launch`, `init`, `convert`) after familiarization
+4. Start with core commands (`launch`, `init`) after familiarization
 
 ---
 

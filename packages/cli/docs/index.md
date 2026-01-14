@@ -35,7 +35,6 @@ This is the comprehensive documentation for AIW CLI, a command-line interface fo
 
 1. **`aiw launch`** - Launch Claude Code with AIW configuration
 2. **`aiw init`** - Initialize workflow templates (BMAD, GSD)
-3. **`aiw convert`** - Convert Claude Code settings between platforms
 
 ### Key Technologies
 
@@ -103,7 +102,6 @@ Complete documentation of `src/lib/` utilities:
   - `template-installer.ts` - Generic template installation
   - `hooks-merger.ts` - Claude hooks merging
   - `settings-hierarchy.ts` - Settings hierarchy management
-  - `template-mapper/` - Cross-platform template conversion
 
 ### Modifiable vs. Foundational Elements
 Comprehensive table showing:
@@ -222,8 +220,7 @@ src/lib/
 ├── spawn.ts           # 🔒 Foundational
 ├── template-resolver.ts # 🔒 Foundational
 ├── debug.ts           # ✏️ Modifiable
-├── hooks-merger.ts    # ✏️ Modifiable
-└── template-mapper/   # ✏️ Modifiable
+└── hooks-merger.ts    # ✏️ Modifiable
 ```
 
 - **🔒 Foundational:** Required for core functionality

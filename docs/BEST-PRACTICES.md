@@ -19,28 +19,13 @@
 
 ## 1. Design Principles
 
-### 1.1 Start with Standard Format, Convert to Platforms
+### 1.1 Start with Standard Format
 
-Write templates once in the standard superset format and convert to platform-specific outputs. This approach ensures:
+Write templates once in the standard superset format for use across platforms. This approach ensures:
 
 - **Single source of truth** - Changes propagate to all platforms
 - **Feature completeness** - Standard format captures all platform capabilities
 - **Reduced maintenance** - No need to maintain separate files per platform
-
-**Recommended Workflow:**
-
-```
-Standard Template (.ai-templates/)
-        |
-        v
-    aiw convert
-        |
-   +----+----+----+
-   |    |    |    |
-   v    v    v    v
-Claude  Windsurf  GitHub
-Code              Copilot
-```
 
 **Anti-pattern:** Writing platform-specific templates first, then trying to generalize.
 
@@ -816,25 +801,18 @@ globs: required-when-trigger-is-glob
 platforms: recommended
 ```
 
-**Step 3: Conversion Test**
+**Step 3: Manual Review**
 
-```bash
-# Convert and check for warnings
-aiw convert .ai-templates/skills/my-skill/SKILL.md --to claude-code --debug
-aiw convert .ai-templates/skills/my-skill/SKILL.md --to windsurf --debug
-```
-
-**Step 4: Dry Run**
-
-```bash
-aiw convert template.md --to claude-code --dry-run
-```
+Review the template for:
+- Proper frontmatter formatting
+- Required fields for target platform
+- Clear, actionable instructions
 
 ### 5.2 Testing on Each Platform
 
 **Claude Code Testing:**
 
-1. Convert template: `aiw convert template.md --to claude-code`
+1. Place template in `.claude/skills/` directory
 2. Open project in VS Code with Claude extension
 3. Invoke skill: `/my-skill`
 4. Verify:
@@ -845,7 +823,7 @@ aiw convert template.md --to claude-code --dry-run
 
 **Windsurf Testing:**
 
-1. Convert template: `aiw convert template.md --to windsurf`
+1. Place template in `.windsurf/workflows/` directory
 2. Open project in Windsurf IDE
 3. Trigger workflow:
    - Manual: `/my-workflow`
@@ -857,7 +835,7 @@ aiw convert template.md --to claude-code --dry-run
 
 **GitHub Copilot Testing:**
 
-1. Convert template (when supported)
+1. Place template in `.github/prompts/` directory
 2. Open project in VS Code with Copilot
 3. Invoke prompt: `/prompt my-prompt`
 4. Verify:
@@ -1101,15 +1079,9 @@ The template above already includes all platform-specific fields in organized se
 - **Windsurf:** `trigger`, `globs`, `labels`
 - **GitHub Copilot:** `applyTo`, `mode`
 
-#### Step 3: Convert and Test on Claude Code
+#### Step 3: Test on Claude Code
 
-Convert the template:
-
-```bash
-aiw convert .ai-templates/skills/test-runner/SKILL.md --to claude-code
-```
-
-Verify output structure:
+Place the template in the appropriate directory:
 
 ```
 .claude/
@@ -1126,15 +1098,9 @@ Test the skill:
 3. Verify skill activates and follows the process
 4. Confirm tool restrictions are enforced (cannot write files)
 
-#### Step 4: Convert and Test on Windsurf
+#### Step 4: Test on Windsurf
 
-Convert the template:
-
-```bash
-aiw convert .ai-templates/skills/test-runner/SKILL.md --to windsurf
-```
-
-Verify output structure:
+Place the template in the appropriate directory:
 
 ```
 .windsurf/
@@ -1142,7 +1108,7 @@ Verify output structure:
     test-runner.md
 ```
 
-The converted file will include:
+The template should include:
 - Advisory tool restrictions section
 - Model decision trigger for auto-activation
 - Version comment
@@ -1383,15 +1349,11 @@ The template above includes:
 5. **Context gathering:** Step 0 for explicit prerequisite checks
 6. **Advisory warnings:** Tool restrictions section for non-enforcing platforms
 
-#### Step 4: Convert to Target Platforms
+#### Step 4: Deploy to Target Platforms
 
-**Convert to Claude Code:**
+**For Claude Code:**
 
-```bash
-aiw convert .ai-templates/workflows/deploy-staging.workflow.md --to claude-code
-```
-
-Output:
+Place the template in:
 ```
 .claude/
   skills/
@@ -1400,49 +1362,33 @@ Output:
   settings.json  # Merged permissions
 ```
 
-**Convert to Windsurf:**
+**For Windsurf:**
 
-```bash
-aiw convert .ai-templates/workflows/deploy-staging.workflow.md --to windsurf
-```
-
-Output:
+Place the template in:
 ```
 .windsurf/
   workflows/
     deploy-staging.md
 ```
 
-**Convert to GitHub Copilot (when supported):**
+**For GitHub Copilot (when supported):**
 
-```bash
-aiw convert .ai-templates/workflows/deploy-staging.workflow.md --to github-copilot
-```
-
-Output:
+Place the template in:
 ```
 .github/
   prompts/
     deploy-staging.prompt.md
 ```
 
-**Verify Conversions:**
+**Verify Templates:**
 
-```bash
-# Check for warnings
-aiw convert .ai-templates/workflows/deploy-staging.workflow.md --to claude-code --debug
-aiw convert .ai-templates/workflows/deploy-staging.workflow.md --to windsurf --debug
-```
-
-Review any `[EMULATED]` or `[UNSUPPORTED]` warnings and adjust template as needed.
+Review templates for platform-specific considerations and adjust as needed.
 
 ---
 
 ## Additional Resources
 
 - [TEMPLATE-USER-GUIDE.md](./TEMPLATE-USER-GUIDE.md) - Template creation and frontmatter reference
-- [CLI-CONVERT-REFERENCE.md](./CLI-CONVERT-REFERENCE.md) - Convert command reference
-- [WORKAROUND-PATTERNS.md](../WORKAROUND-PATTERNS.md) - Detailed emulation patterns
 - [examples/skill-example.md](../examples/skill-example.md) - Complete skill example
 - [examples/workflow-example.md](../examples/workflow-example.md) - Complete workflow example
 
@@ -1451,7 +1397,7 @@ Review any `[EMULATED]` or `[UNSUPPORTED]` warnings and adjust template as neede
 ## Summary
 
 **Design Principles:**
-1. Start with standard format, convert to platforms
+1. Start with standard format for cross-platform use
 2. Use compatibility field proactively
 3. Prefer portable constructs
 4. Document platform-specific behavior
@@ -1470,7 +1416,7 @@ Review any `[EMULATED]` or `[UNSUPPORTED]` warnings and adjust template as neede
 
 **Testing:**
 - Validate YAML frontmatter
-- Convert with debug mode
+- Manual review for required fields
 - Test on each target platform
 - Watch for common pitfalls
 

@@ -778,7 +778,7 @@ After installing shell completion (see [Shell Completion](#shell-completion) sec
 aiw la<TAB>        # Completes to "aiw launch"
 
 # Show all commands
-aiw <TAB>          # Lists: autocomplete, convert, help, init, launch
+aiw <TAB>          # Lists: autocomplete, help, init, launch
 
 # Flag completion
 aiw launch --<TAB> # Shows: --debug, --help, --quiet
@@ -976,8 +976,8 @@ This section explains how to add new commands to AIW CLI following Oclif best pr
 
 AIW CLI uses [Oclif](https://oclif.io) which provides automatic command registration based on file structure:
 
-- **File path = Command name**: `src/commands/launch.ts` → `aiwlaunch`
-- **Subdirectories = Topics**: `src/commands/convert/index.ts` → `aiwconvert`
+- **File path = Command name**: `src/commands/launch.ts` → `aiw launch`
+- **Subdirectories = Topics**: `src/commands/init/index.ts` → `aiw init`
 - **Class names**: PascalCase version of command name (`Launch`, `InitBmad`)
 
 ### Adding a New Top-Level Command
@@ -1156,19 +1156,14 @@ aiwcli/
 ├── src/
 │   ├── commands/
 │   │   ├── launch.ts         # aiw launch
-│   │   ├── init/             # Topic: aiw init
-│   │   │   └── index.ts      # aiw init --method <template>
-│   │   └── convert/          # Topic: aiw convert
-│   │       └── index.ts      # aiw convert <source> --to <platform>
+│   │   └── init/             # Topic: aiw init
+│   │       └── index.ts      # aiw init --method <template>
 │   ├── lib/                  # Internal libraries
 │   │   ├── base-command.ts   # BaseCommand (extend this)
 │   │   ├── config.ts
 │   │   ├── debug.ts
 │   │   ├── errors.ts
-│   │   ├── spawn.ts
-│   │   └── template-mapper/  # Template conversion logic
-│   │       ├── adapters/     # Platform-specific adapters
-│   │       └── parser.ts
+│   │   └── spawn.ts
 │   └── types/                # Type definitions
 │       └── index.ts
 ├── test/

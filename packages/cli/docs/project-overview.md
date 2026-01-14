@@ -67,7 +67,6 @@ Single cohesive codebase with clear separation between commands and shared libra
 
 1. **`aiw launch`** - Launch Claude Code with AIW configuration
 2. **`aiw init`** - Initialize workflow templates (BMAD, GSD)
-3. **`aiw convert`** - Convert Claude Code settings between platforms
 
 ---
 
@@ -79,8 +78,6 @@ Single cohesive codebase with clear separation between commands and shared libra
 - **Version compatibility checking** for Claude Code
 - **Debug logging** system
 - **Extensible init system** for workflow templates (BMAD, GSD)
-- **Settings conversion** between different AI IDE platforms
-- **Semantic content transformation** with intelligent parsing
 
 ---
 

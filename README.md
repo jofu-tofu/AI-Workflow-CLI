@@ -27,11 +27,6 @@ aiw init --method bmad --ide windsurf
 # Initialize with multiple IDEs
 aiw init --method bmad --ide claude --ide windsurf
 
-# Convert templates between platform formats
-aiw convert template.md --to claude-code
-aiw convert template.md --to windsurf
-aiw convert template.md --to claude-code --to windsurf
-
 # Get help
 aiw help
 ```
@@ -43,7 +38,6 @@ aiw help
 - **Multi-IDE Support** - Works with Claude Code, Windsurf, and more
 - **BMAD Workflows** - Built-in BMAD (Build, Measure, Analyze, Deploy) templates
 - **Project Initialization** - Quickly set up AI-powered workflows
-- **Template Conversion** - Convert templates between different AI assistant platforms
 - **Fast & Efficient** - Built on oclif for optimal performance
 
 ## Documentation
@@ -51,7 +45,6 @@ aiw help
 - [Development Guide](./DEVELOPMENT.md) - Development setup and guidelines
 - [Claude Instructions](./CLAUDE.md) - Instructions for Claude Code integration
 - [Template User Guide](./docs/TEMPLATE-USER-GUIDE.md) - How to create and use templates
-- [CLI Convert Reference](./docs/CLI-CONVERT-REFERENCE.md) - Complete guide to template conversion
 - [Best Practices](./docs/BEST-PRACTICES.md) - Best practices and tutorials
 
 ## Environment Variables
@@ -66,7 +59,6 @@ See [.env.example](./.env.example) for a complete list.
 
 - `aiw launch` - Launch Claude Code with AIW configuration (sandbox disabled)
 - `aiw init` - Initialize AIW tools and integrations with template methods (BMAD, etc.)
-- `aiw convert` - Convert templates between AI assistant platform formats
 - `aiw help` - Get help with available commands
 
 ## Status

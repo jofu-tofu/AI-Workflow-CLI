@@ -50,7 +50,6 @@ The AI Workflow CLI uses `AIW_DIR` as the root path for resource location:
 **This repository locations:**
 - `$AIW_DIR/packages/cli/` - CLI source code
 - `$AIW_DIR/packages/cli/src/templates/` - Template definitions (bmad, gsd)
-- `$AIW_DIR/packages/cli/src/lib/template-mapper/` - Template conversion system
 - `$AIW_DIR/examples/` - Example workflow files
 
 **Environment isolation:**
@@ -72,9 +71,8 @@ This repository contains the AI Workflow CLI source code:
 aiwcli/
 ├── packages/cli/           # CLI package
 │   ├── src/
-│   │   ├── commands/       # CLI commands (launch, init, convert)
+│   │   ├── commands/       # CLI commands (launch, init)
 │   │   ├── lib/            # Library code
-│   │   │   └── template-mapper/  # Template conversion system
 │   │   ├── templates/      # Built-in templates (bmad, gsd)
 │   │   └── types/          # TypeScript type definitions
 │   └── test/               # Test files
@@ -86,7 +84,6 @@ aiwcli/
 
 - `aiw launch` - Launch Claude Code with AI Workflow CLI context
 - `aiw init` - Initialize project with workflow templates
-- `aiw convert` - Convert templates between AI assistant formats
 
 ### Working with Claude Code Settings
 

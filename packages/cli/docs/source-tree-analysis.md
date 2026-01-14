@@ -20,10 +20,8 @@ packages/cli/
 │   │
 │   ├── commands/                  # CLI commands (Oclif pattern)
 │   │   ├── launch.ts              # 🎯 CORE: Launch Claude Code with config
-│   │   ├── init/                  # Init command topic (extensible)
-│   │   │   └── index.ts           # Init command with template selection
-│   │   └── convert/               # Settings conversion command
-│   │       └── index.ts           # Convert Claude settings between platforms
+│   │   └── init/                  # Init command topic (extensible)
+│   │       └── index.ts           # Init command with template selection
 │   │
 │   ├── lib/                       # 🏗️ Shared library utilities
 │   │   ├── index.ts               # Library exports
@@ -50,16 +48,7 @@ packages/cli/
 │   │   ├── env-compat.ts          # ✏️ Environment compatibility utilities
 │   │   ├── hooks-merger.ts        # ✏️ Claude hooks merging utility
 │   │   ├── settings-hierarchy.ts  # ✏️ Settings hierarchy management
-│   │   ├── claude-settings-types.ts # ✏️ Claude settings type definitions
-│   │   │
-│   │   │ # === TEMPLATE MAPPER (Semantic Transformation) ===
-│   │   └── template-mapper/       # ✏️ Cross-platform template conversion
-│   │       ├── index.ts           # Main exports
-│   │       ├── types.ts           # Type definitions
-│   │       ├── parser.ts          # Template parsing
-│   │       ├── content-parser.ts  # Semantic content detection
-│   │       ├── content-transformers.ts # Content transformation
-│   │       └── adapters/          # Platform-specific adapters
+│   │   └── claude-settings-types.ts # ✏️ Claude settings type definitions
 │   │
 │   ├── types/                     # TypeScript type definitions
 │   │   └── (shared interfaces)
@@ -93,8 +82,7 @@ packages/cli/
 │   │   ├── template-installer.test.ts # Template installer tests
 │   │   ├── template-resolver.test.ts # Template path resolution tests
 │   │   ├── tty-detection.test.ts  # TTY detection tests
-│   │   ├── version.test.ts        # Version checking tests
-│   │   └── template-mapper/       # Template mapper tests
+│   │   └── version.test.ts        # Version checking tests
 │   │
 │   ├── integration/               # Integration tests
 │   │   ├── cli.test.ts            # General CLI behavior
@@ -110,7 +98,6 @@ packages/cli/
 │   │   ├── bmad-init.test.ts      # BMAD init
 │   │   ├── init-command-structure.test.ts # Init structure
 │   │   ├── init-command-hook-merging.test.ts # Hook merging
-│   │   ├── convert-command.test.ts # Convert command
 │   │   ├── statusline.test.ts     # Status line
 │   │   └── subcommand-architecture.test.ts # Subcommand architecture
 │   │
@@ -148,7 +135,6 @@ packages/cli/
 **Pattern:** Oclif automatically discovers commands based on file structure:
 - `launch.ts` → `aiw launch`
 - `init/index.ts` → `aiw init`
-- `convert/index.ts` → `aiw convert`
 
 **Extensibility:** Add new commands by creating new `.ts` files. They auto-register.
 

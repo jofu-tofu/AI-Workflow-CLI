@@ -149,9 +149,9 @@ These are the **inherent, foundational** design principles that define AIW CLI:
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                     Command Layer                            │
-│  ┌─────────────┐  ┌──────────┐  ┌─────────┐               │
-│  │   launch    │  │   init   │  │ convert │               │
-│  └─────────────┘  └──────────┘  └─────────┘               │
+│  ┌─────────────┐  ┌──────────┐                              │
+│  │   launch    │  │   init   │                              │
+│  └─────────────┘  └──────────┘                              │
 └────────────────────────┬────────────────────────────────────┘
                          │ Uses
                          ▼
@@ -251,29 +251,6 @@ These are the **inherent, foundational** design principles that define AIW CLI:
 - Template resolution mechanism (uses bundled templates)
 - File system operations pattern
 - Oclif command structure
-
----
-
-### `aiw convert` - Settings Conversion Command
-
-**Purpose:** Convert Claude Code settings between different AI IDE platforms.
-
-**Dependencies:**
-
-| Module | Usage | Foundational? |
-|--------|-------|---------------|
-| `template-mapper/` | Cross-platform conversion | No - Feature-specific |
-| `paths.ts` | Cross-platform paths | **Yes** - Required |
-| `errors.ts` | Error handling | **Yes** - Error handling |
-| `output.ts` | Display progress | No - UI enhancement |
-
-**What It Does:**
-1. Reads source settings file (Claude Code, Windsurf, GitHub Copilot)
-2. Parses and transforms content semantically
-3. Converts to target platform format
-4. Outputs converted settings
-
-**Extensibility:** New platform adapters can be added to `template-mapper/adapters/`.
 
 ---
 
@@ -546,22 +523,6 @@ The `src/lib/` directory contains foundational utilities used across commands.
 
 ---
 
-#### `template-mapper/` - Cross-Platform Template Conversion
-
-**Purpose:** Convert templates and settings between different AI IDE platforms.
-
-**Contents:**
-- `index.ts` - Main exports
-- `types.ts` - Type definitions
-- `parser.ts` - Template parsing
-- `content-parser.ts` - Semantic content detection
-- `content-transformers.ts` - Content transformation
-- `adapters/` - Platform-specific adapters
-
-**Modification Allowed:** Entire implementation (feature-specific)
-
----
-
 ## Modifiable vs. Foundational Elements
 
 ### Summary Table
@@ -597,11 +558,9 @@ The `src/lib/` directory contains foundational utilities used across commands.
 | bmad-installer.ts | Library | Yes | Feature-specific |
 | template-installer.ts | Library | Yes | Feature-specific |
 | hooks-merger.ts | Library | Yes | Feature-specific |
-| template-mapper/ | Library | Yes | Feature-specific |
 | **Commands** | | | |
 | aiw launch | Command | Limited | Core command, logic modifiable |
 | aiw init | Command | Yes | Can add templates |
-| aiw convert | Command | Yes | Feature-specific |
 
 ### Key:
 - **No** - Changing this would violate founding principles or require complete rewrite
@@ -626,12 +585,10 @@ test/
 ├── lib/               # Unit tests for library modules
 │   ├── config.test.ts
 │   ├── paths.test.ts
-│   ├── hooks-merger.test.ts
-│   └── template-mapper/
+│   └── hooks-merger.test.ts
 ├── integration/       # Integration tests
 │   ├── cli.test.ts
 │   ├── launch.test.ts
-│   ├── convert-command.test.ts
 │   ├── init-command-hook-merging.test.ts
 │   ├── piping-support.test.ts
 │   ├── exit-codes.test.ts
@@ -662,7 +619,7 @@ test/
 - **Sinon** - Mocks and spies
 - **C8** - Code coverage
 
-**Coverage Target:** 100% for MVP core features (launch, init, convert)
+**Coverage Target:** 100% for MVP core features (launch, init)
 
 ---
 
