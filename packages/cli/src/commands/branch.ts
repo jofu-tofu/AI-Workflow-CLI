@@ -28,7 +28,15 @@ export default class BranchCommand extends BaseCommand {
     'MODES\n' +
     '  --main/-m: Launch aiw in main/master branch in new terminal\n' +
     '  --launch/-l <branch>: Create/open git worktree in sibling folder\n' +
-    '  --delete/-d <branch>: Delete git branch and worktree folder\n\n' +
+    '  --delete/-d <branch>: Delete git branch and worktree folder\n' +
+    '  --delete --all: Clean up all worktrees (soft delete, safe mode)\n\n' +
+    'SOFT DELETE (--delete --all)\n' +
+    '  Safely removes worktrees that meet ALL criteria:\n' +
+    '  • Not main/master branch\n' +
+    '  • No unpushed commits to remote\n' +
+    '  • No open pull requests\n' +
+    '  • Not the current working directory\n' +
+    '  Outputs summary of deleted and preserved worktrees\n\n' +
     'REQUIREMENTS\n' +
     '  • Must be in a git repository\n' +
     '  • For --main: Must be on a branch (not already on main/master)\n' +
@@ -46,6 +54,8 @@ static override examples = [
     '<%= config.bin %> <%= command.id %> -l fix-bug-123',
     '<%= config.bin %> <%= command.id %> --delete feature-branch',
     '<%= config.bin %> <%= command.id %> -d fix-bug-123',
+    '<%= config.bin %> <%= command.id %> --delete --all  # Clean up all safe-to-delete worktrees',
+    '<%= config.bin %> <%= command.id %> -d -a  # Same as above, using short flags',
   ]
 
   static override flags = {
@@ -65,6 +75,11 @@ static override examples = [
       description: 'Delete git branch and worktree folder',
       exclusive: ['main', 'launch'],
     }),
+    all: Flags.boolean({
+      char: 'a',
+      description: 'With --delete: clean up all worktrees (soft delete, skips unpushed commits and open PRs)',
+      dependsOn: ['delete'],
+    }),
   }
 
   async run(): Promise<void> {
@@ -80,7 +95,11 @@ static override examples = [
       await this.handleMainBranch()
     } else if (flags.launch) {
       await this.handleWorktreeLaunch(args.branchName)
+    } else if (flags.delete && flags.all) {
+      // Handle --delete --all: clean up all worktrees
+      await this.handleDeleteAll()
     } else if (flags.delete) {
+      // Handle --delete <branchName>: delete single branch
       await this.handleDelete(args.branchName)
     }
   }
@@ -217,6 +236,137 @@ static override examples = [
   }
 
   /**
+   * Check if a branch has an open merge request/pull request
+   * Returns true if an open PR exists for this branch
+   */
+  private async hasMergeRequest(branchName: string): Promise<boolean> {
+    try {
+      // Check if gh CLI is available
+      try {
+        execSync('gh --version', {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+      } catch {
+        // gh CLI not available, can't check for PRs
+        this.debug('gh CLI not available, skipping PR check')
+        return false
+      }
+
+      // Check for open PRs for this branch
+      const escapedBranch = branchName.replaceAll('\'', String.raw`'\''`)
+      const output = execSync(`gh pr list --head '${escapedBranch}' --state open --json number`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim()
+
+      // Parse JSON output
+      const prs = JSON.parse(output) as Array<{number: number}>
+      return prs.length > 0
+    } catch (error) {
+      // If we can't determine, assume no PR (less conservative than unpushed commits)
+      this.debug(`Error checking for PR on branch '${branchName}': ${error}`)
+      return false
+    }
+  }
+
+  /**
+   * Check if a branch has unpushed commits
+   * Returns true if there are commits not pushed to remote
+   */
+  private async hasUnpushedCommits(branchName: string): Promise<boolean> {
+    try {
+      // Check if remote branch exists first
+      const escapedBranch = branchName.replaceAll('\'', String.raw`'\''`)
+      try {
+        execSync(`git show-ref --verify refs/remotes/origin/${escapedBranch}`, {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+      } catch {
+        // No remote branch - treat as having unpushed commits (safer)
+        this.debug(`Branch '${branchName}' has no remote tracking branch`)
+        return true
+      }
+
+      // Check if there are commits ahead of remote
+      const output = execSync(`git rev-list origin/${escapedBranch}..${escapedBranch} --count`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim()
+
+      const commitCount = Number.parseInt(output, 10)
+      return commitCount > 0
+    } catch (error) {
+      // If we can't determine, err on the side of caution
+      this.debug(`Error checking unpushed commits for '${branchName}': ${error}`)
+      return true
+    }
+  }
+
+  /**
+   * Get all worktrees in the repository
+   * Returns array of worktree info objects
+   */
+  private async getAllWorktrees(): Promise<Array<{branch: null | string; head: string; path: string}>> {
+    try {
+      const output = execSync('git worktree list --porcelain', {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      // Parse worktree list output
+      // Format:
+      // worktree /path/to/worktree
+      // HEAD <commit-hash>
+      // branch refs/heads/branchname
+      // (blank line between entries)
+      const worktrees: Array<{branch: null | string; head: string; path: string}> = []
+      const lines = output.split('\n')
+      let currentWorktree: {branch: null | string; head: string; path: string} | null = null
+
+      for (const line of lines) {
+        if (line.startsWith('worktree ')) {
+          if (currentWorktree) {
+            worktrees.push(currentWorktree)
+          }
+
+          currentWorktree = {
+            branch: null,
+            head: '',
+            path: line.slice('worktree '.length).trim(),
+          }
+        } else if (line.startsWith('HEAD ')) {
+          if (currentWorktree) {
+            currentWorktree.head = line.slice('HEAD '.length).trim()
+          }
+        } else if (line.startsWith('branch ')) {
+          if (currentWorktree) {
+            const branchRef = line.slice('branch '.length).trim()
+            // Extract branch name from refs/heads/branchname
+            currentWorktree.branch = branchRef.replace('refs/heads/', '')
+          }
+        } else if (line === '') {
+          // Empty line marks end of worktree entry
+          if (currentWorktree) {
+            worktrees.push(currentWorktree)
+            currentWorktree = null
+          }
+        }
+      }
+
+      // Push the last worktree if exists
+      if (currentWorktree) {
+        worktrees.push(currentWorktree)
+      }
+
+      return worktrees
+    } catch (error) {
+      const err = error as Error
+      throw new Error(`Failed to get worktrees: ${err.message}`)
+    }
+  }
+
+  /**
    * Get the worktree path for a branch
    * Returns null if no worktree exists for this branch
    */
@@ -252,6 +402,133 @@ static override examples = [
       return null
     } catch {
       return null
+    }
+  }
+
+  /**
+   * Handle --delete --all flags: Clean up all worktrees safely
+   */
+  private async handleDeleteAll(): Promise<void> {
+    try {
+      const cwd = process.cwd()
+
+      // Check 1: Verify we are in a git repository
+      this.debug('Checking if current directory is a git repository...')
+      const isGitRepo = await this.isGitRepository(cwd)
+      if (!isGitRepo) {
+        this.error('Not a git repository. This command only works inside a git repository.', {
+          exit: EXIT_CODES.ENVIRONMENT_ERROR,
+        })
+      }
+
+      this.debug('✓ Git repository detected')
+
+      // Get all worktrees
+      this.logInfo('Scanning all worktrees in repository...')
+      const allWorktrees = await this.getAllWorktrees()
+      this.debug(`Found ${allWorktrees.length} worktrees`)
+
+      // Track results
+      const deleted: Array<{branch: null | string; path: string; reason?: string}> = []
+      const preserved: Array<{branch: null | string; path: string; reason: string}> = []
+
+      // Process each worktree
+      for (const worktree of allWorktrees) {
+        const {branch, path} = worktree
+
+        // Skip if no branch (detached HEAD)
+        if (!branch) {
+          this.debug(`Skipping worktree at ${path} (detached HEAD)`)
+          preserved.push({branch, path, reason: 'detached HEAD'})
+          continue
+        }
+
+        // Skip main/master branches
+        if (branch === 'main' || branch === 'master') {
+          this.debug(`Skipping protected branch: ${branch}`)
+          preserved.push({branch, path, reason: 'protected branch (main/master)'})
+          continue
+        }
+
+        // Check if this is the current directory
+        const normalizedCwd = resolve(cwd)
+        const normalizedPath = resolve(path)
+        if (normalizedCwd === normalizedPath) {
+          this.debug(`Skipping current directory worktree: ${path}`)
+          preserved.push({branch, path, reason: 'current directory (cannot delete while inside)'})
+          continue
+        }
+
+        // Check for unpushed commits
+        this.debug(`Checking for unpushed commits on branch '${branch}'...`)
+        const hasUnpushed = await this.hasUnpushedCommits(branch)
+        if (hasUnpushed) {
+          this.debug(`Branch '${branch}' has unpushed commits, skipping`)
+          preserved.push({branch, path, reason: 'has unpushed commits'})
+          continue
+        }
+
+        // Check for open merge requests
+        this.debug(`Checking for open PR on branch '${branch}'...`)
+        const hasPR = await this.hasMergeRequest(branch)
+        if (hasPR) {
+          this.debug(`Branch '${branch}' has an open PR, skipping`)
+          preserved.push({branch, path, reason: 'has open pull request'})
+          continue
+        }
+
+        // Safe to delete
+        this.debug(`Branch '${branch}' is safe to delete`)
+        try {
+          // Delete the worktree folder first (must be done before deleting the branch)
+          await this.deleteWorktreeFolder(path)
+          // Delete the branch
+          await this.deleteBranch(branch)
+          deleted.push({branch, path})
+          this.debug(`✓ Deleted branch '${branch}' and worktree at ${path}`)
+        } catch (error) {
+          const err = error as Error
+          this.debug(`Failed to delete branch '${branch}': ${err.message}`)
+          preserved.push({branch, path, reason: `deletion failed: ${err.message}`})
+        }
+      }
+
+      // Output results
+      this.log('')
+      this.logSuccess('✓ Worktree cleanup complete')
+      this.log('')
+
+      if (deleted.length > 0) {
+        this.logInfo(`Deleted ${deleted.length} worktree${deleted.length === 1 ? '' : 's'}:`)
+        for (const {branch, path} of deleted) {
+          this.log(`  - ${branch} (${path})`)
+        }
+
+        this.log('')
+      } else {
+        this.logInfo('No worktrees were deleted.')
+        this.log('')
+      }
+
+      if (preserved.length > 0) {
+        this.logInfo(`Preserved ${preserved.length} worktree${preserved.length === 1 ? '' : 's'}:`)
+        for (const {branch, path, reason} of preserved) {
+          this.log(`  - ${branch ?? 'detached'} (${path})`)
+          this.log(`    Reason: ${reason}`)
+        }
+      }
+    } catch (error) {
+      const err = error as Error
+
+      // Check if error is already handled by this.error() calls above
+      if (err.message?.includes('EEXIT')) {
+        throw error
+      }
+
+      // Handle unexpected errors
+      this.error(`Failed to clean up worktrees: ${err.message}`, {
+        exit: EXIT_CODES.GENERAL_ERROR,
+      })
     }
   }
 
@@ -328,12 +605,7 @@ static override examples = [
       this.debug(`Finding worktree path for branch '${branchName}'...`)
       const worktreePath = await this.getWorktreePath(branchName)
 
-      // Delete the git branch
-      this.logInfo(`Deleting git branch '${branchName}'...`)
-      await this.deleteBranch(branchName)
-      this.debug(`✓ Git branch '${branchName}' deleted`)
-
-      // Delete the worktree folder if it exists
+      // Delete the worktree folder first if it exists (must be done before deleting the branch)
       if (worktreePath) {
         this.logInfo(`Deleting worktree folder at ${worktreePath}...`)
         await this.deleteWorktreeFolder(worktreePath)
@@ -341,6 +613,11 @@ static override examples = [
       } else {
         this.debug('No worktree folder found for this branch')
       }
+
+      // Delete the git branch
+      this.logInfo(`Deleting git branch '${branchName}'...`)
+      await this.deleteBranch(branchName)
+      this.debug(`✓ Git branch '${branchName}' deleted`)
 
       this.logSuccess(`✓ Branch '${branchName}' and its worktree have been deleted`)
     } catch (error) {

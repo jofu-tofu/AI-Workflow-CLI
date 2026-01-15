@@ -41,6 +41,24 @@ describe('branch command', () => {
       const hasDebugExample = examples.some((ex: string) => ex.includes('--debug'))
       expect(hasDebugExample).to.be.true
     })
+
+    it('should include --delete --all example', () => {
+      const {examples} = BranchCommand
+      const hasDeleteAllExample = examples.some((ex: string) => ex.includes('--delete') && ex.includes('--all'))
+      expect(hasDeleteAllExample).to.be.true
+    })
+
+    it('should reference soft delete in description', () => {
+      expect(BranchCommand.description).to.match(/soft delete/i)
+    })
+
+    it('should reference unpushed commits in description', () => {
+      expect(BranchCommand.description).to.match(/unpushed/i)
+    })
+
+    it('should reference pull requests in description', () => {
+      expect(BranchCommand.description).to.match(/pull request/i)
+    })
   })
 
   describe('command structure', () => {
@@ -78,6 +96,13 @@ describe('branch command', () => {
       expect(BranchCommand.flags.delete).to.have.property('exclusive')
       expect(BranchCommand.flags.delete.exclusive).to.include('main')
       expect(BranchCommand.flags.delete.exclusive).to.include('launch')
+    })
+
+    it('should define --all flag', () => {
+      expect(BranchCommand.flags).to.have.property('all')
+      expect(BranchCommand.flags.all).to.have.property('char', 'a')
+      expect(BranchCommand.flags.all).to.have.property('dependsOn')
+      expect(BranchCommand.flags.all.dependsOn).to.include('delete')
     })
 
     it('should define branchName argument', () => {
@@ -464,6 +489,116 @@ describe('branch command', () => {
       const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
       expect(source).to.include('fs.rm')
       expect(source).to.include('recursive')
+    })
+  })
+
+  describe('delete all functionality', () => {
+    it('should have handleDeleteAll method', () => {
+      // @ts-expect-error - accessing private method for testing
+      expect(BranchCommand.prototype.handleDeleteAll).to.be.a('function')
+    })
+
+    it('should have getAllWorktrees method', () => {
+      // @ts-expect-error - accessing private method for testing
+      expect(BranchCommand.prototype.getAllWorktrees).to.be.a('function')
+    })
+
+    it('should have hasUnpushedCommits method', () => {
+      // @ts-expect-error - accessing private method for testing
+      expect(BranchCommand.prototype.hasUnpushedCommits).to.be.a('function')
+    })
+
+    it('should have hasMergeRequest method', () => {
+      // @ts-expect-error - accessing private method for testing
+      expect(BranchCommand.prototype.hasMergeRequest).to.be.a('function')
+    })
+
+    it('getAllWorktrees should use git worktree list porcelain', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.getAllWorktrees.toString()
+      expect(source).to.include('git worktree list')
+      expect(source).to.include('porcelain')
+    })
+
+    it('getAllWorktrees should parse branch and path info', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.getAllWorktrees.toString()
+      expect(source).to.include('branch')
+      expect(source).to.include('path')
+      expect(source).to.include('head')
+    })
+
+    it('hasUnpushedCommits should check remote tracking branch', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.hasUnpushedCommits.toString()
+      expect(source).to.include('refs/remotes/origin')
+      expect(source).to.include('git show-ref')
+    })
+
+    it('hasUnpushedCommits should use git rev-list to count commits', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.hasUnpushedCommits.toString()
+      expect(source).to.include('git rev-list')
+      expect(source).to.include('--count')
+    })
+
+    it('hasMergeRequest should use gh CLI', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.hasMergeRequest.toString()
+      expect(source).to.include('gh')
+      expect(source).to.include('pr list')
+    })
+
+    it('hasMergeRequest should check for open PRs', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.hasMergeRequest.toString()
+      expect(source).to.include('--head')
+      expect(source).to.include('--state open')
+    })
+
+    it('handleDeleteAll should skip main/master branches', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.handleDeleteAll.toString()
+      expect(source).to.match(/main|master/)
+      expect(source).to.include('protected')
+    })
+
+    it('handleDeleteAll should skip current directory', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.handleDeleteAll.toString()
+      expect(source).to.include('current directory')
+      expect(source).to.match(/cwd|current/i)
+    })
+
+    it('handleDeleteAll should check for unpushed commits', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.handleDeleteAll.toString()
+      expect(source).to.include('hasUnpushedCommits')
+    })
+
+    it('handleDeleteAll should check for merge requests', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.handleDeleteAll.toString()
+      expect(source).to.include('hasMergeRequest')
+    })
+
+    it('handleDeleteAll should output deleted worktrees', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.handleDeleteAll.toString()
+      expect(source).to.match(/deleted/i)
+      expect(source).to.match(/preserved/i)
+    })
+
+    it('handleDeleteAll should output reasons for preservation', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.handleDeleteAll.toString()
+      expect(source).to.include('reason')
+    })
+
+    it('run method should route to handleDeleteAll when both flags set', () => {
+      const source = BranchCommand.prototype.run.toString()
+      expect(source).to.include('handleDeleteAll')
+      expect(source).to.match(/flags\.delete.*flags\.all|flags\.all.*flags\.delete/)
     })
   })
 
