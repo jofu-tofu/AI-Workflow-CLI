@@ -125,37 +125,51 @@ static override examples = [
    * Delete a git branch (local and remote if exists)
    */
   private async deleteBranch(branchName: string): Promise<void> {
-    try {
-      // Escape branch name to prevent command injection
-      const escapedBranch = branchName.replaceAll('\'', String.raw`'\''`)
+    // Platform-specific branch name escaping
+    let escapedBranch: string
+    if (process.platform === 'win32') {
+      // Windows: use double quotes, escape internal double quotes
+      escapedBranch = `"${branchName.replaceAll('"', '\\"')}"`
+    } else {
+      // Unix/macOS: use single quotes, escape internal single quotes
+      escapedBranch = `'${branchName.replaceAll('\'', String.raw`'\''`)}'`
+    }
 
-      // Delete local branch
-      this.debug(`Deleting local branch '${branchName}'...`)
-      execSync(`git branch -D '${escapedBranch}'`, {
+    // Delete local branch
+    this.debug(`Deleting local branch '${branchName}'...`)
+    try {
+      execSync(`git branch -D ${escapedBranch}`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+    } catch (error) {
+      const err = error as Error
+      // If branch doesn't exist (orphaned worktree), that's fine - just log it
+      if (err.message?.includes('not found')) {
+        this.debug(`Branch '${branchName}' not found (orphaned worktree)`)
+        return
+      }
+
+      // For other errors, throw
+      throw new Error(`Failed to delete branch: ${err.message}`)
+    }
+
+    // Check if remote branch exists
+    try {
+      execSync(`git show-ref --verify refs/remotes/origin/${branchName}`, {
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'pipe'],
       })
 
-      // Check if remote branch exists
-      try {
-        execSync(`git show-ref --verify refs/remotes/origin/${escapedBranch}`, {
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-
-        // Remote branch exists, delete it
-        this.debug(`Deleting remote branch '${branchName}'...`)
-        execSync(`git push origin --delete '${escapedBranch}'`, {
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-      } catch {
-        // Remote branch doesn't exist, skip deletion
-        this.debug('No remote branch to delete')
-      }
-    } catch (error) {
-      const err = error as Error
-      throw new Error(`Failed to delete branch: ${err.message}`)
+      // Remote branch exists, delete it
+      this.debug(`Deleting remote branch '${branchName}'...`)
+      execSync(`git push origin --delete ${escapedBranch}`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+    } catch {
+      // Remote branch doesn't exist, skip deletion
+      this.debug('No remote branch to delete')
     }
   }
 
@@ -163,27 +177,52 @@ static override examples = [
    * Delete the worktree folder and remove worktree from git
    */
   private async deleteWorktreeFolder(worktreePath: string): Promise<void> {
+    // First, try to remove the worktree from git
+    this.debug(`Removing worktree from git: ${worktreePath}`)
+
+    // Platform-specific path escaping for git commands
+    let escapedPath: string
+    if (process.platform === 'win32') {
+      // Windows: use double quotes, escape internal double quotes
+      escapedPath = `"${worktreePath.replaceAll('"', '\\"')}"`
+    } else {
+      // Unix/macOS: use single quotes, escape internal single quotes
+      escapedPath = `'${worktreePath.replaceAll('\'', String.raw`'\''`)}'`
+    }
+
     try {
-      // First, remove the worktree from git
-      this.debug(`Removing worktree from git: ${worktreePath}`)
-      const escapedPath = worktreePath.replaceAll('\'', String.raw`'\''`)
-      execSync(`git worktree remove '${escapedPath}' --force`, {
+      execSync(`git worktree remove ${escapedPath} --force`, {
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'pipe'],
       })
-
-      // Then delete the folder if it still exists
-      try {
-        await fs.access(worktreePath)
-        this.debug(`Deleting folder: ${worktreePath}`)
-        await fs.rm(worktreePath, {recursive: true, force: true})
-      } catch {
-        // Folder doesn't exist or already deleted by git worktree remove
-        this.debug('Folder already deleted')
-      }
+      this.debug('Git worktree removed successfully')
     } catch (error) {
       const err = error as Error
-      throw new Error(`Failed to delete worktree folder: ${err.message}`)
+      // If git reports the worktree doesn't exist, that's fine - the folder might be orphaned
+      // We'll still try to delete the folder below
+      if (err.message?.includes('not a working tree')) {
+        this.debug(`Git worktree not found (orphaned folder): ${err.message}`)
+      } else {
+        // For other git errors, log but continue to folder deletion
+        this.debug(`Git worktree remove failed: ${err.message}`)
+      }
+    }
+
+    // Always try to delete the folder if it exists
+    try {
+      await fs.access(worktreePath)
+      this.debug(`Deleting folder: ${worktreePath}`)
+      await fs.rm(worktreePath, {recursive: true, force: true})
+      this.debug('Folder deleted successfully')
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException
+      // If folder doesn't exist, that's fine
+      if (err.code === 'ENOENT') {
+        this.debug('Folder already deleted')
+      } else {
+        // For real errors (permissions, locks, etc), throw
+        throw new Error(`Failed to delete worktree folder: ${err.message}`)
+      }
     }
   }
 
@@ -679,9 +718,21 @@ static override examples = [
 
       this.debug(`✓ Found main branch: ${mainBranch}`)
 
+      // Get the worktree path for the main branch
+      this.debug(`Finding worktree path for ${mainBranch} branch...`)
+      const mainBranchPath = await this.getWorktreePath(mainBranch)
+
+      if (!mainBranchPath) {
+        this.error(`Could not find worktree for ${mainBranch} branch.`, {
+          exit: EXIT_CODES.ENVIRONMENT_ERROR,
+        })
+      }
+
+      this.debug(`✓ Found ${mainBranch} worktree at: ${mainBranchPath}`)
+
       // Launch new terminal with aiw launch in main/master branch
       this.logInfo(`Opening new terminal with aiw launch in ${mainBranch} branch...`)
-      await this.launchTerminalWithAiw(cwd, mainBranch)
+      await this.launchTerminalWithAiw(mainBranchPath)
 
       this.logSuccess(`✓ New terminal launched with aiw in ${mainBranch} branch`)
     } catch (error) {
@@ -803,31 +854,38 @@ static override examples = [
   }
 
   /**
-   * Launch a new terminal window with aiw launch in the specified branch
+   * Launch a new terminal window with aiw launch in the specified directory
    */
-  private async launchTerminalWithAiw(cwd: string, branch: string): Promise<void> {
+  private async launchTerminalWithAiw(targetPath: string): Promise<void> {
     const {platform} = process
 
     try {
       if (platform === 'win32') {
-        // Windows: Use PowerShell to open new terminal
-        // Command: cd to directory, checkout branch, run aiw launch
-        const escapedCwd = cwd.replaceAll('\'', "''")
-        const escapedBranch = branch.replaceAll('\'', "''")
-        const command = `cd '${escapedCwd}'; git checkout '${escapedBranch}'; aiw launch`
-        const psCommand = `Start-Process powershell -ArgumentList '-NoExit', '-Command', "${command}"`
+        // Windows: Use PowerShell 7 (pwsh) to open new terminal
+        // Detect which PowerShell to use (prefer pwsh for PowerShell 7)
+        let powershellCmd = 'pwsh'
+        try {
+          execSync('where pwsh', {stdio: 'ignore'})
+        } catch {
+          // pwsh not found, use legacy PowerShell
+          powershellCmd = 'powershell'
+        }
+
+        // Command: cd to directory and run aiw launch
+        const escapedPath = targetPath.replaceAll('\'', "''")
+        const command = `cd '${escapedPath}'; aiw launch`
+        const psCommand = `Start-Process ${powershellCmd} -ArgumentList '-NoExit', '-Command', "${command}"`
 
         this.debug(`Launching Windows terminal with command: ${psCommand}`)
-        execSync(`powershell -Command "${psCommand}"`, {
+        execSync(`${powershellCmd} -Command "${psCommand}"`, {
           stdio: 'ignore',
           windowsHide: true,
         })
       } else if (platform === 'darwin') {
         // macOS: Use Terminal.app
         // Escape single quotes for bash context
-        const escapedCwd = cwd.replaceAll('\'', String.raw`'\''`)
-        const escapedBranch = branch.replaceAll('\'', String.raw`'\''`)
-        const command = `cd '${escapedCwd}' && git checkout '${escapedBranch}' && aiw launch`
+        const escapedPath = targetPath.replaceAll('\'', String.raw`'\''`)
+        const command = `cd '${escapedPath}' && aiw launch`
         // Escape double quotes and backslashes for AppleScript context
         const escapedCommand = command.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)
         const osascript = `osascript -e 'tell application "Terminal" to do script "${escapedCommand}"'`
@@ -836,10 +894,9 @@ static override examples = [
         execSync(osascript, {stdio: 'ignore'})
       } else {
         // Linux/Unix: Try common terminal emulators
-        // Escape single quotes in cwd and branch for bash shell
-        const escapedCwd = cwd.replaceAll('\'', String.raw`'\''`)
-        const escapedBranch = branch.replaceAll('\'', String.raw`'\''`)
-        const command = `cd '${escapedCwd}' && git checkout '${escapedBranch}' && aiw launch`
+        // Escape single quotes for bash shell
+        const escapedPath = targetPath.replaceAll('\'', String.raw`'\''`)
+        const command = `cd '${escapedPath}' && aiw launch`
 
         // Try to detect available terminal emulator
         const terminals = [
