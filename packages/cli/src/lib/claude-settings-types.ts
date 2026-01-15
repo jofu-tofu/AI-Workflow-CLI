@@ -7,40 +7,40 @@
  * Hook command configuration
  */
 export interface HookCommand {
-  /** Type of hook action */
-  type: 'command'
   /** Command to execute */
   command: string
   /** Optional timeout in seconds */
   timeout?: number
+  /** Type of hook action */
+  type: 'command'
 }
 
 /**
  * Hook matcher configuration
  */
 export interface HookMatcher {
+  /** Array of hook commands to execute */
+  hooks: HookCommand[]
   /** Tool name pattern to match (regex supported) */
   matcher: string
   /** Execute only once per session */
   once?: boolean
-  /** Array of hook commands to execute */
-  hooks: HookCommand[]
 }
 
 /**
  * Hook event types supported by Claude Code
  */
 export type HookEventType =
-  | 'SessionStart'
-  | 'UserPromptSubmit'
+  | 'Notification'
   | 'PermissionRequest'
-  | 'PreToolUse'
   | 'PostToolUse'
+  | 'PreCompact'
+  | 'PreToolUse'
+  | 'SessionEnd'
+  | 'SessionStart'
   | 'Stop'
   | 'SubagentStop'
-  | 'SessionEnd'
-  | 'PreCompact'
-  | 'Notification'
+  | 'UserPromptSubmit'
 
 /**
  * Hooks configuration
@@ -72,35 +72,35 @@ export type EnvConfig = Record<string, string>
  * Complete Claude Code settings.json structure
  */
 export interface ClaudeSettings {
+  /** Cleanup period in days */
+  cleanupPeriodDays?: number
+  /** Enabled plugins */
+  enabledPlugins?: EnabledPlugins
+  /** Environment variables */
+  env?: EnvConfig
+  /** Hook configurations */
+  hooks?: HooksConfig
   /** Default model to use */
   model?: string
   /** Tool permissions */
   permissions?: Permissions
-  /** Environment variables */
-  env?: EnvConfig
-  /** Enabled plugins */
-  enabledPlugins?: EnabledPlugins
-  /** Hook configurations */
-  hooks?: HooksConfig
   /** Spinner tips enabled */
   spinnerTipsEnabled?: boolean
-  /** Cleanup period in days */
-  cleanupPeriodDays?: number
 }
 
 /**
  * Settings file types in hierarchy
  */
-export type SettingsFileType = 'user' | 'project' | 'local'
+export type SettingsFileType = 'local' | 'project' | 'user'
 
 /**
  * Settings file location
  */
 export interface SettingsLocation {
-  /** Type of settings file */
-  type: SettingsFileType
-  /** Absolute path to settings file */
-  path: string
   /** Whether file exists */
   exists: boolean
+  /** Absolute path to settings file */
+  path: string
+  /** Type of settings file */
+  type: SettingsFileType
 }

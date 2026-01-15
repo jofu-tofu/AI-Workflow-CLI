@@ -1,8 +1,8 @@
 import {expect} from 'chai'
 
 import {
-  AiwError,
   type AiwcliConfig,
+  AiwError,
   ConfigNotFoundError,
   debug,
   EnvironmentError,

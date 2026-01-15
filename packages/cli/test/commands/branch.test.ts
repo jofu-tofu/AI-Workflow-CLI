@@ -61,6 +61,7 @@ describe('branch command', () => {
       expect(BranchCommand.flags.main).to.have.property('char', 'm')
       expect(BranchCommand.flags.main).to.have.property('exclusive')
       expect(BranchCommand.flags.main.exclusive).to.include('launch')
+      expect(BranchCommand.flags.main.exclusive).to.include('delete')
     })
 
     it('should define --launch flag', () => {
@@ -68,6 +69,15 @@ describe('branch command', () => {
       expect(BranchCommand.flags.launch).to.have.property('char', 'l')
       expect(BranchCommand.flags.launch).to.have.property('exclusive')
       expect(BranchCommand.flags.launch.exclusive).to.include('main')
+      expect(BranchCommand.flags.launch.exclusive).to.include('delete')
+    })
+
+    it('should define --delete flag', () => {
+      expect(BranchCommand.flags).to.have.property('delete')
+      expect(BranchCommand.flags.delete).to.have.property('char', 'd')
+      expect(BranchCommand.flags.delete).to.have.property('exclusive')
+      expect(BranchCommand.flags.delete.exclusive).to.include('main')
+      expect(BranchCommand.flags.delete.exclusive).to.include('launch')
     })
 
     it('should define branchName argument', () => {
@@ -306,11 +316,6 @@ describe('branch command', () => {
       // @ts-expect-error - accessing private method for testing
       const source = BranchCommand.prototype.launchTerminalWithAiw.toString()
       // All platform branches (win32, darwin, linux) should have quoting/escaping
-      // Look for patterns in Windows, macOS, and Linux sections
-      const hasWindowsQuoting = source.includes("win32") && source.match(/win32[\s\S]*?['"`]/)
-      const hasDarwinQuoting = source.includes("darwin") && source.match(/darwin[\s\S]*?['"`]/)
-      const hasLinuxQuoting = source.includes("gnome-terminal|konsole|xterm") && source.match(/\['`"]/)
-
       // At least the basic structure should have quotes/escaping
       expect(source).to.match(/['"`].*cwd.*['"`]|['"`].*branch.*['"`]/i)
     })
@@ -320,7 +325,7 @@ describe('branch command', () => {
       const source = BranchCommand.prototype.launchTerminalWithAiw.toString()
       // Should not directly concatenate branch into command string without protection
       // If it does concatenate, should be within quotes/escape sequences
-      if (source.includes('git checkout ${branch}') || source.includes('git checkout " + branch')) {
+      if (source.includes('git checkout $') || source.includes('git checkout " + branch')) {
         // These patterns are vulnerable unless escaped
         expect(source).to.match(/escape|quote|sanitize|replace/i)
       } else {
@@ -351,6 +356,163 @@ describe('branch command', () => {
         // Safe pattern with quotes found
         expect(source).to.match(/git checkout\s+['"`]/)
       }
+    })
+  })
+
+  describe('delete functionality', () => {
+    it('should have handleDelete method', () => {
+      // @ts-expect-error - accessing private method for testing
+      expect(BranchCommand.prototype.handleDelete).to.be.a('function')
+    })
+
+    it('should implement branchExists method', () => {
+      // @ts-expect-error - accessing private method for testing
+      expect(BranchCommand.prototype.branchExists).to.be.a('function')
+    })
+
+    it('should implement getWorktreePath method', () => {
+      // @ts-expect-error - accessing private method for testing
+      expect(BranchCommand.prototype.getWorktreePath).to.be.a('function')
+    })
+
+    it('should implement deleteBranch method', () => {
+      // @ts-expect-error - accessing private method for testing
+      expect(BranchCommand.prototype.deleteBranch).to.be.a('function')
+    })
+
+    it('should implement deleteWorktreeFolder method', () => {
+      // @ts-expect-error - accessing private method for testing
+      expect(BranchCommand.prototype.deleteWorktreeFolder).to.be.a('function')
+    })
+
+    it('handleDelete should check for git repository', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.handleDelete.toString()
+      expect(source).to.include('isGitRepository')
+    })
+
+    it('handleDelete should prevent deletion of main/master branches', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.handleDelete.toString()
+      expect(source).to.match(/main.*master|protected/i)
+      expect(source).to.include('Cannot delete')
+    })
+
+    it('handleDelete should check if branch exists', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.handleDelete.toString()
+      expect(source).to.include('branchExists')
+    })
+
+    it('handleDelete should check current branch', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.handleDelete.toString()
+      expect(source).to.include('getCurrentBranch')
+      expect(source).to.include('currently on it')
+    })
+
+    it('handleDelete should use clipboard for suggestion', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.handleDelete.toString()
+      expect(source).to.include('clipboard')
+      expect(source).to.include('aiw branch --main')
+    })
+
+    it('handleDelete should delete both branch and worktree', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.handleDelete.toString()
+      expect(source).to.include('deleteBranch')
+      expect(source).to.include('deleteWorktreeFolder')
+    })
+
+    it('branchExists should use git show-ref', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.branchExists.toString()
+      expect(source).to.include('git show-ref')
+      expect(source).to.include('refs/heads')
+    })
+
+    it('getWorktreePath should use git worktree list', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.getWorktreePath.toString()
+      expect(source).to.include('git worktree list')
+      expect(source).to.include('porcelain')
+    })
+
+    it('deleteBranch should delete local branch with -D flag', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.deleteBranch.toString()
+      expect(source).to.include('git branch -D')
+    })
+
+    it('deleteBranch should check for and delete remote branch', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.deleteBranch.toString()
+      expect(source).to.include('git push origin --delete')
+      expect(source).to.include('refs/remotes/origin')
+    })
+
+    it('deleteWorktreeFolder should use git worktree remove', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
+      expect(source).to.include('git worktree remove')
+      expect(source).to.include('--force')
+    })
+
+    it('deleteWorktreeFolder should delete folder with fs.rm', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
+      expect(source).to.include('fs.rm')
+      expect(source).to.include('recursive')
+    })
+  })
+
+  describe('delete security: command injection prevention', () => {
+    it('deleteBranch should escape branch names', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.deleteBranch.toString()
+      // Should use single quote escaping for branch names
+      expect(source).to.match(/replace.*'|escape/i)
+      // Check for the escape pattern (may be represented as '\\'\\'' or "'\\\\''")
+      expect(source).to.match(/'\\\\''|escapedBranch/)
+    })
+
+    it('deleteBranch should quote branch names in git commands', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.deleteBranch.toString()
+      // Branch should be quoted in git branch -D command
+      expect(source).to.match(/git branch -D\s+['"]/)
+      expect(source).to.match(/git push origin --delete\s+['"]/)
+    })
+
+    it('deleteWorktreeFolder should escape worktree paths', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
+      // Should escape paths to prevent injection
+      expect(source).to.match(/replace.*'|escape/i)
+      // Check for the escape pattern (may be represented as '\\'\\'' or "'\\\\''")
+      expect(source).to.match(/'\\\\''|escapedPath/)
+    })
+
+    it('deleteWorktreeFolder should quote paths in git commands', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
+      // Path should be quoted in git worktree remove command
+      expect(source).to.match(/git worktree remove\s+['"]/)
+    })
+
+    it('should handle branch names with special characters safely', () => {
+      // @ts-expect-error - accessing private method for testing
+      const deleteBranchSource = BranchCommand.prototype.deleteBranch.toString()
+      // Ensure proper escaping mechanism exists
+      expect(deleteBranchSource).to.match(/escapedBranch|replace.*'/i)
+    })
+
+    it('should handle paths with special characters safely', () => {
+      // @ts-expect-error - accessing private method for testing
+      const deleteWorktreeSource = BranchCommand.prototype.deleteWorktreeFolder.toString()
+      // Ensure proper escaping mechanism exists
+      expect(deleteWorktreeSource).to.match(/escapedPath|replace.*'/i)
     })
   })
 })

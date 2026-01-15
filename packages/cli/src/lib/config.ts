@@ -11,8 +11,8 @@ import {ConfigNotFoundError} from './errors.js'
  * Contains all resolved paths for CLI operation.
  */
 export interface AiwcliConfig {
-  claudeConfigPath: string
   aiwDir: string
+  claudeConfigPath: string
   settingsPath: string
 }
 
