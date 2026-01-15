@@ -24,20 +24,9 @@ describe('Subcommand Architecture Validation', () => {
       expect(result).to.include('Launch Claude Code')
     })
 
-    it('executes topic (nested) commands (aiw hello world)', () => {
-      const result = execSync(`${bin} hello world`, {encoding: 'utf8'})
-      expect(result).to.include('hello world')
-    })
-
     it('lists available commands in main help', () => {
       const result = execSync(`${bin} --help`, {encoding: 'utf8'})
       expect(result).to.include('launch')
-      expect(result).to.include('hello')
-    })
-
-    it('lists topic subcommands (aiw hello --help)', () => {
-      const result = execSync(`${bin} hello --help`, {encoding: 'utf8'})
-      expect(result).to.include('world')
     })
   })
 
@@ -56,22 +45,6 @@ describe('Subcommand Architecture Validation', () => {
         stdio: ['pipe', 'pipe', 'pipe'],
       })
       expect(result).to.include('Launch Claude Code')
-    })
-
-    it('accepts long form --debug on hello world command', () => {
-      const result = execSync(`${bin} hello world --debug`, {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
-      expect(result).to.include('hello world')
-    })
-
-    it('accepts short form -d on hello world command', () => {
-      const result = execSync(`${bin} hello world -d`, {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
-      expect(result).to.include('hello world')
     })
 
     it('help text shows both short and long forms for debug flag', () => {
@@ -94,9 +67,8 @@ describe('Subcommand Architecture Validation', () => {
   describe('AC3/FR32: Consistent Command Naming', () => {
     it('all top-level commands use lowercase names', () => {
       const result = execSync(`${bin} --help`, {encoding: 'utf8'})
-      // Commands should be lowercase (launch, hello)
+      // Commands should be lowercase (launch)
       expect(result).to.include('launch')
-      expect(result).to.include('hello')
     })
 
     it('command file paths match command names (Oclif convention)', () => {
@@ -104,12 +76,6 @@ describe('Subcommand Architecture Validation', () => {
       // Oclif uses file path as command name
       const launchHelp = execSync(`${bin} launch --help`, {encoding: 'utf8'})
       expect(launchHelp).to.include('Launch')
-    })
-
-    it('topic commands follow hierarchy naming', () => {
-      // Topic structure: hello/world.ts → aiw hello world
-      const result = execSync(`${bin} hello world`, {encoding: 'utf8'})
-      expect(result).to.include('hello world')
     })
   })
 
@@ -119,27 +85,11 @@ describe('Subcommand Architecture Validation', () => {
       const flagResult = execSync(`${bin} launch --help`, {encoding: 'utf8'})
       expect(helpResult).to.equal(flagResult)
     })
-
-    it('aiw help works for topic commands (hello:world)', () => {
-      const helpResult = execSync(`${bin} help hello:world`, {encoding: 'utf8'})
-      expect(helpResult).to.include('Say hello world')
-    })
-
-    it('aiw help works for nested commands with space syntax (hello world)', () => {
-      const helpResult = execSync(`${bin} hello world --help`, {encoding: 'utf8'})
-      expect(helpResult).to.include('Say hello world')
-    })
   })
 
   describe('Flag Inheritance from BaseCommand', () => {
     it('launch command inherits debug flag from BaseCommand', () => {
       const result = execSync(`${bin} launch --help`, {encoding: 'utf8'})
-      expect(result).to.include('--debug')
-      expect(result).to.include('-d')
-    })
-
-    it('hello world command inherits debug flag from BaseCommand', () => {
-      const result = execSync(`${bin} hello world --help`, {encoding: 'utf8'})
       expect(result).to.include('--debug')
       expect(result).to.include('-d')
     })

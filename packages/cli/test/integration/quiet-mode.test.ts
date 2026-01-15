@@ -63,13 +63,6 @@ describe('Quiet Mode Integration', () => {
       })
       expect(result).to.include('Launch')
     })
-
-    it('hello command respects quiet mode', () => {
-      const result = execSync(`${binPath} hello --help --quiet`, {
-        encoding: 'utf8',
-      })
-      expect(result).to.include('hello')
-    })
   })
 
   describe('AC5: Quiet Mode Documented in Help Text', () => {

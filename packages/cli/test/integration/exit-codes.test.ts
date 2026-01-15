@@ -64,16 +64,6 @@ describe('Exit Code Consistency', () => {
       }
     })
 
-    it('returns 2 for missing required arguments', () => {
-      try {
-        execSync(`${bin} hello`, {encoding: 'utf8'})
-        expect.fail('Should have thrown')
-      } catch (error: unknown) {
-        const err = error as {status: number; stderr: Buffer}
-        expect(err.status).to.equal(2)
-        expect(err.stderr.toString()).to.include('Missing')
-      }
-    })
   })
 
   describe('AC4: Environment Error Exit Code (3)', () => {

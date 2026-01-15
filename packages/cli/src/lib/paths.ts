@@ -98,11 +98,11 @@ export function resolvePath(...segments: string[]): string {
 }
 
 /**
- * Check if directory is an AI Workflow workspace (contains .aiwcli directory marker).
+ * Check if directory is an AI Workflow workspace (contains .aiw directory marker).
  * Per AC3: The marker must be a directory, not a file.
  */
 export function isWorkspace(dir: string): boolean {
-  const aiwPath = join(dir, '.aiwcli')
+  const aiwPath = join(dir, '.aiw')
   try {
     return existsSync(aiwPath) && statSync(aiwPath).isDirectory()
   } catch {
@@ -111,7 +111,7 @@ export function isWorkspace(dir: string): boolean {
 }
 
 /**
- * Search up the directory tree for a .aiwcli workspace marker.
+ * Search up the directory tree for a .aiw workspace marker.
  * @param startDir - Directory to start searching from
  * @returns Path to workspace root, or null if not found
  */
