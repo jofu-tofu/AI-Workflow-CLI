@@ -59,33 +59,53 @@ describe('branch command', () => {
     it('should define --main flag', () => {
       expect(BranchCommand.flags).to.have.property('main')
       expect(BranchCommand.flags.main).to.have.property('char', 'm')
-      expect(BranchCommand.flags.main).to.have.property('required', true)
+      expect(BranchCommand.flags.main).to.have.property('exclusive')
+      expect(BranchCommand.flags.main.exclusive).to.include('launch')
+    })
+
+    it('should define --launch flag', () => {
+      expect(BranchCommand.flags).to.have.property('launch')
+      expect(BranchCommand.flags.launch).to.have.property('char', 'l')
+      expect(BranchCommand.flags.launch).to.have.property('exclusive')
+      expect(BranchCommand.flags.launch.exclusive).to.include('main')
+    })
+
+    it('should define branchName argument', () => {
+      expect(BranchCommand.args).to.have.property('branchName')
+      expect(BranchCommand.args.branchName).to.have.property('required', false)
     })
   })
 
   describe('implementation verification', () => {
-    it('should check if directory is a git repository', () => {
+    it('should delegate to handleMainBranch or handleWorktreeLaunch', () => {
       const source = BranchCommand.prototype.run.toString()
+      expect(source).to.include('handleMainBranch')
+      expect(source).to.include('handleWorktreeLaunch')
+    })
+
+    it('should check if directory is a git repository', () => {
+      // Check in handleMainBranch
+      const source = (BranchCommand.prototype as any).handleMainBranch.toString()
       expect(source).to.include('isGitRepository')
     })
 
     it('should get current git branch', () => {
-      const source = BranchCommand.prototype.run.toString()
+      const source = (BranchCommand.prototype as any).handleMainBranch.toString()
       expect(source).to.include('getCurrentBranch')
     })
 
     it('should verify main or master branch exists', () => {
-      const source = BranchCommand.prototype.run.toString()
+      const source = (BranchCommand.prototype as any).handleMainBranch.toString()
       expect(source).to.include('getMainBranch')
     })
 
     it('should launch terminal with aiw', () => {
-      const source = BranchCommand.prototype.run.toString()
+      const source = (BranchCommand.prototype as any).handleMainBranch.toString()
       expect(source).to.include('launchTerminalWithAiw')
     })
 
     it('should handle git repository detection error', () => {
-      const source = BranchCommand.prototype.run.toString()
+      const source = (BranchCommand.prototype as any).handleMainBranch.toString()
 
       // Should have error handling
       expect(source).to.include('try')
@@ -96,35 +116,39 @@ describe('branch command', () => {
     })
 
     it('should handle already on main/master error', () => {
-      const source = BranchCommand.prototype.run.toString()
+      const source = (BranchCommand.prototype as any).handleMainBranch.toString()
       expect(source).to.match(/already on/i)
     })
 
     it('should handle missing main/master branch error', () => {
-      const source = BranchCommand.prototype.run.toString()
+      const source = (BranchCommand.prototype as any).handleMainBranch.toString()
       expect(source).to.match(/neither.*main.*nor.*master/i)
     })
 
     it('should use proper exit codes', () => {
-      const source = BranchCommand.prototype.run.toString()
+      const mainSource = (BranchCommand.prototype as any).handleMainBranch.toString()
+      const worktreeSource = (BranchCommand.prototype as any).handleWorktreeLaunch.toString()
 
-      // Should use EXIT_CODES constants
-      expect(source).to.include('EXIT_CODES')
+      // Should use EXIT_CODES constants in both methods
+      expect(mainSource).to.include('EXIT_CODES')
+      expect(worktreeSource).to.include('EXIT_CODES')
 
       // Should handle different error types
-      expect(source).to.include('ENVIRONMENT_ERROR')
-      expect(source).to.include('INVALID_USAGE')
-      expect(source).to.include('GENERAL_ERROR')
+      expect(mainSource).to.include('ENVIRONMENT_ERROR')
+      expect(mainSource).to.include('INVALID_USAGE')
+      expect(mainSource).to.include('GENERAL_ERROR')
     })
 
     it('should support debug logging', () => {
-      const source = BranchCommand.prototype.run.toString()
+      const source = (BranchCommand.prototype as any).handleMainBranch.toString()
       expect(source).to.include('this.debug')
     })
 
     it('should provide success feedback', () => {
-      const source = BranchCommand.prototype.run.toString()
-      expect(source).to.include('logSuccess')
+      const mainSource = (BranchCommand.prototype as any).handleMainBranch.toString()
+      const worktreeSource = (BranchCommand.prototype as any).handleWorktreeLaunch.toString()
+      expect(mainSource).to.include('logSuccess')
+      expect(worktreeSource).to.include('logSuccess')
     })
   })
 
@@ -193,6 +217,49 @@ describe('branch command', () => {
       const source = BranchCommand.prototype.launchTerminalWithAiw.toString()
       expect(source).to.include('git checkout')
       expect(source).to.include('aiw launch')
+    })
+
+    it('should implement createWorktree method', () => {
+      // @ts-expect-error - accessing private method for testing
+      expect(BranchCommand.prototype.createWorktree).to.be.a('function')
+    })
+
+    it('should implement launchTerminalInWorktree method', () => {
+      // @ts-expect-error - accessing private method for testing
+      expect(BranchCommand.prototype.launchTerminalInWorktree).to.be.a('function')
+    })
+
+    it('should implement handleMainBranch method', () => {
+      // @ts-expect-error - accessing private method for testing
+      expect(BranchCommand.prototype.handleMainBranch).to.be.a('function')
+    })
+
+    it('should implement handleWorktreeLaunch method', () => {
+      // @ts-expect-error - accessing private method for testing
+      expect(BranchCommand.prototype.handleWorktreeLaunch).to.be.a('function')
+    })
+
+    it('should implement escapeShellArg method', () => {
+      // @ts-expect-error - accessing private method for testing
+      expect(BranchCommand.prototype.escapeShellArg).to.be.a('function')
+    })
+
+    it('createWorktree should use git worktree add command', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.createWorktree.toString()
+      expect(source).to.include('git')
+      expect(source).to.include('worktree')
+      expect(source).to.include('add')
+      expect(source).to.include('-b')
+    })
+
+    it('launchTerminalInWorktree should handle multiple platforms', () => {
+      // @ts-expect-error - accessing private method for testing
+      const source = BranchCommand.prototype.launchTerminalInWorktree.toString()
+      expect(source).to.include('win32')
+      expect(source).to.include('darwin')
+      expect(source).to.match(/wt|powershell/)
+      expect(source).to.include('osascript')
     })
   })
 
