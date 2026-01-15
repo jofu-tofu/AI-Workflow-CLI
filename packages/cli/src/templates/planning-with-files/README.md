@@ -19,7 +19,7 @@ planning-with-files/
 ### Adapted Structure
 ```
 planning-with-files-adaptation/
-├── .claude/
+├── .claude/                   # Claude Code integration
 │   └── skills/
 │       └── planning-with-files/
 │           ├── SKILL.md
@@ -32,6 +32,10 @@ planning-with-files-adaptation/
 │           └── scripts/     # Hook scripts
 │               ├── init-session.sh
 │               └── check-complete.sh
+├── .windsurf/                # Windsurf IDE integration
+│   ├── README.md
+│   └── workflows/
+│       └── planning-with-files.md
 ├── _planning-with-files-output/   # Output folder for planning files
 │   ├── task_plan.md
 │   ├── findings.md
@@ -84,13 +88,23 @@ You can manually create planning files by running:
 bash .claude/skills/planning-with-files/scripts/init-session.sh
 ```
 
-### Invoking the Skill
+### Invoking the Skill (Claude Code)
 
 The skill can be invoked with:
 
 ```bash
 /planning-with-files
 ```
+
+### Invoking the Workflow (Windsurf)
+
+In Windsurf IDE with Cascade, invoke the workflow with:
+
+```
+/planning-with-files
+```
+
+The workflow loads the same skill definition from `.claude/skills/planning-with-files/SKILL.md`, ensuring consistency across IDEs.
 
 ## Core Principles
 
@@ -119,6 +133,7 @@ From the [Manus context engineering blog post](https://manus.im/blog/Context-Eng
 - Planning files created in `_planning-with-files-output/` folder (follows `_{template-name}-output` convention)
 - No plugin marketplace integration (template-based instead)
 - Skills folder nested inside `.claude/` for cleaner organization
+- **NEW:** Added `.windsurf/` folder for Windsurf IDE integration with Cascade workflows
 
 ## When to Use
 
