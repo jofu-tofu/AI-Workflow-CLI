@@ -3,23 +3,22 @@ import {promises as fs} from 'node:fs'
 import {basename, dirname, join, resolve} from 'node:path'
 
 import {Args, Flags} from '@oclif/core'
+import clipboardy from 'clipboardy'
 
 import BaseCommand from '../lib/base-command.js'
 import {EXIT_CODES} from '../types/index.js'
 
 /**
- * Launch aiw in main/master branch in a new terminal window.
+ * Manage git branch operations: launch in main/master or delete branch and worktree.
  *
- * This command:
- * 1. Verifies you are in a git repository
- * 2. Verifies you are currently in a branch (not on main/master)
- * 3. Verifies that main or master branch exists
- * 4. Opens a new terminal window with `aiw launch` running in the main/master branch
+ * This command supports two modes:
+ * 1. --main: Opens a new terminal window with `aiw launch` running in the main/master branch
+ * 2. --delete: Deletes a git branch and its worktree folder
  */
 export default class BranchCommand extends BaseCommand {
   static override args = {
     branchName: Args.string({
-      description: 'Name of the branch for worktree creation',
+      description: 'Name of the branch for worktree creation or deletion',
       required: false,
     }),
   }
@@ -28,22 +27,25 @@ export default class BranchCommand extends BaseCommand {
     'Manage git branches with worktree support or launch in main/master\n\n' +
     'MODES\n' +
     '  --main/-m: Launch aiw in main/master branch in new terminal\n' +
-    '  --launch/-l <branch>: Create/open git worktree in sibling folder\n\n' +
+    '  --launch/-l <branch>: Create/open git worktree in sibling folder\n' +
+    '  --delete/-d <branch>: Delete git branch and worktree folder\n\n' +
     'REQUIREMENTS\n' +
     '  • Must be in a git repository\n' +
     '  • For --main: Must be on a branch (not already on main/master)\n' +
-    '  • For --main: main or master branch must exist\n\n' +
+    '  • For --main: main or master branch must exist\n' +
+    '  • For --delete: Must not be in the branch being deleted\n\n' +
     'EXIT CODES\n' +
-    '  0  Success - New terminal launched with aiw\n' +
+    '  0  Success - Operation completed\n' +
     '  1  General error - unexpected runtime failure\n' +
     '  2  Invalid usage - requirements not met\n' +
     '  3  Environment error - git not found or not a git repository'
-
-  static override examples = [
+static override examples = [
     '<%= config.bin %> <%= command.id %> --main',
     '<%= config.bin %> <%= command.id %> --main --debug  # Enable verbose logging',
     '<%= config.bin %> <%= command.id %> --launch feature-name',
     '<%= config.bin %> <%= command.id %> -l fix-bug-123',
+    '<%= config.bin %> <%= command.id %> --delete feature-branch',
+    '<%= config.bin %> <%= command.id %> -d fix-bug-123',
   ]
 
   static override flags = {
@@ -51,12 +53,17 @@ export default class BranchCommand extends BaseCommand {
     main: Flags.boolean({
       char: 'm',
       description: 'Launch aiw in main/master branch in new terminal',
-      exclusive: ['launch'],
+      exclusive: ['launch', 'delete'],
     }),
     launch: Flags.boolean({
       char: 'l',
       description: 'Create git worktree in sibling folder or open if exists',
-      exclusive: ['main'],
+      exclusive: ['main', 'delete'],
+    }),
+    delete: Flags.boolean({
+      char: 'd',
+      description: 'Delete git branch and worktree folder',
+      exclusive: ['main', 'launch'],
     }),
   }
 
@@ -64,14 +71,290 @@ export default class BranchCommand extends BaseCommand {
     const {args, flags} = await this.parse(BranchCommand)
 
     // Validate that one of the flags is provided
-    if (!flags.main && !flags.launch) {
-      this.error('Either --main or --launch flag is required', {exit: EXIT_CODES.INVALID_USAGE})
+    if (!flags.main && !flags.launch && !flags.delete) {
+      this.error('Either --main, --launch, or --delete flag is required', {exit: EXIT_CODES.INVALID_USAGE})
     }
 
+    // Route to appropriate handler
     if (flags.main) {
       await this.handleMainBranch()
     } else if (flags.launch) {
       await this.handleWorktreeLaunch(args.branchName)
+    } else if (flags.delete) {
+      await this.handleDelete(args.branchName)
+    }
+  }
+
+  /**
+   * Check if a git branch exists (local or remote)
+   */
+  private async branchExists(branchName: string): Promise<boolean> {
+    try {
+      // Check local branches
+      execSync(`git show-ref --verify refs/heads/${branchName}`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+      return true
+    } catch {
+      // Local branch doesn't exist
+      return false
+    }
+  }
+
+  /**
+   * Delete a git branch (local and remote if exists)
+   */
+  private async deleteBranch(branchName: string): Promise<void> {
+    try {
+      // Escape branch name to prevent command injection
+      const escapedBranch = branchName.replaceAll('\'', String.raw`'\''`)
+
+      // Delete local branch
+      this.debug(`Deleting local branch '${branchName}'...`)
+      execSync(`git branch -D '${escapedBranch}'`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      // Check if remote branch exists
+      try {
+        execSync(`git show-ref --verify refs/remotes/origin/${escapedBranch}`, {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+
+        // Remote branch exists, delete it
+        this.debug(`Deleting remote branch '${branchName}'...`)
+        execSync(`git push origin --delete '${escapedBranch}'`, {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+      } catch {
+        // Remote branch doesn't exist, skip deletion
+        this.debug('No remote branch to delete')
+      }
+    } catch (error) {
+      const err = error as Error
+      throw new Error(`Failed to delete branch: ${err.message}`)
+    }
+  }
+
+  /**
+   * Delete the worktree folder and remove worktree from git
+   */
+  private async deleteWorktreeFolder(worktreePath: string): Promise<void> {
+    try {
+      // First, remove the worktree from git
+      this.debug(`Removing worktree from git: ${worktreePath}`)
+      const escapedPath = worktreePath.replaceAll('\'', String.raw`'\''`)
+      execSync(`git worktree remove '${escapedPath}' --force`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      // Then delete the folder if it still exists
+      try {
+        await fs.access(worktreePath)
+        this.debug(`Deleting folder: ${worktreePath}`)
+        await fs.rm(worktreePath, {recursive: true, force: true})
+      } catch {
+        // Folder doesn't exist or already deleted by git worktree remove
+        this.debug('Folder already deleted')
+      }
+    } catch (error) {
+      const err = error as Error
+      throw new Error(`Failed to delete worktree folder: ${err.message}`)
+    }
+  }
+
+  /**
+   * Get current git branch name
+   */
+  private async getCurrentBranch(): Promise<string> {
+    try {
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim()
+
+      return branch
+    } catch (error) {
+      const err = error as Error
+      this.error(`Failed to get current branch: ${err.message}`, {
+        exit: EXIT_CODES.ENVIRONMENT_ERROR,
+      })
+    }
+  }
+
+  /**
+   * Determine which main branch exists (main or master)
+   * Returns 'main' if it exists, 'master' if it exists, or null if neither exists
+   */
+  private async getMainBranch(): Promise<null | string> {
+    // Check for 'main' first (more modern convention)
+    try {
+      execSync('git show-ref --verify refs/heads/main', {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+      return 'main'
+    } catch {
+      // main doesn't exist, try master
+    }
+
+    // Check for 'master'
+    try {
+      execSync('git show-ref --verify refs/heads/master', {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+      return 'master'
+    } catch {
+      // neither exists
+      return null
+    }
+  }
+
+  /**
+   * Get the worktree path for a branch
+   * Returns null if no worktree exists for this branch
+   */
+  private async getWorktreePath(branchName: string): Promise<null | string> {
+    try {
+      const output = execSync('git worktree list --porcelain', {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      // Parse worktree list output
+      // Format:
+      // worktree /path/to/worktree
+      // HEAD <commit-hash>
+      // branch refs/heads/branchname
+      const lines = output.split('\n')
+      let currentWorktreePath: null | string = null
+
+      for (const line of lines) {
+        if (line.startsWith('worktree ')) {
+          currentWorktreePath = line.slice('worktree '.length).trim()
+        } else if (line.startsWith('branch ')) {
+          const branchRef = line.slice('branch '.length).trim()
+          if (branchRef === `refs/heads/${branchName}` && currentWorktreePath) {
+            return currentWorktreePath
+          }
+        } else if (line === '') {
+          // Reset for next worktree entry
+          currentWorktreePath = null
+        }
+      }
+
+      return null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Handle --delete flag: Delete git branch and worktree folder
+   */
+  private async handleDelete(branchName: string | undefined): Promise<void> {
+    try {
+      // Validate branch name is provided
+      if (!branchName) {
+        this.error('Branch name is required with --delete flag\n\nUsage: aiw branch --delete <branchName>', {
+          exit: EXIT_CODES.INVALID_USAGE,
+        })
+      }
+
+      const cwd = process.cwd()
+
+      // Check 1: Verify we are in a git repository
+      this.debug('Checking if current directory is a git repository...')
+      const isGitRepo = await this.isGitRepository(cwd)
+      if (!isGitRepo) {
+        this.error('Not a git repository. This command only works inside a git repository.', {
+          exit: EXIT_CODES.ENVIRONMENT_ERROR,
+        })
+      }
+
+      this.debug('✓ Git repository detected')
+
+      // Check 2: Prevent deletion of main/master branches
+      if (branchName === 'main' || branchName === 'master') {
+        this.error(`Cannot delete ${branchName} branch. This is a protected branch.`, {
+          exit: EXIT_CODES.INVALID_USAGE,
+        })
+      }
+
+      // Check 3: Verify the branch exists
+      this.debug(`Checking if branch '${branchName}' exists...`)
+      const branchExists = await this.branchExists(branchName)
+      if (!branchExists) {
+        this.error(`Branch '${branchName}' does not exist.`, {
+          exit: EXIT_CODES.INVALID_USAGE,
+        })
+      }
+
+      this.debug(`✓ Branch '${branchName}' exists`)
+
+      // Check 4: Get current branch to verify we're not on the branch being deleted
+      this.debug('Getting current branch name...')
+      const currentBranch = await this.getCurrentBranch()
+      this.debug(`Current branch: ${currentBranch}`)
+
+      if (currentBranch === branchName) {
+        this.error(
+          `Cannot delete branch '${branchName}' because you are currently on it.\n\n` +
+            `Please switch to a different directory first.\n\n` +
+            `Suggestion: 'aiw branch --main' has been copied to your clipboard.`,
+          {exit: EXIT_CODES.INVALID_USAGE},
+        )
+
+        // Copy suggestion to clipboard
+        try {
+          await clipboardy.write('aiw branch --main')
+          this.debug('✓ Copied "aiw branch --main" to clipboard')
+        } catch (clipboardError) {
+          this.debug('Failed to copy to clipboard:', clipboardError)
+        }
+
+        return
+      }
+
+      this.debug(`✓ Not currently on branch '${branchName}'`)
+
+      // Check 5: Find the worktree path for this branch
+      this.debug(`Finding worktree path for branch '${branchName}'...`)
+      const worktreePath = await this.getWorktreePath(branchName)
+
+      // Delete the git branch
+      this.logInfo(`Deleting git branch '${branchName}'...`)
+      await this.deleteBranch(branchName)
+      this.debug(`✓ Git branch '${branchName}' deleted`)
+
+      // Delete the worktree folder if it exists
+      if (worktreePath) {
+        this.logInfo(`Deleting worktree folder at ${worktreePath}...`)
+        await this.deleteWorktreeFolder(worktreePath)
+        this.debug(`✓ Worktree folder deleted`)
+      } else {
+        this.debug('No worktree folder found for this branch')
+      }
+
+      this.logSuccess(`✓ Branch '${branchName}' and its worktree have been deleted`)
+    } catch (error) {
+      const err = error as Error
+
+      // Check if error is already handled by this.error() calls above
+      if (err.message?.includes('EEXIT')) {
+        throw error
+      }
+
+      // Handle unexpected errors
+      this.error(`Failed to delete branch: ${err.message}`, {
+        exit: EXIT_CODES.GENERAL_ERROR,
+      })
     }
   }
 
@@ -243,65 +526,17 @@ export default class BranchCommand extends BaseCommand {
   }
 
   /**
-   * Get current git branch name
-   */
-  private async getCurrentBranch(): Promise<string> {
-    try {
-      const branch = execSync('git rev-parse --abbrev-ref HEAD', {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      }).trim()
-
-      return branch
-    } catch (error) {
-      const err = error as Error
-      this.error(`Failed to get current branch: ${err.message}`, {
-        exit: EXIT_CODES.ENVIRONMENT_ERROR,
-      })
-    }
-  }
-
-  /**
-   * Determine which main branch exists (main or master)
-   * Returns 'main' if it exists, 'master' if it exists, or null if neither exists
-   */
-  private async getMainBranch(): Promise<string | null> {
-    // Check for 'main' first (more modern convention)
-    try {
-      execSync('git show-ref --verify refs/heads/main', {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
-      return 'main'
-    } catch {
-      // main doesn't exist, try master
-    }
-
-    // Check for 'master'
-    try {
-      execSync('git show-ref --verify refs/heads/master', {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
-      return 'master'
-    } catch {
-      // neither exists
-      return null
-    }
-  }
-
-  /**
    * Launch a new terminal window with aiw launch in the specified branch
    */
   private async launchTerminalWithAiw(cwd: string, branch: string): Promise<void> {
-    const platform = process.platform
+    const {platform} = process
 
     try {
       if (platform === 'win32') {
         // Windows: Use PowerShell to open new terminal
         // Command: cd to directory, checkout branch, run aiw launch
-        const escapedCwd = cwd.replace(/'/g, "''")
-        const escapedBranch = branch.replace(/'/g, "''")
+        const escapedCwd = cwd.replaceAll('\'', "''")
+        const escapedBranch = branch.replaceAll('\'', "''")
         const command = `cd '${escapedCwd}'; git checkout '${escapedBranch}'; aiw launch`
         const psCommand = `Start-Process powershell -ArgumentList '-NoExit', '-Command', "${command}"`
 
@@ -313,11 +548,11 @@ export default class BranchCommand extends BaseCommand {
       } else if (platform === 'darwin') {
         // macOS: Use Terminal.app
         // Escape single quotes for bash context
-        const escapedCwd = cwd.replace(/'/g, "'\\''")
-        const escapedBranch = branch.replace(/'/g, "'\\''")
+        const escapedCwd = cwd.replaceAll('\'', String.raw`'\''`)
+        const escapedBranch = branch.replaceAll('\'', String.raw`'\''`)
         const command = `cd '${escapedCwd}' && git checkout '${escapedBranch}' && aiw launch`
         // Escape double quotes and backslashes for AppleScript context
-        const escapedCommand = command.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+        const escapedCommand = command.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)
         const osascript = `osascript -e 'tell application "Terminal" to do script "${escapedCommand}"'`
 
         this.debug(`Launching macOS terminal with command: ${osascript}`)
@@ -325,8 +560,8 @@ export default class BranchCommand extends BaseCommand {
       } else {
         // Linux/Unix: Try common terminal emulators
         // Escape single quotes in cwd and branch for bash shell
-        const escapedCwd = cwd.replace(/'/g, "'\\''")
-        const escapedBranch = branch.replace(/'/g, "'\\''")
+        const escapedCwd = cwd.replaceAll('\'', String.raw`'\''`)
+        const escapedBranch = branch.replaceAll('\'', String.raw`'\''`)
         const command = `cd '${escapedCwd}' && git checkout '${escapedBranch}' && aiw launch`
 
         // Try to detect available terminal emulator

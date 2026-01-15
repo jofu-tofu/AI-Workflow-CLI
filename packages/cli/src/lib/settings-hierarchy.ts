@@ -67,7 +67,7 @@ export async function readClaudeSettings(path: string): Promise<ClaudeSettings |
   try {
     const content = await fs.readFile(path, 'utf8')
     return JSON.parse(content) as ClaudeSettings
-  } catch (error) {
+  } catch {
     // File doesn't exist or invalid JSON
     return undefined
   }

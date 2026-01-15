@@ -4,10 +4,11 @@
  * Used for development workflow to auto-sync template changes.
  */
 
-import {watch} from 'chokidar'
 import {copyFile, mkdir} from 'node:fs/promises'
 import {dirname, join, relative} from 'node:path'
 import {fileURLToPath} from 'node:url'
+
+import {watch} from 'chokidar'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const SRC_TEMPLATES = join(__dirname, '..', 'templates')

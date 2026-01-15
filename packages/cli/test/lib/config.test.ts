@@ -4,7 +4,7 @@ import {join} from 'node:path'
 
 import {expect} from 'chai'
 
-import {getAiwDir, loadConfig, type AiwcliConfig, validateAiwDir} from '../../src/lib/config.js'
+import {type AiwcliConfig, getAiwDir, loadConfig, validateAiwDir} from '../../src/lib/config.js'
 import {ConfigNotFoundError} from '../../src/lib/errors.js'
 
 describe('config', () => {
