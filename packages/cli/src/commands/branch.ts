@@ -480,10 +480,10 @@ static override examples = [
         // Safe to delete
         this.debug(`Branch '${branch}' is safe to delete`)
         try {
+          // Delete the worktree folder first (must be done before deleting the branch)
+          await this.deleteWorktreeFolder(path)
           // Delete the branch
           await this.deleteBranch(branch)
-          // Delete the worktree folder
-          await this.deleteWorktreeFolder(path)
           deleted.push({branch, path})
           this.debug(`✓ Deleted branch '${branch}' and worktree at ${path}`)
         } catch (error) {
@@ -605,12 +605,7 @@ static override examples = [
       this.debug(`Finding worktree path for branch '${branchName}'...`)
       const worktreePath = await this.getWorktreePath(branchName)
 
-      // Delete the git branch
-      this.logInfo(`Deleting git branch '${branchName}'...`)
-      await this.deleteBranch(branchName)
-      this.debug(`✓ Git branch '${branchName}' deleted`)
-
-      // Delete the worktree folder if it exists
+      // Delete the worktree folder first if it exists (must be done before deleting the branch)
       if (worktreePath) {
         this.logInfo(`Deleting worktree folder at ${worktreePath}...`)
         await this.deleteWorktreeFolder(worktreePath)
@@ -618,6 +613,11 @@ static override examples = [
       } else {
         this.debug('No worktree folder found for this branch')
       }
+
+      // Delete the git branch
+      this.logInfo(`Deleting git branch '${branchName}'...`)
+      await this.deleteBranch(branchName)
+      this.debug(`✓ Git branch '${branchName}' deleted`)
 
       this.logSuccess(`✓ Branch '${branchName}' and its worktree have been deleted`)
     } catch (error) {
