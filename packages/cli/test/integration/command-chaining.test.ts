@@ -77,7 +77,7 @@ describe('Command Chaining Integration', () => {
     })
 
     it('informational output does not leak to stderr', async () => {
-      const {stderr} = await execAsync(`${binPath} setup --help`, {
+      const {stderr} = await execAsync(`${binPath} init --help`, {
         encoding: 'utf8',
       })
       // Only errors/warnings on stderr
@@ -115,8 +115,8 @@ describe('Command Chaining Integration', () => {
 
     it('multi-command chains work correctly', () => {
       const script = isWindows
-        ? `${binPath} launch --help && ${binPath} setup --help && echo Done`
-        : `${binPath} launch --help && ${binPath} setup --help && echo "Done"`
+        ? `${binPath} launch --help && ${binPath} init --help && echo Done`
+        : `${binPath} launch --help && ${binPath} init --help && echo "Done"`
 
       const result = execSync(script, {
         encoding: 'utf8',

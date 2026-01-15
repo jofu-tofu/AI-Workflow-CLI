@@ -42,10 +42,12 @@ describe('pai init command', () => {
       expect(exampleStr).to.include('--method')
     })
 
-    it('should have required method flag', async () => {
+    it('should have method flag', async () => {
       const Init = (await import('../../../src/commands/init/index.js')).default
       expect(Init.flags).to.have.property('method')
-      expect(Init.flags.method.required).to.be.true
+      // Method is not marked as required on the flag itself
+      // because it's conditionally required (not needed in interactive mode)
+      expect(Init.flags.method.required).to.be.false
     })
 
     it('should have ide flag with default', async () => {
@@ -93,9 +95,11 @@ describe('pai init command', () => {
   })
 
   describe('flag validation', () => {
-    it('should require --method flag', async () => {
+    it('should have --method flag that is conditionally required', async () => {
       const Init = (await import('../../../src/commands/init/index.js')).default
-      expect(Init.flags.method.required).to.be.true
+      // Method is not marked as required on the flag itself
+      // It's validated manually when not in interactive mode
+      expect(Init.flags.method.required).to.be.false
     })
 
     it('should allow multiple --ide flags', async () => {

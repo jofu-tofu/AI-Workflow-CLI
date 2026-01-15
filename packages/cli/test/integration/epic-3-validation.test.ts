@@ -228,7 +228,7 @@ describe('Epic 3: Scripting & Shell Integration - Integration Validation', () =>
       it('Task 5.3: FR32 - validates consistent naming', () => {
         const output = execSync(`${bin} --help`, {encoding: 'utf8', stdio: 'pipe'})
         expect(output).to.include('launch')
-        expect(output).to.include('setup')
+        expect(output).to.include('init')
       })
     })
 
