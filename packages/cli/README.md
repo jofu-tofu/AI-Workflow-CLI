@@ -50,6 +50,54 @@ cd ~/.aiw/aiwcli
 .\bin\run.cmd launch     # Windows
 ```
 
+## Commands
+
+AIW CLI provides the following commands:
+
+### `aiw launch`
+Launch Claude Code with AIW configuration (sandbox disabled, supports parallel sessions).
+
+```bash
+aiw launch
+aiw launch --debug  # Enable verbose logging
+aiw launch --quiet  # Suppress informational output
+```
+
+### `aiw init`
+Initialize AIW tools and integrations with specified template method.
+
+```bash
+aiw init --interactive          # Run interactive setup wizard
+aiw init --method bmad          # Initialize BMAD template
+aiw init --method gsd           # Initialize GSD template
+```
+
+### `aiw branch <branchName>`
+Create git worktree in sibling folder and auto-launch Claude Code.
+
+Reduces friction in branch-based development workflows by:
+1. Creating a new git worktree with the specified branch name
+2. Creating a sibling folder with suffix pattern (e.g., `aiwcli` → `aiwcli-feature-name`)
+3. Opening a new terminal window at the worktree path
+4. Automatically running `aiw launch` in that terminal
+
+```bash
+aiw branch feature-name     # Creates ../aiwcli-feature-name worktree
+aiw branch fix-bug-123      # Creates ../aiwcli-fix-bug-123 worktree
+aiw branch experiment       # Creates ../aiwcli-experiment worktree
+```
+
+**Requirements:**
+- Must be run from a git repository root
+- Target folder must not already exist
+- Branch name must not already exist
+
+**Exit codes:**
+- `0` - Success: Worktree created and terminal launched
+- `1` - General error: Unexpected failure
+- `2` - Invalid usage: Invalid branch name, folder exists, or not in git repo
+- `3` - Environment error: Git not available
+
 ## Requirements
 
 **Minimum Claude Code Version:** 0.1.0 or later
@@ -1155,6 +1203,7 @@ it('executes command', () => {
 aiwcli/
 ├── src/
 │   ├── commands/
+│   │   ├── branch.ts         # aiw branch <branchName>
 │   │   ├── launch.ts         # aiw launch
 │   │   └── init/             # Topic: aiw init
 │   │       └── index.ts      # aiw init --method <template>

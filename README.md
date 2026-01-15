@@ -27,6 +27,9 @@ aiw init --method bmad --ide windsurf
 # Initialize with multiple IDEs
 aiw init --method bmad --ide claude --ide windsurf
 
+# Create a new git worktree and auto-launch Claude Code
+aiw branch feature-name
+
 # Get help
 aiw help
 ```
@@ -59,6 +62,7 @@ See [.env.example](./.env.example) for a complete list.
 
 - `aiw launch` - Launch Claude Code with AIW configuration (sandbox disabled)
 - `aiw init` - Initialize AIW tools and integrations with template methods (BMAD, etc.)
+- `aiw branch <branchName>` - Create git worktree in sibling folder and auto-launch Claude Code
 - `aiw help` - Get help with available commands
 
 ## Status
