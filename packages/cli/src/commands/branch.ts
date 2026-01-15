@@ -421,10 +421,19 @@ export default class BranchCommand extends BaseCommand {
     const platform = process.platform
 
     if (platform === 'win32') {
-      // Windows: Use Windows Terminal with auto-launch command
-      // wt.exe -d <path> -- aiw launch (uses default profile)
+      // Windows: Use Windows Terminal with PowerShell 7 (pwsh) if available, fallback to PowerShell 5.1
+      // Try pwsh first (PowerShell 7), which is commonly the default Windows Terminal profile
       return new Promise<void>((resolve, reject) => {
-        const terminal = spawn('wt', ['-d', worktreePath, '--', 'aiw', 'launch'], {
+        // Detect which PowerShell to use
+        let powershellCmd = 'pwsh' // Try PowerShell 7 first
+        try {
+          execSync('where pwsh', {stdio: 'ignore'})
+        } catch {
+          // pwsh not found, use legacy PowerShell
+          powershellCmd = 'powershell'
+        }
+
+        const terminal = spawn('wt', ['-d', worktreePath, powershellCmd, '-NoExit', '-Command', 'aiw launch'], {
           detached: true,
           stdio: 'ignore',
         })
