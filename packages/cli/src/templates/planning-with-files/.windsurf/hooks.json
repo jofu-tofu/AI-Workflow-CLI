@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "pre_user_prompt": [
+      {
+        "command": "bash .windsurf/scripts/init-session.sh",
+        "show_output": true,
+        "once": true
+      }
+    ],
+    "post_write_code": [
+      {
+        "command": "bash .windsurf/scripts/check-complete.sh",
+        "show_output": true
+      }
+    ]
+  }
+}

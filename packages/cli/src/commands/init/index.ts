@@ -11,6 +11,8 @@ import {mergeClaudeSettings} from '../../lib/hooks-merger.js'
 import {getTargetSettingsFile, readClaudeSettings, writeClaudeSettings} from '../../lib/settings-hierarchy.js'
 import {installTemplate} from '../../lib/template-installer.js'
 import {getAvailableTemplates, getTemplatePath} from '../../lib/template-resolver.js'
+import {mergeWindsurfHooks} from '../../lib/windsurf-hooks-merger.js'
+import {getTargetHooksFile, readWindsurfHooks, writeWindsurfHooks} from '../../lib/windsurf-hooks-hierarchy.js'
 import {EXIT_CODES} from '../../types/exit-codes.js'
 
 /**
@@ -215,6 +217,11 @@ export default class Init extends BaseCommand {
         await this.mergeTemplateHooks(targetDir, templatePath)
       }
 
+      // Merge hooks if Windsurf IDE is selected
+      if (flags.ide.includes('windsurf')) {
+        await this.mergeWindsurfTemplateHooks(targetDir, templatePath)
+      }
+
       // Update .gitignore if git repository exists
       if (hasGit) {
         await updateGitignore(targetDir, foldersForGitignore)
@@ -296,6 +303,44 @@ export default class Init extends BaseCommand {
     } catch (error) {
       const err = error as Error
       this.warn(`Failed to merge template hooks: ${err.message}`)
+      // Don't fail the entire installation if hook merging fails
+    }
+  }
+
+  /**
+   * Merge Windsurf template hooks into project hooks
+   *
+   * @param targetDir - Project directory
+   * @param templatePath - Template source path
+   */
+  private async mergeWindsurfTemplateHooks(targetDir: string, templatePath: string): Promise<void> {
+    try {
+      // Read template hooks
+      const templateHooksPath = join(templatePath, '.windsurf', 'hooks.json')
+      const templateHooks = await readWindsurfHooks(templateHooksPath)
+
+      // If template has no hooks, nothing to merge
+      if (!templateHooks || !templateHooks.hooks || Object.keys(templateHooks.hooks).length === 0) {
+        this.logInfo('No Windsurf hooks in template to merge')
+        return
+      }
+
+      // Get target hooks file path
+      const targetHooksPath = getTargetHooksFile(targetDir)
+
+      // Read existing project hooks
+      const existingHooks = await readWindsurfHooks(targetHooksPath)
+
+      // Merge hooks
+      const mergedHooks = mergeWindsurfHooks(existingHooks, templateHooks)
+
+      // Write merged hooks
+      await writeWindsurfHooks(targetHooksPath, mergedHooks)
+
+      this.logSuccess('✓ Windsurf template hooks merged into project hooks')
+    } catch (error) {
+      const err = error as Error
+      this.warn(`Failed to merge Windsurf template hooks: ${err.message}`)
       // Don't fail the entire installation if hook merging fails
     }
   }
