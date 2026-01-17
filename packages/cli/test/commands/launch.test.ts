@@ -119,4 +119,51 @@ describe('launch command', () => {
       expect(source).to.include('Unexpected launch failure')
     })
   })
+
+  describe('--new/-n flag for launching in new terminal', () => {
+    it('should have --new flag defined', () => {
+      expect(LaunchCommand.flags).to.have.property('new')
+    })
+
+    it('should have -n as short form for --new', () => {
+      const newFlag = LaunchCommand.flags.new as {char?: string}
+      expect(newFlag).to.have.property('char', 'n')
+    })
+
+    it('should have --new flag default to false', () => {
+      const newFlag = LaunchCommand.flags.new as {default?: boolean}
+      expect(newFlag).to.have.property('default', false)
+    })
+
+    it('should include --new flag in description', () => {
+      expect(LaunchCommand.description).to.include('--new')
+      expect(LaunchCommand.description).to.include('-n')
+    })
+
+    it('should include --new examples', () => {
+      const {examples} = LaunchCommand
+      const hasNewExample = examples.some((ex: string) => ex.includes('--new'))
+      expect(hasNewExample).to.be.true
+    })
+
+    it('should include -n short form example', () => {
+      const {examples} = LaunchCommand
+      const hasShortExample = examples.some((ex: string) => ex.includes('-n'))
+      expect(hasShortExample).to.be.true
+    })
+
+    it('implementation handles --new flag', () => {
+      const source = LaunchCommand.prototype.run.toString()
+      expect(source).to.include('flags.new')
+      expect(source).to.include('launchNewTerminal')
+    })
+
+    it('implementation has cross-platform terminal launching', () => {
+      // Check that the command has private methods for each platform
+      expect(LaunchCommand.prototype).to.have.property('launchNewTerminal')
+      expect(LaunchCommand.prototype).to.have.property('launchWindowsTerminal')
+      expect(LaunchCommand.prototype).to.have.property('launchMacTerminal')
+      expect(LaunchCommand.prototype).to.have.property('launchLinuxTerminal')
+    })
+  })
 })
