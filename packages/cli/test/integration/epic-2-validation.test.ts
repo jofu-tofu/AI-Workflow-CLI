@@ -71,13 +71,12 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
       expect(true).to.be.true
     })
 
-    // eslint-disable-next-line mocha/no-skipped-tests
-    it.skip('REAL E2E TEST: validates setup command via actual CLI invocation (SKIPPED: requires CLI build)', () => {
-      // This test requires the CLI to be built and registered
-      // Currently skipped due to module loading issues in dev environment
-      // Real-world validation performed manually during development
-      expect(true).to.be.true
-    })
+    // NOTE: A "setup command" test was previously skipped here, but the setup command
+    // was never implemented. The CLI uses `aiw init` for initialization instead.
+    // E2E CLI invocation is tested via ./bin/dev.js in other integration tests:
+    // - exit-codes.test.ts: validates CLI execution and exit codes
+    // - quiet-mode.test.ts: validates CLI flags and output
+    // - piping-support.test.ts: validates CLI output formatting
   })
 
   describe('AC2: Setup Command Validation (Task 2)', () => {

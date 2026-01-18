@@ -1,9 +1,25 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
 import {expect} from 'chai'
 import {afterEach, beforeEach, describe, it} from 'mocha'
 import {stderr, stdout} from 'stdout-stderr'
 
 import {logDebug, logError, logInfo, logSuccess, logWarning} from '../../src/lib/output.js'
+import type {ProcessLike} from '../../src/lib/tty-detection.js'
+
+/**
+ * Creates a mock process object for testing output functions.
+ * This avoids mutating the real process global.
+ */
+function createMockProcess(options: {
+  env?: NodeJS.ProcessEnv
+  stderrTTY?: boolean | undefined
+  stdoutTTY?: boolean | undefined
+}): ProcessLike {
+  return {
+    env: options.env ?? {},
+    stderr: {isTTY: options.stderrTTY},
+    stdout: {isTTY: options.stdoutTTY},
+  }
+}
 
 describe('Output Utilities', () => {
   beforeEach(() => {
@@ -35,22 +51,16 @@ describe('Output Utilities', () => {
     })
 
     it('uses green color in TTY', () => {
-      const originalIsTTY = process.stdout.isTTY
-      // @ts-ignore - Mocking read-only property for testing
-      process.stdout.isTTY = true
-      delete process.env.NO_COLOR
-      logSuccess('green message')
+      const mockProcess = createMockProcess({stdoutTTY: true, env: {}})
+      logSuccess('green message', false, {proc: mockProcess})
       // Message should be in stdout, color codes tested in integration
       expect(stdout.output).to.include('green message')
-      // @ts-ignore - Restoring property
-      process.stdout.isTTY = originalIsTTY
     })
 
     it('does not use color when NO_COLOR is set', () => {
-      process.env.NO_COLOR = '1'
-      logSuccess('plain message')
+      const mockProcess = createMockProcess({stdoutTTY: true, env: {NO_COLOR: '1'}})
+      logSuccess('plain message', false, {proc: mockProcess})
       expect(stdout.output).to.equal('plain message\n')
-      delete process.env.NO_COLOR
     })
   })
 
@@ -62,21 +72,15 @@ describe('Output Utilities', () => {
     })
 
     it('uses red color in TTY', () => {
-      const originalIsTTY = process.stderr.isTTY
-      // @ts-ignore - Mocking read-only property for testing
-      process.stderr.isTTY = true
-      delete process.env.NO_COLOR
-      logError('red message')
+      const mockProcess = createMockProcess({stderrTTY: true, stdoutTTY: true, env: {}})
+      logError('red message', {proc: mockProcess})
       expect(stderr.output).to.include('red message')
-      // @ts-ignore - Restoring property
-      process.stderr.isTTY = originalIsTTY
     })
 
     it('does not use color when NO_COLOR is set', () => {
-      process.env.NO_COLOR = '1'
-      logError('plain error')
+      const mockProcess = createMockProcess({stderrTTY: true, stdoutTTY: true, env: {NO_COLOR: '1'}})
+      logError('plain error', {proc: mockProcess})
       expect(stderr.output).to.equal('plain error\n')
-      delete process.env.NO_COLOR
     })
   })
 
@@ -87,21 +91,15 @@ describe('Output Utilities', () => {
     })
 
     it('uses yellow color in TTY', () => {
-      const originalIsTTY = process.stdout.isTTY
-      // @ts-ignore - Mocking read-only property for testing
-      process.stdout.isTTY = true
-      delete process.env.NO_COLOR
-      logWarning('yellow message')
+      const mockProcess = createMockProcess({stdoutTTY: true, env: {}})
+      logWarning('yellow message', false, {proc: mockProcess})
       expect(stdout.output).to.include('yellow message')
-      // @ts-ignore - Restoring property
-      process.stdout.isTTY = originalIsTTY
     })
 
     it('does not use color when NO_COLOR is set', () => {
-      process.env.NO_COLOR = '1'
-      logWarning('plain warning')
+      const mockProcess = createMockProcess({stdoutTTY: true, env: {NO_COLOR: '1'}})
+      logWarning('plain warning', false, {proc: mockProcess})
       expect(stdout.output).to.equal('plain warning\n')
-      delete process.env.NO_COLOR
     })
   })
 
@@ -112,21 +110,15 @@ describe('Output Utilities', () => {
     })
 
     it('uses dim color in TTY', () => {
-      const originalIsTTY = process.stdout.isTTY
-      // @ts-ignore - Mocking read-only property for testing
-      process.stdout.isTTY = true
-      delete process.env.NO_COLOR
-      logDebug('dim message')
+      const mockProcess = createMockProcess({stdoutTTY: true, env: {}})
+      logDebug('dim message', {proc: mockProcess})
       expect(stdout.output).to.include('dim message')
-      // @ts-ignore - Restoring property
-      process.stdout.isTTY = originalIsTTY
     })
 
     it('does not use color when NO_COLOR is set', () => {
-      process.env.NO_COLOR = '1'
-      logDebug('plain debug')
+      const mockProcess = createMockProcess({stdoutTTY: true, env: {NO_COLOR: '1'}})
+      logDebug('plain debug', {proc: mockProcess})
       expect(stdout.output).to.equal('plain debug\n')
-      delete process.env.NO_COLOR
     })
   })
 

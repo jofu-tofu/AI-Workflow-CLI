@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": ".*",
+        "once": true,
+        "hooks": [
+          {
+            "type": "bash",
+            "command": "bash .claude/skills/planning-with-files/scripts/init-session.sh",
+            "timeout": 30000
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": ".*",
+        "once": false,
+        "hooks": [
+          {
+            "type": "bash",
+            "command": "bash .claude/skills/planning-with-files/scripts/check-complete.sh",
+            "timeout": 10000
+          }
+        ]
+      }
+    ]
+  }
+}

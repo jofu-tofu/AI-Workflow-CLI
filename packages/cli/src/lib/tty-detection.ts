@@ -8,19 +8,31 @@
 import {isQuietMode as getQuietMode} from './quiet.js'
 
 /**
+ * Minimal interface for process-like objects used in TTY detection.
+ * Allows dependency injection for testing without mutating Node's process global.
+ */
+export interface ProcessLike {
+  env?: NodeJS.ProcessEnv
+  stderr?: {isTTY?: boolean | undefined}
+  stdout: {isTTY?: boolean | undefined}
+}
+
+/**
  * Check if stdout is a TTY (terminal).
  * Returns true for interactive terminal, false for piped/redirected output.
+ * @param proc - Optional process-like object for testing (defaults to global process)
  */
-export function isTTY(): boolean {
-  return process.stdout.isTTY === true
+export function isTTY(proc: ProcessLike = process): boolean {
+  return proc.stdout.isTTY === true
 }
 
 /**
  * Check if stderr is a TTY (terminal).
  * Useful for determining if error output should use colors.
+ * @param proc - Optional process-like object for testing (defaults to global process)
  */
-export function isStderrTTY(): boolean {
-  return process.stderr.isTTY === true
+export function isStderrTTY(proc: ProcessLike = process): boolean {
+  return proc.stderr?.isTTY === true
 }
 
 /**
@@ -31,10 +43,13 @@ export function isStderrTTY(): boolean {
  * 1. NO_COLOR (if set, always disable)
  * 2. FORCE_COLOR (if set, use level 0-3)
  * 3. TTY detection (colors only in TTY)
+ *
+ * @param proc - Optional process-like object for testing (defaults to global process)
  */
-export function shouldUseColors(): boolean {
-  const noColor = process.env.NO_COLOR
-  const forceColor = process.env.FORCE_COLOR
+export function shouldUseColors(proc: ProcessLike = process): boolean {
+  const env = proc.env ?? process.env
+  const noColor = env.NO_COLOR
+  const forceColor = env.FORCE_COLOR
 
   // NO_COLOR takes precedence (any value disables colors)
   if (noColor !== undefined) {
@@ -48,7 +63,7 @@ export function shouldUseColors(): boolean {
   }
 
   // Default: colors only in TTY
-  return isTTY()
+  return isTTY(proc)
 }
 
 /**
@@ -71,10 +86,14 @@ export function isQuietMode(flags?: {quiet?: boolean}): boolean {
  * Determine if progress spinners should be shown.
  * Spinners only make sense in interactive terminals.
  * Automatically disabled in CI environments and quiet mode.
+ * @param flags - Optional flags object with quiet mode
+ * @param proc - Optional process-like object for testing (defaults to global process)
  */
-export function shouldShowSpinners(flags?: {quiet?: boolean}): boolean {
+export function shouldShowSpinners(flags?: {quiet?: boolean}, proc: ProcessLike = process): boolean {
+  const env = proc.env ?? process.env
+
   // Spinners disabled in CI environments
-  if (process.env.CI) {
+  if (env.CI) {
     return false
   }
 
@@ -83,5 +102,5 @@ export function shouldShowSpinners(flags?: {quiet?: boolean}): boolean {
     return false
   }
 
-  return isTTY()
+  return isTTY(proc)
 }

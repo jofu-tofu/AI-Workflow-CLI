@@ -47,7 +47,8 @@ export default class BranchCommand extends BaseCommand {
     '  1  General error - unexpected runtime failure\n' +
     '  2  Invalid usage - requirements not met\n' +
     '  3  Environment error - git not found or not a git repository'
-static override examples = [
+
+  static override examples = [
     '<%= config.bin %> <%= command.id %> --main',
     '<%= config.bin %> <%= command.id %> --main --debug  # Enable verbose logging',
     '<%= config.bin %> <%= command.id %> --launch feature-name',
@@ -122,18 +123,50 @@ static override examples = [
   }
 
   /**
+   * Create a git worktree with the specified branch name.
+   *
+   * @param branchName - Name of the branch to create
+   * @param worktreePath - Path where the worktree should be created
+   */
+  private async createWorktree(branchName: string, worktreePath: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const gitProcess = spawn('git', ['worktree', 'add', '-b', branchName, worktreePath], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+      let stderr = ''
+
+      gitProcess.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString()
+      })
+
+      gitProcess.on('close', (code) => {
+        if (code === 0) {
+          resolve()
+        } else {
+          const error = new Error(`Git worktree creation failed: ${stderr}`) as NodeJS.ErrnoException & {
+            stderr?: string
+          }
+          error.code = 'GIT_ERROR'
+          error.stderr = stderr
+          reject(error)
+        }
+      })
+
+      gitProcess.on('error', (err) => {
+        reject(new Error(`Failed to execute git command: ${err.message}`))
+      })
+    })
+  }
+
+  /**
    * Delete a git branch (local and remote if exists)
    */
   private async deleteBranch(branchName: string): Promise<void> {
     // Platform-specific branch name escaping
-    let escapedBranch: string
-    if (process.platform === 'win32') {
-      // Windows: use double quotes, escape internal double quotes
-      escapedBranch = `"${branchName.replaceAll('"', '\\"')}"`
-    } else {
-      // Unix/macOS: use single quotes, escape internal single quotes
-      escapedBranch = `'${branchName.replaceAll('\'', String.raw`'\''`)}'`
-    }
+    const escapedBranch = process.platform === 'win32'
+      ? `"${branchName.replaceAll('"', String.raw`\"`)}"`  // Windows: double quotes
+      : `'${branchName.replaceAll('\'', String.raw`'\''`)}'`  // Unix/macOS: single quotes
 
     // Delete local branch
     this.debug(`Deleting local branch '${branchName}'...`)
@@ -181,14 +214,9 @@ static override examples = [
     this.debug(`Removing worktree from git: ${worktreePath}`)
 
     // Platform-specific path escaping for git commands
-    let escapedPath: string
-    if (process.platform === 'win32') {
-      // Windows: use double quotes, escape internal double quotes
-      escapedPath = `"${worktreePath.replaceAll('"', '\\"')}"`
-    } else {
-      // Unix/macOS: use single quotes, escape internal single quotes
-      escapedPath = `'${worktreePath.replaceAll('\'', String.raw`'\''`)}'`
-    }
+    const escapedPath = process.platform === 'win32'
+      ? `"${worktreePath.replaceAll('"', String.raw`\"`)}"`  // Windows: double quotes
+      : `'${worktreePath.replaceAll('\'', String.raw`'\''`)}'`  // Unix/macOS: single quotes
 
     try {
       execSync(`git worktree remove ${escapedPath} --force`, {
@@ -223,6 +251,79 @@ static override examples = [
         // For real errors (permissions, locks, etc), throw
         throw new Error(`Failed to delete worktree folder: ${err.message}`)
       }
+    }
+  }
+
+  /**
+   * Escape shell argument to prevent command injection.
+   * Wraps path in double quotes and escapes internal quotes.
+   *
+   * @param arg - Argument to escape
+   * @returns Escaped argument safe for shell execution
+   */
+  private escapeShellArg(arg: string): string {
+    // Escape double quotes and backslashes, then wrap in double quotes
+    return `"${arg.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)}"`
+  }
+
+  /**
+   * Get all worktrees in the repository
+   * Returns array of worktree info objects
+   */
+  private async getAllWorktrees(): Promise<Array<{branch: null | string; head: string; path: string}>> {
+    try {
+      const output = execSync('git worktree list --porcelain', {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      // Parse worktree list output
+      // Format:
+      // worktree /path/to/worktree
+      // HEAD <commit-hash>
+      // branch refs/heads/branchname
+      // (blank line between entries)
+      const worktrees: Array<{branch: null | string; head: string; path: string}> = []
+      const lines = output.split('\n')
+      let currentWorktree: null | {branch: null | string; head: string; path: string} = null
+
+      for (const line of lines) {
+        if (line.startsWith('worktree ')) {
+          if (currentWorktree) {
+            worktrees.push(currentWorktree)
+          }
+
+          currentWorktree = {
+            branch: null,
+            head: '',
+            path: line.slice('worktree '.length).trim(),
+          }
+        } else if (line.startsWith('HEAD ')) {
+          if (currentWorktree) {
+            currentWorktree.head = line.slice('HEAD '.length).trim()
+          }
+        } else if (line.startsWith('branch ')) {
+          if (currentWorktree) {
+            const branchRef = line.slice('branch '.length).trim()
+            // Extract branch name from refs/heads/branchname
+            currentWorktree.branch = branchRef.replace('refs/heads/', '')
+          }
+        } else if (line === '' && // Empty line marks end of worktree entry
+          currentWorktree) {
+            worktrees.push(currentWorktree)
+            currentWorktree = null
+          }
+      }
+
+      // Push the last worktree if exists
+      if (currentWorktree) {
+        worktrees.push(currentWorktree)
+      }
+
+      return worktrees
+    } catch (error) {
+      const err = error as Error
+      throw new Error(`Failed to get worktrees: ${err.message}`)
     }
   }
 
@@ -275,137 +376,6 @@ static override examples = [
   }
 
   /**
-   * Check if a branch has an open merge request/pull request
-   * Returns true if an open PR exists for this branch
-   */
-  private async hasMergeRequest(branchName: string): Promise<boolean> {
-    try {
-      // Check if gh CLI is available
-      try {
-        execSync('gh --version', {
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-      } catch {
-        // gh CLI not available, can't check for PRs
-        this.debug('gh CLI not available, skipping PR check')
-        return false
-      }
-
-      // Check for open PRs for this branch
-      const escapedBranch = branchName.replaceAll('\'', String.raw`'\''`)
-      const output = execSync(`gh pr list --head '${escapedBranch}' --state open --json number`, {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      }).trim()
-
-      // Parse JSON output
-      const prs = JSON.parse(output) as Array<{number: number}>
-      return prs.length > 0
-    } catch (error) {
-      // If we can't determine, assume no PR (less conservative than unpushed commits)
-      this.debug(`Error checking for PR on branch '${branchName}': ${error}`)
-      return false
-    }
-  }
-
-  /**
-   * Check if a branch has unpushed commits
-   * Returns true if there are commits not pushed to remote
-   */
-  private async hasUnpushedCommits(branchName: string): Promise<boolean> {
-    try {
-      // Check if remote branch exists first
-      const escapedBranch = branchName.replaceAll('\'', String.raw`'\''`)
-      try {
-        execSync(`git show-ref --verify refs/remotes/origin/${escapedBranch}`, {
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-      } catch {
-        // No remote branch - treat as having unpushed commits (safer)
-        this.debug(`Branch '${branchName}' has no remote tracking branch`)
-        return true
-      }
-
-      // Check if there are commits ahead of remote
-      const output = execSync(`git rev-list origin/${escapedBranch}..${escapedBranch} --count`, {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      }).trim()
-
-      const commitCount = Number.parseInt(output, 10)
-      return commitCount > 0
-    } catch (error) {
-      // If we can't determine, err on the side of caution
-      this.debug(`Error checking unpushed commits for '${branchName}': ${error}`)
-      return true
-    }
-  }
-
-  /**
-   * Get all worktrees in the repository
-   * Returns array of worktree info objects
-   */
-  private async getAllWorktrees(): Promise<Array<{branch: null | string; head: string; path: string}>> {
-    try {
-      const output = execSync('git worktree list --porcelain', {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
-
-      // Parse worktree list output
-      // Format:
-      // worktree /path/to/worktree
-      // HEAD <commit-hash>
-      // branch refs/heads/branchname
-      // (blank line between entries)
-      const worktrees: Array<{branch: null | string; head: string; path: string}> = []
-      const lines = output.split('\n')
-      let currentWorktree: {branch: null | string; head: string; path: string} | null = null
-
-      for (const line of lines) {
-        if (line.startsWith('worktree ')) {
-          if (currentWorktree) {
-            worktrees.push(currentWorktree)
-          }
-
-          currentWorktree = {
-            branch: null,
-            head: '',
-            path: line.slice('worktree '.length).trim(),
-          }
-        } else if (line.startsWith('HEAD ')) {
-          if (currentWorktree) {
-            currentWorktree.head = line.slice('HEAD '.length).trim()
-          }
-        } else if (line.startsWith('branch ')) {
-          if (currentWorktree) {
-            const branchRef = line.slice('branch '.length).trim()
-            // Extract branch name from refs/heads/branchname
-            currentWorktree.branch = branchRef.replace('refs/heads/', '')
-          }
-        } else if (line === '') {
-          // Empty line marks end of worktree entry
-          if (currentWorktree) {
-            worktrees.push(currentWorktree)
-            currentWorktree = null
-          }
-        }
-      }
-
-      // Push the last worktree if exists
-      if (currentWorktree) {
-        worktrees.push(currentWorktree)
-      }
-
-      return worktrees
-    } catch (error) {
-      const err = error as Error
-      throw new Error(`Failed to get worktrees: ${err.message}`)
-    }
-  }
-
-  /**
    * Get the worktree path for a branch
    * Returns null if no worktree exists for this branch
    */
@@ -441,133 +411,6 @@ static override examples = [
       return null
     } catch {
       return null
-    }
-  }
-
-  /**
-   * Handle --delete --all flags: Clean up all worktrees safely
-   */
-  private async handleDeleteAll(): Promise<void> {
-    try {
-      const cwd = process.cwd()
-
-      // Check 1: Verify we are in a git repository
-      this.debug('Checking if current directory is a git repository...')
-      const isGitRepo = await this.isGitRepository(cwd)
-      if (!isGitRepo) {
-        this.error('Not a git repository. This command only works inside a git repository.', {
-          exit: EXIT_CODES.ENVIRONMENT_ERROR,
-        })
-      }
-
-      this.debug('✓ Git repository detected')
-
-      // Get all worktrees
-      this.logInfo('Scanning all worktrees in repository...')
-      const allWorktrees = await this.getAllWorktrees()
-      this.debug(`Found ${allWorktrees.length} worktrees`)
-
-      // Track results
-      const deleted: Array<{branch: null | string; path: string; reason?: string}> = []
-      const preserved: Array<{branch: null | string; path: string; reason: string}> = []
-
-      // Process each worktree
-      for (const worktree of allWorktrees) {
-        const {branch, path} = worktree
-
-        // Skip if no branch (detached HEAD)
-        if (!branch) {
-          this.debug(`Skipping worktree at ${path} (detached HEAD)`)
-          preserved.push({branch, path, reason: 'detached HEAD'})
-          continue
-        }
-
-        // Skip main/master branches
-        if (branch === 'main' || branch === 'master') {
-          this.debug(`Skipping protected branch: ${branch}`)
-          preserved.push({branch, path, reason: 'protected branch (main/master)'})
-          continue
-        }
-
-        // Check if this is the current directory
-        const normalizedCwd = resolve(cwd)
-        const normalizedPath = resolve(path)
-        if (normalizedCwd === normalizedPath) {
-          this.debug(`Skipping current directory worktree: ${path}`)
-          preserved.push({branch, path, reason: 'current directory (cannot delete while inside)'})
-          continue
-        }
-
-        // Check for unpushed commits
-        this.debug(`Checking for unpushed commits on branch '${branch}'...`)
-        const hasUnpushed = await this.hasUnpushedCommits(branch)
-        if (hasUnpushed) {
-          this.debug(`Branch '${branch}' has unpushed commits, skipping`)
-          preserved.push({branch, path, reason: 'has unpushed commits'})
-          continue
-        }
-
-        // Check for open merge requests
-        this.debug(`Checking for open PR on branch '${branch}'...`)
-        const hasPR = await this.hasMergeRequest(branch)
-        if (hasPR) {
-          this.debug(`Branch '${branch}' has an open PR, skipping`)
-          preserved.push({branch, path, reason: 'has open pull request'})
-          continue
-        }
-
-        // Safe to delete
-        this.debug(`Branch '${branch}' is safe to delete`)
-        try {
-          // Delete the worktree folder first (must be done before deleting the branch)
-          await this.deleteWorktreeFolder(path)
-          // Delete the branch
-          await this.deleteBranch(branch)
-          deleted.push({branch, path})
-          this.debug(`✓ Deleted branch '${branch}' and worktree at ${path}`)
-        } catch (error) {
-          const err = error as Error
-          this.debug(`Failed to delete branch '${branch}': ${err.message}`)
-          preserved.push({branch, path, reason: `deletion failed: ${err.message}`})
-        }
-      }
-
-      // Output results
-      this.log('')
-      this.logSuccess('✓ Worktree cleanup complete')
-      this.log('')
-
-      if (deleted.length > 0) {
-        this.logInfo(`Deleted ${deleted.length} worktree${deleted.length === 1 ? '' : 's'}:`)
-        for (const {branch, path} of deleted) {
-          this.log(`  - ${branch} (${path})`)
-        }
-
-        this.log('')
-      } else {
-        this.logInfo('No worktrees were deleted.')
-        this.log('')
-      }
-
-      if (preserved.length > 0) {
-        this.logInfo(`Preserved ${preserved.length} worktree${preserved.length === 1 ? '' : 's'}:`)
-        for (const {branch, path, reason} of preserved) {
-          this.log(`  - ${branch ?? 'detached'} (${path})`)
-          this.log(`    Reason: ${reason}`)
-        }
-      }
-    } catch (error) {
-      const err = error as Error
-
-      // Check if error is already handled by this.error() calls above
-      if (err.message?.includes('EEXIT')) {
-        throw error
-      }
-
-      // Handle unexpected errors
-      this.error(`Failed to clean up worktrees: ${err.message}`, {
-        exit: EXIT_CODES.GENERAL_ERROR,
-      })
     }
   }
 
@@ -669,6 +512,153 @@ static override examples = [
 
       // Handle unexpected errors
       this.error(`Failed to delete branch: ${err.message}`, {
+        exit: EXIT_CODES.GENERAL_ERROR,
+      })
+    }
+  }
+
+  /**
+   * Handle --delete --all flags: Clean up all worktrees safely
+   */
+  private async handleDeleteAll(): Promise<void> {
+    try {
+      const cwd = process.cwd()
+
+      // Check 1: Verify we are in a git repository
+      this.debug('Checking if current directory is a git repository...')
+      const isGitRepo = await this.isGitRepository(cwd)
+      if (!isGitRepo) {
+        this.error('Not a git repository. This command only works inside a git repository.', {
+          exit: EXIT_CODES.ENVIRONMENT_ERROR,
+        })
+      }
+
+      this.debug('✓ Git repository detected')
+
+      // Get all worktrees
+      this.logInfo('Scanning all worktrees in repository...')
+      const allWorktrees = await this.getAllWorktrees()
+      this.debug(`Found ${allWorktrees.length} worktrees`)
+
+      // Track results
+      const deleted: Array<{branch: null | string; path: string; reason?: string}> = []
+      const preserved: Array<{branch: null | string; path: string; reason: string}> = []
+
+      // Phase 1: Synchronous filtering
+      const candidatesForAsyncCheck: Array<{branch: string; path: string}> = []
+      const normalizedCwd = resolve(cwd)
+
+      for (const worktree of allWorktrees) {
+        const {branch, path} = worktree
+
+        // Skip if no branch (detached HEAD)
+        if (!branch) {
+          this.debug(`Skipping worktree at ${path} (detached HEAD)`)
+          preserved.push({branch, path, reason: 'detached HEAD'})
+          continue
+        }
+
+        // Skip main/master branches
+        if (branch === 'main' || branch === 'master') {
+          this.debug(`Skipping protected branch: ${branch}`)
+          preserved.push({branch, path, reason: 'protected branch (main/master)'})
+          continue
+        }
+
+        // Check if this is the current directory
+        const normalizedPath = resolve(path)
+        if (normalizedCwd === normalizedPath) {
+          this.debug(`Skipping current directory worktree: ${path}`)
+          preserved.push({branch, path, reason: 'current directory (cannot delete while inside)'})
+          continue
+        }
+
+        // Passed synchronous checks, add to async check candidates
+        candidatesForAsyncCheck.push({branch, path})
+      }
+
+      // Phase 2: Parallel async safety checks (read-only operations)
+      this.debug(`Running safety checks on ${candidatesForAsyncCheck.length} candidates in parallel...`)
+      const safetyCheckResults = await Promise.all(
+        candidatesForAsyncCheck.map(async ({branch, path}) => {
+          this.debug(`Checking safety for branch '${branch}'...`)
+
+          const hasUnpushed = await this.hasUnpushedCommits(branch)
+          if (hasUnpushed) {
+            this.debug(`Branch '${branch}' has unpushed commits, skipping`)
+            return {branch, path, safe: false, reason: 'has unpushed commits'}
+          }
+
+          const hasPR = await this.hasMergeRequest(branch)
+          if (hasPR) {
+            this.debug(`Branch '${branch}' has an open PR, skipping`)
+            return {branch, path, safe: false, reason: 'has open pull request'}
+          }
+
+          this.debug(`Branch '${branch}' is safe to delete`)
+          return {branch, path, safe: true, reason: null}
+        }),
+      )
+
+      // Separate safe and unsafe candidates
+      const safeToDelete = safetyCheckResults.filter((r) => r.safe)
+      const unsafe = safetyCheckResults.filter((r) => !r.safe)
+
+      // Add unsafe candidates to preserved list
+      for (const {branch, path, reason} of unsafe) {
+        preserved.push({branch, path, reason: reason!})
+      }
+
+      // Phase 3: Sequential deletions (destructive operations must be sequential)
+      for (const {branch, path} of safeToDelete) {
+        try {
+          // eslint-disable-next-line no-await-in-loop -- Sequential deletion required: worktree must be deleted before branch
+          await this.deleteWorktreeFolder(path)
+          // eslint-disable-next-line no-await-in-loop -- Sequential deletion required: depends on worktree deletion above
+          await this.deleteBranch(branch)
+          deleted.push({branch, path})
+          this.debug(`✓ Deleted branch '${branch}' and worktree at ${path}`)
+        } catch (error) {
+          const err = error as Error
+          this.debug(`Failed to delete branch '${branch}': ${err.message}`)
+          preserved.push({branch, path, reason: `deletion failed: ${err.message}`})
+        }
+      }
+
+      // Output results
+      this.log('')
+      this.logSuccess('✓ Worktree cleanup complete')
+      this.log('')
+
+      if (deleted.length > 0) {
+        this.logInfo(`Deleted ${deleted.length} worktree${deleted.length === 1 ? '' : 's'}:`)
+        for (const {branch, path} of deleted) {
+          this.log(`  - ${branch} (${path})`)
+        }
+
+        this.log('')
+      } else {
+        this.logInfo('No worktrees were deleted.')
+        this.log('')
+      }
+
+      if (preserved.length > 0) {
+        this.logInfo(`Preserved ${preserved.length} worktree${preserved.length === 1 ? '' : 's'}:`)
+        for (const {branch, path, reason} of preserved) {
+          this.log(`  - ${branch ?? 'detached'} (${path})`)
+          this.log(`    Reason: ${reason}`)
+        }
+      }
+    } catch (error) {
+      const err = error as Error
+
+      // Check if error is already handled by this.error() calls above
+      if (err.message?.includes('EEXIT')) {
+        throw error
+      }
+
+      // Handle unexpected errors
+      this.error(`Failed to clean up worktrees: ${err.message}`, {
         exit: EXIT_CODES.GENERAL_ERROR,
       })
     }
@@ -841,6 +831,74 @@ static override examples = [
   }
 
   /**
+   * Check if a branch has an open merge request/pull request
+   * Returns true if an open PR exists for this branch
+   */
+  private async hasMergeRequest(branchName: string): Promise<boolean> {
+    try {
+      // Check if gh CLI is available
+      try {
+        execSync('gh --version', {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+      } catch {
+        // gh CLI not available, can't check for PRs
+        this.debug('gh CLI not available, skipping PR check')
+        return false
+      }
+
+      // Check for open PRs for this branch
+      const escapedBranch = branchName.replaceAll('\'', String.raw`'\''`)
+      const output = execSync(`gh pr list --head '${escapedBranch}' --state open --json number`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim()
+
+      // Parse JSON output
+      const prs = JSON.parse(output) as Array<{number: number}>
+      return prs.length > 0
+    } catch (error) {
+      // If we can't determine, assume no PR (less conservative than unpushed commits)
+      this.debug(`Error checking for PR on branch '${branchName}': ${error}`)
+      return false
+    }
+  }
+
+  /**
+   * Check if a branch has unpushed commits
+   * Returns true if there are commits not pushed to remote
+   */
+  private async hasUnpushedCommits(branchName: string): Promise<boolean> {
+    try {
+      // Check if remote branch exists first
+      const escapedBranch = branchName.replaceAll('\'', String.raw`'\''`)
+      try {
+        execSync(`git show-ref --verify refs/remotes/origin/${escapedBranch}`, {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+      } catch {
+        // No remote branch - treat as having unpushed commits (safer)
+        this.debug(`Branch '${branchName}' has no remote tracking branch`)
+        return true
+      }
+
+      // Check if there are commits ahead of remote
+      const output = execSync(`git rev-list origin/${escapedBranch}..${escapedBranch} --count`, {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim()
+
+      const commitCount = Number.parseInt(output, 10)
+      return commitCount > 0
+    } catch (error) {
+      // If we can't determine, err on the side of caution
+      this.debug(`Error checking unpushed commits for '${branchName}': ${error}`)
+      return true
+    }
+  }
+
+  /**
    * Check if current directory is a git repository
    */
   private async isGitRepository(cwd: string): Promise<boolean> {
@@ -851,6 +909,121 @@ static override examples = [
     } catch {
       return false
     }
+  }
+
+  /**
+   * Fallback for Windows when wt.exe is not available.
+   * Uses PowerShell Start-Process to open a new PowerShell window.
+   *
+   * @param worktreePath - Path where the terminal should open
+   */
+  private async launchPowerShellFallback(worktreePath: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const psCommand = `Start-Process powershell -ArgumentList '-NoExit','-Command','cd ${this.escapeShellArg(worktreePath)}; aiw launch'`
+
+      const terminal = spawn('powershell', ['-Command', psCommand], {
+        detached: true,
+        stdio: 'ignore',
+      })
+
+      terminal.on('error', (err) => {
+        reject(new Error(`Failed to launch PowerShell: ${err.message}`))
+      })
+
+      terminal.unref()
+      resolve()
+    })
+  }
+
+  /**
+   * Launch a new terminal window at the specified path with 'aiw launch' running.
+   *
+   * For Windows, uses Windows Terminal (wt.exe) if available, falls back to PowerShell.
+   * For Unix/macOS, uses appropriate terminal emulator.
+   *
+   * @param worktreePath - Path where the terminal should open
+   */
+  private async launchTerminalInWorktree(worktreePath: string): Promise<void> {
+    const {platform} = process
+
+    if (platform === 'win32') {
+      // Windows: Use Windows Terminal with PowerShell 7 (pwsh) if available, fallback to PowerShell 5.1
+      // Try pwsh first (PowerShell 7), which is commonly the default Windows Terminal profile
+      return new Promise<void>((resolve, reject) => {
+        // Detect which PowerShell to use
+        let powershellCmd = 'pwsh' // Try PowerShell 7 first
+        try {
+          execSync('where pwsh', {stdio: 'ignore'})
+        } catch {
+          // pwsh not found, use legacy PowerShell
+          powershellCmd = 'powershell'
+        }
+
+        const terminal = spawn('wt', ['-d', worktreePath, powershellCmd, '-NoExit', '-Command', 'aiw launch'], {
+          detached: true,
+          stdio: 'ignore',
+        })
+
+        terminal.on('error', (err) => {
+          // If wt.exe not found, try fallback to Start-Process
+          if (err.message.includes('ENOENT')) {
+            this.launchPowerShellFallback(worktreePath)
+              .then(resolve)
+              .catch(reject)
+          } else {
+            reject(new Error(`Failed to launch terminal: ${err.message}`))
+          }
+        })
+
+        // Detach the terminal process so it runs independently
+        terminal.unref()
+        resolve()
+      })
+    }
+ 
+      // Unix/macOS: Use appropriate terminal
+      return new Promise<void>((resolve, _reject) => {
+        let terminal: ReturnType<typeof spawn>
+
+        if (platform === 'darwin') {
+          // macOS: Use Terminal.app with osascript
+          terminal = spawn(
+            'osascript',
+            [
+              '-e',
+              `tell application "Terminal" to do script "cd ${this.escapeShellArg(worktreePath)} && aiw launch"`,
+            ],
+            {
+              detached: true,
+              stdio: 'ignore',
+            },
+          )
+        } else {
+          // Linux: Try common terminal emulators
+          // Try gnome-terminal first, then xterm as fallback
+          terminal = spawn(
+            'gnome-terminal',
+            ['--working-directory', worktreePath, '--', 'bash', '-c', 'aiw launch; exec bash'],
+            {
+              detached: true,
+              stdio: 'ignore',
+            },
+          )
+
+          terminal.on('error', () => {
+            // Fallback to xterm
+            const xtermProcess = spawn('xterm', ['-e', `cd ${this.escapeShellArg(worktreePath)} && aiw launch`], {
+              detached: true,
+              stdio: 'ignore',
+            })
+            xtermProcess.unref()
+          })
+        }
+
+        terminal.unref()
+        resolve()
+      })
+    
   }
 
   /**
@@ -939,168 +1112,5 @@ static override examples = [
         exit: EXIT_CODES.GENERAL_ERROR,
       })
     }
-  }
-
-  /**
-   * Create a git worktree with the specified branch name.
-   *
-   * @param branchName - Name of the branch to create
-   * @param worktreePath - Path where the worktree should be created
-   */
-  private async createWorktree(branchName: string, worktreePath: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const gitProcess = spawn('git', ['worktree', 'add', '-b', branchName, worktreePath], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
-
-      let stderr = ''
-
-      gitProcess.stderr.on('data', (data: Buffer) => {
-        stderr += data.toString()
-      })
-
-      gitProcess.on('close', (code) => {
-        if (code === 0) {
-          resolve()
-        } else {
-          const error = new Error(`Git worktree creation failed: ${stderr}`) as NodeJS.ErrnoException & {
-            stderr?: string
-          }
-          error.code = 'GIT_ERROR'
-          error.stderr = stderr
-          reject(error)
-        }
-      })
-
-      gitProcess.on('error', (err) => {
-        reject(new Error(`Failed to execute git command: ${err.message}`))
-      })
-    })
-  }
-
-  /**
-   * Launch a new terminal window at the specified path with 'aiw launch' running.
-   *
-   * For Windows, uses Windows Terminal (wt.exe) if available, falls back to PowerShell.
-   * For Unix/macOS, uses appropriate terminal emulator.
-   *
-   * @param worktreePath - Path where the terminal should open
-   */
-  private async launchTerminalInWorktree(worktreePath: string): Promise<void> {
-    const platform = process.platform
-
-    if (platform === 'win32') {
-      // Windows: Use Windows Terminal with PowerShell 7 (pwsh) if available, fallback to PowerShell 5.1
-      // Try pwsh first (PowerShell 7), which is commonly the default Windows Terminal profile
-      return new Promise<void>((resolve, reject) => {
-        // Detect which PowerShell to use
-        let powershellCmd = 'pwsh' // Try PowerShell 7 first
-        try {
-          execSync('where pwsh', {stdio: 'ignore'})
-        } catch {
-          // pwsh not found, use legacy PowerShell
-          powershellCmd = 'powershell'
-        }
-
-        const terminal = spawn('wt', ['-d', worktreePath, powershellCmd, '-NoExit', '-Command', 'aiw launch'], {
-          detached: true,
-          stdio: 'ignore',
-        })
-
-        terminal.on('error', (err) => {
-          // If wt.exe not found, try fallback to Start-Process
-          if (err.message.includes('ENOENT')) {
-            this.launchPowerShellFallback(worktreePath)
-              .then(resolve)
-              .catch(reject)
-          } else {
-            reject(new Error(`Failed to launch terminal: ${err.message}`))
-          }
-        })
-
-        // Detach the terminal process so it runs independently
-        terminal.unref()
-        resolve()
-      })
-    } else {
-      // Unix/macOS: Use appropriate terminal
-      return new Promise<void>((resolve, reject) => {
-        let terminal: ReturnType<typeof spawn>
-
-        if (platform === 'darwin') {
-          // macOS: Use Terminal.app with osascript
-          terminal = spawn(
-            'osascript',
-            [
-              '-e',
-              `tell application "Terminal" to do script "cd ${this.escapeShellArg(worktreePath)} && aiw launch"`,
-            ],
-            {
-              detached: true,
-              stdio: 'ignore',
-            },
-          )
-        } else {
-          // Linux: Try common terminal emulators
-          // Try gnome-terminal first, then xterm as fallback
-          terminal = spawn(
-            'gnome-terminal',
-            ['--working-directory', worktreePath, '--', 'bash', '-c', 'aiw launch; exec bash'],
-            {
-              detached: true,
-              stdio: 'ignore',
-            },
-          )
-
-          terminal.on('error', () => {
-            // Fallback to xterm
-            const xtermProcess = spawn('xterm', ['-e', `cd ${this.escapeShellArg(worktreePath)} && aiw launch`], {
-              detached: true,
-              stdio: 'ignore',
-            })
-            xtermProcess.unref()
-          })
-        }
-
-        terminal.unref()
-        resolve()
-      })
-    }
-  }
-
-  /**
-   * Fallback for Windows when wt.exe is not available.
-   * Uses PowerShell Start-Process to open a new PowerShell window.
-   *
-   * @param worktreePath - Path where the terminal should open
-   */
-  private async launchPowerShellFallback(worktreePath: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const psCommand = `Start-Process powershell -ArgumentList '-NoExit','-Command','cd ${this.escapeShellArg(worktreePath)}; aiw launch'`
-
-      const terminal = spawn('powershell', ['-Command', psCommand], {
-        detached: true,
-        stdio: 'ignore',
-      })
-
-      terminal.on('error', (err) => {
-        reject(new Error(`Failed to launch PowerShell: ${err.message}`))
-      })
-
-      terminal.unref()
-      resolve()
-    })
-  }
-
-  /**
-   * Escape shell argument to prevent command injection.
-   * Wraps path in double quotes and escapes internal quotes.
-   *
-   * @param arg - Argument to escape
-   * @returns Escaped argument safe for shell execution
-   */
-  private escapeShellArg(arg: string): string {
-    // Escape double quotes and backslashes, then wrap in double quotes
-    return `"${arg.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`
   }
 }

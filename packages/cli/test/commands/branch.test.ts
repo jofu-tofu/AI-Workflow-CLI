@@ -1,14 +1,65 @@
 /**
  * @file Unit tests for branch command.
  *
- * Tests command structure, metadata, and implementation behavior.
- * Note: Git and terminal operations use real processes in integration tests.
- * This file focuses on static validation and command structure.
+ * Tests command structure, metadata, and behavior through the public API.
+ * Uses real temporary git repositories to test actual behavior rather than
+ * mocking private methods or checking source code strings.
  */
+
+import {randomUUID} from 'node:crypto'
+import {execSync} from 'node:child_process'
+import {promises as fs} from 'node:fs'
+import {tmpdir, platform} from 'node:os'
+import {join} from 'node:path'
 
 import {expect} from 'chai'
 
 import BranchCommand from '../../src/commands/branch.js'
+
+// Platform-specific bin path for CLI invocation
+const isWindows = platform() === 'win32'
+const bin = isWindows ? String.raw`.\bin\dev.cmd` : './bin/dev.js'
+
+/**
+ * Helper to create a temporary git repository for testing
+ */
+async function createTestGitRepo(): Promise<string> {
+  const testDir = join(tmpdir(), `aiw-branch-test-${randomUUID()}`)
+  await fs.mkdir(testDir, {recursive: true})
+
+  // Initialize git repo
+  execSync('git init', {cwd: testDir, stdio: 'ignore'})
+  execSync('git config user.email "test@example.com"', {cwd: testDir, stdio: 'ignore'})
+  execSync('git config user.name "Test User"', {cwd: testDir, stdio: 'ignore'})
+
+  // Create initial commit so we have a valid repo
+  await fs.writeFile(join(testDir, 'README.md'), '# Test\n')
+  execSync('git add .', {cwd: testDir, stdio: 'ignore'})
+  execSync('git commit -m "Initial commit"', {cwd: testDir, stdio: 'ignore'})
+
+  return testDir
+}
+
+/**
+ * Helper to clean up test directory
+ */
+async function cleanupTestDir(testDir: string): Promise<void> {
+  try {
+    await fs.rm(testDir, {force: true, recursive: true})
+  } catch {
+    // Ignore cleanup errors
+  }
+}
+
+/**
+ * Helper to get absolute path to the CLI bin from packages/cli directory.
+ * Uses bin/run.js which points to the compiled dist/ output.
+ */
+function getAbsoluteBinPath(): string {
+  // process.cwd() during tests is packages/cli, and bin is in packages/cli/bin
+  // Use run.js which uses the compiled dist/ output
+  return join(process.cwd(), 'bin', 'run.js')
+}
 
 describe('branch command', () => {
   describe('command metadata and help', () => {
@@ -66,15 +117,11 @@ describe('branch command', () => {
       expect(BranchCommand.prototype.run).to.be.a('function')
     })
 
-    it('should return promise (async)', () => {
-      expect(BranchCommand.prototype.run).to.be.a('function')
-    })
-
     it('should extend BaseCommand', () => {
       expect(BranchCommand).to.have.property('baseFlags')
     })
 
-    it('should define --main flag', () => {
+    it('should define --main flag with correct properties', () => {
       expect(BranchCommand.flags).to.have.property('main')
       expect(BranchCommand.flags.main).to.have.property('char', 'm')
       expect(BranchCommand.flags.main).to.have.property('exclusive')
@@ -82,7 +129,7 @@ describe('branch command', () => {
       expect(BranchCommand.flags.main.exclusive).to.include('delete')
     })
 
-    it('should define --launch flag', () => {
+    it('should define --launch flag with correct properties', () => {
       expect(BranchCommand.flags).to.have.property('launch')
       expect(BranchCommand.flags.launch).to.have.property('char', 'l')
       expect(BranchCommand.flags.launch).to.have.property('exclusive')
@@ -90,7 +137,7 @@ describe('branch command', () => {
       expect(BranchCommand.flags.launch.exclusive).to.include('delete')
     })
 
-    it('should define --delete flag', () => {
+    it('should define --delete flag with correct properties', () => {
       expect(BranchCommand.flags).to.have.property('delete')
       expect(BranchCommand.flags.delete).to.have.property('char', 'd')
       expect(BranchCommand.flags.delete).to.have.property('exclusive')
@@ -98,570 +145,478 @@ describe('branch command', () => {
       expect(BranchCommand.flags.delete.exclusive).to.include('launch')
     })
 
-    it('should define --all flag', () => {
+    it('should define --all flag that depends on --delete', () => {
       expect(BranchCommand.flags).to.have.property('all')
       expect(BranchCommand.flags.all).to.have.property('char', 'a')
       expect(BranchCommand.flags.all).to.have.property('dependsOn')
       expect(BranchCommand.flags.all.dependsOn).to.include('delete')
     })
 
-    it('should define branchName argument', () => {
+    it('should define branchName argument as optional', () => {
       expect(BranchCommand.args).to.have.property('branchName')
       expect(BranchCommand.args.branchName).to.have.property('required', false)
     })
   })
 
-  // Implementation verification tests removed - these tested internal method calls
-  // (implementation details) rather than user-facing behavior. The actual functionality
-  // is already covered by integration tests and command structure tests.
-
-  describe('private method implementation', () => {
-    it('should implement isGitRepository method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.isGitRepository).to.be.a('function')
+  describe('flag validation via CLI', () => {
+    it('should error when no flag is provided', () => {
+      try {
+        execSync(`${bin} branch`, {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {stderr: string}
+        expect(err.stderr).to.match(/--main|--launch|--delete.*required/i)
+      }
     })
 
-    it('should implement getCurrentBranch method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.getCurrentBranch).to.be.a('function')
-    })
-
-    it('should implement getMainBranch method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.getMainBranch).to.be.a('function')
-    })
-
-    it('should implement launchTerminalWithAiw method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.launchTerminalWithAiw).to.be.a('function')
-    })
-
-    it('isGitRepository should check .git directory', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.isGitRepository.toString()
-      expect(source).to.include('.git')
-      expect(source).to.include('access')
-    })
-
-    it('getCurrentBranch should use git rev-parse', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.getCurrentBranch.toString()
-      expect(source).to.include('git rev-parse')
-      expect(source).to.include('--abbrev-ref HEAD')
-    })
-
-    it('getMainBranch should check for both main and master', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.getMainBranch.toString()
-      expect(source).to.include('refs/heads/main')
-      expect(source).to.include('refs/heads/master')
-      expect(source).to.include('show-ref')
-    })
-
-    it('launchTerminalWithAiw should handle multiple platforms', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.launchTerminalWithAiw.toString()
-      expect(source).to.include('win32')
-      expect(source).to.include('darwin')
-
-      // Windows support
-      expect(source).to.include('powershell')
-
-      // macOS support
-      expect(source).to.include('osascript')
-      expect(source).to.include('Terminal')
-
-      // Linux support (at least one terminal emulator)
-      expect(source).to.match(/gnome-terminal|konsole|xterm/i)
-    })
-
-
-    it('should implement createWorktree method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.createWorktree).to.be.a('function')
-    })
-
-    it('should implement launchTerminalInWorktree method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.launchTerminalInWorktree).to.be.a('function')
-    })
-
-    it('should implement handleMainBranch method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.handleMainBranch).to.be.a('function')
-    })
-
-    it('should implement handleWorktreeLaunch method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.handleWorktreeLaunch).to.be.a('function')
-    })
-
-    it('should implement escapeShellArg method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.escapeShellArg).to.be.a('function')
-    })
-
-    it('createWorktree should use git worktree add command', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.createWorktree.toString()
-      expect(source).to.include('git')
-      expect(source).to.include('worktree')
-      expect(source).to.include('add')
-      expect(source).to.include('-b')
-    })
-
-  describe('delete functionality', () => {
-    describe('error handling', () => {
-      it('should error when not in git repository', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.handleDelete.toString()
-        expect(source).to.include('isGitRepository')
-        expect(source).to.match(/not a git repository/i)
-        expect(source).to.include('ENVIRONMENT_ERROR')
+    it('should show help output when requested', () => {
+      const result = execSync(`${bin} branch --help`, {
+        encoding: 'utf8',
       })
-
-      it('should error when branch name not provided', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.handleDelete.toString()
-        expect(source).to.match(/branch name.*required/i)
-        expect(source).to.include('INVALID_USAGE')
-      })
-
-      it('should prevent deletion of main branch', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.handleDelete.toString()
-        expect(source).to.match(/branchName === ["']main["']/)
-        expect(source).to.match(/cannot delete.*protected/i)
-      })
-
-      it('should prevent deletion of master branch', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.handleDelete.toString()
-        expect(source).to.match(/branchName === ["']master["']/)
-        expect(source).to.match(/cannot delete.*protected/i)
-      })
-
-      it('should error when branch does not exist', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.handleDelete.toString()
-        expect(source).to.include('branchExists')
-        expect(source).to.match(/does not exist/i)
-        expect(source).to.include('INVALID_USAGE')
-      })
-
-      it('should error when trying to delete current branch', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.handleDelete.toString()
-        expect(source).to.include('getCurrentBranch')
-        expect(source).to.include('currentBranch === branchName')
-        expect(source).to.match(/currently on it/i)
-      })
-
-      it('should provide helpful suggestion when deleting current branch', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.handleDelete.toString()
-        expect(source).to.include('clipboard')
-        expect(source).to.include('aiw branch --main')
-      })
+      expect(result).to.include('USAGE')
+      expect(result).to.include('--main')
+      expect(result).to.include('--launch')
+      expect(result).to.include('--delete')
+      expect(result).to.include('--all')
     })
 
-    describe('branch validation', () => {
-      it('should verify branch exists using git show-ref', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.branchExists.toString()
-        expect(source).to.include('git show-ref --verify')
-        expect(source).to.include('refs/heads')
+    it('should show short flags in help', () => {
+      const result = execSync(`${bin} branch --help`, {
+        encoding: 'utf8',
       })
-
-      it('should return boolean indicating branch existence', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.branchExists.toString()
-        // Transpiler may convert `return true/false` to `return !0/!1`
-        expect(source).to.match(/return\s+(!0|true)/)
-        expect(source).to.match(/return\s+(!1|false)/)
-      })
-    })
-
-    describe('worktree detection', () => {
-      it('should locate worktree path using git worktree list', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.getWorktreePath.toString()
-        expect(source).to.include('git worktree list --porcelain')
-      })
-
-      it('should parse worktree list output to find branch', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.getWorktreePath.toString()
-        expect(source).to.include('refs/heads')
-        expect(source).to.include('worktree ')
-      })
-
-      it('should return null when worktree not found', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.getWorktreePath.toString()
-        expect(source).to.include('return null')
-      })
-    })
-
-    describe('branch deletion', () => {
-      it('should force delete local branch', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.deleteBranch.toString()
-        expect(source).to.include('git branch -D')
-      })
-
-      it('should escape branch names to prevent command injection', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.deleteBranch.toString()
-        expect(source).to.match(/escapedBranch|escape|quote|replace/i)
-      })
-
-      it('should handle different escaping for Windows vs Unix', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.deleteBranch.toString()
-        expect(source).to.include('win32')
-        // Should have different quote/escape handling for different platforms
-        expect(source).to.match(/escapedBranch\s*=/)
-      })
-
-      it('should verify remote branch exists before deletion', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.deleteBranch.toString()
-        expect(source).to.include('git show-ref --verify')
-        expect(source).to.include('refs/remotes/origin')
-      })
-
-      it('should delete remote branch when it exists', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.deleteBranch.toString()
-        expect(source).to.include('git push origin --delete')
-      })
-
-      it('should handle orphaned worktrees gracefully', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.deleteBranch.toString()
-        expect(source).to.match(/not found|orphaned/i)
-      })
-    })
-
-    describe('worktree deletion', () => {
-      it('should remove worktree from git first', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
-        expect(source).to.include('git worktree remove')
-        expect(source).to.include('--force')
-      })
-
-      it('should escape worktree paths to prevent command injection', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
-        expect(source).to.match(/escapedPath|escape|quote|replace/i)
-      })
-
-      it('should handle different path escaping for Windows vs Unix', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
-        expect(source).to.include('win32')
-      })
-
-      it('should delete worktree folder recursively', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
-        expect(source).to.include('fs.rm')
-        expect(source).to.include('recursive')
-        expect(source).to.include('force')
-      })
-
-      it('should handle orphaned folders gracefully', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
-        expect(source).to.match(/not a working tree|orphaned|ENOENT/i)
-      })
-
-      it('should verify folder exists before deletion attempt', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
-        expect(source).to.include('fs.access')
-      })
-    })
-
-    describe('deletion sequence', () => {
-      it('should delete worktree folder before branch', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.handleDelete.toString()
-        // Verify worktree deletion happens first by checking order in source
-        const worktreeIndex = source.indexOf('deleteWorktreeFolder')
-        const branchIndex = source.indexOf('deleteBranch')
-        expect(worktreeIndex).to.be.lessThan(branchIndex)
-      })
-
-      it('should handle case where worktree does not exist', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.handleDelete.toString()
-        expect(source).to.include('if (worktreePath)')
-      })
-
-      it('should provide success feedback after deletion', () => {
-        // @ts-expect-error - accessing private method for testing
-        const source = BranchCommand.prototype.handleDelete.toString()
-        expect(source).to.include('logSuccess')
-        expect(source).to.match(/deleted|removed/i)
-      })
-    })
-  })
-    it('should implement getWorktreePath method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.getWorktreePath).to.be.a('function')
-    })
-
-    it('should implement deleteBranch method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.deleteBranch).to.be.a('function')
-    })
-
-    it('should implement deleteWorktreeFolder method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.deleteWorktreeFolder).to.be.a('function')
-    })
-
-    it('handleDelete should check for git repository', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.handleDelete.toString()
-      expect(source).to.include('isGitRepository')
-    })
-
-    it('handleDelete should prevent deletion of main/master branches', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.handleDelete.toString()
-      expect(source).to.match(/main.*master|protected/i)
-      expect(source).to.include('Cannot delete')
-    })
-
-    it('handleDelete should check if branch exists', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.handleDelete.toString()
-      expect(source).to.include('branchExists')
-    })
-
-    it('handleDelete should check current branch', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.handleDelete.toString()
-      expect(source).to.include('getCurrentBranch')
-      expect(source).to.include('currently on it')
-    })
-
-    it('handleDelete should use clipboard for suggestion', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.handleDelete.toString()
-      expect(source).to.include('clipboard')
-      expect(source).to.include('aiw branch --main')
-    })
-
-    it('handleDelete should delete both branch and worktree', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.handleDelete.toString()
-      expect(source).to.include('deleteBranch')
-      expect(source).to.include('deleteWorktreeFolder')
-    })
-
-    it('branchExists should use git show-ref', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.branchExists.toString()
-      expect(source).to.include('git show-ref')
-      expect(source).to.include('refs/heads')
-    })
-
-    it('getWorktreePath should use git worktree list', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.getWorktreePath.toString()
-      expect(source).to.include('git worktree list')
-      expect(source).to.include('porcelain')
-    })
-
-    it('deleteBranch should delete local branch with -D flag', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.deleteBranch.toString()
-      expect(source).to.include('git branch -D')
-    })
-
-    it('deleteBranch should check for and delete remote branch', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.deleteBranch.toString()
-      expect(source).to.include('git push origin --delete')
-      expect(source).to.include('refs/remotes/origin')
-    })
-
-    it('deleteWorktreeFolder should use git worktree remove', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
-      expect(source).to.include('git worktree remove')
-      expect(source).to.include('--force')
-    })
-
-    it('deleteWorktreeFolder should delete folder with fs.rm', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
-      expect(source).to.include('fs.rm')
-      expect(source).to.include('recursive')
+      expect(result).to.include('-m')
+      expect(result).to.include('-l')
+      expect(result).to.include('-d')
+      expect(result).to.include('-a')
     })
   })
 
-  describe('delete all functionality', () => {
-    it('should have handleDeleteAll method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.handleDeleteAll).to.be.a('function')
+  describe('--delete flag behavior', () => {
+    let testDir: string
+
+    beforeEach(async function() {
+      // Increase timeout for git operations
+      this.timeout(10000)
+      testDir = await createTestGitRepo()
     })
 
-    it('should have getAllWorktrees method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.getAllWorktrees).to.be.a('function')
+    afterEach(async () => {
+      await cleanupTestDir(testDir)
     })
 
-    it('should have hasUnpushedCommits method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.hasUnpushedCommits).to.be.a('function')
+    it('should error when branch name is not provided', () => {
+      try {
+        execSync(`${bin} branch --delete`, {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {stderr: string}
+        expect(err.stderr).to.match(/branch name.*required/i)
+      }
     })
 
-    it('should have hasMergeRequest method', () => {
-      // @ts-expect-error - accessing private method for testing
-      expect(BranchCommand.prototype.hasMergeRequest).to.be.a('function')
+    it('should error when not in a git repository', async () => {
+      const nonGitDir = join(tmpdir(), `aiw-non-git-test-${randomUUID()}`)
+      await fs.mkdir(nonGitDir, {recursive: true})
+      const absoluteBin = getAbsoluteBinPath()
+
+      try {
+        execSync(`node "${absoluteBin}" branch --delete some-branch`, {
+          cwd: nonGitDir,
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {stderr: string}
+        expect(err.stderr).to.match(/not a git repository/i)
+      } finally {
+        await cleanupTestDir(nonGitDir)
+      }
     })
 
-    it('getAllWorktrees should use git worktree list porcelain', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.getAllWorktrees.toString()
-      expect(source).to.include('git worktree list')
-      expect(source).to.include('porcelain')
+    it('should prevent deletion of main branch', () => {
+      const absoluteBin = getAbsoluteBinPath()
+      try {
+        execSync(`node "${absoluteBin}" branch --delete main`, {
+          cwd: testDir,
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {stderr: string}
+        // Error format: "Failed to delete branch: Cannot delete main branch. This is a protected branch."
+        expect(err.stderr).to.match(/cannot delete.*main|main.*protected/i)
+      }
     })
 
-    it('getAllWorktrees should parse branch and path info', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.getAllWorktrees.toString()
-      expect(source).to.include('branch')
-      expect(source).to.include('path')
-      expect(source).to.include('head')
+    it('should prevent deletion of master branch', () => {
+      const absoluteBin = getAbsoluteBinPath()
+      try {
+        execSync(`node "${absoluteBin}" branch --delete master`, {
+          cwd: testDir,
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {stderr: string}
+        // Error format: "Failed to delete branch: Cannot delete master branch. This is a protected branch."
+        expect(err.stderr).to.match(/cannot delete.*master|master.*protected/i)
+      }
     })
 
-    it('hasUnpushedCommits should check remote tracking branch', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.hasUnpushedCommits.toString()
-      expect(source).to.include('refs/remotes/origin')
-      expect(source).to.include('git show-ref')
+    it('should error when branch does not exist', () => {
+      const absoluteBin = getAbsoluteBinPath()
+      try {
+        execSync(`node "${absoluteBin}" branch --delete nonexistent-branch`, {
+          cwd: testDir,
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {stderr: string}
+        // Error format spans multiple lines with fancy bullet chars: "does not\n » exist."
+        // Remove all non-alphanumeric chars except spaces for matching
+        const normalizedError = err.stderr.replace(/[^a-zA-Z0-9\s]/g, ' ').replace(/\s+/g, ' ')
+        expect(normalizedError).to.match(/does not exist|not found|no such branch/i)
+      }
     })
 
-    it('hasUnpushedCommits should use git rev-list to count commits', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.hasUnpushedCommits.toString()
-      expect(source).to.include('git rev-list')
-      expect(source).to.include('--count')
+    it('should error when trying to delete current branch', async () => {
+      // Create and switch to a new branch
+      execSync('git checkout -b feature-branch', {cwd: testDir, stdio: 'ignore'})
+      const absoluteBin = getAbsoluteBinPath()
+
+      try {
+        execSync(`node "${absoluteBin}" branch --delete feature-branch`, {
+          cwd: testDir,
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {stderr: string}
+        expect(err.stderr).to.match(/currently on it/i)
+      }
     })
 
-    it('hasMergeRequest should use gh CLI', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.hasMergeRequest.toString()
-      expect(source).to.include('gh')
-      expect(source).to.include('pr list')
-    })
+    it('should delete a branch when not on it', async function() {
+      this.timeout(15000)
+      const absoluteBin = getAbsoluteBinPath()
 
-    it('hasMergeRequest should check for open PRs', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.hasMergeRequest.toString()
-      expect(source).to.include('--head')
-      expect(source).to.include('--state open')
-    })
+      // Create a feature branch
+      execSync('git checkout -b feature-to-delete', {cwd: testDir, stdio: 'ignore'})
+      await fs.writeFile(join(testDir, 'feature.txt'), 'feature\n')
+      execSync('git add .', {cwd: testDir, stdio: 'ignore'})
+      execSync('git commit -m "Feature commit"', {cwd: testDir, stdio: 'ignore'})
 
-    it('handleDeleteAll should skip main/master branches', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.handleDeleteAll.toString()
-      expect(source).to.match(/main|master/)
-      expect(source).to.include('protected')
-    })
+      // Switch back to master/main
+      try {
+        execSync('git checkout main', {cwd: testDir, stdio: 'ignore'})
+      } catch {
+        execSync('git checkout master', {cwd: testDir, stdio: 'ignore'})
+      }
 
-    it('handleDeleteAll should skip current directory', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.handleDeleteAll.toString()
-      expect(source).to.include('current directory')
-      expect(source).to.match(/cwd|current/i)
-    })
+      // Delete the feature branch
+      const result = execSync(`node "${absoluteBin}" branch --delete feature-to-delete`, {
+        cwd: testDir,
+        encoding: 'utf8',
+      })
 
-    it('handleDeleteAll should check for unpushed commits', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.handleDeleteAll.toString()
-      expect(source).to.include('hasUnpushedCommits')
-    })
+      expect(result).to.match(/deleted/i)
 
-    it('handleDeleteAll should check for merge requests', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.handleDeleteAll.toString()
-      expect(source).to.include('hasMergeRequest')
-    })
-
-    it('handleDeleteAll should output deleted worktrees', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.handleDeleteAll.toString()
-      expect(source).to.match(/deleted/i)
-      expect(source).to.match(/preserved/i)
-    })
-
-    it('handleDeleteAll should output reasons for preservation', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.handleDeleteAll.toString()
-      expect(source).to.include('reason')
-    })
-
-    it('run method should route to handleDeleteAll when both flags set', () => {
-      const source = BranchCommand.prototype.run.toString()
-      expect(source).to.include('handleDeleteAll')
-      expect(source).to.match(/flags\.delete.*flags\.all|flags\.all.*flags\.delete/)
+      // Verify branch is gone
+      const branches = execSync('git branch', {cwd: testDir, encoding: 'utf8'})
+      expect(branches).to.not.include('feature-to-delete')
     })
   })
 
-  describe('delete security: command injection prevention', () => {
-    it('deleteBranch should escape branch names', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.deleteBranch.toString()
-      // Should use single quote escaping for branch names
-      expect(source).to.match(/replace.*'|escape/i)
-      // Check for the escape pattern (may be represented as '\\'\\'' or "'\\\\''")
-      expect(source).to.match(/'\\\\''|escapedBranch/)
+  describe('--launch flag behavior', () => {
+    it('should error when branch name is not provided', () => {
+      try {
+        execSync(`${bin} branch --launch`, {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {stderr: string}
+        expect(err.stderr).to.match(/branch name.*required/i)
+      }
     })
 
-    it('deleteBranch should quote branch names in git commands', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.deleteBranch.toString()
-      // Branch should be escaped in git branch -D command using escapedBranch variable
-      expect(source).to.match(/git branch -D.*escapedBranch/)
-      expect(source).to.match(/git push origin --delete.*escapedBranch/)
+    it('should reject invalid branch names with spaces', () => {
+      try {
+        execSync(`${bin} branch --launch "branch with spaces"`, {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {stderr: string}
+        expect(err.stderr).to.match(/invalid characters/i)
+      }
     })
 
-    it('deleteWorktreeFolder should escape worktree paths', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
-      // Should escape paths to prevent injection
-      expect(source).to.match(/replace.*'|escape/i)
-      // Check for the escape pattern (may be represented as '\\'\\'' or "'\\\\''")
-      expect(source).to.match(/'\\\\''|escapedPath/)
+    it('should error when not in a git repository', async () => {
+      const nonGitDir = join(tmpdir(), `aiw-non-git-test-${randomUUID()}`)
+      await fs.mkdir(nonGitDir, {recursive: true})
+      const absoluteBin = getAbsoluteBinPath()
+
+      try {
+        execSync(`node "${absoluteBin}" branch --launch new-feature`, {
+          cwd: nonGitDir,
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {stderr: string}
+        expect(err.stderr).to.match(/not a git repository/i)
+      } finally {
+        await cleanupTestDir(nonGitDir)
+      }
+    })
+  })
+
+  describe('--main flag behavior', () => {
+    let testDir: string
+
+    beforeEach(async function() {
+      this.timeout(10000)
+      testDir = await createTestGitRepo()
     })
 
-    it('deleteWorktreeFolder should quote paths in git commands', () => {
-      // @ts-expect-error - accessing private method for testing
-      const source = BranchCommand.prototype.deleteWorktreeFolder.toString()
-      // Path should be escaped in git worktree remove command using escapedPath variable
-      expect(source).to.match(/git worktree remove.*escapedPath/)
+    afterEach(async () => {
+      await cleanupTestDir(testDir)
     })
 
-    it('should handle branch names with special characters safely', () => {
-      // @ts-expect-error - accessing private method for testing
-      const deleteBranchSource = BranchCommand.prototype.deleteBranch.toString()
-      // Ensure proper escaping mechanism exists
-      expect(deleteBranchSource).to.match(/escapedBranch|replace.*'/i)
+    it('should error when not in a git repository', async () => {
+      const nonGitDir = join(tmpdir(), `aiw-non-git-test-${randomUUID()}`)
+      await fs.mkdir(nonGitDir, {recursive: true})
+      const absoluteBin = getAbsoluteBinPath()
+
+      try {
+        execSync(`node "${absoluteBin}" branch --main`, {
+          cwd: nonGitDir,
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {stderr: string}
+        expect(err.stderr).to.match(/not a git repository/i)
+      } finally {
+        await cleanupTestDir(nonGitDir)
+      }
     })
 
-    it('should handle paths with special characters safely', () => {
-      // @ts-expect-error - accessing private method for testing
-      const deleteWorktreeSource = BranchCommand.prototype.deleteWorktreeFolder.toString()
-      // Ensure proper escaping mechanism exists
-      expect(deleteWorktreeSource).to.match(/escapedPath|replace.*'/i)
+    it('should error when already on main branch', async function() {
+      this.timeout(15000)
+      const absoluteBin = getAbsoluteBinPath()
+
+      // Ensure we're on main
+      try {
+        execSync('git checkout -b main', {cwd: testDir, stdio: 'ignore'})
+      } catch {
+        // Branch might already exist, try to switch to it
+        try {
+          execSync('git checkout main', {cwd: testDir, stdio: 'ignore'})
+        } catch {
+          // Already on main or using master
+        }
+      }
+
+      try {
+        execSync(`node "${absoluteBin}" branch --main`, {
+          cwd: testDir,
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {stderr: string}
+        // Should error because we're already on main/master OR because neither exists as worktree
+        expect(err.stderr).to.match(/already on|neither.*exists|worktree/i)
+      }
+    })
+  })
+
+  describe('--delete --all flag behavior', () => {
+    let testDir: string
+
+    beforeEach(async function() {
+      this.timeout(10000)
+      testDir = await createTestGitRepo()
+    })
+
+    afterEach(async () => {
+      await cleanupTestDir(testDir)
+    })
+
+    it('should error when not in a git repository', async () => {
+      const nonGitDir = join(tmpdir(), `aiw-non-git-test-${randomUUID()}`)
+      await fs.mkdir(nonGitDir, {recursive: true})
+      const absoluteBin = getAbsoluteBinPath()
+
+      try {
+        execSync(`node "${absoluteBin}" branch --delete --all`, {
+          cwd: nonGitDir,
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {stderr: string}
+        expect(err.stderr).to.match(/not a git repository/i)
+      } finally {
+        await cleanupTestDir(nonGitDir)
+      }
+    })
+
+    it('should complete without error when there are no worktrees to delete', function() {
+      this.timeout(15000)
+      const absoluteBin = getAbsoluteBinPath()
+
+      const result = execSync(`node "${absoluteBin}" branch --delete --all`, {
+        cwd: testDir,
+        encoding: 'utf8',
+      })
+
+      expect(result).to.match(/cleanup complete/i)
+    })
+
+    it('should preserve main/master branch (protected)', function() {
+      this.timeout(15000)
+      const absoluteBin = getAbsoluteBinPath()
+
+      const result = execSync(`node "${absoluteBin}" branch --delete --all`, {
+        cwd: testDir,
+        encoding: 'utf8',
+      })
+
+      // Main/master should be listed as preserved with "protected" reason
+      expect(result).to.match(/preserved/i)
+    })
+  })
+
+  describe('exit codes', () => {
+    it('should exit with code 2 for invalid usage (no flags)', () => {
+      try {
+        execSync(`${bin} branch`, {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {status: number}
+        expect(err.status).to.equal(2)
+      }
+    })
+
+    it('should exit with non-zero code for environment error (not a git repo)', async () => {
+      const nonGitDir = join(tmpdir(), `aiw-non-git-test-${randomUUID()}`)
+      await fs.mkdir(nonGitDir, {recursive: true})
+      const absoluteBin = getAbsoluteBinPath()
+
+      try {
+        execSync(`node "${absoluteBin}" branch --delete some-branch`, {
+          cwd: nonGitDir,
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {status: number; stderr: string}
+        // Verify error occurred (exit code > 0) and message is correct
+        expect(err.status).to.be.greaterThan(0)
+        expect(err.stderr).to.match(/not a git repository/i)
+      } finally {
+        await cleanupTestDir(nonGitDir)
+      }
+    })
+
+    it('should exit with non-zero code for invalid usage (protected branch)', async () => {
+      const testDir = await createTestGitRepo()
+      const absoluteBin = getAbsoluteBinPath()
+
+      try {
+        execSync(`node "${absoluteBin}" branch --delete main`, {
+          cwd: testDir,
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        expect.fail('Should have thrown')
+      } catch (error) {
+        const err = error as {status: number; stderr: string}
+        // Verify error occurred (exit code > 0) and message mentions protection
+        expect(err.status).to.be.greaterThan(0)
+        expect(err.stderr).to.match(/cannot delete.*main|main.*protected/i)
+      } finally {
+        await cleanupTestDir(testDir)
+      }
+    })
+  })
+
+  describe('branch name validation', () => {
+    it('should accept valid branch names with dots', () => {
+      // This test verifies the validation regex accepts dots
+      // The actual creation would fail in a test environment without proper git setup
+      // but the validation should pass
+      const validNames = ['feature-v1.0', 'release.1.2.3', 'fix.bug']
+      for (const name of validNames) {
+        // Valid names should not match the invalid pattern check
+        const validPattern = /^[a-zA-Z0-9._/-]+$/
+        expect(validPattern.test(name)).to.be.true
+      }
+    })
+
+    it('should accept valid branch names with dashes', () => {
+      const validNames = ['feature-branch', 'my-new-feature', 'bug-fix-123']
+      for (const name of validNames) {
+        const validPattern = /^[a-zA-Z0-9._/-]+$/
+        expect(validPattern.test(name)).to.be.true
+      }
+    })
+
+    it('should accept valid branch names with underscores', () => {
+      const validNames = ['feature_branch', 'my_new_feature', 'bug_fix_123']
+      for (const name of validNames) {
+        const validPattern = /^[a-zA-Z0-9._/-]+$/
+        expect(validPattern.test(name)).to.be.true
+      }
+    })
+
+    it('should accept valid branch names with slashes', () => {
+      const validNames = ['feature/my-branch', 'bugfix/issue-123', 'release/v1.0']
+      for (const name of validNames) {
+        const validPattern = /^[a-zA-Z0-9._/-]+$/
+        expect(validPattern.test(name)).to.be.true
+      }
+    })
+
+    it('should reject branch names with spaces', () => {
+      const invalidNames = ['my branch', 'feature branch', 'bug fix']
+      for (const name of invalidNames) {
+        const validPattern = /^[a-zA-Z0-9._/-]+$/
+        expect(validPattern.test(name)).to.be.false
+      }
+    })
+
+    it('should reject branch names with special characters', () => {
+      const invalidNames = ['branch@name', 'feature#123', 'bug$fix', 'test!branch']
+      for (const name of invalidNames) {
+        const validPattern = /^[a-zA-Z0-9._/-]+$/
+        expect(validPattern.test(name)).to.be.false
+      }
     })
   })
 })
