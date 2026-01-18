@@ -1,0 +1,81 @@
+# {{PROJECT_NAME}} - Phase Context
+
+## Overview
+
+This document captures decisions, assumptions, and clarifications made during discuss-phase sessions. Each phase section records the pre-planning context that informs task execution.
+
+---
+
+## Phase {{PHASE_NUMBER}}: {{PHASE_NAME}}
+
+### Discussion Summary
+
+**Date:** {{DATE}}
+**Participants:** User, AI Assistant
+
+### Gray Areas Resolved
+
+#### Visual/UI Decisions
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| [What should X look like?] | [Decision] | [Why] |
+
+#### API/Data Decisions
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| [How should data flow?] | [Decision] | [Why] |
+
+#### Content/Copy Decisions
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| [What text should appear?] | [Decision] | [Why] |
+
+#### Organization/Structure Decisions
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| [How should X be organized?] | [Decision] | [Why] |
+
+### Assumptions
+
+List assumptions made that could affect implementation:
+
+1. **Assumption:** [What we're assuming]
+   - **Impact if wrong:** [What changes]
+   - **Validation:** [How to verify]
+
+2. **Assumption:** [What we're assuming]
+   - **Impact if wrong:** [What changes]
+   - **Validation:** [How to verify]
+
+### Dependencies
+
+External factors this phase depends on:
+
+- **[Dependency]:** [Status] - [Notes]
+- **[Dependency]:** [Status] - [Notes]
+
+### Out of Scope (This Phase)
+
+Explicitly excluded from this phase:
+
+- [Item 1] - Reason: [Why deferred]
+- [Item 2] - Reason: [Why deferred]
+
+### Open Questions
+
+Unresolved questions to address during execution:
+
+- [ ] [Question 1] - Who can answer: [Person/Source]
+- [ ] [Question 2] - Who can answer: [Person/Source]
+
+---
+
+## Context Archive
+
+### Phase 1: [Phase Name]
+[Archived context from completed phases]
+
+---
+
+**Maintained by:** GSD discuss-phase workflow
+**Last Updated:** {{DATE}}

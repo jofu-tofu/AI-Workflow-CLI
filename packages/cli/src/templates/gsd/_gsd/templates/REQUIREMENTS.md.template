@@ -1,0 +1,83 @@
+# {{PROJECT_NAME}} - Requirements
+
+## Overview
+
+This document captures all requirements for the project, organized by priority tier and linked to implementation phases.
+
+---
+
+## V1 Requirements (Must Have)
+
+Requirements that define the minimum viable product. Without these, the project cannot ship.
+
+### Functional Requirements
+
+| ID | Requirement | Phase | Status |
+|----|-------------|-------|--------|
+| V1-F01 | [Description] | Phase {{PHASE_NUMBER}} | ⏳ Pending |
+| V1-F02 | [Description] | Phase {{PHASE_NUMBER}} | ⏳ Pending |
+
+### Non-Functional Requirements
+
+| ID | Requirement | Category | Phase | Status |
+|----|-------------|----------|-------|--------|
+| V1-N01 | [Description] | Performance | Phase {{PHASE_NUMBER}} | ⏳ Pending |
+| V1-N02 | [Description] | Security | Phase {{PHASE_NUMBER}} | ⏳ Pending |
+
+---
+
+## V2 Requirements (Should Have)
+
+Requirements that enhance the product but are not blocking for initial release.
+
+### Functional Requirements
+
+| ID | Requirement | Phase | Status |
+|----|-------------|-------|--------|
+| V2-F01 | [Description] | TBD | ⏳ Pending |
+| V2-F02 | [Description] | TBD | ⏳ Pending |
+
+### Non-Functional Requirements
+
+| ID | Requirement | Category | Phase | Status |
+|----|-------------|----------|-------|--------|
+| V2-N01 | [Description] | Usability | TBD | ⏳ Pending |
+
+---
+
+## V3+ Requirements (Nice to Have)
+
+Future enhancements and ideas for consideration.
+
+| ID | Requirement | Notes |
+|----|-------------|-------|
+| V3-01 | [Description] | [Context] |
+| V3-02 | [Description] | [Context] |
+
+---
+
+## Requirement Status Legend
+
+| Status | Meaning |
+|--------|---------|
+| ⏳ Pending | Not yet started |
+| 🔄 In Progress | Currently being implemented |
+| ✅ Complete | Implemented and verified |
+| ❌ Deferred | Moved to later phase |
+| 🚫 Dropped | No longer needed |
+
+---
+
+## Traceability Matrix
+
+Links requirements to their implementation tasks.
+
+| Requirement | Phase | Tasks | Tests |
+|-------------|-------|-------|-------|
+| V1-F01 | 1 | PLAN-phase-1: Task 1 | [Test file] |
+| V1-F02 | 2 | PLAN-phase-2: Task 1,2 | [Test file] |
+
+---
+
+**Created:** {{DATE}}
+**Last Updated:** {{DATE}}

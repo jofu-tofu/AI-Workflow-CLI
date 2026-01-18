@@ -1,6 +1,6 @@
 # GSD: New Project
 
-Extract project ideas through guided questions and create foundational PROJECT.md documentation.
+Initialize a complete project from ideation to roadmap. This unified workflow guides discovery, conducts optional research, generates requirements, and produces a complete project plan.
 
 ## Workflow Source
 
@@ -11,11 +11,23 @@ This workflow is defined in detail at `_gsd/workflows/new-project.md`.
 ## Quick Reference
 
 This command will:
-1. Ask guided discovery questions about your project
-2. Understand vision, goals, constraints, and target users
-3. Generate PROJECT.md with complete project documentation
-4. Initialize supporting files (ROADMAP.md, STATE.md, ISSUES.md)
-5. Create todos/ directory for idea capture
+1. Create `.planning/` directory structure
+2. Ask guided discovery questions about your project
+3. Conduct optional research for unfamiliar technologies
+4. Generate REQUIREMENTS.md with V1/V2 separation
+5. Generate PROJECT.md with complete vision
+6. Generate ROADMAP.md with phase breakdown
+7. Initialize STATE.md, ISSUES.md, SUMMARY.md
+
+## Outputs
+
+All files created in `.planning/` directory:
+- `PROJECT.md` - Vision and goals
+- `REQUIREMENTS.md` - V1/V2 requirements
+- `ROADMAP.md` - Phase breakdown
+- `STATE.md` - Project state tracking
+- `ISSUES.md` - Future enhancements
+- `SUMMARY.md` - Change history
 
 ## Usage
 
@@ -23,4 +35,4 @@ This command will:
 /gsd-new-project
 ```
 
-Then answer the discovery questions to define your project vision.
+Then answer the discovery questions to define your project vision and roadmap.

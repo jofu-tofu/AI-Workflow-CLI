@@ -8,43 +8,51 @@ The Get Shit Done (GSD) template is a structured workflow system for AI-assisted
 
 ```
 packages/cli/src/templates/gsd/
-├── README.md                        # Main template overview
-├── TEMPLATE-SCHEMA.md              # This file - schema documentation
-├── AIWCLI-README.md                # AI Workflow CLI repository README
-├── _gsd/                           # Core template files (copied to user projects)
-│   ├── templates/                  # Document templates with {{placeholders}}
-│   │   ├── PROJECT.md.template     # Project vision template
-│   │   ├── ROADMAP.md.template     # Phase roadmap template
-│   │   ├── STATE.md.template       # Persistent state tracking template
-│   │   ├── PLAN.md.template        # Phase plan template (XML tasks)
-│   │   ├── SUMMARY.md.template     # Change summary template
-│   │   └── ISSUES.md.template      # Deferred issues template
-│   └── workflows/                  # Workflow method definitions
-│       ├── new-project.md
-│       ├── create-roadmap.md
-│       ├── plan-phase.md
-│       ├── execute-plan.md
-│       ├── verify-work.md
-│       ├── plan-fix.md
-│       ├── progress.md
-│       ├── pause-work.md
-│       ├── resume-work.md
-│       ├── map-codebase.md
-│       ├── add-phase.md
-│       ├── insert-phase.md
-│       └── complete-milestone.md
-├── .claude/                        # Claude Code integration
+├── GSD-README.md                        # Main template overview
+├── TEMPLATE-SCHEMA.md                   # This file - schema documentation
+├── MIGRATION.md                         # Breaking changes and migration guide
+├── .gitignore                           # Ignores .planning/ directory
+├── _gsd/                                # Core template files (copied to user projects)
+│   ├── templates/                       # Document templates with {{placeholders}}
+│   │   ├── PROJECT.md.template          # Project vision template
+│   │   ├── REQUIREMENTS.md.template     # V1/V2 requirements template
+│   │   ├── ROADMAP.md.template          # Phase roadmap template
+│   │   ├── CONTEXT.md.template          # Discussion decisions template
+│   │   ├── RESEARCH.md.template         # Research findings template
+│   │   ├── STATE.md.template            # Persistent state tracking template
+│   │   ├── PLAN.md.template             # Phase plan template (XML tasks)
+│   │   ├── SUMMARY.md.template          # Change summary template
+│   │   └── ISSUES.md.template           # Deferred issues template
+│   └── workflows/                       # Workflow method definitions
+│       ├── new-project.md               # Core: Unified project + roadmap
+│       ├── discuss-phase.md             # Core: Pre-planning decisions
+│       ├── plan-phase.md                # Core: Task planning with waves
+│       ├── execute-phase.md             # Core: Wave-based execution
+│       ├── verify-work.md               # Core: Conversational UAT
+│       ├── research-phase.md            # Utility: Standalone research
+│       ├── list-phase-assumptions.md    # Utility: View assumptions
+│       ├── remove-phase.md              # Utility: Remove and renumber
+│       ├── new-milestone.md             # Utility: Start next version
+│       ├── debug.md                     # Utility: Systematic debugging
+│       ├── add-todo.md                  # Utility: Capture ideas
+│       ├── check-todos.md               # Utility: List pending
+│       ├── help.md                      # Utility: Command reference
+│       ├── whats-new.md                 # Utility: Version updates
+│       ├── progress.md                  # Context: Show position
+│       ├── pause-work.md                # Context: Create handoff
+│       ├── resume-work.md               # Context: Restore from handoff
+│       ├── map-codebase.md              # Brownfield: Analyze code
+│       ├── add-phase.md                 # Roadmap: Append phase
+│       ├── insert-phase.md              # Roadmap: Insert phase
+│       └── complete-milestone.md        # Milestone: Archive version
+├── .claude/                             # Claude Code integration
 │   └── commands/
-│       └── gsd/                    # Slash commands for Claude IDE
-│           ├── new-project.md
-│           ├── create-roadmap.md
-│           └── ... (all workflows)
-└── .windsurf/                      # Windsurf IDE integration
+│       └── gsd/                         # Slash commands for Claude IDE
+│           └── *.md                     # One file per command
+└── .windsurf/                           # Windsurf IDE integration
     └── workflows/
-        └── gsd/                    # Workflows for Windsurf
-            ├── new-project.md
-            ├── create-roadmap.md
-            └── ... (all workflows)
+        └── gsd/                         # Workflows for Windsurf
+            └── *.md                     # One file per workflow
 ```
 
 ## Template Components
@@ -71,11 +79,25 @@ Template files use the `.template` extension and contain placeholder variables i
   - `{{DATE}}` - Current date (YYYY-MM-DD format)
   - `{{VERSION}}` - Version number (for milestones)
   - `{{PHASE_NUMBER}}` - Phase number in roadmap
-  - `{{TASK_COUNT}}` - Number of tasks in a plan
+  - `{{PHASE_NAME}}` - Phase name from roadmap
 
-### 2. Workflows (`_gsd/workflows/`)
+### 2. Templates List
 
-Workflow files define step-by-step processes for AI agents to follow. Each workflow is a markdown file with a specific structure.
+| Template | Purpose | Key Placeholders |
+|----------|---------|------------------|
+| PROJECT.md.template | Project vision and goals | PROJECT_NAME, DATE |
+| REQUIREMENTS.md.template | V1/V2 requirements | PROJECT_NAME, PHASE_NUMBER |
+| ROADMAP.md.template | Phase breakdown | PROJECT_NAME, DATE |
+| CONTEXT.md.template | Discussion decisions | PROJECT_NAME, PHASE_NUMBER, PHASE_NAME |
+| RESEARCH.md.template | Research findings | PROJECT_NAME, PHASE_NUMBER, PHASE_NAME |
+| STATE.md.template | Project state tracking | PROJECT_NAME, DATE |
+| PLAN.md.template | Phase execution plan | PHASE_NUMBER, PHASE_NAME, DATE |
+| SUMMARY.md.template | Change history | PROJECT_NAME, DATE |
+| ISSUES.md.template | Deferred enhancements | PROJECT_NAME, DATE |
+
+### 3. Workflows (`_gsd/workflows/`)
+
+Workflow files define step-by-step processes for AI agents to follow.
 
 **Workflow File Structure:**
 ```markdown
@@ -84,6 +106,10 @@ Workflow files define step-by-step processes for AI agents to follow. Each workf
 ## Purpose
 
 Brief description of what this workflow achieves.
+
+## Prerequisites
+
+What must exist before running this workflow.
 
 ## Process
 
@@ -95,6 +121,10 @@ Detailed instructions for the first step.
 
 Detailed instructions for the second step.
 
+## Output Files
+
+What files are created or modified.
+
 ## Next Steps
 
 What the user should do after this workflow completes.
@@ -105,114 +135,137 @@ What the user should do after this workflow completes.
 - [ ] Criterion 2
 ```
 
-### 3. IDE Integrations
+### 4. IDE Integrations
 
 **Claude Code (`.claude/commands/gsd/`):**
 - Commands invoked as `/gsd:command-name`
-- Files mirror the workflow files in `_gsd/workflows/`
+- YAML frontmatter with description
+- Directive to load full workflow from `_gsd/workflows/`
 
 **Windsurf (`.windsurf/workflows/gsd/`):**
 - Workflows accessible through Windsurf IDE
-- Files mirror the workflow files in `_gsd/workflows/`
+- Quick reference with link to full workflow
 
-## Method-Specific README Convention
+## Workflow Organization
 
-Every workflow method has a corresponding README file named `{METHOD-NAME}-README.md` that provides:
+### Core Loop (5 Commands)
+| Workflow | Purpose |
+|----------|---------|
+| new-project | Unified discovery, requirements, and roadmap |
+| discuss-phase | Pre-planning decision capture |
+| plan-phase | Task planning with wave groupings |
+| execute-phase | Wave-based parallel execution |
+| verify-work | Conversational UAT with auto-diagnosis |
 
-1. **Purpose** - What this method does and when to use it
-2. **Prerequisites** - What must be done before running this method
-3. **Execution Order** - Step-by-step user flow
-4. **Generated Files** - What files are created/modified
-5. **Next Steps** - What to do after completion
-6. **Examples** - Sample usage and outputs
+### Utility Commands (9)
+| Workflow | Purpose |
+|----------|---------|
+| research-phase | Standalone research |
+| list-phase-assumptions | View assumptions |
+| remove-phase | Remove and renumber |
+| new-milestone | Start next version |
+| debug | Systematic debugging |
+| add-todo | Capture ideas |
+| check-todos | List pending |
+| help | Command reference |
+| whats-new | Version updates |
 
-**Naming Convention:**
-- Workflow file: `new-project.md`
-- README file: `NEW-PROJECT-README.md`
+### Context Management (3)
+| Workflow | Purpose |
+|----------|---------|
+| progress | Show current position |
+| pause-work | Create handoff |
+| resume-work | Restore from handoff |
 
-**Location:**
-All method READMEs are stored in: `packages/cli/src/templates/gsd/methods/`
+### Roadmap Management (2)
+| Workflow | Purpose |
+|----------|---------|
+| add-phase | Append new phase |
+| insert-phase | Insert urgent phase |
 
-## Workflow Methods
+### Brownfield (1)
+| Workflow | Purpose |
+|----------|---------|
+| map-codebase | Analyze existing code |
 
-### Greenfield Projects (New Projects)
+### Milestone (1)
+| Workflow | Purpose |
+|----------|---------|
+| complete-milestone | Archive version |
 
-1. **new-project** - Extract project ideas, create PROJECT.md
-2. **create-roadmap** - Break project into phases with deliverables
-3. **plan-phase** - Create atomic task plans (max 3 tasks) for a phase
-4. **execute-plan** - Run tasks in fresh subagent contexts
-5. **verify-work** - User acceptance testing for completed work
-6. **plan-fix** - Address UAT issues with targeted fixes
-7. **progress** - Show current position and next steps
+**Total: 21 workflows**
 
-### Brownfield Projects (Existing Codebases)
+## Output Directory Structure
 
-1. **map-codebase** - Analyze existing code, create CODEBASE.md
-2. **new-project** - Create project documentation
-3. Follow greenfield flow from step 2 onwards
+All GSD outputs go to `.planning/`:
 
-### Context Management
-
-1. **pause-work** - Create handoff documentation (HANDOFF.md)
-2. **resume-work** - Restore context from HANDOFF.md
-
-### Roadmap Management
-
-1. **add-phase** - Append new phases to end of roadmap
-2. **insert-phase** - Inject urgent work between existing phases
-
-### Milestone Completion
-
-1. **complete-milestone** - Archive project state, tag release, prepare for v2+
-
-## How Templates Are Used
-
-### Installation
-When a user runs `aiw init --method gsd --ide claude`, the CLI:
-
-1. Copies `_gsd/` directory to user's project root
-2. Copies `.claude/commands/gsd/` to user's project `.claude/` directory
-3. Preserves existing files, only adds new ones
-
-### Template Instantiation
-Workflows instantiate templates by:
-
-1. Reading template file from `_gsd/templates/`
-2. Replacing `{{PLACEHOLDERS}}` with actual values
-3. Writing the result to project root (e.g., `PROJECT.md`)
-
-**Example:**
-```javascript
-// Pseudocode for template instantiation
-const template = readFile('_gsd/templates/PROJECT.md.template')
-const content = template
-  .replace('{{PROJECT_NAME}}', projectName)
-  .replace('{{DATE}}', getCurrentDate())
-  .replace('{{VISION}}', userVision)
-writeFile('PROJECT.md', content)
+```
+.planning/
+├── PROJECT.md                  # Project vision
+├── REQUIREMENTS.md             # V1/V2 requirements
+├── ROADMAP.md                  # Phase breakdown
+├── CONTEXT.md                  # Discussion decisions
+├── RESEARCH.md                 # Research findings
+├── STATE.md                    # Current status
+├── PLAN-phase-{N}.md          # Phase plans
+├── VERIFICATION-phase-{N}.md  # UAT reports
+├── PLAN-fix-phase-{N}.md      # Fix plans (if issues)
+├── SUMMARY.md                  # Commit history
+├── ISSUES.md                   # Deferred items
+├── CODEBASE.md                # Brownfield analysis
+├── HANDOFF.md                 # Context for resume
+├── MILESTONE-{version}.md     # Milestone summaries
+├── todos/                     # Captured ideas
+│   └── {date}-{title}.md
+└── archive/                   # Milestone archives
+    └── v{version}/
 ```
 
 ## XML Task Format
 
-Plans use XML-structured tasks for clarity and parseability:
+Plans use XML-structured tasks:
 
 ```xml
-<task>
+<task id="1" wave="1">
+  <title>Clear, actionable title</title>
+
   <objective>
-    Clear, measurable goal for this task
+    What this task accomplishes in one sentence.
   </objective>
 
+  <requirements>
+    - V1-F01: Requirement text
+    - V1-N01: Requirement text
+  </requirements>
+
   <action>
-    Specific implementation steps with file paths and exact changes
+    Specific, concrete steps:
+    1. File: path/to/file.ts
+       Change: What to modify
+    2. File: path/to/file.ts
+       Change: What to modify
   </action>
 
+  <decisions>
+    Decisions from CONTEXT.md that apply:
+    - Decision 1
+    - Decision 2
+  </decisions>
+
   <verification>
-    How to verify success: tests, behaviors, outputs to check
+    - [ ] Specific test to run
+    - [ ] Behavior to check
+    - [ ] Output to validate
   </verification>
 
   <rollback>
-    How to undo: git commands, files to restore, cleanup steps
+    git revert HEAD
   </rollback>
+
+  <acceptance_criteria>
+    - [ ] Testable criterion 1
+    - [ ] Testable criterion 2
+  </acceptance_criteria>
 </task>
 ```
 
@@ -221,101 +274,50 @@ Plans use XML-structured tasks for clarity and parseability:
 - Easy to extract sections programmatically
 - Self-documenting format
 - Enforces complete task specifications
+- Supports wave attribute for parallel execution
 
-## State Management
+## Installation
 
-### Persistent Files
-These files track project state across sessions:
+When a user runs `aiw init --method gsd --ide claude`, the CLI:
 
-- **PROJECT.md** - Never changes (project vision)
-- **ROADMAP.md** - Updated as phases complete
-- **STATE.md** - Continuously updated (decisions, blockers, progress)
-- **PLAN-phase-{N}.md** - Created per phase, archived after completion
-- **SUMMARY.md** - Append-only commit history
-- **ISSUES.md** - Deferred enhancements, tracked for future work
-
-### Handoff Files
-Created for context switching:
-
-- **HANDOFF.md** - Created by `pause-work`, consumed by `resume-work`
-- **CODEBASE.md** - Created by `map-codebase` for brownfield projects
-
-### Archive Files
-Created at milestones:
-
-- **MILESTONE-{version}.md** - Project snapshot at release
-- **archive/v{version}/** - Complete state archive for version
-
-## Best Practices
-
-### For Template Authors
-
-1. **Keep templates simple** - Minimal placeholders, clear structure
-2. **Document all placeholders** - Explain what each variable means
-3. **Provide examples** - Include sample outputs in comments
-4. **Version templates** - Track changes to template structure
-
-### For Workflow Authors
-
-1. **Be explicit** - Clear, step-by-step instructions
-2. **Include success criteria** - Checklist for completion
-3. **Recommend next steps** - Guide user journey
-4. **Handle edge cases** - What to do if files already exist
-
-### For Method README Authors
-
-1. **User-focused** - Write for developers using the method
-2. **Linear flow** - Step 1, 2, 3 execution order
-3. **Show examples** - Sample commands, outputs, file contents
-4. **Link to related methods** - Create a connected workflow
+1. Copies `_gsd/` directory to user's project root
+2. Copies `.claude/commands/gsd/` to user's `.claude/` directory
+3. Creates `.planning/` directory structure
+4. Preserves existing files, only adds new ones
 
 ## Extension Guidelines
 
-### Adding a New Workflow Method
+### Adding a New Workflow
 
 1. Create workflow file: `_gsd/workflows/{method-name}.md`
-2. Create method README: `methods/{METHOD-NAME}-README.md`
-3. Mirror to `.claude/commands/gsd/{method-name}.md`
-4. Mirror to `.windsurf/workflows/gsd/{method-name}.md`
-5. Update main `README.md` with new method
+2. Mirror to `.claude/commands/gsd/{method-name}.md`
+3. Mirror to `.windsurf/workflows/gsd/{method-name}.md`
+4. Update `GSD-README.md` with new command
+5. Update this schema file
 6. Test the full workflow
-7. Document in this schema file
 
 ### Creating a New Template
 
 1. Add template file: `_gsd/templates/{NAME}.md.template`
 2. Document placeholders in schema
 3. Create workflow that uses the template
-4. Add example output to method README
-
-## Troubleshooting
-
-### Common Issues
-
-**Problem:** Template placeholders not replaced
-- **Solution:** Verify placeholder names match exactly (case-sensitive)
-
-**Problem:** Workflow file not found
-- **Solution:** Check file is in all three locations (_gsd, .claude, .windsurf)
-
-**Problem:** Method doesn't appear in IDE
-- **Solution:** Restart IDE after running `aiw init`
-
-**Problem:** State files not updating
-- **Solution:** Verify workflows are writing to project root, not template directory
-
-## Related Documentation
-
-- **README.md** - User-facing template overview
-- **AIWCLI-README.md** - AI Workflow CLI repository information
-- **methods/{METHOD-NAME}-README.md** - Individual workflow documentation
-- **DEVELOPMENT.md** - Developer setup guide (in repository root)
+4. Update `GSD-README.md`
 
 ## Version History
 
-- **2026-01-12** - Initial schema documentation created
-- Template system established with XML task format
-- Method README convention established
+- **2.0.0** - 5-core loop architecture
+  - Output directory: `.planning/`
+  - Unified new-project (merged create-roadmap)
+  - New discuss-phase workflow
+  - Wave-based execute-phase
+  - Conversational verify-work (absorbs plan-fix)
+  - 9 new utility commands
+  - 3 new templates (REQUIREMENTS, CONTEXT, RESEARCH)
+
+- **1.0.0** - Initial release
+  - Output directory: `_GSD_OUTPUT/`
+  - 13 separate workflows
+  - 6 templates
 
 ---
 

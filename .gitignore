@@ -131,7 +131,7 @@ nul
 NUL
 _bmad-output/
 
-# AIW Installation
-_gsd/
-_GSD_OUTPUT/
-.claude/
+# AIW Installation (user-installed, not template source)
+/_gsd/
+/_GSD_OUTPUT/
+/.claude/

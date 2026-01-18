@@ -1,6 +1,6 @@
 # GSD: Verify Work
 
-User acceptance testing for completed phases to ensure quality before proceeding.
+User acceptance testing for completed phases with conversational walkthrough, automated checks, failure detection, and integrated auto-diagnosis with fix plan generation.
 
 ## Workflow Source
 
@@ -11,16 +11,29 @@ This workflow is defined in detail at `_gsd/workflows/verify-work.md`.
 ## Quick Reference
 
 This command will:
-1. Read PLAN-phase-{N}.md acceptance criteria
-2. Run automated checks (tests, linting, build)
-3. Guide manual verification with specific steps
-4. Create VERIFICATION-phase-{N}.md report
-5. Update ROADMAP.md if phase approved
+1. Extract testable deliverables from requirements
+2. Run automated verification (tests, linting, build)
+3. Conversational UAT walkthrough with user
+4. Failure detection and classification
+5. Auto-diagnosis for failures
+6. Fix plan generation when issues found
+
+## Key Features
+
+- **Conversational UAT:** One-by-one verification with user
+- **Auto-Diagnosis:** Automatically investigates failures
+- **Fix Plan Generation:** Creates actionable fix tasks
+- **Absorbs plan-fix:** No separate workflow needed
 
 ## Usage
 
 ```
-/gsd-verify-work [phase number]
+/gsd-verify-work 1
 ```
 
-Example: `/gsd-verify-work 1` verifies Phase 1 completion.
+Then walk through verification items conversationally.
+
+## Output
+
+- `.planning/VERIFICATION-phase-{N}.md` - Full report
+- `.planning/PLAN-fix-phase-{N}.md` - Fix plan (if issues)

@@ -17,10 +17,10 @@ Use this when:
 ### Step 1: Current State Analysis
 
 Read project state:
-1. `_GSD_OUTPUT/ROADMAP.md` - Current phases and status
-2. `_GSD_OUTPUT/PROJECT.md` - Original goals and vision
-3. `_GSD_OUTPUT/STATE.md` - Recent decisions and context
-4. `_GSD_OUTPUT/ISSUES.md` - Deferred enhancements that might become phases
+1. `.planning/ROADMAP.md` - Current phases and status
+2. `.planning/PROJECT.md` - Original goals and vision
+3. `.planning/STATE.md` - Recent decisions and context
+4. `.planning/ISSUES.md` - Deferred enhancements that might become phases
 
 Determine:
 - How many phases currently exist?
@@ -83,11 +83,11 @@ Decide where to add:
 
 Add new phase to ROADMAP.md:
 
-1. Read current `_GSD_OUTPUT/ROADMAP.md`
+1. Read current `.planning/ROADMAP.md`
 2. Find "Phase Sequence" section
 3. Append new phase after last phase
 4. Maintain formatting consistency
-5. Write updated file to `_GSD_OUTPUT/ROADMAP.md`
+5. Write updated file to `.planning/ROADMAP.md`
 
 Example:
 ```markdown
@@ -114,7 +114,7 @@ Example:
 
 If new phase expands original vision:
 
-1. Read `_GSD_OUTPUT/PROJECT.md`
+1. Read `.planning/PROJECT.md`
 2. Add to goals if it's a new goal:
    ```markdown
    ## Goals
@@ -128,13 +128,13 @@ If new phase expands original vision:
 
 4. Don't remove old goals - mark them complete
 
-5. Write updated file to `_GSD_OUTPUT/PROJECT.md`
+5. Write updated file to `.planning/PROJECT.md`
 
 ### Step 7: Update STATE.md
 
 Document the addition:
 
-1. Read `_GSD_OUTPUT/STATE.md`
+1. Read `.planning/STATE.md`
 2. Add decision entry:
    ```markdown
    ## Key Decisions
@@ -145,7 +145,7 @@ Document the addition:
    - **Rationale:** User feedback requested notification features
    - **Implications:** Extends timeline by estimated {duration}
    ```
-3. Write updated file to `_GSD_OUTPUT/STATE.md`
+3. Write updated file to `.planning/STATE.md`
 
 ### Step 8: Confirmation
 
@@ -159,9 +159,9 @@ Ask: "Does this capture the new phase correctly?"
 
 ## Output Files
 
-- Updated `_GSD_OUTPUT/ROADMAP.md` - New phase appended
-- Updated `_GSD_OUTPUT/PROJECT.md` - Goals adjusted if needed
-- Updated `_GSD_OUTPUT/STATE.md` - Decision documented
+- Updated `.planning/ROADMAP.md` - New phase appended
+- Updated `.planning/PROJECT.md` - Goals adjusted if needed
+- Updated `.planning/STATE.md` - Decision documented
 
 ## Success Criteria
 
@@ -198,7 +198,7 @@ Ask: "Does this capture the new phase correctly?"
 
 **When NOT to Add Phase:**
 - If work fits in existing phase - just add tasks instead
-- If it's a bug fix - use `/gsd:plan-fix` instead
+- If it's a bug fix - use `/gsd:verify-work` to diagnose and fix
 - If it's a tiny enhancement - add to ISSUES.md as future work
 
 **Add Phase When:**
