@@ -1,6 +1,6 @@
 ---
 name: planning-with-files
-version: "2.1.2"
+version: "3.0.0"
 description: Implements Manus-style file-based planning for complex tasks. Creates task_plan.md, findings.md, and progress.md. Use when starting complex multi-step tasks, research projects, or any task requiring >5 tool calls.
 user-invocable: true
 allowed-tools:
@@ -21,16 +21,16 @@ hooks:
     - matcher: "Write|Edit|Bash"
       hooks:
         - type: command
-          command: "cat _planning-with-files-output/task_plan.md 2>/dev/null | head -30 || true"
+          command: "cat _output/planning-with-files/task_plan.md 2>/dev/null | head -30 || true"
   PostToolUse:
     - matcher: "Write|Edit"
       hooks:
         - type: command
-          command: "echo '[planning-with-files] File updated. If this completes a phase, update _planning-with-files-output/task_plan.md status.'"
+          command: "echo '[planning-with-files] File updated. If this completes a phase, update _output/planning-with-files/task_plan.md status.'"
   Stop:
     - hooks:
         - type: command
-          command: ".claude/skills/planning-with-files/scripts/check-complete.sh"
+          command: "bash .claude/skills/planning-with-files/scripts/check-complete.sh"
 ---
 
 # Planning with Files
@@ -42,26 +42,26 @@ Work like Manus: Use persistent markdown files as your "working memory on disk."
 When using this skill:
 
 - **Templates** are stored in the skill directory at `.claude/skills/planning-with-files/templates/`
-- **Your planning files** (`task_plan.md`, `findings.md`, `progress.md`) should be created in the **output folder** `_planning-with-files-output/`
+- **Your planning files** (`task_plan.md`, `findings.md`, `progress.md`) should be created in the **output folder** `_output/planning-with-files/`
 
 | Location | What Goes There |
 |----------|-----------------|
 | Skill directory (`.claude/skills/planning-with-files/`) | Templates, scripts, reference docs |
-| Output folder (`_planning-with-files-output/`) | `task_plan.md`, `findings.md`, `progress.md` |
+| Output folder (`_output/planning-with-files/`) | `task_plan.md`, `findings.md`, `progress.md` |
 
-This ensures your planning files are organized in a dedicated output folder, following the `_{template-name}-output` convention.
+This ensures your planning files are organized in a dedicated output folder, following the `_output/{method}/` convention.
 
 ## Quick Start
 
 Before ANY complex task:
 
-1. **Create `_planning-with-files-output/task_plan.md`** — Use [templates/task_plan.md](templates/task_plan.md) as reference
-2. **Create `_planning-with-files-output/findings.md`** — Use [templates/findings.md](templates/findings.md) as reference
-3. **Create `_planning-with-files-output/progress.md`** — Use [templates/progress.md](templates/progress.md) as reference
+1. **Create `_output/planning-with-files/task_plan.md`** — Use [templates/task_plan.md](templates/task_plan.md) as reference
+2. **Create `_output/planning-with-files/findings.md`** — Use [templates/findings.md](templates/findings.md) as reference
+3. **Create `_output/planning-with-files/progress.md`** — Use [templates/progress.md](templates/progress.md) as reference
 4. **Re-read plan before decisions** — Refreshes goals in attention window
 5. **Update after each phase** — Mark complete, log errors
 
-> **Note:** All three planning files should be created in the `_planning-with-files-output/` folder. You can run `scripts/init-session.sh` to create them automatically.
+> **Note:** All three planning files should be created in the `_output/planning-with-files/` folder. You can run `scripts/init-session.sh` to create them automatically.
 
 ## The Core Pattern
 
@@ -76,9 +76,9 @@ Filesystem = Disk (persistent, unlimited)
 
 | File | Purpose | When to Update |
 |------|---------|----------------|
-| `_planning-with-files-output/task_plan.md` | Phases, progress, decisions | After each phase |
-| `_planning-with-files-output/findings.md` | Research, discoveries | After ANY discovery |
-| `_planning-with-files-output/progress.md` | Session log, test results | Throughout session |
+| `_output/planning-with-files/task_plan.md` | Phases, progress, decisions | After each phase |
+| `_output/planning-with-files/findings.md` | Research, discoveries | After ANY discovery |
+| `_output/planning-with-files/progress.md` | Session log, test results | Throughout session |
 
 ## Critical Rules
 
@@ -208,4 +208,4 @@ Helper scripts for automation:
 | Stuff everything in context | Store large content in files |
 | Start executing immediately | Create plan file FIRST |
 | Repeat failed actions | Track attempts, mutate approach |
-| Create files in skill directory | Create files in `_planning-with-files-output/` |
+| Create files in skill directory | Create files in `_output/planning-with-files/` |

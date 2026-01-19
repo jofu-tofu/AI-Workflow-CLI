@@ -6,9 +6,31 @@
         "once": true,
         "hooks": [
           {
-            "type": "bash",
+            "type": "command",
             "command": "bash .claude/skills/planning-with-files/scripts/init-session.sh",
             "timeout": 30000
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat _output/planning-with-files/task_plan.md 2>/dev/null | head -30 || true"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[planning-with-files] File updated. If this completes a phase, update _output/planning-with-files/task_plan.md status.'"
           }
         ]
       }
@@ -19,7 +41,7 @@
         "once": false,
         "hooks": [
           {
-            "type": "bash",
+            "type": "command",
             "command": "bash .claude/skills/planning-with-files/scripts/check-complete.sh",
             "timeout": 10000
           }

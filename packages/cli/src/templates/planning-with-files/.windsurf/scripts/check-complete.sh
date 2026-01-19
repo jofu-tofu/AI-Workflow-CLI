@@ -3,7 +3,7 @@
 # Exit 0 if complete, exit 1 if incomplete
 # Used by post_write_code hook to verify task completion
 
-OUTPUT_DIR="_planning-with-files-output"
+OUTPUT_DIR="_output/planning-with-files"
 PLAN_FILE="${1:-$OUTPUT_DIR/task_plan.md}"
 
 if [ ! -f "$PLAN_FILE" ]; then

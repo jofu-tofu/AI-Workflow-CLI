@@ -6,7 +6,7 @@ set -e
 
 PROJECT_NAME="${1:-project}"
 DATE=$(date +%Y-%m-%d)
-OUTPUT_DIR="_planning-with-files-output"
+OUTPUT_DIR="_output/planning-with-files"
 
 echo "Initializing planning files for: $PROJECT_NAME"
 

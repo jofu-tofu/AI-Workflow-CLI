@@ -36,7 +36,7 @@ planning-with-files-adaptation/
 │   ├── README.md
 │   └── workflows/
 │       └── planning-with-files.md
-├── _planning-with-files-output/   # Output folder for planning files
+├── _output/planning-with-files/   # Output folder for planning files
 │   ├── task_plan.md
 │   ├── findings.md
 │   └── progress.md
@@ -50,16 +50,16 @@ planning-with-files-adaptation/
 The `.claude/skills/planning-with-files/SKILL.md` file configures four hooks that implement the Manus-style workflow:
 
 1. **SessionStart** - Announces the skill is ready when you start Claude Code
-2. **PreToolUse** - Reads `_planning-with-files-output/task_plan.md` before Write/Edit/Bash operations to keep goals fresh in context
+2. **PreToolUse** - Reads `_output/planning-with-files/task_plan.md` before Write/Edit/Bash operations to keep goals fresh in context
 3. **PostToolUse** - Reminds you to update phase status after file modifications
 4. **Stop** - Verifies all phases are complete before allowing Claude to stop
 
 ### The 3-File Pattern
 
-This template implements the Manus workflow pattern using three persistent markdown files in the `_planning-with-files-output/` folder:
+This template implements the Manus workflow pattern using three persistent markdown files in the `_output/planning-with-files/` folder:
 
 ```
-_planning-with-files-output/
+_output/planning-with-files/
 ├── task_plan.md      → Track phases and progress
 ├── findings.md       → Store research and findings
 └── progress.md       → Session log and test results
@@ -67,8 +67,8 @@ _planning-with-files-output/
 
 ### Hook Scripts
 
-- **init-session.sh** - Creates the three planning files in `_planning-with-files-output/` from templates (can be run manually)
-- **check-complete.sh** - Validates all phases in `_planning-with-files-output/task_plan.md` are marked complete (runs on Stop hook)
+- **init-session.sh** - Creates the three planning files in `_output/planning-with-files/` from templates (can be run manually)
+- **check-complete.sh** - Validates all phases in `_output/planning-with-files/task_plan.md` are marked complete (runs on Stop hook)
 
 ## Usage
 
@@ -76,9 +76,9 @@ _planning-with-files-output/
 
 When using this as a template for new projects:
 
-1. Copy the `.claude` folder and `_planning-with-files-output/` folder to your project root
+1. Copy the `.claude` folder and `_output/planning-with-files/` folder to your project root
 2. The hooks will automatically activate when you start Claude Code in that directory
-3. Claude will create planning files in `_planning-with-files-output/` for complex tasks
+3. Claude will create planning files in `_output/planning-with-files/` for complex tasks
 
 ### Manual Initialization
 
@@ -114,7 +114,7 @@ From the [Manus context engineering blog post](https://manus.im/blog/Context-Eng
 
 ### The 4 Key Rules
 
-1. **Create Plan First** - Never start without `_planning-with-files-output/task_plan.md`
+1. **Create Plan First** - Never start without `_output/planning-with-files/task_plan.md`
 2. **The 2-Action Rule** - Save findings after every 2 view/browser operations
 3. **Read Before Decide** - Re-read plan before major decisions
 4. **Update After Act** - Mark phases complete and log errors
@@ -130,7 +130,7 @@ From the [Manus context engineering blog post](https://manus.im/blog/Context-Eng
 ### What's Different
 - Uses `.claude/skills/planning-with-files/SKILL.md` instead of `.claude-plugin/plugin.json`
 - Scripts referenced as `.claude/skills/planning-with-files/scripts/*` instead of `${CLAUDE_PLUGIN_ROOT}/scripts/*`
-- Planning files created in `_planning-with-files-output/` folder (follows `_{template-name}-output` convention)
+- Planning files created in `_output/planning-with-files/` folder (follows `_output/{method}/` convention)
 - No plugin marketplace integration (template-based instead)
 - Skills folder nested inside `.claude/` for cleaner organization
 - **NEW:** Added `.windsurf/` folder for Windsurf IDE integration with Cascade workflows

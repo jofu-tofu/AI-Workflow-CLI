@@ -1,0 +1,4 @@
+# Planning with Files Output Directory
+# This directory contains all planning-with-files generated documents
+# and should not be committed to version control
+_output/planning-with-files/
