@@ -19,7 +19,7 @@ _GSD_OUTPUT/
 
 **After (2.0):**
 ```
-.planning/
+_output/gsd/.planning/
 ├── PROJECT.md
 ├── ROADMAP.md
 ├── STATE.md
@@ -29,10 +29,10 @@ _GSD_OUTPUT/
 **Migration:**
 ```bash
 # Rename the output directory
-mv _GSD_OUTPUT .planning
+mkdir -p _output/gsd && mv _GSD_OUTPUT _output/gsd/.planning
 
 # Update .gitignore
-sed -i 's/_GSD_OUTPUT/.planning/' .gitignore
+sed -i 's/_GSD_OUTPUT/_output/gsd/.planning/' .gitignore
 ```
 
 ### 2. Workflows Merged/Removed
@@ -55,20 +55,20 @@ If you have existing GSD 1.x projects, you may need to create these new files:
 **REQUIREMENTS.md:**
 ```bash
 # Create from template
-cp _gsd/templates/REQUIREMENTS.md.template .planning/REQUIREMENTS.md
+cp _gsd/templates/REQUIREMENTS.md.template _output/gsd/.planning/REQUIREMENTS.md
 # Edit to add your requirements
 ```
 
 **CONTEXT.md (optional):**
 ```bash
 # Only needed if using discuss-phase
-cp _gsd/templates/CONTEXT.md.template .planning/CONTEXT.md
+cp _gsd/templates/CONTEXT.md.template _output/gsd/.planning/CONTEXT.md
 ```
 
 **RESEARCH.md (optional):**
 ```bash
 # Only needed if research was conducted
-cp _gsd/templates/RESEARCH.md.template .planning/RESEARCH.md
+cp _gsd/templates/RESEARCH.md.template _output/gsd/.planning/RESEARCH.md
 ```
 
 ### 4. Plan File Format Changes
@@ -144,7 +144,7 @@ The 13 workflows have been reorganized into a 5-command core loop:
 
 2. **Rename output directory:**
    ```bash
-   mv _GSD_OUTPUT .planning
+   mkdir -p _output/gsd && mv _GSD_OUTPUT _output/gsd/.planning
    ```
 
 3. **Update gitignore:**
@@ -152,7 +152,7 @@ The 13 workflows have been reorganized into a 5-command core loop:
    # Edit .gitignore, replace:
    # _GSD_OUTPUT/
    # With:
-   # .planning/
+   # _output/gsd/.planning/
    ```
 
 4. **Create REQUIREMENTS.md:**
@@ -160,7 +160,7 @@ The 13 workflows have been reorganized into a 5-command core loop:
 
 5. **Verify files:**
    ```bash
-   ls -la .planning/
+   ls -la _output/gsd/.planning/
    # Should show: PROJECT.md, ROADMAP.md, STATE.md, etc.
    ```
 
@@ -210,7 +210,7 @@ Simply use the new workflow:
 
 **Cause:** Still looking in `_GSD_OUTPUT/`
 
-**Fix:** Ensure output directory is renamed to `.planning/`
+**Fix:** Ensure output directory is renamed to `_output/gsd/.planning/`
 
 ### Error: "REQUIREMENTS.md not found"
 

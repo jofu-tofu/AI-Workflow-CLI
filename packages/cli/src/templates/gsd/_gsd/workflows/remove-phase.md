@@ -46,6 +46,6 @@ Remove a phase from the roadmap and renumber subsequent phases.
 
 ## Output
 
-- Updated `.planning/ROADMAP.md`
-- Renamed `.planning/PLAN-phase-*.md` files
-- Updated `.planning/STATE.md`
+- Updated `_output/gsd/.planning/ROADMAP.md`
+- Renamed `_output/gsd/.planning/PLAN-phase-*.md` files
+- Updated `_output/gsd/.planning/STATE.md`

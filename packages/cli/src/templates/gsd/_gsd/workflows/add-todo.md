@@ -32,7 +32,7 @@ Ask user what to capture:
 
 ### Step 3: Save to Todos
 
-Create file in `.planning/todos/`:
+Create file in `_output/gsd/.planning/todos/`:
 
 ```markdown
 # Todo: {Brief title}
@@ -58,14 +58,14 @@ Create file in `.planning/todos/`:
 - [ ] Addressed
 ```
 
-**Filename:** `.planning/todos/{date}-{brief-title}.md`
+**Filename:** `_output/gsd/.planning/todos/{date}-{brief-title}.md`
 
 ### Step 4: Confirmation
 
 ```markdown
 ✅ Todo captured!
 
-**File:** .planning/todos/{filename}.md
+**File:** _output/gsd/.planning/todos/{filename}.md
 **Category:** {Category}
 **Priority:** {Priority}
 
@@ -74,4 +74,4 @@ Use `/gsd:check-todos` to review all captured items.
 
 ## Output
 
-- New file in `.planning/todos/`
+- New file in `_output/gsd/.planning/todos/`

@@ -42,7 +42,7 @@ This workflow replaces `/gsd:execute-plan` (sequential execution).
 
 ## Output
 
-- Updated `.planning/PLAN-phase-{N}.md` - Task statuses
-- Updated `.planning/SUMMARY.md` - Commit history
-- Updated `.planning/STATE.md` - Progress
+- Updated `_output/gsd/.planning/PLAN-phase-{N}.md` - Task statuses
+- Updated `_output/gsd/.planning/SUMMARY.md` - Commit history
+- Updated `_output/gsd/.planning/STATE.md` - Progress
 - Git commits - One per task

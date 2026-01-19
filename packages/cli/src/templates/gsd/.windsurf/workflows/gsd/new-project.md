@@ -11,7 +11,7 @@ This workflow is defined in detail at `_gsd/workflows/new-project.md`.
 ## Quick Reference
 
 This command will:
-1. Create `.planning/` directory structure
+1. Create `_output/gsd/.planning/` directory structure
 2. Ask guided discovery questions about your project
 3. Conduct optional research for unfamiliar technologies
 4. Generate REQUIREMENTS.md with V1/V2 separation
@@ -21,7 +21,7 @@ This command will:
 
 ## Outputs
 
-All files created in `.planning/` directory:
+All files created in `_output/gsd/.planning/` directory:
 - `PROJECT.md` - Vision and goals
 - `REQUIREMENTS.md` - V1/V2 requirements
 - `ROADMAP.md` - Phase breakdown

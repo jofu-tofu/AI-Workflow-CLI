@@ -18,17 +18,17 @@ Find the most recent handoff:
 
 ```bash
 # Check for HANDOFF.md
-if exists .planning/HANDOFF.md:
+if exists _output/gsd/.planning/HANDOFF.md:
   - Read it
   - This is the primary handoff
 
 # Check for dated handoffs
-ls -la .planning/HANDOFF-*.md 2>/dev/null
+ls -la _output/gsd/.planning/HANDOFF-*.md 2>/dev/null
   - If multiple exist, use most recent
 
 # No handoff found
 if no handoff exists:
-  - Offer to reconstruct from .planning/STATE.md
+  - Offer to reconstruct from _output/gsd/.planning/STATE.md
   - Or run /gsd:progress to orient
 ```
 
@@ -36,7 +36,7 @@ if no handoff exists:
 
 Present handoff to user:
 
-1. Show complete .planning/HANDOFF.md
+1. Show complete _output/gsd/.planning/HANDOFF.md
 2. Highlight key sections:
    - Current status
    - What was being done
@@ -118,9 +118,9 @@ Help user reconstruct context:
    ```
 
 2. **Summarize Progress:**
-   - Read .planning/ROADMAP.md - show which phases complete
-   - Read .planning/STATE.md - show current decisions
-   - Read current .planning/PLAN-phase-{N}.md - show task progress
+   - Read _output/gsd/.planning/ROADMAP.md - show which phases complete
+   - Read _output/gsd/.planning/STATE.md - show current decisions
+   - Read current _output/gsd/.planning/PLAN-phase-{N}.md - show task progress
 
 3. **Highlight Changes:**
    ```bash
@@ -131,7 +131,7 @@ Help user reconstruct context:
    ```
 
 4. **Review "Mental Model" Section:**
-   - From .planning/HANDOFF.md
+   - From _output/gsd/.planning/HANDOFF.md
    - Explain the approach that was being taken
    - Refresh understanding of decisions made
 
@@ -139,7 +139,7 @@ Help user reconstruct context:
 
 Check if blockers are resolved:
 
-**For each blocker in .planning/HANDOFF.md:**
+**For each blocker in _output/gsd/.planning/HANDOFF.md:**
 
 ```markdown
 Blocker: {Blocker Title}
@@ -152,7 +152,7 @@ Status: {Still blocked / Resolved / Unknown}
 
 {If resolved:}
 - How was it resolved?
-- Update .planning/STATE.md with resolution
+- Update _output/gsd/.planning/STATE.md with resolution
 - Continue with work
 ```
 
@@ -181,13 +181,13 @@ From "What I Was About To Do Next" section:
 
 ### Step 8: Complete Resumption Checklist
 
-Work through checklist from .planning/HANDOFF.md:
+Work through checklist from _output/gsd/.planning/HANDOFF.md:
 
 ```markdown
 ## Resumption Checklist
 
 - [ ] Read this entire handoff document
-- [ ] Read .planning/PROJECT.md, .planning/ROADMAP.md, .planning/STATE.md
+- [ ] Read _output/gsd/.planning/PROJECT.md, _output/gsd/.planning/ROADMAP.md, _output/gsd/.planning/STATE.md
 - [ ] Review recent commits (git log)
 - [ ] Restore uncommitted changes (if stashed/branched)
 - [ ] Run tests to verify environment works
@@ -198,7 +198,7 @@ Work through checklist from .planning/HANDOFF.md:
 
 Show progress on checklist as items complete.
 
-### Step 9: Update .planning/STATE.md
+### Step 9: Update _output/gsd/.planning/STATE.md
 
 Mark work as resumed:
 
@@ -218,11 +218,11 @@ Mark work as resumed:
 Don't delete - move to archive:
 
 ```bash
-mkdir -p .planning/.gsd-handoffs
-mv .planning/HANDOFF.md .planning/.gsd-handoffs/HANDOFF-{date}.md
+mkdir -p _output/gsd/.planning/.gsd-handoffs
+mv _output/gsd/.planning/HANDOFF.md _output/gsd/.planning/.gsd-handoffs/HANDOFF-{date}.md
 
-# Add note to .planning/STATE.md
-echo "Handoff archived: .planning/.gsd-handoffs/HANDOFF-{date}.md" >> .planning/STATE.md
+# Add note to _output/gsd/.planning/STATE.md
+echo "Handoff archived: _output/gsd/.planning/.gsd-handoffs/HANDOFF-{date}.md" >> _output/gsd/.planning/STATE.md
 ```
 
 ### Step 11: Confirmation
@@ -269,7 +269,7 @@ Would you like to:
 
 ## Fallback: No Handoff Document
 
-If .planning/HANDOFF.md doesn't exist:
+If _output/gsd/.planning/HANDOFF.md doesn't exist:
 
 1. **Reconstruct from Git:**
    ```bash
@@ -279,10 +279,10 @@ If .planning/HANDOFF.md doesn't exist:
    ```
 
 2. **Read Project Files:**
-   - .planning/PROJECT.md
-   - .planning/ROADMAP.md
-   - .planning/STATE.md
-   - Latest .planning/PLAN-phase-{N}.md
+   - _output/gsd/.planning/PROJECT.md
+   - _output/gsd/.planning/ROADMAP.md
+   - _output/gsd/.planning/STATE.md
+   - Latest _output/gsd/.planning/PLAN-phase-{N}.md
 
 3. **Run Progress:**
    - Use `/gsd:progress` to orient

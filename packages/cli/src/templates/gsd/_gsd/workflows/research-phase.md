@@ -64,7 +64,7 @@ Agents investigate and return:
 
 ### Step 4: Update RESEARCH.md
 
-Create or update `.planning/RESEARCH.md`:
+Create or update `_output/gsd/.planning/RESEARCH.md`:
 
 ```markdown
 ## Phase {N} Research
@@ -99,7 +99,7 @@ Show research summary and ask for validation:
 
 ## Output
 
-- `.planning/RESEARCH.md` - Research findings
+- `_output/gsd/.planning/RESEARCH.md` - Research findings
 
 ## Success Criteria
 

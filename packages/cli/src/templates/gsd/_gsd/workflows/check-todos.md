@@ -8,7 +8,7 @@ List all pending todos captured via `/gsd:add-todo`, organized by priority and c
 
 ### Step 1: Scan Todos Directory
 
-Read all files in `.planning/todos/`
+Read all files in `_output/gsd/.planning/todos/`
 
 ### Step 2: Parse and Organize
 

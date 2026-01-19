@@ -65,7 +65,7 @@ Look for:
 
 ### Step 4: Generate Codebase Report
 
-Create `.planning/CODEBASE.md` with:
+Create `_output/gsd/.planning/CODEBASE.md` with:
 
 ```markdown
 # Codebase Analysis - {{PROJECT_NAME}}
@@ -94,7 +94,7 @@ Create `.planning/CODEBASE.md` with:
 
 ### Step 5: Update PROJECT.md
 
-If `.planning/PROJECT.md` doesn't exist, create it based on codebase analysis.
+If `_output/gsd/.planning/PROJECT.md` doesn't exist, create it based on codebase analysis.
 
 If it exists, ensure it reflects current reality:
 - Update technical constraints based on existing stack
@@ -110,9 +110,9 @@ If planning changes:
 
 ## Output Files
 
-- `.planning/CODEBASE.md` - Detailed analysis report
-- Updated `.planning/PROJECT.md` - Reflects current state
-- Updated `.planning/STATE.md` - Documents key architectural decisions
+- `_output/gsd/.planning/CODEBASE.md` - Detailed analysis report
+- Updated `_output/gsd/.planning/PROJECT.md` - Reflects current state
+- Updated `_output/gsd/.planning/STATE.md` - Documents key architectural decisions
 
 ## Success Criteria
 

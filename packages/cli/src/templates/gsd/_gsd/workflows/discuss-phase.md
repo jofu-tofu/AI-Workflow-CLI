@@ -12,11 +12,11 @@ Use this workflow BEFORE `/gsd:plan-phase` when:
 - Technical approach is unclear
 - User preferences matter for implementation
 
-**Output:** `.planning/CONTEXT.md` with captured decisions for the phase.
+**Output:** `_output/gsd/.planning/CONTEXT.md` with captured decisions for the phase.
 
 ## Prerequisites
 
-- `.planning/ROADMAP.md` exists with defined phases
+- `_output/gsd/.planning/ROADMAP.md` exists with defined phases
 - Phase number specified by user
 - Project context established via `/gsd:new-project`
 
@@ -24,7 +24,7 @@ Use this workflow BEFORE `/gsd:plan-phase` when:
 
 ### Step 1: Phase Validation
 
-1. Read `.planning/ROADMAP.md`
+1. Read `_output/gsd/.planning/ROADMAP.md`
 2. Verify requested phase exists
 3. Check phase status (should be ⏳ Pending or ready to start)
 4. Load phase description and high-level tasks
@@ -167,9 +167,9 @@ Document assumptions made during discussion.
 
 ### Step 6: Generate CONTEXT.md
 
-Create or update `.planning/CONTEXT.md` using `_gsd/templates/CONTEXT.md.template`:
+Create or update `_output/gsd/.planning/CONTEXT.md` using `_gsd/templates/CONTEXT.md.template`:
 
-1. Find or create `.planning/CONTEXT.md`
+1. Find or create `_output/gsd/.planning/CONTEXT.md`
 2. Add section for Phase {N}
 3. Record all decisions by category
 4. Document assumptions
@@ -223,7 +223,7 @@ Record discussion completion:
 - **Decisions Made:** {Count}
 - **Assumptions Documented:** {Count}
 - **Deferred:** {Count}
-- **See:** .planning/CONTEXT.md for details
+- **See:** _output/gsd/.planning/CONTEXT.md for details
 ```
 
 ### Step 8: Confirmation
@@ -247,8 +247,8 @@ Present summary to user:
 ### Deferred: {count}
 
 ### Files Updated
-- `.planning/CONTEXT.md` - Decisions recorded
-- `.planning/STATE.md` - Status updated
+- `_output/gsd/.planning/CONTEXT.md` - Decisions recorded
+- `_output/gsd/.planning/STATE.md` - Status updated
 
 ### Ready for Planning?
 
@@ -261,8 +261,8 @@ The plan will use these decisions as constraints.
 
 ## Output Files
 
-- `.planning/CONTEXT.md` - Decisions for the phase
-- Updated `.planning/STATE.md` - Discussion noted
+- `_output/gsd/.planning/CONTEXT.md` - Decisions for the phase
+- Updated `_output/gsd/.planning/STATE.md` - Discussion noted
 
 ## Next Steps
 

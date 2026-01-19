@@ -19,18 +19,18 @@ Run this workflow when:
 Before marking complete, verify:
 
 1. **All Phases Complete:**
-   - Read .planning/ROADMAP.md
+   - Read _output/gsd/.planning/ROADMAP.md
    - Confirm all phases marked ✅ Complete
    - All verification reports exist
 
 2. **Quality Checks:**
    - All tests passing
-   - No critical issues in .planning/ISSUES.md
+   - No critical issues in _output/gsd/.planning/ISSUES.md
    - Documentation complete
    - Build succeeds
 
 3. **Project Goals Met:**
-   - Read .planning/PROJECT.md
+   - Read _output/gsd/.planning/PROJECT.md
    - Verify all success criteria achieved
    - Confirm all must-have goals completed
 
@@ -38,7 +38,7 @@ Before marking complete, verify:
 
 Create comprehensive project summary:
 
-**File: `.planning/MILESTONE-{version}.md`**
+**File: `_output/gsd/.planning/MILESTONE-{version}.md`**
 
 ```markdown
 # Milestone Complete - {{PROJECT_NAME}} v{version}
@@ -52,7 +52,7 @@ Create comprehensive project summary:
 
 ## Goals Achieved
 
-{From .planning/PROJECT.md - check off all completed goals}
+{From _output/gsd/.planning/PROJECT.md - check off all completed goals}
 - ✅ Goal 1
 - ✅ Goal 2
 - ✅ Goal 3
@@ -80,7 +80,7 @@ Create comprehensive project summary:
 
 ## Key Decisions
 
-{From .planning/STATE.md - major decisions made}
+{From _output/gsd/.planning/STATE.md - major decisions made}
 
 1. **{Decision Title}**
    - Rationale: {Why}
@@ -88,7 +88,7 @@ Create comprehensive project summary:
 
 ## Outstanding Items
 
-{From .planning/ISSUES.md - deferred or future work}
+{From _output/gsd/.planning/ISSUES.md - deferred or future work}
 
 ### Future Enhancements
 - [ ] Enhancement 1
@@ -136,29 +136,29 @@ git push origin v{version}
 Create archive directory:
 
 ```bash
-mkdir -p .planning/archive/v{version}
+mkdir -p _output/gsd/.planning/archive/v{version}
 ```
 
 Copy final state files:
 ```bash
-cp .planning/PROJECT.md .planning/archive/v{version}/
-cp .planning/ROADMAP.md .planning/archive/v{version}/
-cp .planning/STATE.md .planning/archive/v{version}/
-cp .planning/SUMMARY.md .planning/archive/v{version}/
-cp .planning/ISSUES.md .planning/archive/v{version}/
-cp .planning/MILESTONE-{version}.md .planning/archive/v{version}/
+cp _output/gsd/.planning/PROJECT.md _output/gsd/.planning/archive/v{version}/
+cp _output/gsd/.planning/ROADMAP.md _output/gsd/.planning/archive/v{version}/
+cp _output/gsd/.planning/STATE.md _output/gsd/.planning/archive/v{version}/
+cp _output/gsd/.planning/SUMMARY.md _output/gsd/.planning/archive/v{version}/
+cp _output/gsd/.planning/ISSUES.md _output/gsd/.planning/archive/v{version}/
+cp _output/gsd/.planning/MILESTONE-{version}.md _output/gsd/.planning/archive/v{version}/
 ```
 
 ### Step 5: Update Project Status
 
-**Update .planning/PROJECT.md:**
+**Update _output/gsd/.planning/PROJECT.md:**
 ```markdown
 **Status:** Complete ✅
 **Version:** v{version}
 **Completed:** {Date}
 ```
 
-**Update .planning/STATE.md:**
+**Update _output/gsd/.planning/STATE.md:**
 ```markdown
 ## Project Complete
 
@@ -166,7 +166,7 @@ cp .planning/MILESTONE-{version}.md .planning/archive/v{version}/
 **Date:** {Date}
 **Final Status:** All goals achieved
 
-See .planning/MILESTONE-{version}.md for complete summary.
+See _output/gsd/.planning/MILESTONE-{version}.md for complete summary.
 ```
 
 ### Step 6: Prepare for Sequel (Optional)
@@ -191,15 +191,15 @@ If continuing with v2/sequel project:
 
    ## Carried Forward
 
-   From .planning/ISSUES.md:
+   From _output/gsd/.planning/ISSUES.md:
    - {Deferred enhancement 1}
    - {Deferred enhancement 2}
    ```
 
 2. **Initialize New Cycle:**
-   - Create .planning/PROJECT-v{next}.md
-   - Create fresh .planning/ROADMAP-v{next}.md
-   - Create fresh .planning/STATE-v{next}.md
+   - Create _output/gsd/.planning/PROJECT-v{next}.md
+   - Create fresh _output/gsd/.planning/ROADMAP-v{next}.md
+   - Create fresh _output/gsd/.planning/STATE-v{next}.md
    - Preserve archive of v{current}
 
 ### Step 7: Celebration & Reflection
@@ -228,11 +228,11 @@ Thank you for using Get Shit Done! 🚀
 
 ## Output Files
 
-- `.planning/MILESTONE-{version}.md` - Complete project summary
+- `_output/gsd/.planning/MILESTONE-{version}.md` - Complete project summary
 - Git tag `v{version}` - Release marker
-- `.planning/archive/v{version}/` - Archived state
-- Updated `.planning/PROJECT.md` - Marked complete
-- Updated `.planning/STATE.md` - Final status
+- `_output/gsd/.planning/archive/v{version}/` - Archived state
+- Updated `_output/gsd/.planning/PROJECT.md` - Marked complete
+- Updated `_output/gsd/.planning/STATE.md` - Final status
 
 ## Success Criteria
 

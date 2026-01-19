@@ -9,29 +9,29 @@ Initialize a complete project from ideation to roadmap in a single unified workf
 This is the entry point for all new GSD projects. It combines project discovery with roadmap creation to ensure projects start with complete context.
 
 **Outputs:**
-- `.planning/` directory structure
-- `.planning/PROJECT.md` - Vision and goals
-- `.planning/REQUIREMENTS.md` - V1/V2 requirements
-- `.planning/ROADMAP.md` - Phase breakdown
-- `.planning/STATE.md` - Project state tracking
-- `.planning/ISSUES.md` - Future enhancements
-- `.planning/SUMMARY.md` - Change history
+- `_output/gsd/.planning/` directory structure
+- `_output/gsd/.planning/PROJECT.md` - Vision and goals
+- `_output/gsd/.planning/REQUIREMENTS.md` - V1/V2 requirements
+- `_output/gsd/.planning/ROADMAP.md` - Phase breakdown
+- `_output/gsd/.planning/STATE.md` - Project state tracking
+- `_output/gsd/.planning/ISSUES.md` - Future enhancements
+- `_output/gsd/.planning/SUMMARY.md` - Change history
 
 ## Process
 
 ### Step 0: Initialize Planning Directory
 
-Create the `.planning/` directory structure:
+Create the `_output/gsd/.planning/` directory structure:
 
 ```bash
-mkdir -p .planning/todos
-mkdir -p .planning/archive
+mkdir -p _output/gsd/.planning/todos
+mkdir -p _output/gsd/.planning/archive
 ```
 
 This creates:
-- `.planning/` - Main output directory for all project documentation
-- `.planning/todos/` - Subdirectory for captured ideas and notes
-- `.planning/archive/` - Subdirectory for milestone archives
+- `_output/gsd/.planning/` - Main output directory for all project documentation
+- `_output/gsd/.planning/todos/` - Subdirectory for captured ideas and notes
+- `_output/gsd/.planning/archive/` - Subdirectory for milestone archives
 
 ### Step 1: Discovery Questions
 
@@ -90,7 +90,7 @@ If the project involves unfamiliar technology or patterns, spawn research agents
    - Documentation lookup
    - Best practices research
    - Similar implementation patterns
-3. Capture findings in `.planning/RESEARCH.md`
+3. Capture findings in `_output/gsd/.planning/RESEARCH.md`
 4. Surface key findings to user for validation
 
 **Skip Research If:**
@@ -108,7 +108,7 @@ Transform discovery answers into structured requirements.
 3. Identify acceptance criteria for each requirement
 4. Link requirements to potential phases
 
-**Generate `.planning/REQUIREMENTS.md`:**
+**Generate `_output/gsd/.planning/REQUIREMENTS.md`:**
 - Use `_gsd/templates/REQUIREMENTS.md.template`
 - Fill in V1 requirements (MVP scope)
 - Note V2 requirements (future scope)
@@ -123,7 +123,7 @@ Create the project vision document.
 2. Replace `{{PROJECT_NAME}}` with project name
 3. Replace `{{DATE}}` with current date
 4. Fill in all sections based on discovery responses
-5. Write file to `.planning/PROJECT.md`
+5. Write file to `_output/gsd/.planning/PROJECT.md`
 
 **Include:**
 - Clear vision statement
@@ -188,7 +188,7 @@ Create the roadmap document.
    - Description
    - High-level tasks
    - Verification criteria
-4. Write file to `.planning/ROADMAP.md`
+4. Write file to `_output/gsd/.planning/ROADMAP.md`
 
 ### Step 7: Initialize STATE.md
 
@@ -201,18 +201,18 @@ Create the state tracking document.
    - Status: Planning complete
 3. Document key decisions from discovery
 4. Add initial next steps
-5. Write file to `.planning/STATE.md`
+5. Write file to `_output/gsd/.planning/STATE.md`
 
 ### Step 8: Initialize Supporting Files
 
 Create remaining project files:
 
-**`.planning/ISSUES.md`:**
+**`_output/gsd/.planning/ISSUES.md`:**
 - Use `_gsd/templates/ISSUES.md.template`
 - Add any V2+ items as future enhancements
 - Add technical debt considerations
 
-**`.planning/SUMMARY.md`:**
+**`_output/gsd/.planning/SUMMARY.md`:**
 - Use `_gsd/templates/SUMMARY.md.template`
 - Initialize with project creation entry
 
@@ -225,12 +225,12 @@ Present the complete project setup for review:
 
 ### Files Created
 
-✅ `.planning/PROJECT.md` - Project vision and goals
-✅ `.planning/REQUIREMENTS.md` - V1/V2 requirements (X V1, Y V2)
-✅ `.planning/ROADMAP.md` - Phase breakdown (N phases)
-✅ `.planning/STATE.md` - Project state tracking
-✅ `.planning/ISSUES.md` - Future enhancements
-✅ `.planning/SUMMARY.md` - Change history
+✅ `_output/gsd/.planning/PROJECT.md` - Project vision and goals
+✅ `_output/gsd/.planning/REQUIREMENTS.md` - V1/V2 requirements (X V1, Y V2)
+✅ `_output/gsd/.planning/ROADMAP.md` - Phase breakdown (N phases)
+✅ `_output/gsd/.planning/STATE.md` - Project state tracking
+✅ `_output/gsd/.planning/ISSUES.md` - Future enhancements
+✅ `_output/gsd/.planning/SUMMARY.md` - Change history
 
 ### Roadmap Overview
 
@@ -261,7 +261,7 @@ Ask user to confirm:
 
 ## Output Files
 
-All files created in `.planning/` directory:
+All files created in `_output/gsd/.planning/` directory:
 - `PROJECT.md` - Project vision and goals
 - `REQUIREMENTS.md` - V1/V2 requirements with traceability
 - `ROADMAP.md` - Phase breakdown with verification criteria
@@ -281,7 +281,7 @@ Recommend the following workflow:
 
 ## Success Criteria
 
-- [ ] `.planning/` directory created with proper structure
+- [ ] `_output/gsd/.planning/` directory created with proper structure
 - [ ] `PROJECT.md` created with complete vision
 - [ ] `REQUIREMENTS.md` created with V1/V2 separation
 - [ ] `ROADMAP.md` created with 3-8 logical phases

@@ -1,4 +1,7 @@
 # GSD Workflow Output Directory
 # This directory contains all GSD-generated project documentation
 # and should not be committed to version control
-.planning/
+_output/gsd/.planning/
+
+# Plan review artifacts are included in the above pattern
+# Reviews are stored alongside plans: PLAN-phase-N.md → REVIEW-phase-N.md

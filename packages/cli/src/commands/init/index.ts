@@ -9,10 +9,10 @@ import {detectUsername, generateBmadConfigs} from '../../lib/bmad-installer.js'
 import {updateGitignore} from '../../lib/gitignore-manager.js'
 import {mergeClaudeSettings} from '../../lib/hooks-merger.js'
 import {getTargetSettingsFile, readClaudeSettings, writeClaudeSettings} from '../../lib/settings-hierarchy.js'
-import {installTemplate} from '../../lib/template-installer.js'
+import {checkTemplateStatus, installTemplate} from '../../lib/template-installer.js'
 import {getAvailableTemplates, getTemplatePath} from '../../lib/template-resolver.js'
-import {mergeWindsurfHooks} from '../../lib/windsurf-hooks-merger.js'
 import {getTargetHooksFile, readWindsurfHooks, writeWindsurfHooks} from '../../lib/windsurf-hooks-hierarchy.js'
+import {mergeWindsurfHooks} from '../../lib/windsurf-hooks-merger.js'
 import {EXIT_CODES} from '../../types/exit-codes.js'
 
 /**
@@ -22,28 +22,6 @@ const AVAILABLE_IDES = [
   {value: 'claude', name: 'Claude Code', description: 'Anthropic Claude Code CLI'},
   {value: 'windsurf', name: 'Windsurf', description: 'Codeium Windsurf IDE'},
 ]
-
-/**
- * Detect if a template is already installed in the given directory.
- * Checks for common template folders like _bmad, GSR, etc.
- */
-async function detectExistingInstallation(targetDir: string): Promise<boolean> {
-  // Check for common template folders
-  const commonFolders = ['_bmad', 'GSR', '_gsr']
-
-  const checks = commonFolders.map(async (folder) => {
-    try {
-      const folderPath = join(targetDir, folder)
-      await fs.access(folderPath)
-      return true
-    } catch {
-      return false
-    }
-  })
-
-  const results = await Promise.all(checks)
-  return results.some(Boolean)
-}
 
 /**
  * Detect if current directory is a git repository.
@@ -157,14 +135,6 @@ export default class Init extends BaseCommand {
         projectName = detectProjectName(targetDir)
       }
 
-      // Check if template already installed
-      const exists = await detectExistingInstallation(targetDir)
-      if (exists) {
-        this.warn('Template already installed in this directory.')
-        this.log('To reinstall, remove the template directory first.')
-        return
-      }
-
       // Validate write permissions
       try {
         const testFile = join(targetDir, '.aiwcli-write-test')
@@ -178,22 +148,58 @@ export default class Init extends BaseCommand {
 
       const hasGit = await detectGitRepository(targetDir)
 
-      this.logInfo(`Installing ${method} template for project: ${projectName}`)
-      this.logInfo(`Detected user: ${username}`)
-      this.logInfo(`Installing IDEs: ${ides.join(', ')}`)
-
       // Get template path
       const templatePath = await getTemplatePath(method)
 
-      // Install template with IDE selection
-      const result = await installTemplate({
-        templateName: method,
-        targetDir,
-        ides,
-        username,
-        projectName,
-        templatePath,
-      })
+      // Check what already exists vs what's missing
+      const status = await checkTemplateStatus(templatePath, targetDir, ides, method)
+
+      this.logInfo(`Installing ${method} template for project: ${projectName}`)
+      this.logInfo(`Detected user: ${username}`)
+      this.logInfo(`Target IDEs: ${ides.join(', ')}`)
+
+      // Report existing items
+      if (status.existing.length > 0) {
+        this.log('')
+        this.logInfo('Already present (will be skipped):')
+        for (const item of status.existing) {
+          const suffix = item.isDirectory ? '/' : ''
+          this.log(`  - ${item.name}${suffix}`)
+        }
+      }
+
+      // Report missing items that will be installed
+      if (status.missing.length > 0) {
+        this.log('')
+        this.logInfo('Will be installed:')
+        for (const item of status.missing) {
+          const suffix = item.isDirectory ? '/' : ''
+          this.log(`  - ${item.name}${suffix}`)
+        }
+      }
+
+      // If everything already exists, report and continue (don't block)
+      if (status.missing.length === 0) {
+        this.log('')
+        this.logInfo('All template items already exist. Nothing new to install.')
+        this.log('')
+        // Still update gitignore and merge hooks if needed
+      }
+
+      this.log('')
+
+      // Install template with selective installation (skip existing items)
+      const result = await installTemplate(
+        {
+          templateName: method,
+          targetDir,
+          ides,
+          username,
+          projectName,
+          templatePath,
+        },
+        true, // skipExisting = true for regeneration support
+      )
 
       // BMAD-specific post-install: generate custom config files
       if (method === 'bmad') {
@@ -201,16 +207,22 @@ export default class Init extends BaseCommand {
         this.logSuccess('✓ Configuration files generated')
       }
 
-      // Collect all folders that need gitignore entries
-      const foldersForGitignore = [...result.installedFolders]
+      // Collect all folders that need gitignore entries (both installed and existing)
+      const foldersForGitignore = [...result.installedFolders, ...result.skippedFolders]
 
       // BMAD-specific post-install: add output directories to gitignore
       if (method === 'bmad') {
         foldersForGitignore.push('_bmad-output', 'bmad-output', '**/bmad-output')
       }
 
-      this.logSuccess('✓ Template structure installed')
-      this.logSuccess(`✓ Installed folders: ${result.installedFolders.join(', ')}`)
+      // Report installation results
+      if (result.installedFolders.length > 0) {
+        this.logSuccess(`✓ Installed: ${result.installedFolders.join(', ')}`)
+      }
+
+      if (result.skippedFolders.length > 0) {
+        this.logInfo(`✓ Skipped (already exist): ${result.skippedFolders.join(', ')}`)
+      }
 
       // Merge hooks if Claude IDE is selected
       if (flags.ide.includes('claude')) {

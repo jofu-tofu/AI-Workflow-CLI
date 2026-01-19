@@ -17,16 +17,16 @@ This workflow executes plans created by `/gsd:plan-phase`:
 
 ## Prerequisites
 
-- `.planning/PLAN-phase-{N}.md` exists with wave groupings
+- `_output/gsd/.planning/PLAN-phase-{N}.md` exists with wave groupings
 - User has confirmed the plan
 - All tasks have complete XML specifications
-- No blockers in `.planning/STATE.md`
+- No blockers in `_output/gsd/.planning/STATE.md`
 
 ## Process
 
 ### Step 1: Load Active Plan
 
-1. Find `.planning/PLAN-phase-{N}.md` for the specified or current phase
+1. Find `_output/gsd/.planning/PLAN-phase-{N}.md` for the specified or current phase
 2. Parse wave groupings
 3. Verify plan status is "Draft" or "In Progress"
 4. Load all task XML specifications
@@ -62,9 +62,9 @@ Before starting any tasks:
    - Check for blocking issues
 
 3. **Context Files:**
-   - Read `.planning/STATE.md` for current state
-   - Load `.planning/CONTEXT.md` decisions
-   - Have `.planning/REQUIREMENTS.md` available
+   - Read `_output/gsd/.planning/STATE.md` for current state
+   - Load `_output/gsd/.planning/CONTEXT.md` decisions
+   - Have `_output/gsd/.planning/REQUIREMENTS.md` available
 
 **If issues found:**
 - Stop and resolve before proceeding
@@ -126,8 +126,8 @@ For each task in the current wave, spawn fresh subagent:
 **Task Lifecycle:**
 
 1. **Mark In Progress:**
-   - Update `.planning/PLAN-phase-{N}.md`: Task status → "In Progress"
-   - Update `.planning/STATE.md`: "Working on: Task {M}"
+   - Update `_output/gsd/.planning/PLAN-phase-{N}.md`: Task status → "In Progress"
+   - Update `_output/gsd/.planning/STATE.md`: "Working on: Task {M}"
 
 2. **Execute via Subagent:**
    - Spawn fresh Claude Code agent with task context
@@ -142,8 +142,8 @@ For each task in the current wave, spawn fresh subagent:
 
 4. **Update Status:**
    - Mark task complete in PLAN-phase-{N}.md
-   - Update `.planning/SUMMARY.md` with commit
-   - Update `.planning/STATE.md` with progress
+   - Update `_output/gsd/.planning/SUMMARY.md` with commit
+   - Update `_output/gsd/.planning/STATE.md` with progress
 
 ### Step 5: Parallel Execution Strategy
 
@@ -267,9 +267,9 @@ After each wave completes:
 
 ### Files Updated
 
-- `.planning/PLAN-phase-{N}.md` - Task statuses
-- `.planning/SUMMARY.md` - Commit history
-- `.planning/STATE.md` - Progress
+- `_output/gsd/.planning/PLAN-phase-{N}.md` - Task statuses
+- `_output/gsd/.planning/SUMMARY.md` - Commit history
+- `_output/gsd/.planning/STATE.md` - Progress
 
 ### Next
 
@@ -341,9 +341,9 @@ Present completion summary:
 
 ### Files Updated
 
-- `.planning/PLAN-phase-{N}.md` - Marked complete
-- `.planning/SUMMARY.md` - Commits logged
-- `.planning/STATE.md` - Status updated
+- `_output/gsd/.planning/PLAN-phase-{N}.md` - Marked complete
+- `_output/gsd/.planning/SUMMARY.md` - Commits logged
+- `_output/gsd/.planning/STATE.md` - Status updated
 
 ### Next Step
 
@@ -352,9 +352,9 @@ Present completion summary:
 
 ## Output Files
 
-- Updated `.planning/PLAN-phase-{N}.md` - Task completion statuses
-- Updated `.planning/SUMMARY.md` - Commit history
-- Updated `.planning/STATE.md` - Phase progress
+- Updated `_output/gsd/.planning/PLAN-phase-{N}.md` - Task completion statuses
+- Updated `_output/gsd/.planning/SUMMARY.md` - Commit history
+- Updated `_output/gsd/.planning/STATE.md` - Phase progress
 - Git commits - One per task
 
 ## Success Criteria

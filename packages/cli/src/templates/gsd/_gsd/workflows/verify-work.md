@@ -28,10 +28,10 @@ This workflow verifies completed work through:
 
 Gather verification materials:
 
-1. Read `.planning/PLAN-phase-{N}.md` - Tasks and acceptance criteria
-2. Read `.planning/ROADMAP.md` - Phase completion criteria
-3. Read `.planning/REQUIREMENTS.md` - Requirements for this phase
-4. Read `.planning/SUMMARY.md` - Commits made during phase
+1. Read `_output/gsd/.planning/PLAN-phase-{N}.md` - Tasks and acceptance criteria
+2. Read `_output/gsd/.planning/ROADMAP.md` - Phase completion criteria
+3. Read `_output/gsd/.planning/REQUIREMENTS.md` - Requirements for this phase
+4. Read `_output/gsd/.planning/SUMMARY.md` - Commits made during phase
 5. Review git log for phase commits
 
 **Create Verification Summary:**
@@ -323,7 +323,7 @@ If issues exist, automatically create fix plan:
 Execute fixes immediately via subagent
 
 **Option 2: Save Plan**
-Write plan to `.planning/PLAN-fix-phase-{N}.md` for later
+Write plan to `_output/gsd/.planning/PLAN-fix-phase-{N}.md` for later
 
 **Which would you like?**
 ```
@@ -348,7 +348,7 @@ If user chooses to fix now:
 
 Create verification report:
 
-**File: `.planning/VERIFICATION-phase-{N}.md`**
+**File: `_output/gsd/.planning/VERIFICATION-phase-{N}.md`**
 
 ```markdown
 # Verification Report - Phase {N}
@@ -408,22 +408,22 @@ Create verification report:
 
 **If Approved:**
 
-1. Update `.planning/ROADMAP.md`:
+1. Update `_output/gsd/.planning/ROADMAP.md`:
    - Move Phase {N} to "Completed Phases"
    - Status: ✅ Complete
    - Completion date
 
-2. Update `.planning/STATE.md`:
+2. Update `_output/gsd/.planning/STATE.md`:
    - Add to completed work
    - Set next phase as current
    - Clear blockers
 
-3. Update `.planning/REQUIREMENTS.md`:
+3. Update `_output/gsd/.planning/REQUIREMENTS.md`:
    - Mark implemented requirements as ✅ Complete
 
 **If Deferred Issues:**
 
-1. Update `.planning/ISSUES.md`:
+1. Update `_output/gsd/.planning/ISSUES.md`:
    - Add deferred items with context
    - Tag with "Deferred from Phase {N}"
    - Priority for future
@@ -446,10 +446,10 @@ Create verification report:
 
 ### Files Updated
 
-- `.planning/VERIFICATION-phase-{N}.md` - Full report
-- `.planning/ROADMAP.md` - Phase marked complete
-- `.planning/STATE.md` - Status updated
-- `.planning/REQUIREMENTS.md` - Requirements marked implemented
+- `_output/gsd/.planning/VERIFICATION-phase-{N}.md` - Full report
+- `_output/gsd/.planning/ROADMAP.md` - Phase marked complete
+- `_output/gsd/.planning/STATE.md` - Status updated
+- `_output/gsd/.planning/REQUIREMENTS.md` - Requirements marked implemented
 
 ### Next Steps
 
@@ -462,17 +462,17 @@ Ready for Phase {N+1}?
 {If needs fixes:}
 ⚠️ **Blockers Remain**
 
-Run fixes: `.planning/PLAN-fix-phase-{N}.md` contains fix plan
+Run fixes: `_output/gsd/.planning/PLAN-fix-phase-{N}.md` contains fix plan
 ```
 
 ## Output Files
 
-- `.planning/VERIFICATION-phase-{N}.md` - Full verification report
-- `.planning/PLAN-fix-phase-{N}.md` - Fix plan (if issues found)
-- Updated `.planning/ROADMAP.md` - Phase status
-- Updated `.planning/STATE.md` - Current position
-- Updated `.planning/REQUIREMENTS.md` - Implementation status
-- Updated `.planning/ISSUES.md` - Deferred items
+- `_output/gsd/.planning/VERIFICATION-phase-{N}.md` - Full verification report
+- `_output/gsd/.planning/PLAN-fix-phase-{N}.md` - Fix plan (if issues found)
+- Updated `_output/gsd/.planning/ROADMAP.md` - Phase status
+- Updated `_output/gsd/.planning/STATE.md` - Current position
+- Updated `_output/gsd/.planning/REQUIREMENTS.md` - Implementation status
+- Updated `_output/gsd/.planning/ISSUES.md` - Deferred items
 
 ## Success Criteria
 

@@ -80,4 +80,4 @@ If hypothesis confirmed:
 
 - Fixed code
 - Commit with clear message
-- Updated `.planning/STATE.md` with notes
+- Updated `_output/gsd/.planning/STATE.md` with notes

@@ -50,12 +50,12 @@ Read project state to understand:
 ## Milestone v{N+1} Initialized
 
 **Files Created:**
-- .planning/PROJECT.md (v{N+1})
-- .planning/ROADMAP.md (v{N+1})
-- .planning/STATE.md (v{N+1})
+- _output/gsd/.planning/PROJECT.md (v{N+1})
+- _output/gsd/.planning/ROADMAP.md (v{N+1})
+- _output/gsd/.planning/STATE.md (v{N+1})
 
 **Archived:**
-- .planning/archive/v{N}/
+- _output/gsd/.planning/archive/v{N}/
 
 **Ready to start planning!**
 Run `/gsd:plan-phase 1` to begin.
@@ -63,7 +63,7 @@ Run `/gsd:plan-phase 1` to begin.
 
 ## Output
 
-- Fresh `.planning/PROJECT.md`
-- Fresh `.planning/ROADMAP.md`
-- Fresh `.planning/STATE.md`
+- Fresh `_output/gsd/.planning/PROJECT.md`
+- Fresh `_output/gsd/.planning/ROADMAP.md`
+- Fresh `_output/gsd/.planning/STATE.md`
 - Archived previous version

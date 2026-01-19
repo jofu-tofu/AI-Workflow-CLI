@@ -17,7 +17,7 @@ Display version information:
 
 ⚠️ **Output Directory Changed**
 - Old: `_GSD_OUTPUT/`
-- New: `.planning/`
+- New: `_output/gsd/.planning/`
 
 ⚠️ **Workflows Merged/Deprecated**
 - `create-roadmap` → merged into `new-project`
@@ -77,7 +77,7 @@ If upgrading from GSD 1.x:
 
 1. **Rename output directory:**
    ```bash
-   mv _GSD_OUTPUT .planning
+   mkdir -p _output/gsd && mv _GSD_OUTPUT _output/gsd/.planning
    ```
 
 2. **Update workflows:**

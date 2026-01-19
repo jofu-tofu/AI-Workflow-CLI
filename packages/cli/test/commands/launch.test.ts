@@ -70,11 +70,15 @@ describe('launch command', () => {
       // Should call spawnProcess
       expect(source).to.include('spawnProcess')
 
-      // Should pass 'claude' command
-      expect(source).to.include("'claude'")
+      // Should support 'claude' command (via cliCommand variable)
+      expect(source).to.include('claude')
 
-      // Should pass --dangerously-skip-permissions flag
+      // Should pass --dangerously-skip-permissions flag for Claude
       expect(source).to.include('--dangerously-skip-permissions')
+
+      // Should support 'codex' command with --yolo flag
+      expect(source).to.include('codex')
+      expect(source).to.include('--yolo')
 
       // Should handle exit code
       expect(source).to.include('exitCode')
@@ -117,6 +121,48 @@ describe('launch command', () => {
       const source = LaunchCommand.prototype.run.toString()
       expect(source).to.include('GENERAL_ERROR')
       expect(source).to.include('Unexpected launch failure')
+    })
+  })
+
+  describe('--codex/-c flag for launching Codex', () => {
+    it('should have --codex flag defined', () => {
+      expect(LaunchCommand.flags).to.have.property('codex')
+    })
+
+    it('should have -c as short form for --codex', () => {
+      const codexFlag = LaunchCommand.flags.codex as {char?: string}
+      expect(codexFlag).to.have.property('char', 'c')
+    })
+
+    it('should have --codex flag default to false', () => {
+      const codexFlag = LaunchCommand.flags.codex as {default?: boolean}
+      expect(codexFlag).to.have.property('default', false)
+    })
+
+    it('should include --codex flag in description', () => {
+      expect(LaunchCommand.description).to.include('--codex')
+      expect(LaunchCommand.description).to.include('-c')
+    })
+
+    it('should include Codex in description', () => {
+      expect(LaunchCommand.description).to.include('Codex')
+    })
+
+    it('should include --codex examples', () => {
+      const {examples} = LaunchCommand
+      const hasCodexExample = examples.some((ex: string) => ex.includes('--codex'))
+      expect(hasCodexExample).to.be.true
+    })
+
+    it('implementation handles --codex flag', () => {
+      const source = LaunchCommand.prototype.run.toString()
+      expect(source).to.include('flags.codex')
+      expect(source).to.include('useCodex')
+    })
+
+    it('implementation uses --yolo for Codex', () => {
+      const source = LaunchCommand.prototype.run.toString()
+      expect(source).to.include('--yolo')
     })
   })
 

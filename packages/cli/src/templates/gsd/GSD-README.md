@@ -21,7 +21,7 @@ aiw init --method gsd --ide claude
 This installs:
 - `_gsd/` - Core workflow files and templates
 - `.claude/commands/gsd/` - Claude IDE slash commands
-- `.planning/` - Output directory for project documentation
+- `_output/gsd/.planning/` - Output directory for project documentation
 
 ## Core Loop (5 Commands)
 
@@ -83,7 +83,7 @@ This installs:
 /gsd:new-project
 ```
 
-Creates in `.planning/`:
+Creates in `_output/gsd/.planning/`:
 - `PROJECT.md` - Vision, goals, success criteria
 - `REQUIREMENTS.md` - V1/V2 requirements
 - `ROADMAP.md` - Phase sequence
@@ -157,7 +157,7 @@ Shows:
 
 ## Key Files
 
-All files stored in `.planning/`:
+All files stored in `_output/gsd/.planning/`:
 
 - **PROJECT.md** - Project vision and goals
 - **REQUIREMENTS.md** - V1/V2 requirements with traceability
@@ -291,6 +291,85 @@ Archives project state:
 - Archives to `archive/v{version}/`
 - Prepares for sequel (v2, v3, etc.)
 
+## Plan Review (Multi-Agent)
+
+GSD includes an optional plan review system that automatically sends plans to external AI agents (Codex, Gemini) for review before execution.
+
+### How It Works
+
+When you run `/gsd:plan-phase`, a PostToolUse hook detects the plan file creation and:
+
+1. Sends the plan to enabled reviewers (Codex CLI, Gemini CLI)
+2. Collects structured feedback (verdict, issues, missing sections, questions)
+3. Saves review artifacts alongside the plan (PLAN-phase-N.md → REVIEW-phase-N.md)
+4. Returns feedback to Claude as additional context
+5. Optionally blocks execution if verdict is FAIL
+
+### Configuration
+
+Edit `.claude/settings.json`:
+
+```json
+{
+  "gsd": {
+    "planReview": {
+      "enabled": true,
+      "reviewers": {
+        "codex": {
+          "enabled": true,
+          "model": "",
+          "timeout": 120
+        },
+        "gemini": {
+          "enabled": false,
+          "model": "",
+          "timeout": 120
+        }
+      },
+      "blockOnFail": false,
+      "planPattern": "_output/gsd/.planning/PLAN-phase-"
+    }
+  }
+}
+```
+
+### Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `enabled` | `true` | Enable/disable plan review entirely |
+| `reviewers.codex.enabled` | `true` | Enable Codex CLI review |
+| `reviewers.gemini.enabled` | `false` | Enable Gemini CLI review |
+| `reviewers.*.model` | `""` | Model override (empty = default) |
+| `reviewers.*.timeout` | `120` | Timeout in seconds |
+| `blockOnFail` | `false` | Block execution on FAIL verdict |
+| `planPattern` | `_output/gsd/.planning/PLAN-phase-` | Pattern to detect plan files |
+
+### Prerequisites
+
+- **Codex CLI**: Install via `npm install -g @openai/codex`
+- **Gemini CLI**: Install via `npm install -g @google/gemini-cli`
+
+Both CLIs must be authenticated with their respective API keys.
+
+### Review Output
+
+Reviews are saved alongside plan files in `_output/gsd/.planning/`:
+
+- `REVIEW-phase-{N}.md` - Formatted markdown report (matches `PLAN-phase-{N}.md`)
+- `REVIEW-phase-{N}-codex.json` - Codex structured output
+- `REVIEW-phase-{N}-gemini.json` - Gemini structured output
+
+### Verdicts
+
+| Verdict | Meaning |
+|---------|---------|
+| `PASS` | Plan looks good, proceed with execution |
+| `WARN` | Minor issues, consider addressing before execution |
+| `FAIL` | Significant issues, should revise plan before execution |
+
+When `blockOnFail` is `true` and verdict is FAIL, Claude is prompted to revise the plan rather than proceeding with execution.
+
 ## Benefits
 
 - **No Context Degradation** - Fresh agent per task
@@ -303,6 +382,7 @@ Archives project state:
 - **Persistent Memory** - STATE.md never forgets
 - **Brownfield Support** - Works with existing code
 - **Flexible Phases** - Add/insert/remove as needed
+- **Multi-Agent Review** - Optional Codex/Gemini plan review
 
 ## Recommended Usage
 

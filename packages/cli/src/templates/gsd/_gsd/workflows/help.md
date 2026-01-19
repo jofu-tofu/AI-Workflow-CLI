@@ -88,7 +88,7 @@ Display comprehensive help:
 
 ## Output Directory
 
-All GSD files are stored in `.planning/`:
+All GSD files are stored in `_output/gsd/.planning/`:
 - `PROJECT.md` - Vision and goals
 - `REQUIREMENTS.md` - V1/V2 requirements
 - `ROADMAP.md` - Phase breakdown

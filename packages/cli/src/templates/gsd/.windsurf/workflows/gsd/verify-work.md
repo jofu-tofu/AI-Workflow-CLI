@@ -35,5 +35,5 @@ Then walk through verification items conversationally.
 
 ## Output
 
-- `.planning/VERIFICATION-phase-{N}.md` - Full report
-- `.planning/PLAN-fix-phase-{N}.md` - Fix plan (if issues)
+- `_output/gsd/.planning/VERIFICATION-phase-{N}.md` - Full report
+- `_output/gsd/.planning/PLAN-fix-phase-{N}.md` - Fix plan (if issues)

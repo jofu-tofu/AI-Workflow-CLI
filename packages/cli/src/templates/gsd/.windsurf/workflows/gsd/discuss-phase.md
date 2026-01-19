@@ -36,5 +36,5 @@ Then answer questions about the phase to capture decisions before planning.
 
 ## Outputs
 
-- `.planning/CONTEXT.md` - Decisions captured for the phase
-- Updated `.planning/STATE.md` - Discussion status
+- `_output/gsd/.planning/CONTEXT.md` - Decisions captured for the phase
+- Updated `_output/gsd/.planning/STATE.md` - Discussion status

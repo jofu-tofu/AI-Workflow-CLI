@@ -8,7 +8,7 @@ Display all assumptions made for a phase, their validation status, and impact if
 
 ### Step 1: Load Assumptions
 
-Read `.planning/CONTEXT.md` and extract assumptions for the specified phase.
+Read `_output/gsd/.planning/CONTEXT.md` and extract assumptions for the specified phase.
 
 ### Step 2: Display Assumptions
 

@@ -46,10 +46,10 @@ If this work can wait until current phases complete, use `/gsd:add-phase` instea
 ### Step 2: Current State Analysis
 
 Read project state:
-1. `.planning/ROADMAP.md` - All current phases
-2. `.planning/STATE.md` - Current position
-3. List all `.planning/PLAN-phase-*.md` files
-4. List all `.planning/VERIFICATION-phase-*.md` files
+1. `_output/gsd/.planning/ROADMAP.md` - All current phases
+2. `_output/gsd/.planning/STATE.md` - Current position
+3. List all `_output/gsd/.planning/PLAN-phase-*.md` files
+4. List all `_output/gsd/.planning/VERIFICATION-phase-*.md` files
 
 Determine impact:
 - Which phases will be renumbered?
@@ -133,14 +133,14 @@ Create execution plan for renumbering:
 **Step 5a: Backup Current State**
 ```bash
 # Create backup
-mkdir -p .planning/.gsd-backup
-cp .planning/ROADMAP.md .planning/.gsd-backup/
-cp .planning/STATE.md .planning/.gsd-backup/
-cp .planning/SUMMARY.md .planning/.gsd-backup/
-cp .planning/PLAN-phase-*.md .planning/.gsd-backup/ 2>/dev/null || true
-cp .planning/VERIFICATION-phase-*.md .planning/.gsd-backup/ 2>/dev/null || true
+mkdir -p _output/gsd/.planning/.gsd-backup
+cp _output/gsd/.planning/ROADMAP.md _output/gsd/.planning/.gsd-backup/
+cp _output/gsd/.planning/STATE.md _output/gsd/.planning/.gsd-backup/
+cp _output/gsd/.planning/SUMMARY.md _output/gsd/.planning/.gsd-backup/
+cp _output/gsd/.planning/PLAN-phase-*.md _output/gsd/.planning/.gsd-backup/ 2>/dev/null || true
+cp _output/gsd/.planning/VERIFICATION-phase-*.md _output/gsd/.planning/.gsd-backup/ 2>/dev/null || true
 
-echo "Backup created in .planning/.gsd-backup/"
+echo "Backup created in _output/gsd/.planning/.gsd-backup/"
 ```
 
 **Step 5b: Rename Files (Reverse Order)**
@@ -152,28 +152,28 @@ Rename from highest to lowest to avoid conflicts:
 # Rename 5→6, then 4→5, then 3→4
 
 {For i from N down to M}:
-  if exists .planning/PLAN-phase-{i}.md:
-    mv .planning/PLAN-phase-{i}.md .planning/PLAN-phase-{i+1}.md
+  if exists _output/gsd/.planning/PLAN-phase-{i}.md:
+    mv _output/gsd/.planning/PLAN-phase-{i}.md _output/gsd/.planning/PLAN-phase-{i+1}.md
 
-  if exists .planning/VERIFICATION-phase-{i}.md:
-    mv .planning/VERIFICATION-phase-{i}.md .planning/VERIFICATION-phase-{i+1}.md
+  if exists _output/gsd/.planning/VERIFICATION-phase-{i}.md:
+    mv _output/gsd/.planning/VERIFICATION-phase-{i}.md _output/gsd/.planning/VERIFICATION-phase-{i+1}.md
 ```
 
 **Step 5c: Update ROADMAP.md**
 
-1. Read current `.planning/ROADMAP.md`
+1. Read current `_output/gsd/.planning/ROADMAP.md`
 2. Find phase {M} and all subsequent phases
 3. Increment their numbers by 1
 4. Insert new phase {M} before old phase {M}
 5. Update all phase references
-6. Write updated `.planning/ROADMAP.md`
+6. Write updated `_output/gsd/.planning/ROADMAP.md`
 
 **Step 5d: Update Other Files**
 
 Update phase references in:
-- `.planning/STATE.md`
-- `.planning/SUMMARY.md`
-- All renamed `.planning/PLAN-phase-*.md` files (internal references)
+- `_output/gsd/.planning/STATE.md`
+- `_output/gsd/.planning/SUMMARY.md`
+- All renamed `_output/gsd/.planning/PLAN-phase-*.md` files (internal references)
 
 ### Step 6: Verification
 
@@ -181,15 +181,15 @@ After renumbering:
 
 1. **File Check:**
    ```bash
-   ls -la .planning/PLAN-phase-*.md
-   ls -la .planning/VERIFICATION-phase-*.md
+   ls -la _output/gsd/.planning/PLAN-phase-*.md
+   ls -la _output/gsd/.planning/VERIFICATION-phase-*.md
    ```
    Confirm sequential numbering with no gaps
 
 2. **Content Check:**
-   - Open `.planning/ROADMAP.md` - verify phase sequence
-   - Open `.planning/STATE.md` - verify current phase correct
-   - Open renamed `.planning/PLAN-phase-*.md` files - verify internal numbers updated
+   - Open `_output/gsd/.planning/ROADMAP.md` - verify phase sequence
+   - Open `_output/gsd/.planning/STATE.md` - verify current phase correct
+   - Open renamed `_output/gsd/.planning/PLAN-phase-*.md` files - verify internal numbers updated
 
 3. **Git Status:**
    ```bash
@@ -239,18 +239,18 @@ After user confirms everything looks correct:
 
 ```bash
 # Remove backup
-rm -rf .planning/.gsd-backup/
-git add .planning/.gsd-backup/  # Stage deletion
+rm -rf _output/gsd/.planning/.gsd-backup/
+git add _output/gsd/.planning/.gsd-backup/  # Stage deletion
 git commit -m "Cleanup: Remove insertion backup"
 ```
 
 ## Output Files
 
-- Updated `.planning/ROADMAP.md` - Phases renumbered, new phase inserted
-- Renamed `.planning/PLAN-phase-{N+1}.md` files
-- Renamed `.planning/VERIFICATION-phase-{N+1}.md` files
-- Updated `.planning/STATE.md` - Decision documented
-- Updated `.planning/SUMMARY.md` - References updated
+- Updated `_output/gsd/.planning/ROADMAP.md` - Phases renumbered, new phase inserted
+- Renamed `_output/gsd/.planning/PLAN-phase-{N+1}.md` files
+- Renamed `_output/gsd/.planning/VERIFICATION-phase-{N+1}.md` files
+- Updated `_output/gsd/.planning/STATE.md` - Decision documented
+- Updated `_output/gsd/.planning/SUMMARY.md` - References updated
 - Git commits documenting changes
 
 ## Success Criteria
@@ -269,9 +269,9 @@ If insertion goes wrong:
 
 ```bash
 # Restore from backup
-cp .planning/.gsd-backup/* .planning/
-git checkout -- .planning/
-rm -rf .planning/.gsd-backup/
+cp _output/gsd/.planning/.gsd-backup/* _output/gsd/.planning/
+git checkout -- _output/gsd/.planning/
+rm -rf _output/gsd/.planning/.gsd-backup/
 ```
 
 ## Notes

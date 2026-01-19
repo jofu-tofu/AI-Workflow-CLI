@@ -13,21 +13,21 @@ This workflow creates detailed execution plans by:
 4. Grouping tasks into waves for parallel execution
 5. Verifying tasks trace back to requirements
 
-**Output:** `.planning/PLAN-phase-{N}.md` with complete execution specification.
+**Output:** `_output/gsd/.planning/PLAN-phase-{N}.md` with complete execution specification.
 
 ## Prerequisites
 
-- `.planning/ROADMAP.md` exists with defined phases
-- `.planning/PROJECT.md` exists with goals
-- `.planning/REQUIREMENTS.md` exists with V1/V2 requirements
+- `_output/gsd/.planning/ROADMAP.md` exists with defined phases
+- `_output/gsd/.planning/PROJECT.md` exists with goals
+- `_output/gsd/.planning/REQUIREMENTS.md` exists with V1/V2 requirements
 - Phase number specified by user
-- Optional: `.planning/CONTEXT.md` from discuss-phase
+- Optional: `_output/gsd/.planning/CONTEXT.md` from discuss-phase
 
 ## Process
 
 ### Step 1: Phase Validation
 
-1. Read `.planning/ROADMAP.md`
+1. Read `_output/gsd/.planning/ROADMAP.md`
 2. Verify requested phase exists
 3. Check phase readiness:
    - Previous phases completed (if applicable)
@@ -48,15 +48,15 @@ This workflow creates detailed execution plans by:
 Gather all relevant context for planning:
 
 **Required:**
-1. Read `.planning/PROJECT.md` - Overall goals
-2. Read `.planning/ROADMAP.md` - Phase description and tasks
-3. Read `.planning/REQUIREMENTS.md` - V1/V2 requirements for this phase
-4. Read `.planning/STATE.md` - Current decisions and blockers
+1. Read `_output/gsd/.planning/PROJECT.md` - Overall goals
+2. Read `_output/gsd/.planning/ROADMAP.md` - Phase description and tasks
+3. Read `_output/gsd/.planning/REQUIREMENTS.md` - V1/V2 requirements for this phase
+4. Read `_output/gsd/.planning/STATE.md` - Current decisions and blockers
 
 **If Available:**
-5. Read `.planning/CONTEXT.md` - Decisions from discuss-phase
-6. Read `.planning/CODEBASE.md` - For brownfield projects
-7. Read `.planning/RESEARCH.md` - Existing research
+5. Read `_output/gsd/.planning/CONTEXT.md` - Decisions from discuss-phase
+6. Read `_output/gsd/.planning/CODEBASE.md` - For brownfield projects
+7. Read `_output/gsd/.planning/RESEARCH.md` - Existing research
 
 **Context Summary:**
 ```markdown
@@ -95,7 +95,7 @@ If the phase involves unfamiliar patterns or technologies, conduct targeted rese
    - Best practices
    - Similar implementations
    - Security considerations
-3. Update `.planning/RESEARCH.md` with findings
+3. Update `_output/gsd/.planning/RESEARCH.md` with findings
 
 **Research Agent Instructions:**
 ```xml
@@ -106,7 +106,7 @@ If the phase involves unfamiliar patterns or technologies, conduct targeted rese
     - {Specific question 2}
   </questions>
   <output>
-    Update .planning/RESEARCH.md Phase {N} section with:
+    Update _output/gsd/.planning/RESEARCH.md Phase {N} section with:
     - Relevant files/patterns found
     - External documentation references
     - Recommended approach
@@ -274,7 +274,7 @@ Options:
 
 ### Step 8: Generate PLAN.md
 
-Create `.planning/PLAN-phase-{N}.md`:
+Create `_output/gsd/.planning/PLAN-phase-{N}.md`:
 
 ```markdown
 # Plan - Phase {N}: {Phase Name}
@@ -389,7 +389,7 @@ Present plan to user:
 
 ### Plan Location
 
-`.planning/PLAN-phase-{N}.md`
+`_output/gsd/.planning/PLAN-phase-{N}.md`
 
 ### Ready to Execute?
 
@@ -402,9 +402,9 @@ Ask for confirmation before proceeding.
 
 ## Output Files
 
-- `.planning/PLAN-phase-{N}.md` - Complete execution plan
-- `.planning/RESEARCH.md` - Updated with phase research (if conducted)
-- Updated `.planning/STATE.md` - Plan status
+- `_output/gsd/.planning/PLAN-phase-{N}.md` - Complete execution plan
+- `_output/gsd/.planning/RESEARCH.md` - Updated with phase research (if conducted)
+- Updated `_output/gsd/.planning/STATE.md` - Plan status
 
 ## Next Steps
 

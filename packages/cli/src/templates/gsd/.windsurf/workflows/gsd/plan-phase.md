@@ -35,4 +35,4 @@ Then review the generated plan with wave groupings.
 
 ## Output
 
-`.planning/PLAN-phase-{N}.md` - Complete execution plan with waves
+`_output/gsd/.planning/PLAN-phase-{N}.md` - Complete execution plan with waves
