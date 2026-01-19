@@ -1,0 +1,17 @@
+{
+    "hooks": 
+    {
+        "PostToolUse": [
+            {
+                "matcher": "ExitPlanMode",
+                "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 _cc-native/hooks/archive_plan.py",
+                    "timeout": 600
+                }
+                ]
+            }
+        ]
+    }
+}
