@@ -134,4 +134,6 @@ _bmad-output/
 # AIW Installation (user-installed, not template source)
 /_gsd/
 /_GSD_OUTPUT/
+/_cc-native/
+/_output/
 /.claude/
