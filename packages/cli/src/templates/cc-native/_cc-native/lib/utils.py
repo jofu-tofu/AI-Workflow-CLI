@@ -113,6 +113,16 @@ def sanitize_title(s: str, max_len: int = 50) -> str:
     return s.strip("._-")[:max_len] or "unknown"
 
 
+def extract_plan_title(plan: str) -> Optional[str]:
+    """Extract title from '# Plan: <title>' line in plan content."""
+    for line in plan.split('\n'):
+        line = line.strip()
+        if line.startswith('# Plan:'):
+            title = line[7:].strip()
+            return title if title else None
+    return None
+
+
 # ---------------------------
 # Plan hash deduplication
 # ---------------------------
@@ -502,28 +512,52 @@ def write_combined_artifacts(
     payload: Dict[str, Any],
     settings: Optional[Dict[str, Any]] = None,
 ) -> Path:
-    """Write combined review artifacts (single JSON + single Markdown)."""
+    """Write combined review artifacts to task-centric folder structure.
+
+    Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}-{HHMMSS}/reviews/
+    """
     ts = now_local()
     date_folder = ts.strftime("%Y-%m-%d")
     time_part = ts.strftime("%H%M%S")
-    sid = sanitize_filename(str(payload.get("session_id", "unknown")))
 
-    out_dir = base / "_output" / "cc-native" / "plans" / "reviews" / date_folder
+    # Extract task slug from plan title
+    title = extract_plan_title(plan)
+    if title:
+        slug = sanitize_title(title.lower())
+    else:
+        sid = sanitize_filename(str(payload.get("session_id", "unknown")))
+        slug = f"session-{sid}"
+
+    # Build task-centric path: plans/{date}/{slug}-{time}/reviews/
+    task_folder = f"{slug}-{time_part}"
+    out_dir = base / "_output" / "cc-native" / "plans" / date_folder / task_folder / "reviews"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Write plan copy
-    plan_path = out_dir / f"{time_part}-session-{sid}-plan.md"
-    plan_path.write_text(plan, encoding="utf-8")
-
-    # Write combined JSON
-    json_path = out_dir / f"{time_part}-session-{sid}-review.json"
+    # Write combined JSON (simplified filename since folder provides context)
+    json_path = out_dir / "review.json"
     json_data = build_combined_json(result)
     json_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False), encoding="utf-8")
 
     # Write combined Markdown
-    md_path = out_dir / f"{time_part}-session-{sid}-review.md"
+    md_path = out_dir / "review.md"
     md_content = format_combined_markdown(result, settings)
     md_path.write_text(md_content, encoding="utf-8")
+
+    # Write individual reviewer results
+    for name, r in result.cli_reviewers.items():
+        if r.data:
+            reviewer_path = out_dir / f"{name}.json"
+            reviewer_path.write_text(
+                json.dumps(r.data, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+    for name, r in result.agents.items():
+        if r.data:
+            reviewer_path = out_dir / f"{sanitize_filename(name)}.json"
+            reviewer_path.write_text(
+                json.dumps(r.data, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
 
     return md_path
 

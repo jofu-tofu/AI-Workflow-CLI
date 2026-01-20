@@ -21,10 +21,10 @@ Features:
 
 Configuration: _cc-native/config.json -> planReview, agentReview
 
-Output: _output/cc-native/plans/reviews/{YYYY-MM-DD}/
-  - HHMMSS-session-{id}-plan.md
-  - HHMMSS-session-{id}-review.json
-  - HHMMSS-session-{id}-review.md
+Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}-{HHMMSS}/reviews/
+  - review.json (combined review data)
+  - review.md (combined markdown)
+  - {reviewer}.json (individual reviewer results)
 """
 
 import json

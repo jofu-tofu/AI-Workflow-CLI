@@ -13,7 +13,7 @@ This design ensures:
 4. User can review before implementation (archive doesn't require impl)
 
 State file: %TEMP%/cc-native-plan-state-{session_id}.json
-Output: _output/cc-native/plans/YYYY-MM-DD/HHMMSS-{slug}.md
+Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}-{HHMMSS}/plan.md
 """
 
 import json
@@ -157,20 +157,26 @@ def main() -> int:
     date_folder = now.strftime("%Y-%m-%d")
     time_part = now.strftime("%H%M%S")
 
-    # Extract title for descriptive filename
+    # Extract title for descriptive task folder name
     title = extract_title(plan)
     if title:
         slug = sanitize(title.lower())
     else:
         slug = f"session-{sanitize(session_id, 32)}"
 
-    out_dir = base / "_output" / "cc-native" / "plans" / date_folder
+    # Build task-centric path: plans/{date}/{slug}-{time}/plan.md
+    task_folder = f"{slug}-{time_part}"
+    out_dir = base / "_output" / "cc-native" / "plans" / date_folder / task_folder
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    out_path = out_dir / f"{time_part}-{slug}.md"
+    out_path = out_dir / "plan.md"
+    # Handle collision (rare - same slug and exact same second)
     i = 1
     while out_path.exists():
-        out_path = out_dir / f"{time_part}-{slug}-{i}.md"
+        collision_folder = f"{slug}-{time_part}-{i}"
+        out_dir = base / "_output" / "cc-native" / "plans" / date_folder / collision_folder
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / "plan.md"
         i += 1
 
     # Create header with metadata
