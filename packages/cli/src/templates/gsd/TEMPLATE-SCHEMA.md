@@ -4,15 +4,20 @@
 
 ```
 packages/cli/src/templates/gsd/
-├── _gsd/                    # Core files (copied to projects)
-│   ├── templates/*.template # Document templates with {{PLACEHOLDERS}}
-│   └── workflows/*.md       # Workflow definitions
-├── .claude/commands/gsd/    # Claude Code slash commands
-├── .windsurf/workflows/gsd/ # Windsurf workflows
-├── .gitignore               # Ignores _output/gsd/.planning/
-├── GSD-README.md            # User documentation
-├── TEMPLATE-SCHEMA.md       # This file
-└── MIGRATION.md             # Breaking changes guide
+├── _gsd/                         # Core files (copied to projects)
+│   ├── templates/*.template      # Document templates with {{PLACEHOLDERS}}
+│   ├── workflows/*.md            # Workflow definitions
+│   ├── hooks/                    # Hook scripts (IDE-agnostic)
+│   │   └── gsd-plan-review.py    # Plan review via Codex/Gemini
+│   ├── config.json               # GSD configuration
+│   └── docs/                     # GSD documentation
+├── .claude/commands/gsd/         # Claude Code slash commands
+├── .claude/settings.json         # Hook wiring only (points to _gsd/hooks/)
+├── .windsurf/workflows/gsd/      # Windsurf workflows
+├── .gitignore                    # Ignores _output/gsd/.planning/
+├── GSD-README.md                 # User documentation
+├── TEMPLATE-SCHEMA.md            # This file
+└── MIGRATION.md                  # Breaking changes guide
 ```
 
 ---
@@ -150,6 +155,58 @@ Both contain lightweight stubs that load full workflows from `_gsd/workflows/`.
 
 ---
 
+## Configuration (`_gsd/config.json`)
+
+GSD-specific settings are stored in `_gsd/config.json`, keeping them IDE-agnostic:
+
+```json
+{
+  "planReview": {
+    "enabled": true,
+    "reviewers": {
+      "codex": { "enabled": true, "model": "", "timeout": 120 },
+      "gemini": { "enabled": false, "model": "", "timeout": 120 }
+    },
+    "blockOnFail": false,
+    "planPattern": "_output/gsd/.planning/PLAN-phase-"
+  }
+}
+```
+
+| Setting | Purpose | Default |
+|---------|---------|---------|
+| `planReview.enabled` | Master switch for plan review | `true` |
+| `planReview.reviewers.codex.enabled` | Use Codex CLI for review | `true` |
+| `planReview.reviewers.gemini.enabled` | Use Gemini CLI for review | `false` |
+| `planReview.reviewers.*.model` | Model override | `""` (use default) |
+| `planReview.reviewers.*.timeout` | Seconds before timeout | `120` |
+| `planReview.blockOnFail` | Block Claude if review fails | `false` |
+| `planReview.planPattern` | File pattern triggering review | `_output/gsd/.planning/PLAN-phase-` |
+
+---
+
+## Hooks (`_gsd/hooks/`)
+
+Hook scripts live in `_gsd/hooks/` for IDE portability. IDE-specific wiring references them:
+
+**`.claude/settings.json` (wiring only):**
+```json
+{
+  "hooks": {
+    "PostToolUse": [{
+      "matcher": "Write",
+      "hooks": [{ "type": "command", "command": "python _gsd/hooks/gsd-plan-review.py" }]
+    }]
+  }
+}
+```
+
+| Hook | Trigger | Purpose |
+|------|---------|---------|
+| `gsd-plan-review.py` | Write to `PLAN-phase-*.md` | Sends plan to Codex/Gemini for review |
+
+---
+
 ## Extension
 
 **New Workflow:**
@@ -168,6 +225,7 @@ Both contain lightweight stubs that load full workflows from `_gsd/workflows/`.
 
 | Version | Changes |
 |---------|---------|
+| 2.1.0 | Moved hooks and config to `_gsd/` for IDE portability |
 | 2.0.0 | 5-core loop, `_output/gsd/.planning/`, wave execution, 9 utilities, 3 new templates |
 | 1.0.0 | Initial release, `_GSD_OUTPUT/`, 13 workflows, 6 templates |
 

@@ -1,0 +1,46 @@
+{
+  "unifiedReview": {
+    "enabled": true,
+    "blockOnFail": false,
+    "planPattern": "_output/gsd/.planning/PLAN-phase-",
+    "reviewers": {
+      "codex": {
+        "enabled": true,
+        "model": "",
+        "timeout": 120
+      },
+      "gemini": {
+        "enabled": false,
+        "model": "",
+        "timeout": 120
+      }
+    },
+    "agents": [
+      {
+        "name": "architect-reviewer",
+        "model": "sonnet",
+        "focus": "architectural concerns and scalability",
+        "enabled": true
+      },
+      {
+        "name": "penetration-tester",
+        "model": "sonnet",
+        "focus": "security vulnerabilities and attack vectors",
+        "enabled": true
+      },
+      {
+        "name": "performance-engineer",
+        "model": "sonnet",
+        "focus": "performance bottlenecks and optimization",
+        "enabled": true
+      },
+      {
+        "name": "accessibility-tester",
+        "model": "sonnet",
+        "focus": "accessibility compliance and UX concerns",
+        "enabled": true
+      }
+    ],
+    "agentTimeout": 120
+  }
+}

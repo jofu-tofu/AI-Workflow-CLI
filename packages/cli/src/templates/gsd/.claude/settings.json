@@ -6,30 +6,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/gsd-plan-review.py",
-            "timeout": 300000
+            "command": "python _gsd/hooks/gsd-unified-review.py",
+            "timeout": 600000
           }
         ]
       }
     ]
-  },
-  "gsd": {
-    "planReview": {
-      "enabled": true,
-      "reviewers": {
-        "codex": {
-          "enabled": true,
-          "model": "",
-          "timeout": 120
-        },
-        "gemini": {
-          "enabled": false,
-          "model": "",
-          "timeout": 120
-        }
-      },
-      "blockOnFail": false,
-      "planPattern": "_output/gsd/.planning/PLAN-phase-"
-    }
   }
 }
