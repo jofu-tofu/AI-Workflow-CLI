@@ -2,13 +2,13 @@
 """
 CC-Native Plan Review Hook
 
-Claude Code PostToolUse hook that intercepts ExitPlanMode and
+Claude Code PreToolUse hook that intercepts ExitPlanMode and
 automatically reviews plans using external AI agents (Codex + Gemini).
 
-Trigger: ExitPlanMode tool use
+Trigger: ExitPlanMode tool use (PreToolUse - runs BEFORE user approval prompt)
 
 Features:
-- Detects approved plans via ExitPlanMode PostToolUse
+- Detects plans via ExitPlanMode PreToolUse
 - Runs Codex CLI and/or Gemini CLI for plan review
 - Outputs review artifacts to _output/cc-native/plans/reviews/
 - Returns feedback to Claude via hook additionalContext
@@ -39,6 +39,37 @@ DEFAULT_DISPLAY: Dict[str, int] = {
     "maxMissingSections": 12,
     "maxQuestions": 12,
 }
+
+
+# ---------------------------
+# Plan-hash deduplication
+# ---------------------------
+
+import hashlib
+
+
+def compute_plan_hash(plan_content: str) -> str:
+    """Compute a hash of the plan content."""
+    return hashlib.sha256(plan_content.encode("utf-8")).hexdigest()[:16]
+
+
+def get_review_marker_path(session_id: str) -> Path:
+    """Get path to review marker file for this session."""
+    safe_id = re.sub(r'[^a-zA-Z0-9_-]', '_', session_id)[:32]
+    return Path(tempfile.gettempdir()) / f"cc-native-plan-reviewed-{safe_id}.json"
+
+
+def is_plan_already_reviewed(session_id: str, plan_hash: str) -> bool:
+    """Check if this exact plan has already been reviewed in this session."""
+    marker_path = get_review_marker_path(session_id)
+    if not marker_path.exists():
+        return False
+    try:
+        data = json.loads(marker_path.read_text(encoding="utf-8"))
+        stored_hash = data.get("plan_hash", "")
+        return stored_hash == plan_hash
+    except Exception:
+        return False
 
 
 # ---------------------------
@@ -441,8 +472,20 @@ def write_artifacts(base: Path, plan: str, md: str, results: List[ReviewerResult
     return review_path
 
 
+def find_plan_file() -> Optional[str]:
+    """Find the most recent plan file in ~/.claude/plans/."""
+    plans_dir = Path.home() / ".claude" / "plans"
+    if not plans_dir.exists():
+        return None
+    plan_files = list(plans_dir.glob("*.md"))
+    if not plan_files:
+        return None
+    plan_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return str(plan_files[0])
+
+
 def main() -> int:
-    eprint("[cc-native-plan-review] Hook started")
+    eprint("[cc-native-plan-review] Hook started (PreToolUse)")
 
     try:
         payload = json.load(sys.stdin)
@@ -458,6 +501,8 @@ def main() -> int:
         eprint("[cc-native-plan-review] Skipping: not ExitPlanMode")
         return 0
 
+    session_id = str(payload.get("session_id", "unknown"))
+
     # Load settings
     base = project_dir(payload)
     settings = load_settings(base)
@@ -466,15 +511,31 @@ def main() -> int:
         eprint("[cc-native-plan-review] Skipping: plan review disabled in settings")
         return 0
 
-    tool_response = payload.get("tool_response") or {}
-
-    # Plan is in tool_response.plan for PostToolUse hooks
-    plan = str(tool_response.get("plan", "")).strip()
-    if not plan:
-        eprint("[cc-native-plan-review] Skipping: no plan content")
+    # PreToolUse: Find and read plan from file system (no tool_response yet)
+    plan_path = find_plan_file()
+    if not plan_path:
+        eprint("[cc-native-plan-review] Skipping: no plan file found in ~/.claude/plans/")
         return 0
 
+    try:
+        plan = Path(plan_path).read_text(encoding="utf-8").strip()
+    except Exception as e:
+        eprint(f"[cc-native-plan-review] Failed to read plan file: {e}")
+        return 0
+
+    if not plan:
+        eprint("[cc-native-plan-review] Skipping: plan file is empty")
+        return 0
+
+    eprint(f"[cc-native-plan-review] Found plan at: {plan_path}")
     eprint(f"[cc-native-plan-review] Plan length: {len(plan)} chars")
+
+    # Plan-hash deduplication: skip if this exact plan was already reviewed
+    plan_hash = compute_plan_hash(plan)
+    eprint(f"[cc-native-plan-review] Plan hash: {plan_hash}")
+    if is_plan_already_reviewed(session_id, plan_hash):
+        eprint(f"[cc-native-plan-review] Skipping: plan already reviewed (hash match)")
+        return 0
 
     # Check which reviewers are enabled
     reviewers_config = settings.get("reviewers", {})
@@ -509,7 +570,7 @@ def main() -> int:
     # Build Claude Code hook JSON output
     out: Dict[str, Any] = {
         "hookSpecificOutput": {
-            "hookEventName": "PostToolUse",
+            "hookEventName": "PreToolUse",
             "additionalContext": (
                 f"**CC-Native Plan Review Complete**\n\n"
                 f"External reviewers (Codex + Gemini) have analyzed your plan.\n"

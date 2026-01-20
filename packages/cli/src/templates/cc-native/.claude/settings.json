@@ -1,9 +1,24 @@
 {
     "hooks": {
-        "PostToolUse": [
+        "PreToolUse": [
+            {
+                "matcher": "Edit|Write|Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python _cc-native/hooks/archive_plan.py",
+                        "timeout": 5000
+                    }
+                ]
+            },
             {
                 "matcher": "ExitPlanMode",
                 "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python _cc-native/hooks/set_plan_state.py",
+                        "timeout": 5000
+                    },
                     {
                         "type": "command",
                         "command": "python _cc-native/hooks/cc-native-plan-review.py",
@@ -13,11 +28,17 @@
                         "type": "command",
                         "command": "python _cc-native/hooks/cc-native-agent-review.py",
                         "timeout": 600000
-                    },
+                    }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [
                     {
                         "type": "command",
                         "command": "python _cc-native/hooks/archive_plan.py",
-                        "timeout": 600
+                        "timeout": 5000
                     }
                 ]
             }

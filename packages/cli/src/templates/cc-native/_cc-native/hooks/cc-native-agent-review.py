@@ -2,13 +2,13 @@
 """
 CC-Native Agent Review Hook
 
-Claude Code PostToolUse hook that intercepts ExitPlanMode and
+Claude Code PreToolUse hook that intercepts ExitPlanMode and
 automatically reviews plans using multiple Claude Code agents in parallel.
 
-Trigger: ExitPlanMode tool use
+Trigger: ExitPlanMode tool use (PreToolUse - runs BEFORE user approval prompt)
 
 Features:
-- Detects approved plans via ExitPlanMode PostToolUse
+- Detects plans via ExitPlanMode PreToolUse
 - Spawns headless Claude Code instances with --agent flag for each reviewer
 - Runs all agents in parallel for faster review
 - Aggregates results, writes artifacts under _output/cc-native/plans/agent-reviews/
@@ -38,6 +38,52 @@ if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
 from aggregate_agents import aggregate_agents
+import tempfile
+
+
+# ---------------------------
+# Plan-hash deduplication
+# ---------------------------
+
+import hashlib
+
+
+def compute_plan_hash(plan_content: str) -> str:
+    """Compute a hash of the plan content."""
+    return hashlib.sha256(plan_content.encode("utf-8")).hexdigest()[:16]
+
+
+def get_review_marker_path(session_id: str) -> Path:
+    """Get path to review marker file for this session."""
+    safe_id = re.sub(r'[^a-zA-Z0-9_-]', '_', session_id)[:32]
+    return Path(tempfile.gettempdir()) / f"cc-native-plan-reviewed-{safe_id}.json"
+
+
+def is_plan_already_reviewed(session_id: str, plan_hash: str) -> bool:
+    """Check if this exact plan has already been reviewed in this session."""
+    marker_path = get_review_marker_path(session_id)
+    if not marker_path.exists():
+        return False
+    try:
+        data = json.loads(marker_path.read_text(encoding="utf-8"))
+        stored_hash = data.get("plan_hash", "")
+        return stored_hash == plan_hash
+    except Exception:
+        return False
+
+
+def mark_plan_reviewed(session_id: str, plan_hash: str) -> None:
+    """Mark this plan as reviewed (stores hash in marker file)."""
+    marker = get_review_marker_path(session_id)
+    try:
+        data = {
+            "plan_hash": plan_hash,
+            "reviewed_at": datetime.now().isoformat(),
+        }
+        marker.write_text(json.dumps(data), encoding="utf-8")
+        eprint(f"[cc-native-agent-review] Created review marker: {marker} (hash: {plan_hash})")
+    except Exception as e:
+        eprint(f"[cc-native-agent-review] Warning: failed to create review marker: {e}")
 
 
 # ---------------------------
@@ -615,7 +661,7 @@ def output_no_review_needed(orch_result: OrchestratorResult, review_file: Option
 
     return {
         "hookSpecificOutput": {
-            "hookEventName": "PostToolUse",
+            "hookEventName": "PreToolUse",
             "additionalContext": context_msg,
         }
     }
@@ -841,8 +887,20 @@ def write_artifacts(base: Path, plan: str, md: str, results: List[ReviewerResult
     return review_path
 
 
+def find_plan_file() -> Optional[str]:
+    """Find the most recent plan file in ~/.claude/plans/."""
+    plans_dir = Path.home() / ".claude" / "plans"
+    if not plans_dir.exists():
+        return None
+    plan_files = list(plans_dir.glob("*.md"))
+    if not plan_files:
+        return None
+    plan_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return str(plan_files[0])
+
+
 def main() -> int:
-    eprint("[cc-native-agent-review] Hook started")
+    eprint("[cc-native-agent-review] Hook started (PreToolUse)")
 
     try:
         payload = json.load(sys.stdin)
@@ -858,6 +916,8 @@ def main() -> int:
         eprint("[cc-native-agent-review] Skipping: not ExitPlanMode")
         return 0
 
+    session_id = str(payload.get("session_id", "unknown"))
+
     # Load settings
     base = project_dir(payload)
     settings = load_settings(base)
@@ -866,15 +926,31 @@ def main() -> int:
         eprint("[cc-native-agent-review] Skipping: agent review disabled in settings")
         return 0
 
-    tool_response = payload.get("tool_response") or {}
-
-    # Plan is in tool_response.plan for PostToolUse hooks
-    plan = str(tool_response.get("plan", "")).strip()
-    if not plan:
-        eprint("[cc-native-agent-review] Skipping: no plan content")
+    # PreToolUse: Find and read plan from file system (no tool_response yet)
+    plan_path = find_plan_file()
+    if not plan_path:
+        eprint("[cc-native-agent-review] Skipping: no plan file found in ~/.claude/plans/")
         return 0
 
+    try:
+        plan = Path(plan_path).read_text(encoding="utf-8").strip()
+    except Exception as e:
+        eprint(f"[cc-native-agent-review] Failed to read plan file: {e}")
+        return 0
+
+    if not plan:
+        eprint("[cc-native-agent-review] Skipping: plan file is empty")
+        return 0
+
+    eprint(f"[cc-native-agent-review] Found plan at: {plan_path}")
     eprint(f"[cc-native-agent-review] Plan length: {len(plan)} chars")
+
+    # Plan-hash deduplication: skip if this exact plan was already reviewed
+    plan_hash = compute_plan_hash(plan)
+    eprint(f"[cc-native-agent-review] Plan hash: {plan_hash}")
+    if is_plan_already_reviewed(session_id, plan_hash):
+        eprint(f"[cc-native-agent-review] Skipping: plan already reviewed (hash match)")
+        return 0
 
     # Load agent library from frontmatter auto-detection
     agent_library = load_agent_library(base, settings)
@@ -915,6 +991,7 @@ def main() -> int:
         if orch_result.complexity == "simple" and not orch_result.selected_agents:
             eprint("[cc-native-agent-review] Orchestrator determined: simple complexity, no review needed")
             out = output_no_review_needed(orch_result)
+            mark_plan_reviewed(session_id, plan_hash)  # Mark plan as reviewed (hash-based)
             print(json.dumps(out, ensure_ascii=False))
             return 0
 
@@ -941,6 +1018,7 @@ def main() -> int:
         eprint("[cc-native-agent-review] No agents selected, exiting")
         if orch_result:
             out = output_no_review_needed(orch_result)
+            mark_plan_reviewed(session_id, plan_hash)  # Mark plan as reviewed (hash-based)
             print(json.dumps(out, ensure_ascii=False))
         return 0
 
@@ -1015,7 +1093,7 @@ def main() -> int:
 
     out: Dict[str, Any] = {
         "hookSpecificOutput": {
-            "hookEventName": "PostToolUse",
+            "hookEventName": "PreToolUse",
             "additionalContext": "".join(context_parts),
         }
     }
@@ -1028,6 +1106,9 @@ def main() -> int:
             "Revise the plan to address the high-severity issues and missing sections, "
             "then present an updated plan."
         )
+
+    # Mark plan as reviewed (hash-based) - only create marker on successful completion
+    mark_plan_reviewed(session_id, plan_hash)
 
     # Print JSON to stdout for Claude Code to process
     print(json.dumps(out, ensure_ascii=False))
