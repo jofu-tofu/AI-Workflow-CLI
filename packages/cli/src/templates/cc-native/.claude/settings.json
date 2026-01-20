@@ -1,15 +1,24 @@
 {
-    "hooks": 
-    {
+    "hooks": {
         "PostToolUse": [
             {
                 "matcher": "ExitPlanMode",
                 "hooks": [
-                {
-                    "type": "command",
-                    "command": "python3 _cc-native/hooks/archive_plan.py",
-                    "timeout": 600
-                }
+                    {
+                        "type": "command",
+                        "command": "python _cc-native/hooks/cc-native-plan-review.py",
+                        "timeout": 300000
+                    },
+                    {
+                        "type": "command",
+                        "command": "python _cc-native/hooks/cc-native-agent-review.py",
+                        "timeout": 600000
+                    },
+                    {
+                        "type": "command",
+                        "command": "python _cc-native/hooks/archive_plan.py",
+                        "timeout": 600
+                    }
                 ]
             }
         ]

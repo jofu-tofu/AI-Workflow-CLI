@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
 PostToolUse hook for ExitPlanMode.
-Saves approved plans to plans/YYYY-MM-DD/HHMMSS-session-{session_id}.md
+Saves approved plans to plans/YYYY-MM-DD/HHMMSS-{slug}.md
+
+Filename uses plan title if available (e.g., "191811-test-hook-after-restart.md"),
+falls back to session ID if no title found (e.g., "191811-session-abc123.md").
 """
 
 import json
@@ -12,9 +15,23 @@ from datetime import datetime
 from pathlib import Path
 
 
-def sanitize(s: str) -> str:
+def sanitize(s: str, max_len: int = 50) -> str:
+    """Sanitize string for use in filename."""
+    # Replace spaces with hyphens before stripping other chars
+    s = s.replace(' ', '-')
     s = re.sub(r"[^A-Za-z0-9._-]+", "_", s)
-    return s.strip("._-")[:32] or "unknown"
+    s = re.sub(r"[-_]+", "-", s)  # Collapse multiple separators
+    return s.strip("._-")[:max_len] or "unknown"
+
+
+def extract_title(plan: str) -> str | None:
+    """Extract title from '# Plan: <title>' line."""
+    for line in plan.split('\n'):
+        line = line.strip()
+        if line.startswith('# Plan:'):
+            title = line[7:].strip()  # Remove '# Plan:' prefix
+            return title if title else None
+    return None
 
 
 def main() -> int:
@@ -41,15 +58,22 @@ def main() -> int:
     now = datetime.now()
     date_folder = now.strftime("%Y-%m-%d")
     time_part = now.strftime("%H%M%S")
-    session_id = sanitize(str(payload.get("session_id", "unknown")))
+    session_id = sanitize(str(payload.get("session_id", "unknown")), max_len=32)
+
+    # Extract title for descriptive filename
+    title = extract_title(plan)
+    if title:
+        slug = sanitize(title.lower())  # e.g., "test-hook-after-restart"
+    else:
+        slug = f"session-{session_id}"  # fallback to current behavior
 
     out_dir = base / "_output" / "cc-native" / "plans" / date_folder
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    out_path = out_dir / f"{time_part}-session-{session_id}.md"
+    out_path = out_dir / f"{time_part}-{slug}.md"
     i = 1
     while out_path.exists():
-        out_path = out_dir / f"{time_part}-session-{session_id}-{i}.md"
+        out_path = out_dir / f"{time_part}-{slug}-{i}.md"
         i += 1
 
     header = (

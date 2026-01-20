@@ -1,4 +1,4 @@
-Read $1 and interview me in detail using the AskUserQuestionTool about literally anything: 
+Read this spec and interview me in detail using the AskUserQuestionTool about literally anything: 
 - Technical implementation
 - UI & UX
 - Concerns
