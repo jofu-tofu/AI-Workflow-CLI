@@ -72,7 +72,6 @@ export default class LaunchCommand extends BaseCommand {
       try {
         await this.launchNewTerminal(cwd, useCodex)
         this.log(`New terminal launched with aiw launch${launchFlag ? ` ${launchFlag}` : ''}`)
-        this.exit(0)
       } catch (error) {
         const err = error as Error
         this.error(`Failed to launch new terminal: ${err.message}`, {exit: EXIT_CODES.GENERAL_ERROR})
