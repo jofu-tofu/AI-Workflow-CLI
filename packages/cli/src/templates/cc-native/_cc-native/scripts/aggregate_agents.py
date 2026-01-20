@@ -5,7 +5,7 @@ Aggregate Agents - Auto-detect agent configurations from frontmatter.
 Reads all agent markdown files from .claude/agents/ and extracts their
 YAML frontmatter to provide agent configuration for the hook system.
 
-Used by cc-native-agent-review.py to auto-detect available agents
+Used by cc-native-plan-review.py to auto-detect available agents
 instead of requiring manual config.json entries.
 
 Note: Uses simple YAML parsing without external dependencies.

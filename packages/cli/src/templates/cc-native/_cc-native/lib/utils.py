@@ -1,0 +1,552 @@
+"""
+CC-Native shared utilities.
+
+Provides common functions used across all cc-native hooks:
+- Core utilities (eprint, now_local, project_dir, sanitize_filename)
+- Plan hash deduplication (compute_plan_hash, get_review_marker_path, etc.)
+- JSON parsing (parse_json_maybe, coerce_to_review, worst_verdict)
+- Artifact writing (format_markdown, write_artifacts, find_plan_file)
+- Constants (REVIEW_SCHEMA, DEFAULT_DISPLAY)
+- Dataclasses (ReviewerResult)
+"""
+
+import hashlib
+import json
+import os
+import re
+import sys
+import tempfile
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+
+# ---------------------------
+# Constants
+# ---------------------------
+
+DEFAULT_DISPLAY: Dict[str, int] = {
+    "maxIssues": 12,
+    "maxMissingSections": 12,
+    "maxQuestions": 12,
+}
+
+DEFAULT_SANITIZATION: Dict[str, int] = {
+    "maxSessionIdLength": 32,
+    "maxTitleLength": 50,
+}
+
+REVIEW_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "verdict": {"type": "string", "enum": ["pass", "warn", "fail"]},
+        "summary": {"type": "string"},
+        "issues": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "severity": {"type": "string", "enum": ["high", "medium", "low"]},
+                    "category": {"type": "string"},
+                    "issue": {"type": "string"},
+                    "suggested_fix": {"type": "string"},
+                },
+                "required": ["severity", "category", "issue", "suggested_fix"],
+                "additionalProperties": False,
+            },
+        },
+        "missing_sections": {"type": "array", "items": {"type": "string"}},
+        "questions": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["verdict", "summary", "issues", "missing_sections", "questions"],
+    "additionalProperties": False,
+}
+
+
+# ---------------------------
+# Dataclasses
+# ---------------------------
+
+@dataclass
+class ReviewerResult:
+    """Result from a plan reviewer (Codex, Gemini, or Claude agent)."""
+    name: str
+    ok: bool
+    verdict: str  # pass|warn|fail|error|skip
+    data: Dict[str, Any]
+    raw: str
+    err: str
+
+
+# ---------------------------
+# Core utilities
+# ---------------------------
+
+def eprint(*args: Any) -> None:
+    """Print to stderr."""
+    print(*args, file=sys.stderr)
+
+
+def now_local() -> datetime:
+    """Get current local datetime."""
+    return datetime.now()
+
+
+def project_dir(payload: Dict[str, Any]) -> Path:
+    """Get project directory from payload or environment."""
+    p = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd()
+    return Path(p)
+
+
+def sanitize_filename(s: str, max_len: int = 32) -> str:
+    """Sanitize string for use in filename."""
+    s = re.sub(r"[^A-Za-z0-9._-]+", "_", s)
+    return s.strip("._-")[:max_len] or "unknown"
+
+
+def sanitize_title(s: str, max_len: int = 50) -> str:
+    """Sanitize title for use in filename (with space-to-dash conversion)."""
+    s = s.replace(' ', '-')
+    s = re.sub(r"[^A-Za-z0-9._-]+", "_", s)
+    s = re.sub(r"[-_]+", "-", s)
+    return s.strip("._-")[:max_len] or "unknown"
+
+
+# ---------------------------
+# Plan hash deduplication
+# ---------------------------
+
+def compute_plan_hash(plan_content: str) -> str:
+    """Compute a hash of the plan content."""
+    return hashlib.sha256(plan_content.encode("utf-8")).hexdigest()[:16]
+
+
+def get_review_marker_path(session_id: str) -> Path:
+    """Get path to review marker file for this session."""
+    safe_id = re.sub(r'[^a-zA-Z0-9_-]', '_', session_id)[:32]
+    return Path(tempfile.gettempdir()) / f"cc-native-plan-reviewed-{safe_id}.json"
+
+
+def is_plan_already_reviewed(session_id: str, plan_hash: str) -> bool:
+    """Check if this exact plan has already been reviewed in this session."""
+    marker_path = get_review_marker_path(session_id)
+    if not marker_path.exists():
+        return False
+    try:
+        data = json.loads(marker_path.read_text(encoding="utf-8"))
+        stored_hash = data.get("plan_hash", "")
+        return stored_hash == plan_hash
+    except Exception:
+        return False
+
+
+def mark_plan_reviewed(session_id: str, plan_hash: str, hook_name: str = "cc-native") -> None:
+    """Mark this plan as reviewed (stores hash in marker file)."""
+    marker = get_review_marker_path(session_id)
+    try:
+        data = {
+            "plan_hash": plan_hash,
+            "reviewed_at": datetime.now().isoformat(),
+        }
+        marker.write_text(json.dumps(data), encoding="utf-8")
+        eprint(f"[{hook_name}] Created review marker: {marker} (hash: {plan_hash})")
+    except Exception as e:
+        eprint(f"[{hook_name}] Warning: failed to create review marker: {e}")
+
+
+# ---------------------------
+# JSON parsing
+# ---------------------------
+
+def parse_json_maybe(text: str) -> Optional[Dict[str, Any]]:
+    """Try strict JSON parse. If that fails, attempt to extract the first {...} block."""
+    text = text.strip()
+    if not text:
+        return None
+    try:
+        obj = json.loads(text)
+        if isinstance(obj, dict):
+            return obj
+        return None
+    except Exception:
+        pass
+
+    # Heuristic: try to extract a JSON object substring
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        candidate = text[start : end + 1]
+        try:
+            obj = json.loads(candidate)
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            return None
+    return None
+
+
+def coerce_to_review(obj: Optional[Dict[str, Any]], default_fix_msg: str = "Retry or check configuration.") -> Tuple[bool, str, Dict[str, Any]]:
+    """Validate/normalize to our expected structure."""
+    if not obj:
+        return False, "error", {
+            "verdict": "fail",
+            "summary": "No structured output returned.",
+            "issues": [{"severity": "high", "category": "tooling", "issue": "Reviewer returned no JSON.", "suggested_fix": default_fix_msg}],
+            "missing_sections": [],
+            "questions": [],
+        }
+
+    verdict = obj.get("verdict")
+    if verdict not in ("pass", "warn", "fail"):
+        verdict = "warn"
+
+    norm = {
+        "verdict": verdict,
+        "summary": str(obj.get("summary", "")).strip() or "No summary provided.",
+        "issues": obj.get("issues") if isinstance(obj.get("issues"), list) else [],
+        "missing_sections": obj.get("missing_sections") if isinstance(obj.get("missing_sections"), list) else [],
+        "questions": obj.get("questions") if isinstance(obj.get("questions"), list) else [],
+    }
+
+    return True, verdict, norm
+
+
+def worst_verdict(verdicts: List[str]) -> str:
+    """Return the worst verdict from a list."""
+    order = {"pass": 0, "warn": 1, "fail": 2, "skip": 0, "error": 1}
+    worst = "pass"
+    for v in verdicts:
+        if order.get(v, 1) > order.get(worst, 0):
+            worst = v
+    if worst == "error":
+        return "warn"
+    return worst
+
+
+# ---------------------------
+# Artifact writing
+# ---------------------------
+
+def find_plan_file() -> Optional[str]:
+    """Find the most recent plan file in ~/.claude/plans/."""
+    plans_dir = Path.home() / ".claude" / "plans"
+    if not plans_dir.exists():
+        return None
+    plan_files = list(plans_dir.glob("*.md"))
+    if not plan_files:
+        return None
+    plan_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return str(plan_files[0])
+
+
+def format_review_markdown(
+    results: List[ReviewerResult],
+    overall: str,
+    title: str = "CC-Native Plan Review",
+    settings: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Format review results as markdown."""
+    display = DEFAULT_DISPLAY.copy()
+    if settings:
+        display = settings.get("display", DEFAULT_DISPLAY)
+
+    max_issues = display.get("maxIssues", 12)
+    max_missing = display.get("maxMissingSections", 12)
+    max_questions = display.get("maxQuestions", 12)
+
+    lines: List[str] = []
+    lines.append(f"# {title}\n")
+    lines.append(f"**Overall verdict:** `{overall.upper()}`\n")
+
+    for r in results:
+        lines.append(f"## {r.name.title() if r.name.islower() else r.name}\n")
+        lines.append(f"- ok: `{r.ok}`")
+        lines.append(f"- verdict: `{r.verdict}`")
+        if r.data:
+            lines.append(f"- summary: {r.data.get('summary','').strip()}")
+            issues = r.data.get("issues", [])
+            if issues:
+                lines.append("\n### Issues")
+                for it in issues[:max_issues]:
+                    sev = it.get("severity", "medium")
+                    cat = it.get("category", "general")
+                    issue = it.get("issue", "")
+                    fix = it.get("suggested_fix", "")
+                    lines.append(f"- **[{sev}] {cat}**: {issue}\n  - fix: {fix}")
+            missing = r.data.get("missing_sections", [])
+            if missing:
+                lines.append("\n### Missing Sections")
+                for m in missing[:max_missing]:
+                    lines.append(f"- {m}")
+            qs = r.data.get("questions", [])
+            if qs:
+                lines.append("\n### Questions")
+                for q in qs[:max_questions]:
+                    lines.append(f"- {q}")
+        else:
+            lines.append(f"- note: {r.err or 'no structured output'}")
+        lines.append("")
+
+    return "\n".join(lines).strip() + "\n"
+
+
+def write_review_artifacts(
+    base: Path,
+    plan: str,
+    md: str,
+    results: List[ReviewerResult],
+    payload: Dict[str, Any],
+    subdir: str = "reviews",
+) -> Path:
+    """Write review artifacts to _output/cc-native/plans/{subdir}/."""
+    ts = now_local()
+    date_folder = ts.strftime("%Y-%m-%d")
+    time_part = ts.strftime("%H%M%S")
+    sid = sanitize_filename(str(payload.get("session_id", "unknown")))
+
+    out_dir = base / "_output" / "cc-native" / "plans" / subdir / date_folder
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    plan_path = out_dir / f"{time_part}-session-{sid}-plan.md"
+    review_path = out_dir / f"{time_part}-session-{sid}-review.md"
+
+    plan_path.write_text(plan, encoding="utf-8")
+    review_path.write_text(md, encoding="utf-8")
+
+    for r in results:
+        if r.data:
+            (out_dir / f"{time_part}-session-{sid}-{r.name}.json").write_text(
+                json.dumps(r.data, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+    return review_path
+
+
+@dataclass
+class OrchestratorResult:
+    """Result from the plan orchestrator."""
+    complexity: str  # simple | medium | high
+    category: str    # code | infrastructure | documentation | life | business | design | research
+    selected_agents: List[str]
+    reasoning: str
+    skip_reason: Optional[str] = None
+    error: Optional[str] = None
+
+
+@dataclass
+class CombinedReviewResult:
+    """Combined result from all review phases."""
+    plan_hash: str
+    overall_verdict: str
+    cli_reviewers: Dict[str, ReviewerResult]
+    orchestration: Optional[OrchestratorResult]
+    agents: Dict[str, ReviewerResult]
+    timestamp: str
+
+
+def format_combined_markdown(
+    result: CombinedReviewResult,
+    settings: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Format combined review result as a single markdown document."""
+    display = DEFAULT_DISPLAY.copy()
+    if settings:
+        display = settings.get("display", DEFAULT_DISPLAY)
+
+    max_issues = display.get("maxIssues", 12)
+    max_missing = display.get("maxMissingSections", 12)
+    max_questions = display.get("maxQuestions", 12)
+
+    lines: List[str] = []
+    lines.append("# CC-Native Plan Review\n")
+    lines.append(f"**Overall Verdict:** `{result.overall_verdict.upper()}`")
+    lines.append(f"**Plan Hash:** `{result.plan_hash}`\n")
+    lines.append("---\n")
+
+    # CLI Reviewers section
+    if result.cli_reviewers:
+        lines.append("## CLI Reviewers\n")
+        for name, r in result.cli_reviewers.items():
+            lines.append(f"### {name.title()}\n")
+            lines.append(f"- verdict: `{r.verdict}`")
+            if r.data:
+                lines.append(f"- summary: {r.data.get('summary', '').strip()}")
+                _append_review_details(lines, r.data, max_issues, max_missing, max_questions)
+            elif r.err:
+                lines.append(f"- error: {r.err}")
+            lines.append("")
+
+    # Orchestration section
+    if result.orchestration:
+        lines.append("---\n")
+        lines.append("## Orchestration\n")
+        lines.append(f"- **Complexity:** `{result.orchestration.complexity}`")
+        lines.append(f"- **Category:** `{result.orchestration.category}`")
+        agents_str = ", ".join(result.orchestration.selected_agents) if result.orchestration.selected_agents else "None"
+        lines.append(f"- **Agents Selected:** {agents_str}")
+        lines.append(f"- **Reasoning:** {result.orchestration.reasoning}")
+        if result.orchestration.skip_reason:
+            lines.append(f"- **Skip Reason:** {result.orchestration.skip_reason}")
+        if result.orchestration.error:
+            lines.append(f"- **Error:** {result.orchestration.error}")
+        lines.append("")
+
+    # Agent Reviews section
+    if result.agents:
+        lines.append("---\n")
+        lines.append("## Agent Reviews\n")
+        for name, r in result.agents.items():
+            lines.append(f"### {name}\n")
+            lines.append(f"- verdict: `{r.verdict}`")
+            if r.data:
+                lines.append(f"- summary: {r.data.get('summary', '').strip()}")
+                _append_review_details(lines, r.data, max_issues, max_missing, max_questions)
+            elif r.err:
+                lines.append(f"- error: {r.err}")
+            lines.append("")
+
+    return "\n".join(lines).strip() + "\n"
+
+
+def _append_review_details(
+    lines: List[str],
+    data: Dict[str, Any],
+    max_issues: int,
+    max_missing: int,
+    max_questions: int
+) -> None:
+    """Append issue details to markdown lines."""
+    issues = data.get("issues", [])
+    if issues:
+        lines.append("\n**Issues:**")
+        for it in issues[:max_issues]:
+            sev = it.get("severity", "medium")
+            cat = it.get("category", "general")
+            issue = it.get("issue", "")
+            fix = it.get("suggested_fix", "")
+            lines.append(f"- **[{sev}] {cat}**: {issue}")
+            if fix:
+                lines.append(f"  - fix: {fix}")
+
+    missing = data.get("missing_sections", [])
+    if missing:
+        lines.append("\n**Missing Sections:**")
+        for m in missing[:max_missing]:
+            lines.append(f"- {m}")
+
+    qs = data.get("questions", [])
+    if qs:
+        lines.append("\n**Questions:**")
+        for q in qs[:max_questions]:
+            lines.append(f"- {q}")
+
+
+def build_combined_json(result: CombinedReviewResult) -> Dict[str, Any]:
+    """Build combined JSON output structure."""
+    output: Dict[str, Any] = {
+        "metadata": {
+            "timestamp": result.timestamp,
+            "plan_hash": result.plan_hash,
+        },
+        "overall": {
+            "verdict": result.overall_verdict,
+        },
+    }
+
+    # CLI reviewers
+    if result.cli_reviewers:
+        output["cliReviewers"] = {}
+        for name, r in result.cli_reviewers.items():
+            output["cliReviewers"][name] = {
+                "verdict": r.verdict,
+                "summary": r.data.get("summary") if r.data else None,
+                "issues": r.data.get("issues", []) if r.data else [],
+                "ok": r.ok,
+                "error": r.err if r.err else None,
+            }
+
+    # Orchestration
+    if result.orchestration:
+        output["orchestration"] = {
+            "complexity": result.orchestration.complexity,
+            "category": result.orchestration.category,
+            "selectedAgents": result.orchestration.selected_agents,
+            "reasoning": result.orchestration.reasoning,
+            "skipReason": result.orchestration.skip_reason,
+            "error": result.orchestration.error,
+        }
+
+    # Agents
+    if result.agents:
+        output["agents"] = {}
+        for name, r in result.agents.items():
+            output["agents"][name] = {
+                "verdict": r.verdict,
+                "summary": r.data.get("summary") if r.data else None,
+                "issues": r.data.get("issues", []) if r.data else [],
+                "missing_sections": r.data.get("missing_sections", []) if r.data else [],
+                "questions": r.data.get("questions", []) if r.data else [],
+                "ok": r.ok,
+                "error": r.err if r.err else None,
+            }
+
+    return output
+
+
+def write_combined_artifacts(
+    base: Path,
+    plan: str,
+    result: CombinedReviewResult,
+    payload: Dict[str, Any],
+    settings: Optional[Dict[str, Any]] = None,
+) -> Path:
+    """Write combined review artifacts (single JSON + single Markdown)."""
+    ts = now_local()
+    date_folder = ts.strftime("%Y-%m-%d")
+    time_part = ts.strftime("%H%M%S")
+    sid = sanitize_filename(str(payload.get("session_id", "unknown")))
+
+    out_dir = base / "_output" / "cc-native" / "plans" / "reviews" / date_folder
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write plan copy
+    plan_path = out_dir / f"{time_part}-session-{sid}-plan.md"
+    plan_path.write_text(plan, encoding="utf-8")
+
+    # Write combined JSON
+    json_path = out_dir / f"{time_part}-session-{sid}-review.json"
+    json_data = build_combined_json(result)
+    json_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    # Write combined Markdown
+    md_path = out_dir / f"{time_part}-session-{sid}-review.md"
+    md_content = format_combined_markdown(result, settings)
+    md_path.write_text(md_content, encoding="utf-8")
+
+    return md_path
+
+
+# ---------------------------
+# Settings loading
+# ---------------------------
+
+def load_config(project_dir: Path) -> Dict[str, Any]:
+    """Load full CC-Native config from _cc-native/config.json."""
+    settings_path = project_dir / "_cc-native" / "config.json"
+    if not settings_path.exists():
+        return {}
+    try:
+        with open(settings_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        eprint(f"[cc-native] Failed to load config: {e}")
+        return {}
+
+
+def get_display_settings(config: Dict[str, Any], section: str) -> Dict[str, int]:
+    """Get display settings, checking section-specific first, then root."""
+    section_display = config.get(section, {}).get("display", {})
+    root_display = config.get("display", DEFAULT_DISPLAY)
+    return {**DEFAULT_DISPLAY, **root_display, **section_display}

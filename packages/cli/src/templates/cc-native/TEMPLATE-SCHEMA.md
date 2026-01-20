@@ -13,11 +13,16 @@ packages/cli/src/templates/cc-native/
 ├── _cc-native/
 │   ├── workflows/*.md        # Workflow definitions
 │   ├── hooks/                # Hook scripts
-│   │   ├── cc-native-plan-review.py   # Plan review via Codex/Gemini
-│   │   ├── cc-native-agent-review.py  # Plan review via Claude agents
-│   │   └── archive_plan.py            # Archives approved plans (runs last)
+│   │   ├── cc-native-plan-review.py   # Unified plan review (CLI + agents)
+│   │   ├── set_plan_state.py          # Sets plan state before review
+│   │   └── archive_plan.py            # Archives approved plans
+│   ├── lib/                  # Shared utilities
+│   │   └── utils.py          # Common functions for hooks
+│   ├── scripts/              # Utility scripts
+│   │   └── aggregate_agents.py  # Auto-detect agents from frontmatter
 │   └── config.json           # CC-Native configuration
 ├── .claude/commands/cc-native/  # Claude Code slash commands
+├── .claude/agents/cc-native/    # Agent definitions for plan review
 ├── .claude/settings.json     # Hook wiring
 ├── .windsurf/workflows/cc-native/  # Windsurf workflows
 ├── .gitignore                # Ignores _output/cc-native/
@@ -59,17 +64,11 @@ _output/cc-native/
 ├── plans/                # Archived approved plans
 │   ├── YYYY-MM-DD/       # Date-organized plan archives
 │   │   └── HHMMSS-session-{id}.md
-│   ├── reviews/          # External CLI review artifacts (Codex/Gemini)
-│   │   └── YYYY-MM-DD/
-│   │       ├── HHMMSS-session-{id}-plan.md
-│   │       ├── HHMMSS-session-{id}-review.md
-│   │       ├── HHMMSS-session-{id}-codex.json
-│   │       └── HHMMSS-session-{id}-gemini.json
-│   └── agent-reviews/    # Claude agent review artifacts
+│   └── reviews/          # Combined review artifacts (CLI + agents)
 │       └── YYYY-MM-DD/
-│           ├── HHMMSS-session-{id}-plan.md
-│           ├── HHMMSS-session-{id}-agents-review.md
-│           └── HHMMSS-session-{id}-{agent-name}.json
+│           ├── HHMMSS-session-{id}-plan.md      # Copy of plan
+│           ├── HHMMSS-session-{id}-review.json  # Combined JSON
+│           └── HHMMSS-session-{id}-review.md    # Combined Markdown
 └── scratch/              # Working notes
 ```
 
@@ -93,12 +92,17 @@ CC-Native settings are stored in `_cc-native/config.json`:
     "enabled": true,
     "timeout": 120,
     "blockOnFail": true,
-    "agents": [
-      { "name": "architect-reviewer", "model": "sonnet", "focus": "architectural concerns", "enabled": true },
-      { "name": "penetration-tester", "model": "sonnet", "focus": "security vulnerabilities", "enabled": true },
-      { "name": "performance-engineer", "model": "sonnet", "focus": "performance bottlenecks", "enabled": true },
-      { "name": "accessibility-tester", "model": "sonnet", "focus": "accessibility compliance", "enabled": true }
-    ]
+    "orchestrator": {
+      "enabled": true,
+      "model": "haiku",
+      "timeout": 30
+    },
+    "agentSelection": {
+      "simple": { "min": 0, "max": 0 },
+      "medium": { "min": 1, "max": 2 },
+      "high": { "min": 2, "max": 4 },
+      "fallbackCount": 2
+    }
   }
 }
 ```
@@ -121,10 +125,11 @@ CC-Native settings are stored in `_cc-native/config.json`:
 | `agentReview.enabled` | Master switch for agent review | `true` |
 | `agentReview.timeout` | Seconds per agent before timeout | `120` |
 | `agentReview.blockOnFail` | Block Claude if any agent fails | `true` |
-| `agentReview.agents[].name` | Agent name (used in `--agent` flag) | Required |
-| `agentReview.agents[].model` | Model: `sonnet`, `opus`, `haiku` | `sonnet` |
-| `agentReview.agents[].focus` | Focus area description (for logging) | `general review` |
-| `agentReview.agents[].enabled` | Whether this agent runs | `true` |
+| `agentReview.orchestrator.enabled` | Use orchestrator for complexity analysis | `true` |
+| `agentReview.orchestrator.model` | Model for orchestrator | `haiku` |
+| `agentReview.agentSelection.simple` | Agent count for simple plans | `0-0` |
+| `agentReview.agentSelection.medium` | Agent count for medium plans | `1-2` |
+| `agentReview.agentSelection.high` | Agent count for complex plans | `2-4` |
 
 ---
 
@@ -135,34 +140,33 @@ Hook scripts live in `_cc-native/hooks/`. IDE-specific wiring in `.claude/settin
 ```json
 {
   "hooks": {
-    "PostToolUse": [{
+    "PreToolUse": [{
       "matcher": "ExitPlanMode",
       "hooks": [
-        { "type": "command", "command": "python _cc-native/hooks/cc-native-plan-review.py", "timeout": 300000 },
-        { "type": "command", "command": "python _cc-native/hooks/cc-native-agent-review.py", "timeout": 600000 },
-        { "type": "command", "command": "python _cc-native/hooks/archive_plan.py", "timeout": 600 }
+        { "type": "command", "command": "python _cc-native/hooks/set_plan_state.py", "timeout": 5000 },
+        { "type": "command", "command": "python _cc-native/hooks/cc-native-plan-review.py", "timeout": 600000 }
       ]
     }]
   }
 }
 ```
 
-**Hook order matters:** Reviews run first; archive runs last. If a review blocks, the plan is not archived. Only plans that pass all reviews get archived.
+**Hook order matters:** Reviews run first; archive runs on Edit/Write/Bash. If a review blocks, the plan is not archived. Only plans that pass all reviews get archived.
 
 | Hook | Trigger | Purpose |
 |------|---------|---------|
-| `cc-native-plan-review.py` | ExitPlanMode | Sends plan to Codex/Gemini for review |
-| `cc-native-agent-review.py` | ExitPlanMode | Spawns parallel Claude Code agents for review |
-| `archive_plan.py` | ExitPlanMode | Archives approved plans (runs last) |
+| `set_plan_state.py` | ExitPlanMode | Sets plan state before review |
+| `cc-native-plan-review.py` | ExitPlanMode | Unified review: CLI + orchestrator + agents |
+| `archive_plan.py` | Edit/Write/Bash | Archives approved plans when implementation starts |
 
 ### Claude Feedback Mechanism
 
-Both review hooks return structured JSON to Claude Code:
+The unified review hook returns structured JSON to Claude Code:
 
 ```json
 {
   "hookSpecificOutput": {
-    "hookEventName": "PostToolUse",
+    "hookEventName": "PreToolUse",
     "additionalContext": "Review results and recommendations..."
   },
   "decision": "block",  // Optional: blocks Claude if review fails
@@ -172,14 +176,31 @@ Both review hooks return structured JSON to Claude Code:
 
 When a plan fails review and `blockOnFail` is enabled, Claude is blocked from proceeding until the plan is revised.
 
-### Agent Review Details
+### Unified Review Pipeline
 
-The `cc-native-agent-review.py` hook:
-1. Spawns headless Claude Code instances with `--agent` flag
-2. Each agent runs in parallel via ThreadPoolExecutor
-3. Uses `--permission-mode plan` and `--max-turns 1` for constrained review
-4. Aggregates results and identifies critical issues
-5. Blocks if any agent returns verdict `fail` (when `blockOnFail: true`)
+The `cc-native-plan-review.py` hook runs 4 phases:
+
+1. **Phase 1: CLI Reviewers** - Sends plan to Codex/Gemini for external review
+2. **Phase 2: Orchestrator** - Analyzes plan complexity and selects appropriate agents
+3. **Phase 3: Agent Reviews** - Spawns selected Claude Code agents in parallel
+4. **Phase 4: Combined Output** - Generates single JSON + Markdown output file
+
+#### Orchestrator Details
+
+The orchestrator uses a fast model (Haiku) to:
+- Classify plan complexity (simple/medium/high)
+- Categorize the plan (code/infrastructure/documentation/life/business/design/research)
+- Select appropriate agents based on complexity and category
+
+Simple plans skip agent review entirely. Medium/high complexity plans get 1-4 agents based on configuration.
+
+#### Agent Execution
+
+Each selected agent:
+1. Runs as a headless Claude Code instance with `--agent` flag
+2. Executes in parallel via ThreadPoolExecutor
+3. Uses `--permission-mode bypassPermissions` and `--max-turns 3`
+4. Returns structured JSON verdict (pass/warn/fail)
 
 ---
 
@@ -190,8 +211,9 @@ The `cc-native-agent-review.py` hook:
 3. **Context efficiency** - Explore subagents discard context, findings persist
 4. **User control** - Clarification before action, plan approval before execution
 5. **Composable** - Each workflow is independent, no interdependencies
-6. **Multi-layer validation** - Plans reviewed by external CLIs + parallel Claude agents
+6. **Multi-layer validation** - Plans reviewed by external CLIs + orchestrator + agents
 7. **Selective archival** - Only plans passing all reviews get archived
+8. **Single output** - One JSON + one Markdown file per review (no duplication)
 
 ---
 
@@ -199,6 +221,7 @@ The `cc-native-agent-review.py` hook:
 
 | Version | Changes |
 |---------|---------|
+| 1.3.0 | Consolidated CLI + agent review into single unified hook with combined output |
 | 1.2.0 | Added multi-agent plan review via Claude Code agents, reordered hooks (archive last) |
 | 1.1.0 | Added plan review via Codex/Gemini with Claude feedback, config.json |
 | 1.0.0 | Initial release with fix, research, implement workflows |

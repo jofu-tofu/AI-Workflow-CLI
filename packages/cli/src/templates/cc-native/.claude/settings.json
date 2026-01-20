@@ -22,11 +22,6 @@
                     {
                         "type": "command",
                         "command": "python _cc-native/hooks/cc-native-plan-review.py",
-                        "timeout": 300000
-                    },
-                    {
-                        "type": "command",
-                        "command": "python _cc-native/hooks/cc-native-agent-review.py",
                         "timeout": 600000
                     }
                 ]
