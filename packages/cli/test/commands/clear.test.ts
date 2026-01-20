@@ -1,7 +1,7 @@
 /**
  * @file Unit tests for clear command.
  *
- * Tests command structure, metadata, and file deletion behavior.
+ * Tests command structure, metadata, and folder deletion behavior.
  */
 
 import {expect} from 'chai'
@@ -15,12 +15,24 @@ describe('clear command', () => {
       expect(ClearCommand.description.length).to.be.greaterThan(0)
     })
 
-    it('should reference Markdown in description', () => {
-      expect(ClearCommand.description.toLowerCase()).to.include('markdown')
+    it('should reference workflow folders in description', () => {
+      expect(ClearCommand.description.toLowerCase()).to.include('workflow')
     })
 
     it('should reference output folders in description', () => {
       expect(ClearCommand.description.toLowerCase()).to.include('output')
+    })
+
+    it('should reference IDE folders in description', () => {
+      expect(ClearCommand.description.toLowerCase()).to.include('ide')
+    })
+
+    it('should reference .claude in description', () => {
+      expect(ClearCommand.description.toLowerCase()).to.include('.claude')
+    })
+
+    it('should reference .windsurf in description', () => {
+      expect(ClearCommand.description.toLowerCase()).to.include('.windsurf')
     })
 
     it('should have static examples array', () => {
@@ -78,14 +90,34 @@ describe('clear command', () => {
       expect(source).to.include('findOutputFolders')
     })
 
-    it('should find markdown files', () => {
+    it('should find workflow folders', () => {
       const source = ClearCommand.prototype.run.toString()
-      expect(source).to.include('findMarkdownFiles')
+      expect(source).to.include('findWorkflowFolders')
     })
 
-    it('should handle file deletion', () => {
+    it('should find IDE method folders', () => {
       const source = ClearCommand.prototype.run.toString()
-      expect(source).to.include('unlink')
+      expect(source).to.include('findIdeMethodFolders')
+    })
+
+    it('should handle folder deletion', () => {
+      const source = ClearCommand.prototype.run.toString()
+      expect(source).to.include('removeDirectory')
+    })
+
+    it('should update gitignore after clearing', () => {
+      const source = ClearCommand.prototype.run.toString()
+      expect(source).to.include('updateGitignoreAfterClear')
+    })
+
+    it('should update IDE settings after clearing', () => {
+      const source = ClearCommand.prototype.run.toString()
+      expect(source).to.include('updateIdeSettings')
+    })
+
+    it('should extract method names for settings update', () => {
+      const source = ClearCommand.prototype.run.toString()
+      expect(source).to.include('extractMethodNames')
     })
 
     it('should handle errors with proper exit codes', () => {
@@ -103,6 +135,22 @@ describe('clear command', () => {
     it('should support template filtering', () => {
       const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('flags.template')
+    })
+
+    it('should check if output folder is empty and remove it', () => {
+      const source = ClearCommand.prototype.run.toString()
+      expect(source).to.include('isDirectoryEmpty')
+    })
+
+    it('should report IDE method folder deletions', () => {
+      const source = ClearCommand.prototype.run.toString()
+      expect(source).to.include('deletedIde')
+    })
+
+    it('should report settings.json updates', () => {
+      const source = ClearCommand.prototype.run.toString()
+      expect(source).to.include('updatedClaudeSettings')
+      expect(source).to.include('updatedWindsurfSettings')
     })
   })
 })
