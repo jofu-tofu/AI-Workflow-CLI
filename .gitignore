@@ -113,6 +113,10 @@ desktop.ini
 *.swp
 *~
 
+# Python cache
+**/__pycache__/
+*.pyc
+
 # Temporary test directories (created by Claude Code)
 **/tmpclaude-*-cwd
 tmpclaude-*-cwd
