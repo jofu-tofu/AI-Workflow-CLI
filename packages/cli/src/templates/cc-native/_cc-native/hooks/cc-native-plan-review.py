@@ -31,6 +31,17 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 # ---------------------------
+# Default display limits
+# ---------------------------
+
+DEFAULT_DISPLAY: Dict[str, int] = {
+    "maxIssues": 12,
+    "maxMissingSections": 12,
+    "maxQuestions": 12,
+}
+
+
+# ---------------------------
 # Load settings from _cc-native/config.json
 # ---------------------------
 
@@ -44,6 +55,7 @@ def load_settings(project_dir: Path) -> Dict[str, Any]:
             "gemini": {"enabled": False, "model": "", "timeout": 120},
         },
         "blockOnFail": False,
+        "display": DEFAULT_DISPLAY.copy(),
     }
 
     if not settings_path.exists():
@@ -59,6 +71,8 @@ def load_settings(project_dir: Path) -> Dict[str, Any]:
         if "reviewers" in plan_review:
             merged["reviewers"] = defaults["reviewers"].copy()
             merged["reviewers"].update(plan_review["reviewers"])
+        # Merge display settings with defaults
+        merged["display"] = {**DEFAULT_DISPLAY, **plan_review.get("display", {})}
         return merged
     except Exception as e:
         eprint(f"[cc-native-plan-review] Failed to load settings: {e}")
@@ -354,8 +368,17 @@ def worst_verdict(verdicts: List[str]) -> str:
     return worst
 
 
-def format_markdown(results: List[ReviewerResult], overall: str) -> str:
+def format_markdown(results: List[ReviewerResult], overall: str, settings: Optional[Dict[str, Any]] = None) -> str:
     """Format review results as markdown."""
+    # Get display limits from settings
+    display = DEFAULT_DISPLAY.copy()
+    if settings:
+        display = settings.get("display", DEFAULT_DISPLAY)
+
+    max_issues = display.get("maxIssues", 12)
+    max_missing = display.get("maxMissingSections", 12)
+    max_questions = display.get("maxQuestions", 12)
+
     lines: List[str] = []
     lines.append("# CC-Native Plan Review (Codex + Gemini)\n")
     lines.append(f"**Overall verdict:** `{overall.upper()}`\n")
@@ -369,7 +392,7 @@ def format_markdown(results: List[ReviewerResult], overall: str) -> str:
             issues = r.data.get("issues", [])
             if issues:
                 lines.append("\n### Issues")
-                for it in issues[:12]:
+                for it in issues[:max_issues]:
                     sev = it.get("severity", "medium")
                     cat = it.get("category", "general")
                     issue = it.get("issue", "")
@@ -378,12 +401,12 @@ def format_markdown(results: List[ReviewerResult], overall: str) -> str:
             missing = r.data.get("missing_sections", [])
             if missing:
                 lines.append("\n### Missing Sections")
-                for m in missing[:12]:
+                for m in missing[:max_missing]:
                     lines.append(f"- {m}")
             qs = r.data.get("questions", [])
             if qs:
                 lines.append("\n### Questions")
-                for q in qs[:12]:
+                for q in qs[:max_questions]:
                     lines.append(f"- {q}")
         else:
             lines.append(f"- note: {r.err or 'no structured output'}")
@@ -478,7 +501,7 @@ def main() -> int:
 
     overall = worst_verdict([r.verdict for r in results if r.verdict])
 
-    md = format_markdown(results, overall)
+    md = format_markdown(results, overall, settings)
 
     review_file = write_artifacts(base, plan, md, results, payload)
     eprint(f"[cc-native-plan-review] Saved review: {review_file}")

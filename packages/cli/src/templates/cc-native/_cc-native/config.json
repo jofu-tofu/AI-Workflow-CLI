@@ -13,37 +13,46 @@
         "timeout": 120
       }
     },
-    "blockOnFail": false
+    "blockOnFail": false,
+    "display": {
+      "maxIssues": 12,
+      "maxMissingSections": 12,
+      "maxQuestions": 12
+    }
   },
   "agentReview": {
     "enabled": true,
     "timeout": 120,
     "blockOnFail": true,
-    "agents": [
-      {
-        "name": "architect-reviewer",
-        "model": "sonnet",
-        "focus": "architectural concerns and scalability",
-        "enabled": true
-      },
-      {
-        "name": "penetration-tester",
-        "model": "sonnet",
-        "focus": "security vulnerabilities and attack vectors",
-        "enabled": true
-      },
-      {
-        "name": "performance-engineer",
-        "model": "sonnet",
-        "focus": "performance bottlenecks and optimization",
-        "enabled": true
-      },
-      {
-        "name": "accessibility-tester",
-        "model": "sonnet",
-        "focus": "accessibility compliance and UX concerns",
-        "enabled": true
-      }
-    ]
+    "maxTurns": 3,
+    "orchestrator": {
+      "enabled": true,
+      "model": "haiku",
+      "timeout": 30,
+      "maxTurns": 3
+    },
+    "legacyMode": false,
+    "display": {
+      "maxIssues": 12,
+      "maxMissingSections": 12,
+      "maxQuestions": 12
+    }
+  },
+  "agentSelection": {
+    "simple": { "min": 0, "max": 0 },
+    "medium": { "min": 1, "max": 2 },
+    "high": { "min": 2, "max": 4 },
+    "fallbackCount": 2
+  },
+  "agentDefaults": {
+    "model": "sonnet"
+  },
+  "complexityCategories": [
+    "code", "infrastructure", "documentation",
+    "life", "business", "design", "research"
+  ],
+  "sanitization": {
+    "maxSessionIdLength": 32,
+    "maxTitleLength": 50
   }
 }
