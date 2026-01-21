@@ -285,6 +285,15 @@ def main() -> int:
     else:
         eprint("[cc-native-plan-review] No task_folder in state, will generate folder path")
 
+    # Check if we've exhausted review iterations
+    if state and "iteration" in state:
+        iter_state = state["iteration"]
+        current = iter_state.get("current", 1)
+        max_iter = iter_state.get("max", 1)
+        if current > max_iter:
+            eprint(f"[cc-native-plan-review] Skipping: review iterations exhausted ({current}/{max_iter})")
+            return 0
+
     # Plan-hash deduplication
     plan_hash = compute_plan_hash(plan)
     eprint(f"[cc-native-plan-review] Plan hash: {plan_hash}")
@@ -493,7 +502,9 @@ def main() -> int:
                 f"({remaining} revision{'s' if remaining != 1 else ''} remaining)"
             )
         else:
-            # Final iteration - save state and proceed normally
+            # Final iteration - increment current and save state
+            iteration_state["current"] = iteration_state.get("current", 1) + 1
+            state["iteration"] = iteration_state
             save_state(plan_path, state)
 
     # Standard blocking (only if not already blocked by iteration)
