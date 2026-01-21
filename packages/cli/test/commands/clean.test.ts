@@ -7,42 +7,13 @@
  */
 
 import {execSync} from 'node:child_process'
-import {randomUUID} from 'node:crypto'
 import {promises as fs} from 'node:fs'
-import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
 import {expect} from 'chai'
 
 import CleanCommand from '../../src/commands/clean.js'
-
-
-/**
- * Helper to create a temporary directory for testing
- */
-async function createTestDir(): Promise<string> {
-  const testDir = join(tmpdir(), `aiw-clean-test-${randomUUID()}`)
-  await fs.mkdir(testDir, {recursive: true})
-  return testDir
-}
-
-/**
- * Helper to clean up test directory
- */
-async function cleanupTestDir(testDir: string): Promise<void> {
-  try {
-    await fs.rm(testDir, {force: true, recursive: true})
-  } catch {
-    // Ignore cleanup errors
-  }
-}
-
-/**
- * Helper to get absolute path to the CLI bin from packages/cli directory.
- */
-function getAbsoluteBinPath(): string {
-  return join(process.cwd(), 'bin', 'run.js')
-}
+import {cleanupTestDir, createTestDir, getAbsoluteBinPath} from '../helpers/test-utils.js'
 
 describe('clean command', () => {
   describe('command metadata', () => {

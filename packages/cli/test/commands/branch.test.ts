@@ -15,51 +15,11 @@ import {join} from 'node:path'
 import {expect} from 'chai'
 
 import BranchCommand from '../../src/commands/branch.js'
+import {cleanupTestDir, createTestGitRepo, getAbsoluteBinPath} from '../helpers/test-utils.js'
 
 // Platform-specific bin path for CLI invocation
 const isWindows = platform() === 'win32'
 const bin = isWindows ? String.raw`.\bin\dev.cmd` : './bin/dev.js'
-
-/**
- * Helper to create a temporary git repository for testing
- */
-async function createTestGitRepo(): Promise<string> {
-  const testDir = join(tmpdir(), `aiw-branch-test-${randomUUID()}`)
-  await fs.mkdir(testDir, {recursive: true})
-
-  // Initialize git repo
-  execSync('git init', {cwd: testDir, stdio: 'ignore'})
-  execSync('git config user.email "test@example.com"', {cwd: testDir, stdio: 'ignore'})
-  execSync('git config user.name "Test User"', {cwd: testDir, stdio: 'ignore'})
-
-  // Create initial commit so we have a valid repo
-  await fs.writeFile(join(testDir, 'README.md'), '# Test\n')
-  execSync('git add .', {cwd: testDir, stdio: 'ignore'})
-  execSync('git commit -m "Initial commit"', {cwd: testDir, stdio: 'ignore'})
-
-  return testDir
-}
-
-/**
- * Helper to clean up test directory
- */
-async function cleanupTestDir(testDir: string): Promise<void> {
-  try {
-    await fs.rm(testDir, {force: true, recursive: true})
-  } catch {
-    // Ignore cleanup errors
-  }
-}
-
-/**
- * Helper to get absolute path to the CLI bin from packages/cli directory.
- * Uses bin/run.js which points to the compiled dist/ output.
- */
-function getAbsoluteBinPath(): string {
-  // process.cwd() during tests is packages/cli, and bin is in packages/cli/bin
-  // Use run.js which uses the compiled dist/ output
-  return join(process.cwd(), 'bin', 'run.js')
-}
 
 describe('branch command', () => {
   describe('command metadata and help', () => {
@@ -199,7 +159,7 @@ describe('branch command', () => {
 
     beforeEach(async function() {
       // Increase timeout for git operations
-      this.timeout(10_000)
+      this.timeout(5000)
       testDir = await createTestGitRepo()
     })
 
@@ -217,26 +177,6 @@ describe('branch command', () => {
       } catch (error) {
         const err = error as {stderr: string}
         expect(err.stderr).to.match(/branch name.*required/i)
-      }
-    })
-
-    it('should error when not in a git repository', async () => {
-      const nonGitDir = join(tmpdir(), `aiw-non-git-test-${randomUUID()}`)
-      await fs.mkdir(nonGitDir, {recursive: true})
-      const absoluteBin = getAbsoluteBinPath()
-
-      try {
-        execSync(`node "${absoluteBin}" branch --delete some-branch`, {
-          cwd: nonGitDir,
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        expect.fail('Should have thrown')
-      } catch (error) {
-        const err = error as {stderr: string}
-        expect(err.stderr).to.match(/not a git repository/i)
-      } finally {
-        await cleanupTestDir(nonGitDir)
       }
     })
 
@@ -309,7 +249,7 @@ describe('branch command', () => {
     })
 
     it('should delete a branch when not on it', async function() {
-      this.timeout(15_000)
+      this.timeout(5000)
       const absoluteBin = getAbsoluteBinPath()
 
       // Create a feature branch
@@ -366,32 +306,13 @@ describe('branch command', () => {
       }
     })
 
-    it('should error when not in a git repository', async () => {
-      const nonGitDir = join(tmpdir(), `aiw-non-git-test-${randomUUID()}`)
-      await fs.mkdir(nonGitDir, {recursive: true})
-      const absoluteBin = getAbsoluteBinPath()
-
-      try {
-        execSync(`node "${absoluteBin}" branch --launch new-feature`, {
-          cwd: nonGitDir,
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        expect.fail('Should have thrown')
-      } catch (error) {
-        const err = error as {stderr: string}
-        expect(err.stderr).to.match(/not a git repository/i)
-      } finally {
-        await cleanupTestDir(nonGitDir)
-      }
-    })
   })
 
   describe('--main flag behavior', () => {
     let testDir: string
 
     beforeEach(async function() {
-      this.timeout(10_000)
+      this.timeout(5000)
       testDir = await createTestGitRepo()
     })
 
@@ -399,28 +320,8 @@ describe('branch command', () => {
       await cleanupTestDir(testDir)
     })
 
-    it('should error when not in a git repository', async () => {
-      const nonGitDir = join(tmpdir(), `aiw-non-git-test-${randomUUID()}`)
-      await fs.mkdir(nonGitDir, {recursive: true})
-      const absoluteBin = getAbsoluteBinPath()
-
-      try {
-        execSync(`node "${absoluteBin}" branch --main`, {
-          cwd: nonGitDir,
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        expect.fail('Should have thrown')
-      } catch (error) {
-        const err = error as {stderr: string}
-        expect(err.stderr).to.match(/not a git repository/i)
-      } finally {
-        await cleanupTestDir(nonGitDir)
-      }
-    })
-
     it('should error when already on main branch', async function() {
-      this.timeout(15_000)
+      this.timeout(5000)
       const absoluteBin = getAbsoluteBinPath()
 
       // Ensure we're on main
@@ -454,7 +355,7 @@ describe('branch command', () => {
     let testDir: string
 
     beforeEach(async function() {
-      this.timeout(10_000)
+      this.timeout(5000)
       testDir = await createTestGitRepo()
     })
 
@@ -462,28 +363,8 @@ describe('branch command', () => {
       await cleanupTestDir(testDir)
     })
 
-    it('should error when not in a git repository', async () => {
-      const nonGitDir = join(tmpdir(), `aiw-non-git-test-${randomUUID()}`)
-      await fs.mkdir(nonGitDir, {recursive: true})
-      const absoluteBin = getAbsoluteBinPath()
-
-      try {
-        execSync(`node "${absoluteBin}" branch --delete --all`, {
-          cwd: nonGitDir,
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        expect.fail('Should have thrown')
-      } catch (error) {
-        const err = error as {stderr: string}
-        expect(err.stderr).to.match(/not a git repository/i)
-      } finally {
-        await cleanupTestDir(nonGitDir)
-      }
-    })
-
     it('should complete without error when there are no worktrees to delete', function() {
-      this.timeout(15_000)
+      this.timeout(5000)
       const absoluteBin = getAbsoluteBinPath()
 
       const result = execSync(`node "${absoluteBin}" branch --delete --all`, {
@@ -495,7 +376,7 @@ describe('branch command', () => {
     })
 
     it('should preserve main/master branch (protected)', function() {
-      this.timeout(15_000)
+      this.timeout(5000)
       const absoluteBin = getAbsoluteBinPath()
 
       const result = execSync(`node "${absoluteBin}" branch --delete --all`, {
@@ -566,56 +447,61 @@ describe('branch command', () => {
     })
   })
 
+  describe('git repository requirement', () => {
+    const flagsRequiringGitRepo = [
+      {flag: '--delete some-branch', name: '--delete'},
+      {flag: '--launch new-feature', name: '--launch'},
+      {flag: '--main', name: '--main'},
+      {flag: '--delete --all', name: '--delete --all'},
+    ]
+
+    for (const {flag, name} of flagsRequiringGitRepo) {
+      it(`should error when not in a git repository (${name})`, async () => {
+        const nonGitDir = join(tmpdir(), `aiw-non-git-test-${randomUUID()}`)
+        await fs.mkdir(nonGitDir, {recursive: true})
+        const absoluteBin = getAbsoluteBinPath()
+
+        try {
+          execSync(`node "${absoluteBin}" branch ${flag}`, {
+            cwd: nonGitDir,
+            encoding: 'utf8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+          })
+          expect.fail('Should have thrown')
+        } catch (error) {
+          const err = error as {stderr: string}
+          expect(err.stderr).to.match(/not a git repository/i)
+        } finally {
+          await cleanupTestDir(nonGitDir)
+        }
+      })
+    }
+  })
+
   describe('branch name validation', () => {
-    it('should accept valid branch names with dots', () => {
-      // This test verifies the validation regex accepts dots
-      // The actual creation would fail in a test environment without proper git setup
-      // but the validation should pass
-      const validNames = ['feature-v1.0', 'release.1.2.3', 'fix.bug']
+    const validPattern = /^[a-zA-Z0-9._/-]+$/
+
+    it('should accept valid branch names', () => {
+      // Valid names include dots, dashes, underscores, and slashes
+      const validNames = [
+        'feature-v1.0', 'release.1.2.3', 'fix.bug',           // dots
+        'feature-branch', 'my-new-feature', 'bug-fix-123',    // dashes
+        'feature_branch', 'my_new_feature', 'bug_fix_123',    // underscores
+        'feature/my-branch', 'bugfix/issue-123', 'release/v1.0', // slashes
+      ]
       for (const name of validNames) {
-        // Valid names should not match the invalid pattern check
-        const validPattern = /^[a-zA-Z0-9._/-]+$/
-        expect(validPattern.test(name)).to.be.true
+        expect(validPattern.test(name), `Expected "${name}" to be valid`).to.be.true
       }
     })
 
-    it('should accept valid branch names with dashes', () => {
-      const validNames = ['feature-branch', 'my-new-feature', 'bug-fix-123']
-      for (const name of validNames) {
-        const validPattern = /^[a-zA-Z0-9._/-]+$/
-        expect(validPattern.test(name)).to.be.true
-      }
-    })
-
-    it('should accept valid branch names with underscores', () => {
-      const validNames = ['feature_branch', 'my_new_feature', 'bug_fix_123']
-      for (const name of validNames) {
-        const validPattern = /^[a-zA-Z0-9._/-]+$/
-        expect(validPattern.test(name)).to.be.true
-      }
-    })
-
-    it('should accept valid branch names with slashes', () => {
-      const validNames = ['feature/my-branch', 'bugfix/issue-123', 'release/v1.0']
-      for (const name of validNames) {
-        const validPattern = /^[a-zA-Z0-9._/-]+$/
-        expect(validPattern.test(name)).to.be.true
-      }
-    })
-
-    it('should reject branch names with spaces', () => {
-      const invalidNames = ['my branch', 'feature branch', 'bug fix']
+    it('should reject invalid branch names', () => {
+      // Invalid names include spaces and special characters
+      const invalidNames = [
+        'my branch', 'feature branch', 'bug fix',              // spaces
+        'branch@name', 'feature#123', 'bug$fix', 'test!branch', // special chars
+      ]
       for (const name of invalidNames) {
-        const validPattern = /^[a-zA-Z0-9._/-]+$/
-        expect(validPattern.test(name)).to.be.false
-      }
-    })
-
-    it('should reject branch names with special characters', () => {
-      const invalidNames = ['branch@name', 'feature#123', 'bug$fix', 'test!branch']
-      for (const name of invalidNames) {
-        const validPattern = /^[a-zA-Z0-9._/-]+$/
-        expect(validPattern.test(name)).to.be.false
+        expect(validPattern.test(name), `Expected "${name}" to be invalid`).to.be.false
       }
     })
   })

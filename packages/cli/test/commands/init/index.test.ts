@@ -1,27 +1,20 @@
-import {randomUUID} from 'node:crypto'
 import {promises as fs} from 'node:fs'
-import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
 import {expect} from 'chai'
 import {afterEach, beforeEach, describe, it} from 'mocha'
 
+import {cleanupTestDir, createTestDir, pathExists} from '../../helpers/test-utils.js'
+
 describe('pai init command', () => {
   let testDir: string
 
   beforeEach(async () => {
-    // Create a unique temp directory for each test
-    testDir = join(tmpdir(), `pai-init-test-${randomUUID()}`)
-    await fs.mkdir(testDir, {recursive: true})
+    testDir = await createTestDir('pai-init-test')
   })
 
   afterEach(async () => {
-    // Clean up test directory
-    try {
-      await fs.rm(testDir, {force: true, recursive: true})
-    } catch {
-      // Ignore cleanup errors
-    }
+    await cleanupTestDir(testDir)
   })
 
   describe('command structure', () => {
@@ -167,15 +160,3 @@ describe('pai init command', () => {
     })
   })
 })
-
-/**
- * Helper to check if path exists
- */
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await fs.access(path)
-    return true
-  } catch {
-    return false
-  }
-}

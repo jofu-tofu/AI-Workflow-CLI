@@ -38,14 +38,14 @@ describe('version utilities', () => {
       }
     })
 
-    it('completes within timeout (5 seconds)', async function () {
+    it('completes within timeout (3 seconds)', async function () {
       // Verify timeout is working (prevent hanging)
-      this.timeout(6000)
+      this.timeout(3000)
       const start = Date.now()
       await getClaudeCodeVersion()
       const elapsed = Date.now() - start
-      // Should complete in under 5 seconds (timeout) even if command hangs
-      expect(elapsed).to.be.lessThan(5500)
+      // Should complete in under 3 seconds (timeout) even if command hangs
+      expect(elapsed).to.be.lessThan(3500)
     })
   })
 

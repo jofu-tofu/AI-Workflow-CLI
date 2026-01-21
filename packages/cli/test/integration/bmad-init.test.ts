@@ -1,6 +1,4 @@
-import {randomUUID} from 'node:crypto'
 import {promises as fs} from 'node:fs'
-import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
 import {expect} from 'chai'
@@ -8,28 +6,22 @@ import {afterEach, beforeEach, describe, it} from 'mocha'
 
 import {installBmad} from '../../src/lib/bmad-installer.js'
 import {updateGitignore} from '../../src/lib/gitignore-manager.js'
+import {cleanupTestDir, createTestDir, pathExists} from '../helpers/test-utils.js'
 
 describe('BMAD Installation Integration Tests', () => {
   let testDir: string
 
   beforeEach(async () => {
-    // Create a unique temp directory for each test
-    testDir = join(tmpdir(), `aiw-bmad-test-${randomUUID()}`)
-    await fs.mkdir(testDir, {recursive: true})
+    testDir = await createTestDir('aiw-bmad-test')
   })
 
   afterEach(async () => {
-    // Clean up test directory
-    try {
-      await fs.rm(testDir, {force: true, recursive: true})
-    } catch {
-      // Ignore cleanup errors
-    }
+    await cleanupTestDir(testDir)
   })
 
   it('should install BMAD with complete directory structure', async function () {
     // Increase timeout for this test as it copies many files
-    this.timeout(30_000)
+    this.timeout(15_000)
 
     await installBmad({
       projectName: 'test-project',
@@ -79,7 +71,7 @@ describe('BMAD Installation Integration Tests', () => {
   })
 
   it('should generate custom configuration files', async function () {
-    this.timeout(30_000)
+    this.timeout(15_000)
 
     await installBmad({
       projectName: 'my-project',
@@ -147,7 +139,7 @@ describe('BMAD Installation Integration Tests', () => {
   })
 
   it('should install agents from template', async function () {
-    this.timeout(30_000)
+    this.timeout(15_000)
 
     await installBmad({
       projectName: 'test-project',
@@ -168,7 +160,7 @@ describe('BMAD Installation Integration Tests', () => {
   })
 
   it('should install workflows from template', async function () {
-    this.timeout(30_000)
+    this.timeout(15_000)
 
     await installBmad({
       projectName: 'test-project',
@@ -188,15 +180,3 @@ describe('BMAD Installation Integration Tests', () => {
     expect(workflowDirs.some((f) => f.includes('implementation'))).to.be.true
   })
 })
-
-/**
- * Helper to check if path exists
- */
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await fs.access(path)
-    return true
-  } catch {
-    return false
-  }
-}

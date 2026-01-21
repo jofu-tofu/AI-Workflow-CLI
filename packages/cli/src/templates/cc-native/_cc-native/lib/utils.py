@@ -41,7 +41,7 @@ REVIEW_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
         "verdict": {"type": "string", "enum": ["pass", "warn", "fail"]},
-        "summary": {"type": "string"},
+        "summary": {"type": "string", "minLength": 20},
         "issues": {
             "type": "array",
             "items": {
@@ -313,6 +313,10 @@ def coerce_to_review(obj: Optional[Dict[str, Any]], default_fix_msg: str = "Retr
     summary_raw = str(obj.get("summary", "")).strip()
     if not summary_raw:
         eprint("[coerce] WARNING: summary missing or empty from parsed output, using default")
+        # Add diagnostic output
+        eprint(f"[coerce] Raw object keys: {list(obj.keys()) if obj else 'None'}")
+        if obj:
+            eprint(f"[coerce] verdict={obj.get('verdict')}, issues_count={len(obj.get('issues', []))}")
     if not obj.get("issues"):
         eprint("[coerce] INFO: issues array empty or missing")
 

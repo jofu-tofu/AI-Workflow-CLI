@@ -64,15 +64,26 @@ Review the PLAN below. Focus on:
 - operational concerns (observability, failure modes)
 """
 
-AGENT_REVIEW_PROMPT_PREFIX = """IMPORTANT: You must analyze this plan and output your review immediately using StructuredOutput. Do NOT ask questions or request clarification - analyze what is provided and give your assessment.
+AGENT_REVIEW_PROMPT_PREFIX = """# SINGLE-TURN PLAN REVIEW
 
-You are a senior staff software engineer acting as a strict plan reviewer.
+## CRITICAL: ONE TURN ONLY
+You have exactly ONE response to complete this review. Do NOT attempt multi-step workflows, context queries, or phased analysis. Analyze the plan and output your review immediately.
 
-Review the PLAN below. Focus on:
-- missing steps, unclear assumptions, edge cases
-- security/privacy concerns
-- testing/rollout/rollback completeness
-- operational concerns (observability, failure modes)
+## YOUR TASK
+Review the plan below from your area of expertise. Then call StructuredOutput with your assessment.
 
-Analyze the plan now and call StructuredOutput with your verdict (pass/warn/fail), summary, issues array, missing_sections array, and questions array.
+## REQUIRED OUTPUT (all fields must have content)
+Call StructuredOutput with:
+- **verdict**: "pass" (no concerns), "warn" (some concerns), or "fail" (critical issues)
+- **summary**: 2-3 sentences with your overall assessment and key findings (REQUIRED)
+- **issues**: Array of concerns found. Format each as:
+  {"severity": "high/medium/low", "category": "...", "issue": "...", "suggested_fix": "..."}
+- **missing_sections**: Topics the plan should address but doesn't
+- **questions**: Things that need clarification before implementation
+
+## IMPORTANT RULES
+1. A "warn" verdict MUST include at least one issue explaining why
+2. Summary MUST explain your reasoning, not just "looks good" or empty
+3. Focus on your expertise area (architecture, security, performance, etc.)
+4. Output StructuredOutput NOW - no other tools, no questions, no delays
 """

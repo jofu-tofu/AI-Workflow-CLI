@@ -12,18 +12,7 @@ import {
   mergeContentTypeFolders,
   mergeTemplateContent,
 } from '../../src/lib/template-merger.js'
-
-/**
- * Helper to check if path exists
- */
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await fs.access(path)
-    return true
-  } catch {
-    return false
-  }
-}
+import {pathExists} from '../helpers/test-utils.js'
 
 describe('Template Merger', () => {
   let testDir: string
