@@ -6,43 +6,38 @@ This hook runs FIRST in the ExitPlanMode PreToolUse chain, BEFORE the user
 sees the approval prompt. This allows review hooks to provide feedback that
 the user can see before deciding whether to approve the plan.
 
-It creates a session-specific state file that signals "this session has an
+It creates a plan-adjacent state file that signals "this plan has an
 approved plan pending archive."
 
 The archive_plan.py hook checks for this state file before archiving.
 This ensures:
 1. Non-plan workflows are unaffected (no state file = no archive action)
-2. Multiple concurrent sessions don't conflict (session-specific state files)
+2. Multiple concurrent sessions don't conflict (plan-keyed state files)
 3. The plan path is preserved for later archiving
+4. Session ID changes don't reset iteration counters (state keyed by plan path)
 
-State file location: %TEMP%/cc-native-plan-state-{session_id}.json
+State file location: ~/.claude/plans/{plan-name}.state.json
 """
 
 import json
 import os
-import re
 import sys
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+# Add lib directory to path for imports
+_hook_dir = Path(__file__).resolve().parent
+_lib_dir = _hook_dir.parent / "lib"
+sys.path.insert(0, str(_lib_dir))
 
-def eprint(*args: Any) -> None:
-    print(*args, file=sys.stderr)
-
-
-def sanitize(s: str, max_len: int = 50) -> str:
-    """Sanitize string for use in filename."""
-    s = re.sub(r"[^A-Za-z0-9._-]+", "_", s)
-    return s.strip("._-")[:max_len] or "unknown"
-
-
-def get_state_file_path(session_id: str) -> Path:
-    """Get path to the state file for this session."""
-    temp_dir = Path(tempfile.gettempdir())
-    safe_id = sanitize(session_id, 32)
-    return temp_dir / f"cc-native-plan-state-{safe_id}.json"
+from utils import (
+    eprint,
+    sanitize_filename,
+    sanitize_title,
+    extract_plan_title,
+)
+from state import get_state_file_path
 
 
 def find_plan_file_path(payload: Dict[str, Any]) -> Optional[str]:
@@ -111,18 +106,48 @@ def main() -> int:
 
     eprint(f"[set_plan_state] Found plan with {len(plan_content)} chars at: {plan_path}")
 
-    # Create state file
-    state_file = get_state_file_path(session_id)
+    # Extract title and generate task folder path
+    title = extract_plan_title(plan_content)
+    if title:
+        slug = sanitize_title(title.lower())
+    else:
+        slug = f"session-{sanitize_filename(session_id, 32)}"
+
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd()
+    date_folder = datetime.now().strftime("%Y-%m-%d")
+    task_folder = str(Path(project_dir) / "_output" / "cc-native" / "plans" / date_folder / slug)
+
+    eprint(f"[set_plan_state] Task folder: {task_folder}")
+
+    # Create or update state file (preserving iteration data if it exists)
+    # State file is adjacent to plan file, keyed by plan path (not session_id)
+    state_file = get_state_file_path(plan_path)
+
+    # Check for existing state file to preserve iteration data
+    existing_state: Dict[str, Any] = {}
+    if state_file.exists():
+        try:
+            existing_state = json.loads(state_file.read_text(encoding="utf-8"))
+            eprint(f"[set_plan_state] Found existing state file, preserving iteration data")
+        except Exception as e:
+            eprint(f"[set_plan_state] Failed to read existing state file: {e}")
+
     state_data = {
         "session_id": session_id,
         "plan_path": plan_path,
-        "created_at": datetime.now().isoformat(),
-        "project_dir": os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd(),
+        "created_at": existing_state.get("created_at", datetime.now().isoformat()),
+        "project_dir": project_dir,
+        "task_folder": task_folder,
     }
+
+    # Preserve iteration data if it exists (set by cc-native-plan-review.py)
+    if "iteration" in existing_state:
+        state_data["iteration"] = existing_state["iteration"]
+        eprint(f"[set_plan_state] Preserving iteration state: current={existing_state['iteration'].get('current', 1)}")
 
     try:
         state_file.write_text(json.dumps(state_data, indent=2), encoding="utf-8")
-        eprint(f"[set_plan_state] Created state file: {state_file}")
+        eprint(f"[set_plan_state] {'Updated' if existing_state else 'Created'} state file: {state_file}")
     except Exception as e:
         eprint(f"[set_plan_state] Failed to create state file: {e}")
         return 1

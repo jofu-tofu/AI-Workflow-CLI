@@ -1,89 +1,80 @@
 #!/usr/bin/env python3
 """
-PreToolUse/Stop hook - archives the final plan after feedback revisions.
+PreToolUse hook - backup archiver that runs on ExitPlanMode.
 
-This hook triggers on Edit/Write/Bash (implementation start) or Stop (session end).
-It ONLY archives if a state file exists for this session, which is created by
-set_plan_state.py when ExitPlanMode fires.
+NOTE: Primary archiving now happens in add_plan_context.py (PreToolUse:Write),
+which runs BEFORE any permission prompts. This hook serves as a backup that:
+1. Updates the archive with post-review metadata if reviews completed
+2. Skips if plan was already archived with same content (idempotent)
 
-This design ensures:
-1. Non-plan workflows are unaffected (no state file = skip entirely)
-2. Multiple concurrent sessions don't conflict (session-specific state files)
-3. Archives the FINAL plan (after any feedback-driven revisions)
-4. User can review before implementation (archive doesn't require impl)
+This hook triggers on PreToolUse (ExitPlanMode), running after set_plan_state.py
+and cc-native-plan-review.py. It ONLY archives if a state file exists for this
+plan, which is created by set_plan_state.py when ExitPlanMode fires.
 
-State file: %TEMP%/cc-native-plan-state-{session_id}.json
-Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}-{HHMMSS}/plan.md
+State file: ~/.claude/plans/{plan-name}.state.json (adjacent to plan file)
+Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}/plan.md (uses task_folder from state)
 """
 
 import json
 import os
-import re
 import sys
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+# Add lib directory to path for imports
+_hook_dir = Path(__file__).resolve().parent
+_lib_dir = _hook_dir.parent / "lib"
+sys.path.insert(0, str(_lib_dir))
 
-def eprint(*args: Any) -> None:
-    print(*args, file=sys.stderr)
-
-
-def sanitize(s: str, max_len: int = 50) -> str:
-    """Sanitize string for use in filename."""
-    s = s.replace(' ', '-')
-    s = re.sub(r"[^A-Za-z0-9._-]+", "_", s)
-    s = re.sub(r"[-_]+", "-", s)
-    return s.strip("._-")[:max_len] or "unknown"
-
-
-def extract_title(plan: str) -> Optional[str]:
-    """Extract title from '# Plan: <title>' line."""
-    for line in plan.split('\n'):
-        line = line.strip()
-        if line.startswith('# Plan:'):
-            title = line[7:].strip()
-            return title if title else None
-    return None
+from utils import (
+    eprint,
+    sanitize_title,
+    sanitize_filename,
+    extract_plan_title,
+    find_plan_file,
+)
+from state import (
+    get_state_file_path,
+    load_state,
+    delete_state,
+)
 
 
-def get_state_file_path(session_id: str) -> Path:
-    """Get path to the state file for this session."""
-    temp_dir = Path(tempfile.gettempdir())
-    safe_id = sanitize(session_id, 32).replace('-', '_')  # Match set_plan_state.py sanitization
-    # Try both possible sanitization patterns
-    for safe in [sanitize(session_id, 32), session_id[:32]]:
-        candidate = temp_dir / f"cc-native-plan-state-{safe}.json"
-        if candidate.exists():
-            return candidate
-    # Return the canonical path even if it doesn't exist
-    return temp_dir / f"cc-native-plan-state-{sanitize(session_id, 32)}.json"
+def extract_plan_content_from_archive(archive_path: Path) -> Optional[str]:
+    """Extract the original plan content from an archived file (strips header).
 
-
-def load_state(session_id: str) -> Optional[Dict[str, Any]]:
-    """Load state file for this session if it exists."""
-    state_file = get_state_file_path(session_id)
-
-    if not state_file.exists():
+    Archives have a header format:
+    # Plan - YYYY-MM-DD HH:MM:SS
+    **Session:** ...
+    **Source:** ...
+    **Archived:** ...
+    ---
+    <actual plan content>
+    """
+    if not archive_path.exists():
         return None
 
     try:
-        return json.loads(state_file.read_text(encoding="utf-8"))
-    except Exception as e:
-        eprint(f"[archive_plan] Failed to read state file: {e}")
+        content = archive_path.read_text(encoding="utf-8")
+        # Find the separator and return content after it
+        sep = "\n---\n\n"
+        idx = content.find(sep)
+        if idx != -1:
+            return content[idx + len(sep):]
+        return None
+    except Exception:
         return None
 
 
-def delete_state(session_id: str) -> None:
-    """Delete state file after successful archive."""
-    state_file = get_state_file_path(session_id)
-    try:
-        if state_file.exists():
-            state_file.unlink()
-            eprint(f"[archive_plan] Deleted state file: {state_file}")
-    except Exception as e:
-        eprint(f"[archive_plan] Warning: failed to delete state file: {e}")
+def is_already_archived(out_path: Path, plan: str) -> bool:
+    """Check if plan is already archived with same content (idempotent check)."""
+    existing_plan = extract_plan_content_from_archive(out_path)
+    if existing_plan is None:
+        return False
+
+    # Normalize for comparison (strip trailing whitespace)
+    return existing_plan.strip() == plan.strip()
 
 
 def is_plan_file_edit(payload: Dict[str, Any], plan_path: str) -> bool:
@@ -120,14 +111,29 @@ def main() -> int:
 
     eprint(f"[archive_plan] tool_name: {tool_name}, session_id: {session_id}")
 
-    # Check for state file - this is the key gate
-    state = load_state(session_id)
-
-    if not state:
-        eprint("[archive_plan] No state file for this session - not a plan mode workflow, skipping")
+    # Find plan file first (state file is keyed by plan path)
+    plan_path_found = find_plan_file()
+    if not plan_path_found:
+        eprint("[archive_plan] No plan file found in ~/.claude/plans/ - skipping")
         return 0
 
-    eprint(f"[archive_plan] Found state file for session")
+    # Check for state file - this is the key gate
+    state = load_state(plan_path_found)
+
+    if not state:
+        eprint("[archive_plan] No state file for this plan - not a plan mode workflow, skipping")
+        return 0
+
+    eprint(f"[archive_plan] Found state file for plan: {plan_path_found}")
+
+    # Check if mid-iteration (more reviews pending) - skip archive during revision cycles
+    iteration = state.get("iteration")
+    if iteration:
+        current = iteration.get("current", 1)
+        max_iter = iteration.get("max", 1)
+        if current < max_iter:
+            eprint(f"[archive_plan] Skipping: mid-iteration ({current}/{max_iter}), waiting for final iteration")
+            return 0
 
     plan_path = state.get("plan_path", "")
     project_dir = state.get("project_dir", os.getcwd())
@@ -148,36 +154,36 @@ def main() -> int:
 
     if not plan.strip():
         eprint("[archive_plan] Plan is empty, cleaning up state and skipping archive")
-        delete_state(session_id)
+        delete_state(plan_path_found)
         return 0
 
-    # Create output directory
-    base = Path(project_dir)
+    # Use task_folder from state file (created by set_plan_state.py)
+    # This ensures review and archive go to the same folder
     now = datetime.now()
-    date_folder = now.strftime("%Y-%m-%d")
-    time_part = now.strftime("%H%M%S")
-
-    # Extract title for descriptive task folder name
-    title = extract_title(plan)
-    if title:
-        slug = sanitize(title.lower())
+    task_folder_path = state.get("task_folder")
+    if task_folder_path:
+        out_dir = Path(task_folder_path)
+        eprint(f"[archive_plan] Using task_folder from state: {out_dir}")
     else:
-        slug = f"session-{sanitize(session_id, 32)}"
+        # Fallback: generate folder (backwards compatibility)
+        base = Path(project_dir)
+        date_folder = now.strftime("%Y-%m-%d")
+        title = extract_plan_title(plan)
+        if title:
+            slug = sanitize_title(title.lower())
+        else:
+            slug = f"session-{sanitize_filename(session_id, 32)}"
+        out_dir = base / "_output" / "cc-native" / "plans" / date_folder / slug
+        eprint(f"[archive_plan] Generated task folder (no state): {out_dir}")
 
-    # Build task-centric path: plans/{date}/{slug}-{time}/plan.md
-    task_folder = f"{slug}-{time_part}"
-    out_dir = base / "_output" / "cc-native" / "plans" / date_folder / task_folder
     out_dir.mkdir(parents=True, exist_ok=True)
-
     out_path = out_dir / "plan.md"
-    # Handle collision (rare - same slug and exact same second)
-    i = 1
-    while out_path.exists():
-        collision_folder = f"{slug}-{time_part}-{i}"
-        out_dir = base / "_output" / "cc-native" / "plans" / date_folder / collision_folder
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / "plan.md"
-        i += 1
+
+    # Idempotent check: skip if plan already archived with same content
+    if is_already_archived(out_path, plan):
+        eprint(f"[archive_plan] Plan already archived with same content, skipping: {out_path}")
+        delete_state(plan_path_found)
+        return 0
 
     # Create header with metadata
     header = (
@@ -198,7 +204,7 @@ def main() -> int:
         return 0
 
     # Delete state file to prevent duplicate archives
-    delete_state(session_id)
+    delete_state(plan_path_found)
 
     return 0
 

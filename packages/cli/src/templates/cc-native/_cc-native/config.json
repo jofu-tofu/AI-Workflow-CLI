@@ -24,7 +24,7 @@
     "enabled": true,
     "timeout": 120,
     "blockOnFail": true,
-    "maxTurns": 3,
+    "maxTurns": 1,
     "orchestrator": {
       "enabled": true,
       "model": "haiku",
@@ -32,6 +32,12 @@
       "maxTurns": 3
     },
     "legacyMode": false,
+    "reviewIterations": {
+      "simple": 1,
+      "medium": 1,
+      "high": 2
+    },
+    "earlyExitOnAllPass": true,
     "display": {
       "maxIssues": 12,
       "maxMissingSections": 12,
@@ -54,5 +60,9 @@
   "sanitization": {
     "maxSessionIdLength": 32,
     "maxTitleLength": 50
+  },
+  "planContext": {
+    "enabled": true,
+    "offerClarifyingQuestions": true
   }
 }

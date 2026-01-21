@@ -21,19 +21,15 @@ Features:
 
 Configuration: _cc-native/config.json -> planReview, agentReview
 
-Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}-{HHMMSS}/reviews/
+Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}/reviews/
   - review.json (combined review data)
   - review.md (combined markdown)
   - {reviewer}.json (individual reviewer results)
 """
 
 import json
-import shutil
-import subprocess
 import sys
-import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -47,7 +43,6 @@ try:
         DEFAULT_SANITIZATION,
         REVIEW_SCHEMA,
         ReviewerResult,
-        OrchestratorResult,
         CombinedReviewResult,
         eprint,
         project_dir,
@@ -55,13 +50,31 @@ try:
         compute_plan_hash,
         is_plan_already_reviewed,
         mark_plan_reviewed,
-        parse_json_maybe,
-        coerce_to_review,
         worst_verdict,
         format_combined_markdown,
         write_combined_artifacts,
         load_config,
         get_display_settings,
+    )
+    from state import (
+        load_state,
+        save_state,
+        get_iteration_state,
+        update_iteration_state,
+        should_continue_iterating,
+        DEFAULT_REVIEW_ITERATIONS,
+    )
+    from reviewers import (
+        run_codex_review,
+        run_gemini_review,
+        run_agent_review,
+        AgentConfig,
+        OrchestratorConfig,
+    )
+    from orchestrator import (
+        run_orchestrator,
+        DEFAULT_AGENT_SELECTION,
+        DEFAULT_COMPLEXITY_CATEGORIES,
     )
 except ImportError as e:
     print(f"[cc-native-plan-review] Failed to import lib: {e}", file=sys.stderr)
@@ -81,31 +94,9 @@ except ImportError:
 
 
 # ---------------------------
-# Agent Configuration
+# Default Configuration
 # ---------------------------
 
-@dataclass
-class AgentConfig:
-    """Configuration for a Claude Code review agent."""
-    name: str
-    model: str = "sonnet"
-    focus: str = ""
-    enabled: bool = True
-    categories: List[str] = field(default_factory=lambda: ["code"])
-    description: str = ""
-    tools: str = ""
-
-
-@dataclass
-class OrchestratorConfig:
-    """Configuration for the plan orchestrator."""
-    enabled: bool = True
-    model: str = "haiku"
-    timeout: int = 30
-    max_turns: int = 3
-
-
-# Default configurations
 DEFAULT_AGENTS: List[Dict[str, Any]] = [
     {"name": "architect-reviewer", "model": "sonnet", "focus": "architectural concerns and scalability", "enabled": True, "categories": ["code", "infrastructure", "design"]},
     {"name": "penetration-tester", "model": "sonnet", "focus": "security vulnerabilities and attack vectors", "enabled": True, "categories": ["code", "infrastructure"]},
@@ -113,23 +104,14 @@ DEFAULT_AGENTS: List[Dict[str, Any]] = [
     {"name": "accessibility-tester", "model": "sonnet", "focus": "accessibility compliance and UX concerns", "enabled": True, "categories": ["code", "design"]},
 ]
 
-DEFAULT_ORCHESTRATOR: Dict[str, Any] = {"enabled": True, "model": "haiku", "timeout": 30, "maxTurns": 3}
-DEFAULT_AGENT_SELECTION: Dict[str, Any] = {"simple": {"min": 0, "max": 0}, "medium": {"min": 1, "max": 2}, "high": {"min": 2, "max": 4}, "fallbackCount": 2}
-DEFAULT_COMPLEXITY_CATEGORIES: List[str] = ["code", "infrastructure", "documentation", "life", "business", "design", "research"]
-DEFAULT_AGENT_MODEL: str = "sonnet"
-
-ORCHESTRATOR_SCHEMA: Dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "complexity": {"type": "string", "enum": ["simple", "medium", "high"]},
-        "category": {"type": "string", "enum": DEFAULT_COMPLEXITY_CATEGORIES},
-        "selectedAgents": {"type": "array", "items": {"type": "string"}},
-        "reasoning": {"type": "string"},
-        "skipReason": {"type": "string"},
-    },
-    "required": ["complexity", "category", "selectedAgents", "reasoning"],
-    "additionalProperties": False,
+DEFAULT_ORCHESTRATOR: Dict[str, Any] = {
+    "enabled": True,
+    "model": "haiku",
+    "timeout": 30,
+    "maxTurns": 3,
 }
+
+DEFAULT_AGENT_MODEL: str = "sonnet"
 
 
 # ---------------------------
@@ -195,6 +177,10 @@ def load_settings(proj_dir: Path) -> Dict[str, Any]:
     merged_agent["complexityCategories"] = config.get("complexityCategories", DEFAULT_COMPLEXITY_CATEGORIES.copy())
     merged_agent["sanitization"] = {**DEFAULT_SANITIZATION, **config.get("sanitization", {})}
 
+    # Merge reviewIterations settings
+    merged_agent["reviewIterations"] = {**DEFAULT_REVIEW_ITERATIONS, **agent_review.get("reviewIterations", {})}
+    merged_agent["earlyExitOnAllPass"] = agent_review.get("earlyExitOnAllPass", True)
+
     return {"planReview": merged_plan, "agentReview": merged_agent}
 
 
@@ -238,374 +224,6 @@ def load_agent_library(proj_dir: Path, settings: Optional[Dict[str, Any]] = None
 
 
 # ---------------------------
-# CLI Reviewers (Phase 1)
-# ---------------------------
-
-def run_codex_review(plan: str, schema: Dict[str, Any], settings: Dict[str, Any]) -> ReviewerResult:
-    """Run Codex CLI to review the plan."""
-    codex_settings = settings.get("reviewers", {}).get("codex", {})
-    timeout = codex_settings.get("timeout", 120)
-    model = codex_settings.get("model", "")
-
-    codex_path = shutil.which("codex")
-    if codex_path is None:
-        eprint("[codex] CLI not found on PATH")
-        return ReviewerResult(
-            name="codex",
-            ok=False,
-            verdict="skip",
-            data={},
-            raw="",
-            err="codex CLI not found on PATH",
-        )
-
-    eprint(f"[codex] Found CLI at: {codex_path}")
-
-    prompt = f"""You are a senior staff software engineer acting as a strict plan reviewer.
-
-Review the PLAN below. Focus on:
-- missing steps, unclear assumptions, edge cases
-- security/privacy concerns
-- testing/rollout/rollback completeness
-- operational concerns (observability, failure modes)
-
-Return ONLY a JSON object that matches this JSON Schema:
-{json.dumps(schema, ensure_ascii=False)}
-
-PLAN:
-<<<
-{plan}
->>>
-"""
-
-    with tempfile.TemporaryDirectory() as td:
-        td_path = Path(td)
-        schema_path = td_path / "schema.json"
-        out_path = td_path / "codex_review.json"
-
-        schema_path.write_text(json.dumps(schema, indent=2), encoding="utf-8")
-
-        cmd = [
-            codex_path,
-            "exec",
-            "--full-auto",
-            "--sandbox",
-            "read-only",
-            "--output-schema",
-            str(schema_path),
-            "-o",
-            str(out_path),
-            "-",
-        ]
-
-        if model:
-            cmd.insert(2, "--model")
-            cmd.insert(3, model)
-
-        eprint(f"[codex] Running command: {' '.join(cmd)}")
-
-        try:
-            p = subprocess.run(
-                cmd,
-                input=prompt,
-                text=True,
-                capture_output=True,
-                timeout=timeout,
-                encoding='utf-8',
-                errors='replace',
-            )
-        except subprocess.TimeoutExpired:
-            eprint(f"[codex] TIMEOUT after {timeout}s")
-            return ReviewerResult("codex", False, "error", {}, "", f"codex timed out after {timeout}s")
-        except Exception as ex:
-            eprint(f"[codex] EXCEPTION: {ex}")
-            return ReviewerResult("codex", False, "error", {}, "", f"codex failed to run: {ex}")
-
-        eprint(f"[codex] Exit code: {p.returncode}")
-
-        raw = ""
-        if out_path.exists():
-            raw = out_path.read_text(encoding="utf-8", errors="replace")
-
-        obj = parse_json_maybe(raw) or parse_json_maybe(p.stdout)
-        ok, verdict, norm = coerce_to_review(obj, "Retry or check CLI auth/config.")
-
-        err = (p.stderr or "").strip()
-        return ReviewerResult("codex", ok, verdict, norm, raw or p.stdout, err)
-
-
-def run_gemini_review(plan: str, schema: Dict[str, Any], settings: Dict[str, Any]) -> ReviewerResult:
-    """Run Gemini CLI to review the plan."""
-    gemini_settings = settings.get("reviewers", {}).get("gemini", {})
-    timeout = gemini_settings.get("timeout", 120)
-    model = gemini_settings.get("model", "")
-
-    gemini_path = shutil.which("gemini")
-    if gemini_path is None:
-        eprint("[gemini] CLI not found on PATH")
-        return ReviewerResult(
-            name="gemini",
-            ok=False,
-            verdict="skip",
-            data={},
-            raw="",
-            err="gemini CLI not found on PATH",
-        )
-
-    eprint(f"[gemini] Found CLI at: {gemini_path}")
-
-    instruction = f"""
-
-Review the PLAN above as a senior staff software engineer. Focus on:
-- missing steps, unclear assumptions, edge cases
-- security/privacy concerns
-- testing/rollout/rollback completeness
-- operational concerns (observability, failure modes)
-
-Return ONLY a JSON object that matches this JSON Schema (no markdown, no code fences):
-{json.dumps(schema, ensure_ascii=False)}
-"""
-
-    cmd = [
-        gemini_path,
-        "-y",  # YOLO mode - auto-approve all actions
-        "-p",
-        instruction,
-    ]
-
-    if model:
-        cmd.extend(["--model", model])
-
-    eprint("[gemini] Running command: gemini -y -p <instruction>")
-
-    try:
-        p = subprocess.run(
-            cmd,
-            input=plan,
-            text=True,
-            capture_output=True,
-            timeout=timeout,
-            encoding='utf-8',
-            errors='replace',
-        )
-    except subprocess.TimeoutExpired:
-        eprint(f"[gemini] TIMEOUT after {timeout}s")
-        return ReviewerResult("gemini", False, "error", {}, "", f"gemini timed out after {timeout}s")
-    except Exception as ex:
-        eprint(f"[gemini] EXCEPTION: {ex}")
-        return ReviewerResult("gemini", False, "error", {}, "", f"gemini failed to run: {ex}")
-
-    eprint(f"[gemini] Exit code: {p.returncode}")
-
-    raw = (p.stdout or "").strip()
-    err = (p.stderr or "").strip()
-
-    obj = parse_json_maybe(raw)
-    ok, verdict, norm = coerce_to_review(obj, "Retry or check CLI auth/config.")
-
-    return ReviewerResult("gemini", ok, verdict, norm, raw, err)
-
-
-# ---------------------------
-# Orchestrator (Phase 2)
-# ---------------------------
-
-def run_orchestrator(plan: str, agent_library: List[AgentConfig], config: OrchestratorConfig, settings: Dict[str, Any]) -> OrchestratorResult:
-    """Run the orchestrator agent to analyze plan complexity and select reviewers."""
-    eprint("[orchestrator] Starting plan analysis...")
-
-    selection = settings.get("agentSelection", DEFAULT_AGENT_SELECTION)
-    categories = settings.get("complexityCategories", DEFAULT_COMPLEXITY_CATEGORIES)
-    fallback_count = selection.get("fallbackCount", 2)
-
-    claude_path = shutil.which("claude")
-    if claude_path is None:
-        eprint("[orchestrator] Claude CLI not found on PATH, falling back to medium complexity")
-        return OrchestratorResult(
-            complexity="medium", category="code",
-            selected_agents=[a.name for a in agent_library if a.enabled][:fallback_count],
-            reasoning="Orchestrator skipped - Claude CLI not found",
-            error="claude CLI not found on PATH",
-        )
-
-    eprint(f"[orchestrator] Found Claude CLI at: {claude_path}")
-
-    agent_list = "\n".join([f"- {a.name}: {a.focus} (categories: {', '.join(a.categories)})" for a in agent_library if a.enabled])
-    category_list = "/".join(categories)
-    simple_range = f"{selection.get('simple', {}).get('min', 0)}-{selection.get('simple', {}).get('max', 0)}"
-    medium_range = f"{selection.get('medium', {}).get('min', 1)}-{selection.get('medium', {}).get('max', 2)}"
-    high_range = f"{selection.get('high', {}).get('min', 2)}-{selection.get('high', {}).get('max', 4)}"
-
-    prompt = f"""IMPORTANT: Analyze this plan and output your decision immediately using StructuredOutput. Do NOT ask questions.
-
-You are a plan orchestrator. Analyze the plan below and determine:
-1. Complexity level (simple/medium/high)
-2. Category ({category_list})
-3. Which agents (if any) should review this plan
-
-Available agents:
-{agent_list}
-
-Rules:
-- simple complexity = {simple_range} agents (CLI review sufficient)
-- medium complexity = {medium_range} agents
-- high complexity = {high_range} agents
-- Only select agents whose categories match the plan category
-- Non-technical plans (life, business) typically need 0 code-focused agents
-
-Analyze and call StructuredOutput with your decision now.
-
-PLAN:
-<<<
-{plan}
->>>
-"""
-
-    schema_json = json.dumps(ORCHESTRATOR_SCHEMA, ensure_ascii=False)
-
-    cmd_args = [claude_path, "--agent", "plan-orchestrator", "--model", config.model, "--permission-mode", "bypassPermissions", "--output-format", "json", "--max-turns", str(config.max_turns), "--json-schema", schema_json, "--settings", "{}"]
-
-    eprint(f"[orchestrator] Running with model: {config.model}, timeout: {config.timeout}s")
-
-    try:
-        p = subprocess.run(cmd_args, input=prompt, text=True, capture_output=True, timeout=config.timeout, encoding="utf-8", errors="replace")
-    except subprocess.TimeoutExpired:
-        eprint(f"[orchestrator] TIMEOUT after {config.timeout}s, falling back to medium complexity")
-        return OrchestratorResult(complexity="medium", category="code", selected_agents=[a.name for a in agent_library if a.enabled][:fallback_count], reasoning="Orchestrator timed out - defaulting to medium complexity", error=f"Orchestrator timed out after {config.timeout}s")
-    except Exception as ex:
-        eprint(f"[orchestrator] EXCEPTION: {ex}, falling back to medium complexity")
-        return OrchestratorResult(complexity="medium", category="code", selected_agents=[a.name for a in agent_library if a.enabled][:fallback_count], reasoning=f"Orchestrator failed: {ex}", error=str(ex))
-
-    eprint(f"[orchestrator] Exit code: {p.returncode}")
-
-    raw = (p.stdout or "").strip()
-    if p.stderr:
-        eprint(f"[orchestrator] stderr: {p.stderr[:300]}")
-
-    obj = _parse_claude_output(raw)
-    if not obj:
-        eprint("[orchestrator] Failed to parse output, falling back to medium complexity")
-        return OrchestratorResult(complexity="medium", category="code", selected_agents=[a.name for a in agent_library if a.enabled][:fallback_count], reasoning="Orchestrator output could not be parsed", error="Failed to parse orchestrator output")
-
-    complexity = obj.get("complexity", "medium")
-    if complexity not in ("simple", "medium", "high"):
-        complexity = "medium"
-
-    category = obj.get("category", "code")
-    if category not in categories:
-        category = "code"
-
-    selected_agents = obj.get("selectedAgents", [])
-    if not isinstance(selected_agents, list):
-        selected_agents = []
-
-    reasoning = str(obj.get("reasoning", "")).strip() or "No reasoning provided"
-    skip_reason = obj.get("skipReason")
-
-    eprint(f"[orchestrator] Result: complexity={complexity}, category={category}, agents={selected_agents}")
-    eprint(f"[orchestrator] Reasoning: {reasoning}")
-
-    return OrchestratorResult(complexity=complexity, category=category, selected_agents=selected_agents, reasoning=reasoning, skip_reason=skip_reason if skip_reason else None)
-
-
-def _parse_claude_output(raw: str) -> Optional[Dict[str, Any]]:
-    """Parse Claude CLI JSON output, handling various formats."""
-    try:
-        result = json.loads(raw)
-        if isinstance(result, dict):
-            if "structured_output" in result:
-                return result["structured_output"]
-            if result.get("type") == "assistant":
-                message = result.get("message", {})
-                content = message.get("content", [])
-                for item in content:
-                    if isinstance(item, dict) and item.get("name") == "StructuredOutput":
-                        return item.get("input", {})
-        elif isinstance(result, list):
-            for event in result:
-                if not isinstance(event, dict):
-                    continue
-                if event.get("type") == "assistant":
-                    message = event.get("message", {})
-                    content = message.get("content", [])
-                    for item in content:
-                        if isinstance(item, dict) and item.get("name") == "StructuredOutput":
-                            return item.get("input", {})
-    except json.JSONDecodeError:
-        pass
-    except Exception:
-        pass
-    return parse_json_maybe(raw)
-
-
-# ---------------------------
-# Agent Review (Phase 3)
-# ---------------------------
-
-def run_agent_review(plan: str, agent: AgentConfig, schema: Dict[str, Any], timeout: int, max_turns: int = 3) -> ReviewerResult:
-    """Run a single Claude Code agent to review the plan."""
-    claude_path = shutil.which("claude")
-    if claude_path is None:
-        eprint(f"[{agent.name}] Claude CLI not found on PATH")
-        return ReviewerResult(name=agent.name, ok=False, verdict="skip", data={}, raw="", err="claude CLI not found on PATH")
-
-    eprint(f"[{agent.name}] Found Claude CLI at: {claude_path}")
-
-    prompt = f"""IMPORTANT: You must analyze this plan and output your review immediately using StructuredOutput. Do NOT ask questions or request clarification - analyze what is provided and give your assessment.
-
-You are a senior staff software engineer acting as a strict plan reviewer.
-
-Review the PLAN below. Focus on:
-- missing steps, unclear assumptions, edge cases
-- security/privacy concerns
-- testing/rollout/rollback completeness
-- operational concerns (observability, failure modes)
-
-Analyze the plan now and call StructuredOutput with your verdict (pass/warn/fail), summary, issues array, missing_sections array, and questions array.
-
-PLAN:
-<<<
-{plan}
->>>
-"""
-
-    schema_json = json.dumps(schema, ensure_ascii=False)
-    cmd_args = [claude_path, "--agent", agent.name, "--model", agent.model, "--permission-mode", "bypassPermissions", "--output-format", "json", "--max-turns", str(max_turns), "--json-schema", schema_json, "--settings", "{}"]
-
-    eprint(f"[{agent.name}] Running with model: {agent.model}, timeout: {timeout}s, max-turns: {max_turns}")
-
-    try:
-        p = subprocess.run(cmd_args, input=prompt, text=True, capture_output=True, timeout=timeout, encoding="utf-8", errors="replace")
-    except subprocess.TimeoutExpired:
-        eprint(f"[{agent.name}] TIMEOUT after {timeout}s")
-        return ReviewerResult(agent.name, False, "error", {}, "", f"{agent.name} timed out after {timeout}s")
-    except Exception as ex:
-        eprint(f"[{agent.name}] EXCEPTION: {ex}")
-        return ReviewerResult(agent.name, False, "error", {}, "", f"{agent.name} failed to run: {ex}")
-
-    eprint(f"[{agent.name}] Exit code: {p.returncode}")
-    eprint(f"[{agent.name}] stdout length: {len(p.stdout or '')} chars")
-    if p.stderr:
-        eprint(f"[{agent.name}] stderr: {p.stderr[:500]}")
-
-    raw = (p.stdout or "").strip()
-    err = (p.stderr or "").strip()
-
-    if raw:
-        eprint(f"[{agent.name}] stdout preview: {raw[:500]}")
-
-    obj = _parse_claude_output(raw)
-    if obj:
-        eprint(f"[{agent.name}] Parsed JSON successfully, verdict: {obj.get('verdict', 'N/A')}")
-    else:
-        eprint(f"[{agent.name}] Failed to parse JSON from output")
-
-    ok, verdict, norm = coerce_to_review(obj, "Retry or check agent configuration.")
-
-    return ReviewerResult(agent.name, ok, verdict, norm, raw, err)
-
-
-# ---------------------------
 # Main Hook
 # ---------------------------
 
@@ -640,7 +258,7 @@ def main() -> int:
         eprint("[cc-native-plan-review] Skipping: both plan and agent review disabled")
         return 0
 
-    # Find and read plan
+    # Find and read plan FIRST (state file is keyed by plan path)
     plan_path = find_plan_file()
     if not plan_path:
         eprint("[cc-native-plan-review] Skipping: no plan file found in ~/.claude/plans/")
@@ -659,6 +277,14 @@ def main() -> int:
     eprint(f"[cc-native-plan-review] Found plan at: {plan_path}")
     eprint(f"[cc-native-plan-review] Plan length: {len(plan)} chars")
 
+    # Load state file (keyed by plan path, created by set_plan_state.py)
+    state = load_state(plan_path)
+    task_folder = state.get("task_folder") if state else None
+    if task_folder:
+        eprint(f"[cc-native-plan-review] Using task_folder from state: {task_folder}")
+    else:
+        eprint("[cc-native-plan-review] No task_folder in state, will generate folder path")
+
     # Plan-hash deduplication
     plan_hash = compute_plan_hash(plan)
     eprint(f"[cc-native-plan-review] Plan hash: {plan_hash}")
@@ -668,9 +294,11 @@ def main() -> int:
 
     # Initialize combined result
     cli_results: Dict[str, ReviewerResult] = {}
-    orch_result: Optional[OrchestratorResult] = None
+    orch_result = None
     agent_results: Dict[str, ReviewerResult] = {}
     all_verdicts: List[str] = []
+    iteration_state: Optional[Dict[str, Any]] = None
+    detected_complexity: str = "medium"  # Will be updated by orchestrator
 
     # ============================================
     # PHASE 1: CLI Reviewers (Codex/Gemini)
@@ -728,6 +356,7 @@ def main() -> int:
         if enabled_agents:
             if orchestrator_config.enabled and not legacy_mode:
                 orch_result = run_orchestrator(plan, enabled_agents, orchestrator_config, agent_settings)
+                detected_complexity = orch_result.complexity
 
                 if orch_result.complexity == "simple" and not orch_result.selected_agents:
                     eprint("[cc-native-plan-review] Orchestrator determined: simple complexity, no agent review needed")
@@ -743,25 +372,41 @@ def main() -> int:
             else:
                 eprint("[cc-native-plan-review] Running in legacy mode (all enabled agents)")
                 selected_agents = enabled_agents
+                detected_complexity = "medium"  # Default for legacy mode
 
-            # PHASE 3: Run selected agents
-            if selected_agents:
-                eprint("[cc-native-plan-review] === PHASE 3: Agent Reviews ===")
-                max_turns = agent_settings.get("maxTurns", 3)
+        # Initialize iteration state based on complexity (after orchestrator runs)
+        if state:
+            iteration_state = get_iteration_state(state, detected_complexity, agent_settings)
+            eprint(f"[cc-native-plan-review] Iteration state: {iteration_state['current']}/{iteration_state['max']} ({detected_complexity})")
 
-                with ThreadPoolExecutor(max_workers=len(selected_agents)) as executor:
-                    futures = {executor.submit(run_agent_review, plan, agent, REVIEW_SCHEMA, timeout, max_turns): agent for agent in selected_agents}
-                    for future in as_completed(futures):
-                        agent = futures[future]
-                        try:
-                            result = future.result()
-                            agent_results[agent.name] = result
-                            if result.verdict and result.verdict not in ("skip", "error"):
-                                all_verdicts.append(result.verdict)
-                            eprint(f"[cc-native-plan-review] {agent.name} completed with verdict: {result.verdict}")
-                        except Exception as ex:
-                            eprint(f"[cc-native-plan-review] {agent.name} failed with exception: {ex}")
-                            agent_results[agent.name] = ReviewerResult(name=agent.name, ok=False, verdict="error", data={}, raw="", err=str(ex))
+        # PHASE 3: Run selected agents
+        if selected_agents:
+            eprint("[cc-native-plan-review] === PHASE 3: Agent Reviews ===")
+            max_turns = agent_settings.get("maxTurns", 3)
+
+            with ThreadPoolExecutor(max_workers=len(selected_agents)) as executor:
+                futures = {
+                    executor.submit(run_agent_review, plan, agent, REVIEW_SCHEMA, timeout, max_turns): agent
+                    for agent in selected_agents
+                }
+                for future in as_completed(futures):
+                    agent = futures[future]
+                    try:
+                        result = future.result()
+                        agent_results[agent.name] = result
+                        if result.verdict and result.verdict not in ("skip", "error"):
+                            all_verdicts.append(result.verdict)
+                        eprint(f"[cc-native-plan-review] {agent.name} completed with verdict: {result.verdict}")
+                    except Exception as ex:
+                        eprint(f"[cc-native-plan-review] {agent.name} failed with exception: {ex}")
+                        agent_results[agent.name] = ReviewerResult(
+                            name=agent.name,
+                            ok=False,
+                            verdict="error",
+                            data={},
+                            raw="",
+                            err=str(ex),
+                        )
 
     # ============================================
     # PHASE 4: Generate Combined Output
@@ -787,7 +432,7 @@ def main() -> int:
     display_settings = {**plan_settings.get("display", {}), **agent_settings.get("display", {})}
     combined_settings = {"display": display_settings}
 
-    review_file = write_combined_artifacts(base, plan, combined_result, payload, combined_settings)
+    review_file = write_combined_artifacts(base, plan, combined_result, payload, combined_settings, task_folder)
     eprint(f"[cc-native-plan-review] Saved review: {review_file}")
 
     # Build context message
@@ -820,7 +465,39 @@ def main() -> int:
     block_on_fail_agent = agent_settings.get("blockOnFail", True)
     should_block = (overall == "fail") and (block_on_fail_plan or block_on_fail_agent)
 
-    if should_block:
+    # Handle iteration logic
+    needs_more_iterations = False
+    if iteration_state and state:
+        # Update iteration state with this review result
+        state = update_iteration_state(state, iteration_state, plan_hash, overall)
+
+        # Check if more iterations needed
+        if should_continue_iterating(iteration_state, overall, agent_settings):
+            needs_more_iterations = True
+            # Increment iteration counter for next round
+            iteration_state["current"] = iteration_state.get("current", 1) + 1
+            state["iteration"] = iteration_state
+
+            # Save updated state for next iteration
+            save_state(plan_path, state)
+
+            current = iteration_state["current"] - 1  # Display the just-completed iteration
+            max_iter = iteration_state["max"]
+            remaining = max_iter - current
+
+            out["decision"] = "block"
+            out["reason"] = (
+                f"CC-Native plan review iteration {current}/{max_iter} verdict = {overall.upper()}.\n\n"
+                f"REVISION REQUIRED: Address the issues identified above.\n"
+                f"Revise the plan in place, then attempt ExitPlanMode again.\n"
+                f"({remaining} revision{'s' if remaining != 1 else ''} remaining)"
+            )
+        else:
+            # Final iteration - save state and proceed normally
+            save_state(plan_path, state)
+
+    # Standard blocking (only if not already blocked by iteration)
+    if should_block and not needs_more_iterations:
         out["decision"] = "block"
         out["reason"] = (
             "CC-Native plan review verdict = FAIL. Do NOT start implementation yet. "
@@ -828,7 +505,7 @@ def main() -> int:
             "then present an updated plan."
         )
 
-    mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review")
+    mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review", iteration_state)
     print(json.dumps(out, ensure_ascii=False))
     return 0
 

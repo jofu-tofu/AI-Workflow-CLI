@@ -151,18 +151,81 @@ def is_plan_already_reviewed(session_id: str, plan_hash: str) -> bool:
         return False
 
 
-def mark_plan_reviewed(session_id: str, plan_hash: str, hook_name: str = "cc-native") -> None:
-    """Mark this plan as reviewed (stores hash in marker file)."""
+def mark_plan_reviewed(
+    session_id: str,
+    plan_hash: str,
+    hook_name: str = "cc-native",
+    iteration_state: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Mark this plan as reviewed (stores hash in marker file).
+
+    Args:
+        session_id: The session identifier
+        plan_hash: Hash of the plan content
+        hook_name: Name of the hook (for logging)
+        iteration_state: Optional iteration state dict with current, max, verdict info
+    """
     marker = get_review_marker_path(session_id)
     try:
-        data = {
+        data: Dict[str, Any] = {
             "plan_hash": plan_hash,
             "reviewed_at": datetime.now().isoformat(),
         }
+
+        # Include iteration info if provided
+        if iteration_state:
+            data["iteration"] = {
+                "current": iteration_state.get("current", 1),
+                "max": iteration_state.get("max", 1),
+                "complexity": iteration_state.get("complexity", "unknown"),
+            }
+            # Include latest verdict from history if available
+            history = iteration_state.get("history", [])
+            if history:
+                data["iteration"]["latest_verdict"] = history[-1].get("verdict", "unknown")
+
         marker.write_text(json.dumps(data), encoding="utf-8")
-        eprint(f"[{hook_name}] Created review marker: {marker} (hash: {plan_hash})")
+        iter_info = f" (iteration {data.get('iteration', {}).get('current', '?')}/{data.get('iteration', {}).get('max', '?')})" if iteration_state else ""
+        eprint(f"[{hook_name}] Created review marker: {marker} (hash: {plan_hash}){iter_info}")
     except Exception as e:
         eprint(f"[{hook_name}] Warning: failed to create review marker: {e}")
+
+
+# ---------------------------
+# Questions offered state
+# ---------------------------
+
+def get_questions_marker_path(session_id: str) -> Path:
+    """Get path to questions-offered marker file for this session."""
+    safe_id = re.sub(r'[^a-zA-Z0-9_-]', '_', session_id)[:32]
+    return Path(tempfile.gettempdir()) / f"cc-native-questions-offered-{safe_id}.json"
+
+
+def was_questions_offered(session_id: str) -> bool:
+    """Check if clarifying questions were already offered this session.
+
+    Returns False on any error (fail-safe: allow feature to work).
+    """
+    try:
+        marker = get_questions_marker_path(session_id)
+        return marker.exists()
+    except Exception:
+        return False
+
+
+def mark_questions_offered(session_id: str) -> bool:
+    """Mark that questions were offered. Returns True on success.
+
+    Only stores timestamp, no user data. Returns False on error.
+    """
+    try:
+        marker = get_questions_marker_path(session_id)
+        data = {"offered_at": datetime.now().isoformat()}
+        marker.write_text(json.dumps(data), encoding="utf-8")
+        return True
+    except Exception as e:
+        eprint(f"[utils] Failed to write questions marker: {e}")
+        return False
 
 
 # ---------------------------
@@ -248,6 +311,62 @@ def find_plan_file() -> Optional[str]:
         return None
     plan_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return str(plan_files[0])
+
+
+def get_state_path_from_plan(plan_path: str) -> Path:
+    """Derive state file path from plan file path.
+
+    The state file is stored adjacent to the plan file with a .state.json extension.
+    This prevents state loss when session IDs change or temp files are cleaned up.
+
+    Example: ~/.claude/plans/foo.md -> ~/.claude/plans/foo.state.json
+    """
+    plan_file = Path(plan_path)
+    return plan_file.with_suffix('.state.json')
+
+
+def load_state(plan_path: str) -> Optional[Dict[str, Any]]:
+    """Load state file for this plan if it exists."""
+    state_file = get_state_path_from_plan(plan_path)
+
+    if not state_file.exists():
+        return None
+
+    try:
+        return json.loads(state_file.read_text(encoding="utf-8"))
+    except Exception as e:
+        eprint(f"[utils] Failed to read state file: {e}")
+        return None
+
+
+def save_state(plan_path: str, state: Dict[str, Any]) -> bool:
+    """Save state file for this plan.
+
+    Returns True on success, False on failure.
+    """
+    state_file = get_state_path_from_plan(plan_path)
+    try:
+        state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        return True
+    except Exception as e:
+        eprint(f"[utils] Failed to save state file: {e}")
+        return False
+
+
+def delete_state(plan_path: str) -> bool:
+    """Delete state file after successful archive.
+
+    Returns True if deleted or didn't exist, False on error.
+    """
+    state_file = get_state_path_from_plan(plan_path)
+    try:
+        if state_file.exists():
+            state_file.unlink()
+            eprint(f"[utils] Deleted state file: {state_file}")
+        return True
+    except Exception as e:
+        eprint(f"[utils] Warning: failed to delete state file: {e}")
+        return False
 
 
 def format_review_markdown(
@@ -511,26 +630,42 @@ def write_combined_artifacts(
     result: CombinedReviewResult,
     payload: Dict[str, Any],
     settings: Optional[Dict[str, Any]] = None,
+    task_folder: Optional[str] = None,
 ) -> Path:
     """Write combined review artifacts to task-centric folder structure.
 
-    Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}-{HHMMSS}/reviews/
+    Output: {task_folder}/reviews/ (if task_folder provided)
+            or _output/cc-native/plans/{YYYY-MM-DD}/{slug}/reviews/ (fallback)
+
+    Args:
+        base: Project base directory
+        plan: Plan content
+        result: Combined review result
+        payload: Hook payload
+        settings: Display settings
+        task_folder: Optional explicit task folder path from state file
     """
-    ts = now_local()
-    date_folder = ts.strftime("%Y-%m-%d")
-    time_part = ts.strftime("%H%M%S")
-
-    # Extract task slug from plan title
-    title = extract_plan_title(plan)
-    if title:
-        slug = sanitize_title(title.lower())
+    if task_folder:
+        # Use provided task folder (ensures review and archive use same location)
+        out_dir = Path(task_folder) / "reviews"
+        eprint(f"[utils] Using task_folder from state: {out_dir}")
     else:
-        sid = sanitize_filename(str(payload.get("session_id", "unknown")))
-        slug = f"session-{sid}"
+        # Fallback: generate folder (backwards compatibility)
+        ts = now_local()
+        date_folder = ts.strftime("%Y-%m-%d")
 
-    # Build task-centric path: plans/{date}/{slug}-{time}/reviews/
-    task_folder = f"{slug}-{time_part}"
-    out_dir = base / "_output" / "cc-native" / "plans" / date_folder / task_folder / "reviews"
+        # Extract task slug from plan title
+        title = extract_plan_title(plan)
+        if title:
+            slug = sanitize_title(title.lower())
+        else:
+            sid = sanitize_filename(str(payload.get("session_id", "unknown")))
+            slug = f"session-{sid}"
+
+        # Build task-centric path: plans/{date}/{slug}/reviews/
+        out_dir = base / "_output" / "cc-native" / "plans" / date_folder / slug / "reviews"
+        eprint(f"[utils] Generated task folder: {out_dir}")
+
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Write combined JSON (simplified filename since folder provides context)
