@@ -1,3 +1,4 @@
+import {mergeArraysWithDedup, mergeConfigByEventType} from './generic-merge.js'
 import type {WindsurfHookCommand, WindsurfHookEventType, WindsurfHooks, WindsurfHooksConfig} from './windsurf-hooks-types.js'
 
 /**
@@ -10,32 +11,6 @@ function areHookCommandsEqual(a: WindsurfHookCommand, b: WindsurfHookCommand): b
     a.show_output === b.show_output &&
     a.once === b.once
   )
-}
-
-/**
- * Merge hook commands for a single event type
- * Deduplicates based on command configuration
- *
- * @param existing - Existing hook commands
- * @param template - Template hook commands to merge
- * @returns Merged array of hook commands
- */
-function mergeHookCommands(
-  existing: WindsurfHookCommand[],
-  template: WindsurfHookCommand[],
-): WindsurfHookCommand[] {
-  const merged = [...existing]
-
-  for (const templateCommand of template) {
-    // Check if equivalent command already exists
-    const isDuplicate = merged.some((existingCommand) => areHookCommandsEqual(existingCommand, templateCommand))
-
-    if (!isDuplicate) {
-      merged.push(templateCommand)
-    }
-  }
-
-  return merged
 }
 
 /**
@@ -55,33 +30,12 @@ export function mergeWindsurfHooksConfig(
   existing: undefined | WindsurfHooksConfig,
   template: undefined | WindsurfHooksConfig,
 ): WindsurfHooksConfig {
-  // If no template hooks, return existing (or empty object)
-  if (!template || Object.keys(template).length === 0) {
-    return existing || {}
-  }
-
-  // If no existing hooks, return template
-  if (!existing || Object.keys(existing).length === 0) {
-    return template
-  }
-
-  const merged: WindsurfHooksConfig = {}
-
-  // Get all unique event types from both configurations
-  const allEventTypes = new Set<WindsurfHookEventType>([
-    ...(Object.keys(existing) as WindsurfHookEventType[]),
-    ...(Object.keys(template) as WindsurfHookEventType[]),
-  ])
-
-  // Merge each event type
-  for (const eventType of allEventTypes) {
-    const existingCommands = existing[eventType] || []
-    const templateCommands = template[eventType] || []
-
-    merged[eventType] = mergeHookCommands(existingCommands, templateCommands)
-  }
-
-  return merged
+  return mergeConfigByEventType<WindsurfHookEventType, WindsurfHookCommand, WindsurfHooksConfig>(
+    existing,
+    template,
+    (existingCommands, templateCommands) =>
+      mergeArraysWithDedup(existingCommands, templateCommands, areHookCommandsEqual),
+  )
 }
 
 /**

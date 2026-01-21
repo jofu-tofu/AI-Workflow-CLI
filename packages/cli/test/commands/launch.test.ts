@@ -201,15 +201,16 @@ describe('launch command', () => {
     it('implementation handles --new flag', () => {
       const source = LaunchCommand.prototype.run.toString()
       expect(source).to.include('flags.new')
-      expect(source).to.include('launchNewTerminal')
+      // Verifies the run method uses launchTerminal utility (imported from lib/terminal.ts)
+      expect(source).to.include('launchTerminal')
     })
 
     it('implementation has cross-platform terminal launching', () => {
-      // Check that the command has private methods for each platform
-      expect(LaunchCommand.prototype).to.have.property('launchNewTerminal')
-      expect(LaunchCommand.prototype).to.have.property('launchWindowsTerminal')
-      expect(LaunchCommand.prototype).to.have.property('launchMacTerminal')
-      expect(LaunchCommand.prototype).to.have.property('launchLinuxTerminal')
+      // Cross-platform terminal launching is now handled by shared utility in lib/terminal.ts
+      // Verify that the run method calls the shared launchTerminal function
+      const source = LaunchCommand.prototype.run.toString()
+      expect(source).to.include('launchTerminal')
+      // The platform-specific logic is encapsulated in lib/terminal.ts
     })
   })
 })
