@@ -76,15 +76,19 @@ def _parse_claude_output(raw: str) -> Optional[Dict[str, Any]]:
         result = json.loads(raw)
         if isinstance(result, dict):
             if "structured_output" in result:
+                eprint("[orchestrator:parse] Found structured_output in root dict")
                 return result["structured_output"]
             if result.get("type") == "assistant":
                 message = result.get("message", {})
                 content = message.get("content", [])
                 for item in content:
                     if isinstance(item, dict) and item.get("name") == "StructuredOutput":
+                        eprint("[orchestrator:parse] Found StructuredOutput in assistant message content")
                         return item.get("input", {})
+                eprint("[orchestrator:parse] Assistant message found but no StructuredOutput tool use in content")
         elif isinstance(result, list):
-            for event in result:
+            eprint(f"[orchestrator:parse] Received list of {len(result)} events, searching for assistant message")
+            for i, event in enumerate(result):
                 if not isinstance(event, dict):
                     continue
                 if event.get("type") == "assistant":
@@ -92,11 +96,16 @@ def _parse_claude_output(raw: str) -> Optional[Dict[str, Any]]:
                     content = message.get("content", [])
                     for item in content:
                         if isinstance(item, dict) and item.get("name") == "StructuredOutput":
+                            eprint(f"[orchestrator:parse] Found StructuredOutput in event[{i}] assistant message")
                             return item.get("input", {})
-    except json.JSONDecodeError:
-        pass
-    except Exception:
-        pass
+            eprint("[orchestrator:parse] No StructuredOutput found in any assistant message in event list")
+    except json.JSONDecodeError as e:
+        eprint(f"[orchestrator:parse] JSON decode error: {e}")
+    except Exception as e:
+        eprint(f"[orchestrator:parse] Unexpected error during structured parsing: {e}")
+
+    # Fallback to heuristic extraction
+    eprint("[orchestrator:parse] No structured output found, falling back to heuristic JSON extraction")
     return parse_json_maybe(raw)
 
 

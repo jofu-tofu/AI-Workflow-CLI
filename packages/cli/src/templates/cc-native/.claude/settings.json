@@ -12,6 +12,16 @@
                 ]
             },
             {
+                "matcher": "Write",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python _cc-native/hooks/add_plan_context.py",
+                        "timeout": 5000
+                    }
+                ]
+            },
+            {
                 "matcher": "ExitPlanMode",
                 "hooks": [
                     {

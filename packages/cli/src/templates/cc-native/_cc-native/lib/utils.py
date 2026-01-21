@@ -232,39 +232,73 @@ def mark_questions_offered(session_id: str) -> bool:
 # JSON parsing
 # ---------------------------
 
-def parse_json_maybe(text: str) -> Optional[Dict[str, Any]]:
-    """Try strict JSON parse. If that fails, attempt to extract the first {...} block."""
+def parse_json_maybe(text: str, require_fields: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+    """Try strict JSON parse. If that fails, attempt to extract the first {...} block.
+
+    Args:
+        text: Raw text that may contain JSON
+        require_fields: Optional list of field names to check for in parsed result.
+                       If provided and fields are missing, a warning is logged but
+                       the object is still returned.
+
+    Returns:
+        Parsed dict or None if parsing failed entirely.
+    """
     text = text.strip()
     if not text:
         return None
+
+    obj: Optional[Dict[str, Any]] = None
+    parse_method = None
+
     try:
-        obj = json.loads(text)
-        if isinstance(obj, dict):
-            return obj
-        return None
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            obj = parsed
+            parse_method = "strict"
     except Exception:
         pass
 
     # Heuristic: try to extract a JSON object substring
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1 and end > start:
-        candidate = text[start : end + 1]
-        try:
-            obj = json.loads(candidate)
-            if isinstance(obj, dict):
-                return obj
-        except Exception:
-            return None
-    return None
+    if obj is None:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            candidate = text[start : end + 1]
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, dict):
+                    obj = parsed
+                    parse_method = "heuristic"
+                    eprint(f"[parse] Used heuristic extraction (chars {start}-{end})")
+            except Exception:
+                eprint(f"[parse] Heuristic extraction failed for candidate at chars {start}-{end}")
+                return None
+
+    # If we parsed something, validate required fields
+    if obj and require_fields:
+        missing = [f for f in require_fields if f not in obj or not obj[f]]
+        if missing:
+            eprint(f"[parse] WARNING: parsed JSON ({parse_method}) missing/empty fields: {missing}")
+            eprint(f"[parse] Keys present: {list(obj.keys())}")
+
+    return obj
 
 
 def coerce_to_review(obj: Optional[Dict[str, Any]], default_fix_msg: str = "Retry or check configuration.") -> Tuple[bool, str, Dict[str, Any]]:
-    """Validate/normalize to our expected structure."""
+    """Validate/normalize to our expected structure.
+
+    Returns:
+        Tuple of (ok, verdict, normalized_data).
+        normalized_data includes 'summary_source' field: 'reviewer' if summary was provided,
+        'default' if it was defaulted due to missing/empty summary.
+    """
     if not obj:
+        eprint("[coerce] WARNING: No object provided to coerce_to_review")
         return False, "error", {
             "verdict": "fail",
             "summary": "No structured output returned.",
+            "summary_source": "default",
             "issues": [{"severity": "high", "category": "tooling", "issue": "Reviewer returned no JSON.", "suggested_fix": default_fix_msg}],
             "missing_sections": [],
             "questions": [],
@@ -272,11 +306,20 @@ def coerce_to_review(obj: Optional[Dict[str, Any]], default_fix_msg: str = "Retr
 
     verdict = obj.get("verdict")
     if verdict not in ("pass", "warn", "fail"):
+        eprint(f"[coerce] WARNING: Invalid or missing verdict '{verdict}', defaulting to 'warn'")
         verdict = "warn"
+
+    # Log when fields are being defaulted
+    summary_raw = str(obj.get("summary", "")).strip()
+    if not summary_raw:
+        eprint("[coerce] WARNING: summary missing or empty from parsed output, using default")
+    if not obj.get("issues"):
+        eprint("[coerce] INFO: issues array empty or missing")
 
     norm = {
         "verdict": verdict,
-        "summary": str(obj.get("summary", "")).strip() or "No summary provided.",
+        "summary": summary_raw or "No summary provided.",
+        "summary_source": "reviewer" if summary_raw else "default",
         "issues": obj.get("issues") if isinstance(obj.get("issues"), list) else [],
         "missing_sections": obj.get("missing_sections") if isinstance(obj.get("missing_sections"), list) else [],
         "questions": obj.get("questions") if isinstance(obj.get("questions"), list) else [],
@@ -393,7 +436,11 @@ def format_review_markdown(
         lines.append(f"- ok: `{r.ok}`")
         lines.append(f"- verdict: `{r.verdict}`")
         if r.data:
-            lines.append(f"- summary: {r.data.get('summary','').strip()}")
+            summary = r.data.get('summary', '').strip()
+            if r.data.get('summary_source') == 'default':
+                lines.append(f"- summary: ⚠️ {summary} *(reviewer did not return summary)*")
+            else:
+                lines.append(f"- summary: {summary}")
             issues = r.data.get("issues", [])
             if issues:
                 lines.append("\n### Issues")
@@ -501,7 +548,11 @@ def format_combined_markdown(
             lines.append(f"### {name.title()}\n")
             lines.append(f"- verdict: `{r.verdict}`")
             if r.data:
-                lines.append(f"- summary: {r.data.get('summary', '').strip()}")
+                summary = r.data.get('summary', '').strip()
+                if r.data.get('summary_source') == 'default':
+                    lines.append(f"- summary: ⚠️ {summary} *(reviewer did not return summary)*")
+                else:
+                    lines.append(f"- summary: {summary}")
                 _append_review_details(lines, r.data, max_issues, max_missing, max_questions)
             elif r.err:
                 lines.append(f"- error: {r.err}")
@@ -530,7 +581,11 @@ def format_combined_markdown(
             lines.append(f"### {name}\n")
             lines.append(f"- verdict: `{r.verdict}`")
             if r.data:
-                lines.append(f"- summary: {r.data.get('summary', '').strip()}")
+                summary = r.data.get('summary', '').strip()
+                if r.data.get('summary_source') == 'default':
+                    lines.append(f"- summary: ⚠️ {summary} *(reviewer did not return summary)*")
+                else:
+                    lines.append(f"- summary: {summary}")
                 _append_review_details(lines, r.data, max_issues, max_missing, max_questions)
             elif r.err:
                 lines.append(f"- error: {r.err}")
@@ -591,6 +646,7 @@ def build_combined_json(result: CombinedReviewResult) -> Dict[str, Any]:
             output["cliReviewers"][name] = {
                 "verdict": r.verdict,
                 "summary": r.data.get("summary") if r.data else None,
+                "summarySource": r.data.get("summary_source") if r.data else None,
                 "issues": r.data.get("issues", []) if r.data else [],
                 "ok": r.ok,
                 "error": r.err if r.err else None,
@@ -614,6 +670,7 @@ def build_combined_json(result: CombinedReviewResult) -> Dict[str, Any]:
             output["agents"][name] = {
                 "verdict": r.verdict,
                 "summary": r.data.get("summary") if r.data else None,
+                "summarySource": r.data.get("summary_source") if r.data else None,
                 "issues": r.data.get("issues", []) if r.data else [],
                 "missing_sections": r.data.get("missing_sections", []) if r.data else [],
                 "questions": r.data.get("questions", []) if r.data else [],

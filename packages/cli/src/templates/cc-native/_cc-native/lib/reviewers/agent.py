@@ -37,15 +37,19 @@ def _parse_claude_output(raw: str) -> Optional[Dict[str, Any]]:
         result = json.loads(raw)
         if isinstance(result, dict):
             if "structured_output" in result:
+                eprint("[parse] Found structured_output in root dict")
                 return result["structured_output"]
             if result.get("type") == "assistant":
                 message = result.get("message", {})
                 content = message.get("content", [])
                 for item in content:
                     if isinstance(item, dict) and item.get("name") == "StructuredOutput":
+                        eprint("[parse] Found StructuredOutput in assistant message content")
                         return item.get("input", {})
+                eprint("[parse] Assistant message found but no StructuredOutput tool use in content")
         elif isinstance(result, list):
-            for event in result:
+            eprint(f"[parse] Received list of {len(result)} events, searching for assistant message")
+            for i, event in enumerate(result):
                 if not isinstance(event, dict):
                     continue
                 if event.get("type") == "assistant":
@@ -53,12 +57,17 @@ def _parse_claude_output(raw: str) -> Optional[Dict[str, Any]]:
                     content = message.get("content", [])
                     for item in content:
                         if isinstance(item, dict) and item.get("name") == "StructuredOutput":
+                            eprint(f"[parse] Found StructuredOutput in event[{i}] assistant message")
                             return item.get("input", {})
-    except json.JSONDecodeError:
-        pass
-    except Exception:
-        pass
-    return parse_json_maybe(raw)
+            eprint("[parse] No StructuredOutput found in any assistant message in event list")
+    except json.JSONDecodeError as e:
+        eprint(f"[parse] JSON decode error: {e}")
+    except Exception as e:
+        eprint(f"[parse] Unexpected error during structured parsing: {e}")
+
+    # Fallback to heuristic extraction with required field validation
+    eprint("[parse] No structured output found, falling back to heuristic JSON extraction")
+    return parse_json_maybe(raw, require_fields=["verdict", "summary"])
 
 
 def run_agent_review(

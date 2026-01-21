@@ -1,6 +1,8 @@
 import {promises as fs} from 'node:fs'
 import {join} from 'node:path'
 
+import {mergeTemplateContent} from './template-merger.js'
+
 /**
  * Configuration for template installation
  */
@@ -51,6 +53,10 @@ export interface TemplateInstallationStatus {
 export interface InstallationResult {
   /** List of folder names that were installed (for gitignore) */
   installedFolders: string[]
+  /** Number of files that were merged into existing folders */
+  mergedFileCount: number
+  /** List of folder names that had content merged */
+  mergedFolders: string[]
   /** List of folder names that were skipped (already exist) */
   skippedFolders: string[]
   /** Absolute path to the template that was installed */
@@ -224,6 +230,8 @@ export async function installTemplate(
 
   const installedFolders: string[] = []
   const skippedFolders: string[] = []
+  const mergedFolders: string[] = []
+  let mergedFileCount = 0
 
   // Install non-dot folders (skip if already exist and skipExisting is true)
   const nonDotInstalls = nonDotFolders.map(async (folder) => {
@@ -247,29 +255,46 @@ export async function installTemplate(
     }
   }
 
-  // Install matching IDE folders (skip if already exist and skipExisting is true)
+  // Install matching IDE folders
+  // If folder exists, merge content recursively by looking for method name folders
   const ideInstalls = ides.map(async (ide) => {
     const folderName = dotFolders.get(ide)
     if (folderName) {
       const srcPath = join(templatePath, folderName)
       const destPath = join(targetDir, folderName)
 
-      if (skipExisting && (await pathExists(destPath))) {
-        return {folder: folderName, skipped: true}
+      if (await pathExists(destPath)) {
+        if (skipExisting) {
+          // Folder exists - merge template content by finding method-named folders
+          const mergeResult = await mergeTemplateContent(srcPath, destPath, templateName)
+          return {
+            folder: folderName,
+            skipped: false,
+            merged: true,
+            mergedFiles: mergeResult.copiedFiles.length,
+          }
+        }
+
+        // skipExisting is false, so overwrite
+        await copyDir(srcPath, destPath)
+        return {folder: folderName, skipped: false, merged: false, mergedFiles: 0}
       }
 
       await copyDir(srcPath, destPath)
-      return {folder: folderName, skipped: false}
+      return {folder: folderName, skipped: false, merged: false, mergedFiles: 0}
     }
 
     return null
   })
 
   const ideResults = (await Promise.all(ideInstalls)).filter(
-    (result): result is {folder: string; skipped: boolean} => result !== null,
+    (result): result is {folder: string; merged: boolean; mergedFiles: number; skipped: boolean} => result !== null,
   )
   for (const result of ideResults) {
-    if (result.skipped) {
+    if (result.merged) {
+      mergedFolders.push(result.folder)
+      mergedFileCount += result.mergedFiles
+    } else if (result.skipped) {
       skippedFolders.push(result.folder)
     } else {
       installedFolders.push(result.folder)
@@ -279,6 +304,8 @@ export async function installTemplate(
   return {
     installedFolders,
     skippedFolders,
+    mergedFolders,
+    mergedFileCount,
     templatePath,
   }
 }

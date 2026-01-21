@@ -220,6 +220,10 @@ export default class Init extends BaseCommand {
         this.logSuccess(`✓ Installed: ${result.installedFolders.join(', ')}`)
       }
 
+      if (result.mergedFolders.length > 0) {
+        this.logSuccess(`✓ Merged content into: ${result.mergedFolders.join(', ')} (${result.mergedFileCount} files)`)
+      }
+
       if (result.skippedFolders.length > 0) {
         this.logInfo(`✓ Skipped (already exist): ${result.skippedFolders.join(', ')}`)
       }

@@ -36,12 +36,20 @@ echo $AIW_DIR
 
 ### Step 3: Run Initial Test
 
+Tests must be run from the `packages/cli/` directory using npm (not bun):
+
 ```bash
-bun test
+cd packages/cli
+npm test
 ```
 
-**Success:** Tests run without path errors
-**Failure:** AIW_DIR not set correctly - repeat Step 1
+**Success:** All tests pass (577 tests)
+**Failure:** If tests fail with path errors, AIW_DIR not set correctly - repeat Step 1
+
+> **Note:** This project uses Mocha via npm scripts. Running `bun test` from the repo root will fail because:
+> - Tests expect to run from `packages/cli/` directory
+> - The test runner is Mocha, not Bun's built-in test framework
+> - Tests require a build step (`test:build`) that compiles TypeScript to `dist-test/`
 
 ## How AIW_DIR Works
 
@@ -91,23 +99,28 @@ This repository includes a `.claude/` directory with project-specific settings. 
 
 ## Running Tests
 
+All test commands must be run from `packages/cli/`:
+
 ```bash
-# All tests
-bun test
-
-# Specific file
-bun test path/to/test-file.test.ts
-
-# Watch mode (for bun)
-bun test --watch
-
-# Watch mode (npm scripts in packages/cli)
 cd packages/cli
+
+# All tests (builds first, then runs Mocha)
+npm test
+
+# Unit tests only
+npm run test:unit
+
+# Integration tests only
+npm run test:integration
+
+# Watch mode (re-runs on file changes)
 npm run test:watch
 
-# With coverage (if configured)
-bun test --coverage
+# With coverage
+npm run test:coverage
 ```
+
+**Important:** Do NOT use `bun test` from the repo root - it will fail.
 
 ## Watch Mode Development
 
@@ -197,7 +210,7 @@ Use this section to resolve common development issues.
 Complete all items before deploying to production:
 
 **Pre-Deployment Verification:**
-- [ ] All tests passing: `bun test` shows no failures
+- [ ] All tests passing: `npm test` (from `packages/cli/`) shows no failures
 - [ ] Code review approved by team member
 - [ ] Documentation updated to reflect changes
 - [ ] No debug code or console.logs in production code
@@ -224,10 +237,10 @@ Complete all items before deploying to production:
 Development environment is correctly configured when:
 
 ✅ AIW_DIR environment variable is set and verified
-✅ `bun test` runs without path-related errors
+✅ `npm test` (from `packages/cli/`) runs without errors
+✅ All 577 tests pass
 ✅ Files are created in worktree, not in global .aiw directory
 ✅ Changes can be made without affecting production environment
-✅ All tests pass consistently
 
 ## Development Best Practices
 

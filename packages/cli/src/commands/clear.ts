@@ -50,6 +50,120 @@ async function isDirectoryEmpty(dir: string): Promise<boolean> {
 }
 
 /**
+ * Check if a JSON settings file is empty or effectively empty.
+ * Returns true if the file doesn't exist, can't be parsed, or contains an empty object.
+ *
+ * @param filePath - Path to the JSON settings file
+ * @returns True if file is empty or doesn't exist
+ */
+async function isSettingsFileEmpty(filePath: string): Promise<boolean> {
+  try {
+    const content = await fs.readFile(filePath, 'utf8')
+    const trimmed = content.trim()
+    if (trimmed === '' || trimmed === '{}') {
+      return true
+    }
+
+    const parsed = JSON.parse(content)
+    // Check if it's an empty object
+    return typeof parsed === 'object' && parsed !== null && Object.keys(parsed).length === 0
+  } catch {
+    // File doesn't exist or can't be parsed - consider it empty
+    return true
+  }
+}
+
+/**
+ * Check if an IDE folder should be fully deleted.
+ * Returns true if:
+ * 1. The settings file is empty (or doesn't exist)
+ * 2. All method subfolders are empty (or don't exist)
+ * Backup files (e.g., settings.json.backup) are ignored.
+ *
+ * @param targetDir - Directory containing the IDE folder
+ * @param ideFolder - IDE folder configuration
+ * @param ideFolder.methodSubfolders - List of method subfolder names to check
+ * @param ideFolder.root - Root folder name (e.g., '.claude')
+ * @param ideFolder.settingsFile - Settings file name (e.g., 'settings.json')
+ * @returns True if the IDE folder should be fully deleted
+ */
+async function shouldDeleteIdeFolder(
+  targetDir: string,
+  ideFolder: {methodSubfolders: string[]; root: string; settingsFile: string},
+): Promise<boolean> {
+  const ideFolderPath = join(targetDir, ideFolder.root)
+
+  // Check if IDE folder exists at all
+  try {
+    const stat = await fs.stat(ideFolderPath)
+    if (!stat.isDirectory()) {
+      return false
+    }
+  } catch {
+    // Folder doesn't exist - nothing to delete
+    return false
+  }
+
+  // Check if settings file is empty
+  const settingsPath = join(ideFolderPath, ideFolder.settingsFile)
+  const settingsEmpty = await isSettingsFileEmpty(settingsPath)
+  if (!settingsEmpty) {
+    return false
+  }
+
+  // Check if all method subfolders are empty (in parallel)
+  const subfolderChecks = await Promise.all(
+    ideFolder.methodSubfolders.map(async (subfolder) => {
+      const subfolderPath = join(ideFolderPath, subfolder)
+      return isDirectoryEmpty(subfolderPath)
+    }),
+  )
+  if (subfolderChecks.some((isEmpty) => !isEmpty)) {
+    return false
+  }
+
+  // Check the IDE folder itself - ignore backup files and check for other meaningful content
+  try {
+    const entries = await fs.readdir(ideFolderPath)
+    // Filter entries to check (skip backup files, settings file, and known subfolders)
+    const entriesToCheck = entries.filter((entry) => {
+      if (entry.endsWith('.backup')) return false
+      if (entry === ideFolder.settingsFile) return false
+      if (ideFolder.methodSubfolders.includes(entry)) return false
+      return true
+    })
+
+    // Check all entries in parallel
+    const entryResults = await Promise.all(
+      entriesToCheck.map(async (entry) => {
+        const entryPath = join(ideFolderPath, entry)
+        try {
+          const stat = await fs.stat(entryPath)
+          if (stat.isDirectory()) {
+            return isDirectoryEmpty(entryPath)
+          }
+
+          // Non-backup file exists - don't delete the folder
+          return false
+        } catch {
+          // Can't stat entry - be safe and don't delete
+          return false
+        }
+      }),
+    )
+
+    // If any entry is not empty (or is a non-backup file), don't delete
+    if (entryResults.some((result) => !result)) {
+      return false
+    }
+  } catch {
+    return false
+  }
+
+  return true
+}
+
+/**
  * Remove a directory recursively.
  *
  * @param dir - Directory to remove
@@ -199,6 +313,8 @@ function cleanupGitignoreContent(content: string): string {
  *
  * @param targetDir - Directory containing the IDE folder
  * @param ideFolder - IDE folder configuration (e.g., IDE_FOLDERS.claude)
+ * @param ideFolder.root - Root folder name (e.g., '.claude')
+ * @param ideFolder.settingsFile - Settings file name (e.g., 'settings.json')
  * @param methodsToRemove - Method names to remove from settings
  */
 async function updateIdeSettings(
@@ -406,6 +522,85 @@ export default class ClearCommand extends BaseCommand {
         this.log('')
       }
 
+      // Check if IDE folders might be removed after clearing
+      // This happens when settings.json becomes empty and all subfolders are empty
+      const checkIdeRemoval = async (ideFolder: typeof IDE_FOLDERS.claude): Promise<boolean> => {
+        const idePath = join(targetDir, ideFolder.root)
+        // Check if IDE folder exists
+        try {
+          const stat = await fs.stat(idePath)
+          if (!stat.isDirectory()) return false
+        } catch {
+          return false
+        }
+
+        // Count existing method folders vs folders being deleted (in parallel)
+        const subfolderResults = await Promise.all(
+          ideFolder.methodSubfolders.map(async (subfolder) => {
+            const subfolderPath = join(idePath, subfolder)
+            try {
+              const entries = await fs.readdir(subfolderPath, {withFileTypes: true})
+              const methodDirs = entries.filter((e) => e.isDirectory())
+              const beingDeleted = methodDirs.filter((entry) => {
+                const fullPath = join(subfolderPath, entry.name)
+                return ideMethodFolders.includes(fullPath)
+              }).length
+              return {beingDeleted, total: methodDirs.length}
+            } catch {
+              // Subfolder doesn't exist
+              return {beingDeleted: 0, total: 0}
+            }
+          }),
+        )
+
+        const totalMethodFolders = subfolderResults.reduce((sum, r) => sum + r.total, 0)
+        const foldersBeingDeleted = subfolderResults.reduce((sum, r) => sum + r.beingDeleted, 0)
+
+        // If all method folders are being deleted, check if settings would be empty
+        if (totalMethodFolders > 0 && totalMethodFolders === foldersBeingDeleted) {
+          // Check if settings file would become empty after removing methods
+          const settingsPath = join(idePath, ideFolder.settingsFile)
+          try {
+            const content = await fs.readFile(settingsPath, 'utf8')
+            const settings = JSON.parse(content)
+            // Remove method keys that would be removed
+            for (const method of methodsToRemove) {
+              if (method in settings) {
+                delete settings[method]
+              }
+            }
+
+            // Remove hooks that would be empty
+            if (settings.hooks && typeof settings.hooks === 'object') {
+              // Simplified check - if hooks only contains method-related entries
+              delete settings.hooks
+            }
+
+            return Object.keys(settings).length === 0
+          } catch {
+            // Settings file doesn't exist or is invalid - would be considered empty
+            return true
+          }
+        }
+
+        return false
+      }
+
+      const [willClaudeFolderBeEmpty, willWindsurfFolderBeEmpty] = await Promise.all([
+        checkIdeRemoval(IDE_FOLDERS.claude),
+        checkIdeRemoval(IDE_FOLDERS.windsurf),
+      ])
+
+      if (willClaudeFolderBeEmpty) {
+        this.logInfo(`${IDE_FOLDERS.claude.root}/ folder will be removed (will be empty)`)
+        this.log('')
+      }
+
+      if (willWindsurfFolderBeEmpty) {
+        this.logInfo(`${IDE_FOLDERS.windsurf.root}/ folder will be removed (will be empty)`)
+        this.log('')
+      }
+
       // Dry run - just show what would happen
       if (flags['dry-run']) {
         this.logInfo('Dry run complete. No files or folders were deleted.')
@@ -489,6 +684,36 @@ export default class ClearCommand extends BaseCommand {
         }
       }
 
+      // Check if IDE folders should be fully deleted (empty settings + empty subfolders)
+      let removedClaudeDir = false
+      let removedWindsurfDir = false
+
+      if (await shouldDeleteIdeFolder(targetDir, IDE_FOLDERS.claude)) {
+        const claudeDirPath = join(targetDir, IDE_FOLDERS.claude.root)
+        try {
+          await removeDirectory(claudeDirPath)
+          this.logDebug(`Removed empty ${IDE_FOLDERS.claude.root}/ folder`)
+          removedClaudeDir = true
+          // If we deleted the whole folder, the settings update message is misleading
+          updatedClaudeSettings = false
+        } catch {
+          // Folder can't be removed
+        }
+      }
+
+      if (await shouldDeleteIdeFolder(targetDir, IDE_FOLDERS.windsurf)) {
+        const windsurfDirPath = join(targetDir, IDE_FOLDERS.windsurf.root)
+        try {
+          await removeDirectory(windsurfDirPath)
+          this.logDebug(`Removed empty ${IDE_FOLDERS.windsurf.root}/ folder`)
+          removedWindsurfDir = true
+          // If we deleted the whole folder, the settings update message is misleading
+          updatedWindsurfSettings = false
+        } catch {
+          // Folder can't be removed
+        }
+      }
+
       // Report results
       this.log('')
       const parts: string[] = []
@@ -506,6 +731,14 @@ export default class ClearCommand extends BaseCommand {
 
       if (removedOutputDir) {
         parts.push(`${OUTPUT_FOLDER_NAME}/ folder`)
+      }
+
+      if (removedClaudeDir) {
+        parts.push(`${IDE_FOLDERS.claude.root}/ folder`)
+      }
+
+      if (removedWindsurfDir) {
+        parts.push(`${IDE_FOLDERS.windsurf.root}/ folder`)
       }
 
       this.logSuccess(`Cleared: ${parts.join(', ')}.`)

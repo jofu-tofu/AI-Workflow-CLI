@@ -152,5 +152,26 @@ describe('clear command', () => {
       expect(source).to.include('updatedClaudeSettings')
       expect(source).to.include('updatedWindsurfSettings')
     })
+
+    it('should check if IDE folders should be fully deleted', () => {
+      const source = ClearCommand.prototype.run.toString()
+      expect(source).to.include('shouldDeleteIdeFolder')
+    })
+
+    it('should track removal of .claude folder', () => {
+      const source = ClearCommand.prototype.run.toString()
+      expect(source).to.include('removedClaudeDir')
+    })
+
+    it('should track removal of .windsurf folder', () => {
+      const source = ClearCommand.prototype.run.toString()
+      expect(source).to.include('removedWindsurfDir')
+    })
+
+    it('should preview IDE folder removal in dry-run mode', () => {
+      const source = ClearCommand.prototype.run.toString()
+      expect(source).to.include('willClaudeFolderBeEmpty')
+      expect(source).to.include('willWindsurfFolderBeEmpty')
+    })
   })
 })

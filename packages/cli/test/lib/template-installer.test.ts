@@ -199,10 +199,16 @@ describe('Template Installer', () => {
 
       // Verify result structure
       expect(result).to.have.property('installedFolders')
+      expect(result).to.have.property('skippedFolders')
+      expect(result).to.have.property('mergedFolders')
+      expect(result).to.have.property('mergedFileCount')
       expect(result).to.have.property('templatePath')
 
       expect(result.installedFolders).to.be.an('array')
       expect(result.installedFolders.length).to.equal(4) // _bmad, GSR, .claude, .windsurf
+
+      expect(result.mergedFolders).to.be.an('array')
+      expect(result.mergedFileCount).to.be.a('number')
 
       expect(result.templatePath).to.equal(mockTemplateDir)
     })
@@ -223,6 +229,79 @@ describe('Template Installer', () => {
 
       const claudeSettings = await fs.readFile(join(testDir, '.claude', 'settings.json'), 'utf8')
       expect(claudeSettings).to.equal('claude settings')
+    })
+  })
+
+  describe('Content merging', () => {
+    it('should merge template content when IDE folder already exists', async () => {
+      // Create existing .claude folder with some content
+      await fs.mkdir(join(testDir, '.claude', 'commands'), {recursive: true})
+      await fs.writeFile(join(testDir, '.claude', 'commands', 'existing.md'), 'existing command', 'utf8')
+
+      // Create template with method-named folder structure
+      await fs.mkdir(join(mockTemplateDir, '.claude', 'commands', 'mock', 'agents'), {recursive: true})
+      await fs.writeFile(
+        join(mockTemplateDir, '.claude', 'commands', 'mock', 'agents', 'new-agent.md'),
+        'new agent content',
+        'utf8',
+      )
+
+      const result = await installTemplate({
+        templateName: 'mock',
+        targetDir: testDir,
+        ides: ['claude'],
+        username: 'TestUser',
+        projectName: 'test-project',
+        templatePath: mockTemplateDir,
+      })
+
+      // Should have merged content
+      expect(result.mergedFolders).to.include('.claude')
+      expect(result.mergedFileCount).to.be.greaterThan(0)
+
+      // Existing content should still be there
+      expect(await pathExists(join(testDir, '.claude', 'commands', 'existing.md'))).to.be.true
+
+      // New content should be merged
+      expect(await pathExists(join(testDir, '.claude', 'commands', 'mock', 'agents', 'new-agent.md'))).to.be.true
+
+      // Verify new content
+      const newAgentContent = await fs.readFile(
+        join(testDir, '.claude', 'commands', 'mock', 'agents', 'new-agent.md'),
+        'utf8',
+      )
+      expect(newAgentContent).to.equal('new agent content')
+    })
+
+    it('should not overwrite existing files when merging', async () => {
+      // Create existing .claude folder with a file that also exists in template
+      await fs.mkdir(join(testDir, '.claude', 'commands', 'mock'), {recursive: true})
+      await fs.writeFile(
+        join(testDir, '.claude', 'commands', 'mock', 'same-file.md'),
+        'original content',
+        'utf8',
+      )
+
+      // Create template with the same file
+      await fs.mkdir(join(mockTemplateDir, '.claude', 'commands', 'mock'), {recursive: true})
+      await fs.writeFile(
+        join(mockTemplateDir, '.claude', 'commands', 'mock', 'same-file.md'),
+        'template content',
+        'utf8',
+      )
+
+      await installTemplate({
+        templateName: 'mock',
+        targetDir: testDir,
+        ides: ['claude'],
+        username: 'TestUser',
+        projectName: 'test-project',
+        templatePath: mockTemplateDir,
+      })
+
+      // Original content should be preserved
+      const content = await fs.readFile(join(testDir, '.claude', 'commands', 'mock', 'same-file.md'), 'utf8')
+      expect(content).to.equal('original content')
     })
   })
 
