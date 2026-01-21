@@ -68,26 +68,32 @@ export default class CleanCommand extends BaseCommand {
         return
       }
 
-      // Collect contents from all folders
-      const allContents: {folder: string; items: {isDirectory: boolean; path: string}[]}[] = []
-      let totalItems = 0
-
-      for (const folder of outputFolders) {
-        const folderPath = join(targetDir, folder)
-        const stat = await fs.stat(folderPath).catch(() => null)
-
-        if (stat?.isDirectory()) {
-          const items = await this.getContents(folderPath)
-          if (items.length > 0) {
-            allContents.push({folder, items})
-            totalItems += items.length
+      // Collect contents from all folders (parallel stat and content retrieval)
+      const folderResults = await Promise.all(
+        outputFolders.map(async (folder) => {
+          const folderPath = join(targetDir, folder)
+          const stat = await fs.stat(folderPath).catch(() => null)
+          if (!stat?.isDirectory()) {
+            return {folder, items: [], exists: false}
           }
-        } else if (!flags.all) {
-          // Only show "does not exist" for single method mode
-          this.logInfo(`Output folder '${folder}' does not exist.`)
+
+          const items = await this.getContents(folderPath)
+          return {folder, items, exists: true}
+        }),
+      )
+
+      // Check for non-existent folder in single method mode
+      if (!flags.all) {
+        const result = folderResults[0]
+        if (result && !result.exists) {
+          this.logInfo(`Output folder '${result.folder}' does not exist.`)
           return
         }
       }
+
+      // Filter to folders with content
+      const allContents = folderResults.filter((r) => r.exists && r.items.length > 0)
+      const totalItems = allContents.reduce((sum, c) => sum + c.items.length, 0)
 
       if (totalItems === 0) {
         const msg = flags.all ? 'All output folders are empty.' : `Output folder '${outputFolders[0]}' is already empty.`
@@ -100,7 +106,7 @@ export default class CleanCommand extends BaseCommand {
       this.logInfo(`Found ${totalItems} item(s) in ${allContents.length} output folder(s):`)
       this.log('')
 
-      for (const {folder, items} of allContents) {
+      for (const {items} of allContents) {
         for (const item of items) {
           const relativePath = item.path.replace(targetDir + '\\', '').replace(targetDir + '/', '')
           const suffix = item.isDirectory ? '/' : ''
@@ -130,20 +136,22 @@ export default class CleanCommand extends BaseCommand {
         }
       }
 
-      // Delete all contents
-      let deletedCount = 0
-      for (const {items} of allContents) {
-        for (const item of items) {
+      // Delete all contents (parallel deletion with error tracking)
+      const allItems = allContents.flatMap((c) => c.items)
+      const deleteResults = await Promise.all(
+        allItems.map(async (item) => {
           try {
             await fs.rm(item.path, {recursive: true, force: true})
             this.logDebug(`Deleted: ${item.path}`)
-            deletedCount++
+            return {success: true, path: item.path}
           } catch (error) {
             const err = error as NodeJS.ErrnoException
             this.logWarning(`Failed to delete ${item.path}: ${err.message}`)
+            return {success: false, path: item.path}
           }
-        }
-      }
+        }),
+      )
+      const deletedCount = deleteResults.filter((r) => r.success).length
 
       this.log('')
       const firstFolder = allContents[0]

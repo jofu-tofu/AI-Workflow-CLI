@@ -2,7 +2,7 @@ import {promises as fs} from 'node:fs'
 import {homedir} from 'node:os'
 import {join} from 'node:path'
 
-import type {ClaudeSettings, SettingsFileType, SettingsLocation} from './claude-settings-types.js'
+import type {ClaudeSettings, SettingsLocation} from './claude-settings-types.js'
 
 /**
  * Discover Claude settings files in the hierarchy

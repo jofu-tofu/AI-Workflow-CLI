@@ -27,8 +27,7 @@ export default class LaunchCommand extends BaseCommand {
     '  1  General error - unexpected runtime failure\n' +
     '  2  Invalid usage - check your arguments and flags\n' +
     '  3  Environment error - CLI not found (install Claude Code from https://claude.ai/download or Codex from npm)'
-
-  static override examples = [
+static override examples = [
     '<%= config.bin %> <%= command.id %>',
     '<%= config.bin %> <%= command.id %> --codex  # Launch Codex with --yolo flag',
     '<%= config.bin %> <%= command.id %> -c  # Short form for --codex',
@@ -39,8 +38,7 @@ export default class LaunchCommand extends BaseCommand {
     '# Check exit code in Bash\n<%= config.bin %> <%= command.id %>\necho $?',
     '# Check exit code in PowerShell\n<%= config.bin %> <%= command.id %>\necho $LASTEXITCODE',
   ]
-
-  static override flags = {
+static override flags = {
     ...BaseCommand.baseFlags,
     codex: Flags.boolean({
       char: 'c',
@@ -59,7 +57,6 @@ export default class LaunchCommand extends BaseCommand {
 
     // Determine which CLI to launch
     const useCodex = flags.codex
-    const cliName = useCodex ? 'Codex' : 'Claude Code'
     const cliCommand = useCodex ? 'codex' : 'claude'
     const cliArgs = useCodex ? ['--yolo'] : ['--dangerously-skip-permissions']
     const launchFlag = useCodex ? '--codex' : ''
@@ -85,7 +82,9 @@ export default class LaunchCommand extends BaseCommand {
 
     try {
       // Version check only applies to Claude Code (not Codex)
-      if (!useCodex) {
+      if (useCodex) {
+        this.debug('Launching Codex with --yolo flag')
+      } else {
         // Check Claude Code version compatibility (non-blocking)
         const version = await getClaudeCodeVersion()
         const versionCheck = checkVersionCompatibility(version)
@@ -98,8 +97,6 @@ export default class LaunchCommand extends BaseCommand {
         if (versionCheck.warning) {
           this.warn(versionCheck.warning)
         }
-      } else {
-        this.debug('Launching Codex with --yolo flag')
       }
 
       // Spawn AI CLI with sandbox permissions disabled
@@ -118,108 +115,6 @@ export default class LaunchCommand extends BaseCommand {
 
     // Pass through Claude Code's exit code (outside try-catch to avoid catching exit)
     this.exit(exitCode)
-  }
-
-  /**
-   * Launch a new terminal window with aiw launch in the specified directory.
-   * Cross-platform support for Windows, macOS, and Linux.
-   */
-  private async launchNewTerminal(targetPath: string, useCodex: boolean = false): Promise<void> {
-    const {platform} = process
-    const launchCmd = useCodex ? 'aiw launch --codex' : 'aiw launch'
-
-    if (platform === 'win32') {
-      await this.launchWindowsTerminal(targetPath, launchCmd)
-    } else if (platform === 'darwin') {
-      await this.launchMacTerminal(targetPath, launchCmd)
-    } else {
-      await this.launchLinuxTerminal(targetPath, launchCmd)
-    }
-  }
-
-  /**
-   * Launch Windows Terminal or PowerShell fallback with aiw launch.
-   */
-  private async launchWindowsTerminal(targetPath: string, launchCmd: string): Promise<void> {
-    // Detect which PowerShell to use (prefer pwsh for PowerShell 7)
-    let powershellCmd = 'pwsh'
-    try {
-      execSync('where pwsh', {stdio: 'ignore'})
-    } catch {
-      // pwsh not found, use legacy PowerShell
-      powershellCmd = 'powershell'
-    }
-
-    // Try Windows Terminal first
-    return new Promise<void>((resolve, reject) => {
-      const terminal = spawn('wt', ['-d', targetPath, powershellCmd, '-NoExit', '-Command', launchCmd], {
-        detached: true,
-        stdio: 'ignore',
-      })
-
-      terminal.on('error', (err) => {
-        // If wt.exe not found, try fallback to Start-Process
-        if (err.message.includes('ENOENT')) {
-          this.debug('Windows Terminal not found, using PowerShell fallback')
-          this.launchPowerShellFallback(targetPath, powershellCmd, launchCmd)
-            .then(resolve)
-            .catch(reject)
-        } else {
-          reject(new Error(`Failed to launch terminal: ${err.message}`))
-        }
-      })
-
-      terminal.unref()
-      resolve()
-    })
-  }
-
-  /**
-   * Fallback for Windows when Windows Terminal is not available.
-   */
-  private async launchPowerShellFallback(targetPath: string, powershellCmd: string, launchCmd: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const escapedPath = targetPath.replaceAll("'", "''")
-      const command = `cd '${escapedPath}'; ${launchCmd}`
-      const psCommand = `Start-Process ${powershellCmd} -ArgumentList '-NoExit', '-Command', "${command}"`
-
-      const terminal = spawn(powershellCmd, ['-Command', psCommand], {
-        detached: true,
-        stdio: 'ignore',
-      })
-
-      terminal.on('error', (err) => {
-        reject(new Error(`Failed to launch PowerShell: ${err.message}`))
-      })
-
-      terminal.unref()
-      resolve()
-    })
-  }
-
-  /**
-   * Launch macOS Terminal.app with aiw launch.
-   */
-  private async launchMacTerminal(targetPath: string, launchCmd: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      // Escape single quotes for bash context
-      const escapedPath = targetPath.replaceAll("'", String.raw`'\''`)
-      const command = `cd '${escapedPath}' && ${launchCmd}`
-      // Escape double quotes and backslashes for AppleScript context
-      const escapedCommand = command.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)
-
-      const terminal = spawn('osascript', ['-e', `tell application "Terminal" to do script "${escapedCommand}"`], {
-        detached: true,
-        stdio: 'ignore',
-      })
-
-      terminal.on('error', (err) => {
-        reject(new Error(`Failed to launch Terminal.app: ${err.message}`))
-      })
-
-      terminal.unref()
-      resolve()
-    })
   }
 
   /**
@@ -261,5 +156,107 @@ export default class LaunchCommand extends BaseCommand {
     }
 
     throw new Error('No supported terminal emulator found. Please install gnome-terminal, konsole, or xterm.')
+  }
+
+  /**
+   * Launch macOS Terminal.app with aiw launch.
+   */
+  private async launchMacTerminal(targetPath: string, launchCmd: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      // Escape single quotes for bash context
+      const escapedPath = targetPath.replaceAll("'", String.raw`'\''`)
+      const command = `cd '${escapedPath}' && ${launchCmd}`
+      // Escape double quotes and backslashes for AppleScript context
+      const escapedCommand = command.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)
+
+      const terminal = spawn('osascript', ['-e', `tell application "Terminal" to do script "${escapedCommand}"`], {
+        detached: true,
+        stdio: 'ignore',
+      })
+
+      terminal.on('error', (err) => {
+        reject(new Error(`Failed to launch Terminal.app: ${err.message}`))
+      })
+
+      terminal.unref()
+      resolve()
+    })
+  }
+
+  /**
+   * Launch a new terminal window with aiw launch in the specified directory.
+   * Cross-platform support for Windows, macOS, and Linux.
+   */
+  private async launchNewTerminal(targetPath: string, useCodex: boolean = false): Promise<void> {
+    const {platform} = process
+    const launchCmd = useCodex ? 'aiw launch --codex' : 'aiw launch'
+
+    if (platform === 'win32') {
+      await this.launchWindowsTerminal(targetPath, launchCmd)
+    } else if (platform === 'darwin') {
+      await this.launchMacTerminal(targetPath, launchCmd)
+    } else {
+      await this.launchLinuxTerminal(targetPath, launchCmd)
+    }
+  }
+
+  /**
+   * Fallback for Windows when Windows Terminal is not available.
+   */
+  private async launchPowerShellFallback(targetPath: string, powershellCmd: string, launchCmd: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const escapedPath = targetPath.replaceAll("'", "''")
+      const command = `cd '${escapedPath}'; ${launchCmd}`
+      const psCommand = `Start-Process ${powershellCmd} -ArgumentList '-NoExit', '-Command', "${command}"`
+
+      const terminal = spawn(powershellCmd, ['-Command', psCommand], {
+        detached: true,
+        stdio: 'ignore',
+      })
+
+      terminal.on('error', (err) => {
+        reject(new Error(`Failed to launch PowerShell: ${err.message}`))
+      })
+
+      terminal.unref()
+      resolve()
+    })
+  }
+
+  /**
+   * Launch Windows Terminal or PowerShell fallback with aiw launch.
+   */
+  private async launchWindowsTerminal(targetPath: string, launchCmd: string): Promise<void> {
+    // Detect which PowerShell to use (prefer pwsh for PowerShell 7)
+    let powershellCmd = 'pwsh'
+    try {
+      execSync('where pwsh', {stdio: 'ignore'})
+    } catch {
+      // pwsh not found, use legacy PowerShell
+      powershellCmd = 'powershell'
+    }
+
+    // Try Windows Terminal first
+    return new Promise<void>((resolve, reject) => {
+      const terminal = spawn('wt', ['-d', targetPath, powershellCmd, '-NoExit', '-Command', launchCmd], {
+        detached: true,
+        stdio: 'ignore',
+      })
+
+      terminal.on('error', (err) => {
+        // If wt.exe not found, try fallback to Start-Process
+        if (err.message.includes('ENOENT')) {
+          this.debug('Windows Terminal not found, using PowerShell fallback')
+          this.launchPowerShellFallback(targetPath, powershellCmd, launchCmd)
+            .then(resolve)
+            .catch(reject)
+        } else {
+          reject(new Error(`Failed to launch terminal: ${err.message}`))
+        }
+      })
+
+      terminal.unref()
+      resolve()
+    })
   }
 }

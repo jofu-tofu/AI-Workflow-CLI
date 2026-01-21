@@ -72,11 +72,11 @@ function startWatching(): void {
   // Handle graceful shutdown
   process.on('SIGINT', () => {
     console.log('\nStopping template watcher...')
-    watcher.close().then(() => process.exit(0))
+    watcher.close().catch(() => {})
   })
 
   process.on('SIGTERM', () => {
-    watcher.close().then(() => process.exit(0))
+    watcher.close().catch(() => {})
   })
 }
 

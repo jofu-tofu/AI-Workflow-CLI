@@ -21,7 +21,7 @@ async function fileExists(path: string): Promise<boolean> {
  * @param path - Path to hooks.json file
  * @returns Parsed hooks or undefined if file doesn't exist or is invalid
  */
-export async function readWindsurfHooks(path: string): Promise<WindsurfHooks | undefined> {
+export async function readWindsurfHooks(path: string): Promise<undefined | WindsurfHooks> {
   try {
     const content = await fs.readFile(path, 'utf8')
     return JSON.parse(content) as WindsurfHooks

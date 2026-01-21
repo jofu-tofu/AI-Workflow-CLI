@@ -22,8 +22,7 @@ export default class BranchCommand extends BaseCommand {
       required: false,
     }),
   }
-
-  static override description =
+static override description =
     'Manage git branches with worktree support or launch in main/master\n\n' +
     'MODES\n' +
     '  --main/-m: Launch aiw in main/master branch in new terminal\n' +
@@ -47,8 +46,7 @@ export default class BranchCommand extends BaseCommand {
     '  1  General error - unexpected runtime failure\n' +
     '  2  Invalid usage - requirements not met\n' +
     '  3  Environment error - git not found or not a git repository'
-
-  static override examples = [
+static override examples = [
     '<%= config.bin %> <%= command.id %> --main',
     '<%= config.bin %> <%= command.id %> --main --debug  # Enable verbose logging',
     '<%= config.bin %> <%= command.id %> --launch feature-name',
@@ -58,8 +56,7 @@ export default class BranchCommand extends BaseCommand {
     '<%= config.bin %> <%= command.id %> --delete --all  # Clean up all safe-to-delete worktrees',
     '<%= config.bin %> <%= command.id %> -d -a  # Same as above, using short flags',
   ]
-
-  static override flags = {
+static override flags = {
     ...BaseCommand.baseFlags,
     main: Flags.boolean({
       char: 'm',

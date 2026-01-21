@@ -6,10 +6,10 @@
  * mocking private methods or checking source code strings.
  */
 
-import {randomUUID} from 'node:crypto'
 import {execSync} from 'node:child_process'
+import {randomUUID} from 'node:crypto'
 import {promises as fs} from 'node:fs'
-import {tmpdir, platform} from 'node:os'
+import {platform, tmpdir} from 'node:os'
 import {join} from 'node:path'
 
 import {expect} from 'chai'
@@ -199,7 +199,7 @@ describe('branch command', () => {
 
     beforeEach(async function() {
       // Increase timeout for git operations
-      this.timeout(10000)
+      this.timeout(10_000)
       testDir = await createTestGitRepo()
     })
 
@@ -285,7 +285,7 @@ describe('branch command', () => {
         const err = error as {stderr: string}
         // Error format spans multiple lines with fancy bullet chars: "does not\n » exist."
         // Remove all non-alphanumeric chars except spaces for matching
-        const normalizedError = err.stderr.replace(/[^a-zA-Z0-9\s]/g, ' ').replace(/\s+/g, ' ')
+        const normalizedError = err.stderr.replaceAll(/[^a-zA-Z0-9\s]/g, ' ').replaceAll(/\s+/g, ' ')
         expect(normalizedError).to.match(/does not exist|not found|no such branch/i)
       }
     })
@@ -309,7 +309,7 @@ describe('branch command', () => {
     })
 
     it('should delete a branch when not on it', async function() {
-      this.timeout(15000)
+      this.timeout(15_000)
       const absoluteBin = getAbsoluteBinPath()
 
       // Create a feature branch
@@ -391,7 +391,7 @@ describe('branch command', () => {
     let testDir: string
 
     beforeEach(async function() {
-      this.timeout(10000)
+      this.timeout(10_000)
       testDir = await createTestGitRepo()
     })
 
@@ -420,7 +420,7 @@ describe('branch command', () => {
     })
 
     it('should error when already on main branch', async function() {
-      this.timeout(15000)
+      this.timeout(15_000)
       const absoluteBin = getAbsoluteBinPath()
 
       // Ensure we're on main
@@ -454,7 +454,7 @@ describe('branch command', () => {
     let testDir: string
 
     beforeEach(async function() {
-      this.timeout(10000)
+      this.timeout(10_000)
       testDir = await createTestGitRepo()
     })
 
@@ -483,7 +483,7 @@ describe('branch command', () => {
     })
 
     it('should complete without error when there are no worktrees to delete', function() {
-      this.timeout(15000)
+      this.timeout(15_000)
       const absoluteBin = getAbsoluteBinPath()
 
       const result = execSync(`node "${absoluteBin}" branch --delete --all`, {
@@ -495,7 +495,7 @@ describe('branch command', () => {
     })
 
     it('should preserve main/master branch (protected)', function() {
-      this.timeout(15000)
+      this.timeout(15_000)
       const absoluteBin = getAbsoluteBinPath()
 
       const result = execSync(`node "${absoluteBin}" branch --delete --all`, {

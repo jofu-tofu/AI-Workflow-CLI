@@ -6,18 +6,16 @@
  * checking source code strings.
  */
 
-import {randomUUID} from 'node:crypto'
 import {execSync} from 'node:child_process'
+import {randomUUID} from 'node:crypto'
 import {promises as fs} from 'node:fs'
-import {tmpdir, platform} from 'node:os'
+import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
 import {expect} from 'chai'
 
 import CleanCommand from '../../src/commands/clean.js'
 
-// Platform-specific bin path for CLI invocation
-const isWindows = platform() === 'win32'
 
 /**
  * Helper to create a temporary directory for testing
@@ -217,7 +215,7 @@ describe('clean command', () => {
         })
         expect.fail('Should have thrown an error')
       } catch (error) {
-        const err = error as {stderr: string; status: number}
+        const err = error as {status: number; stderr: string;}
         expect(err.stderr).to.include('Either --method or --all is required')
         expect(err.status).to.be.greaterThan(0)
       }

@@ -19,7 +19,7 @@ const OUTPUT_FOLDER_NAME = '_output'
 const IDE_FOLDERS = {
   claude: {
     root: '.claude',
-    methodSubfolders: ['commands', 'skills'],
+    methodSubfolders: ['commands', 'skills', 'agents'],
     settingsFile: 'settings.json',
   },
   windsurf: {
@@ -96,8 +96,7 @@ async function updateGitignoreAfterClear(targetDir: string, foldersToRemove: str
           inAiwSection = false
           // Process AIW section lines now
           const filteredAiwLines = filterAiwSection(aiwSectionLines, foldersToRemove)
-          newLines.push(...filteredAiwLines)
-          newLines.push(line)
+          newLines.push(...filteredAiwLines, line)
         } else {
           aiwSectionLines.push(line)
         }
@@ -170,7 +169,7 @@ function cleanupGitignoreContent(content: string): string {
         // Skip the AIW header since it has no patterns
         i++
         // Also skip any trailing empty lines that were before AIW section
-        while (newLines.length > 0 && newLines[newLines.length - 1] === '') {
+        while (newLines.length > 0 && newLines.at(-1) === '') {
           newLines.pop()
         }
 
@@ -245,6 +244,7 @@ async function updateIdeSettings(
                         innerHook.command?.toString().includes(`/${method}-`),
                     )
                   }
+
                   return true
                 },
               )
@@ -252,17 +252,20 @@ async function updateIdeSettings(
                 hook.hooks = filteredInner
                 modified = true
               }
+
               // Remove hook entry if all inner hooks were removed
               if (filteredInner.length === 0) {
                 return false
               }
             }
+
             return true
           })
           if (filtered.length !== hookArray.length) {
             settings.hooks[hookType] = filtered
             modified = true
           }
+
           // Remove hook type if empty
           if (filtered.length === 0) {
             delete settings.hooks[hookType]
@@ -270,6 +273,7 @@ async function updateIdeSettings(
           }
         }
       }
+
       // Remove hooks object if empty
       if (Object.keys(settings.hooks).length === 0) {
         delete settings.hooks
@@ -424,45 +428,31 @@ export default class ClearCommand extends BaseCommand {
         }
       }
 
-      let deletedWorkflow = 0
-      let deletedOutput = 0
-      let deletedIde = 0
-
-      // Delete workflow folders
-      for (const folder of workflowFolders) {
+      // Delete all folders in parallel
+      const deleteFolder = async (
+        folder: string,
+        type: string,
+      ): Promise<{folder: string; success: boolean; type: string}> => {
         try {
           await removeDirectory(folder)
-          this.logDebug(`Removed workflow folder: ${folder}`)
-          deletedWorkflow++
+          this.logDebug(`Removed ${type} folder: ${folder}`)
+          return {folder, success: true, type}
         } catch (error) {
           const err = error as NodeJS.ErrnoException
           this.logWarning(`Failed to delete ${folder}: ${err.message}`)
+          return {folder, success: false, type}
         }
       }
 
-      // Delete output method folders
-      for (const folder of outputMethodFolders) {
-        try {
-          await removeDirectory(folder)
-          this.logDebug(`Removed output folder: ${folder}`)
-          deletedOutput++
-        } catch (error) {
-          const err = error as NodeJS.ErrnoException
-          this.logWarning(`Failed to delete ${folder}: ${err.message}`)
-        }
-      }
+      const deleteResults = await Promise.all([
+        ...workflowFolders.map((f) => deleteFolder(f, 'workflow')),
+        ...outputMethodFolders.map((f) => deleteFolder(f, 'output')),
+        ...ideMethodFolders.map((f) => deleteFolder(f, 'IDE method')),
+      ])
 
-      // Delete IDE method folders
-      for (const folder of ideMethodFolders) {
-        try {
-          await removeDirectory(folder)
-          this.logDebug(`Removed IDE method folder: ${folder}`)
-          deletedIde++
-        } catch (error) {
-          const err = error as NodeJS.ErrnoException
-          this.logWarning(`Failed to delete ${folder}: ${err.message}`)
-        }
-      }
+      const deletedWorkflow = deleteResults.filter((r) => r.success && r.type === 'workflow').length
+      const deletedOutput = deleteResults.filter((r) => r.success && r.type === 'output').length
+      const deletedIde = deleteResults.filter((r) => r.success && r.type === 'IDE method').length
 
       // Check if _output folder is now empty and remove it
       let removedOutputDir = false
@@ -547,37 +537,63 @@ export default class ClearCommand extends BaseCommand {
   }
 
   /**
-   * Find all workflow folders in the target directory.
-   * Looks for _{method}/ structure (e.g., _gsd/, _bmad/).
+   * Extract method names from workflow folder names (e.g., _gsd -> gsd).
    *
-   * @param targetDir - Directory to search in
-   * @param template - Optional template/method name to filter by (e.g., 'bmad', 'gsd')
-   * @returns Array of workflow folder paths
+   * @param workflowFolders - Array of workflow folder paths
+   * @returns Array of method names
    */
-  private async findWorkflowFolders(targetDir: string, template?: string): Promise<string[]> {
-    const foundFolders: string[] = []
-
-    try {
-      const entries = await fs.readdir(targetDir, {withFileTypes: true})
-
-      for (const entry of entries) {
-        // Look for directories starting with underscore (workflow folders)
-        if (entry.isDirectory() && entry.name.startsWith('_') && entry.name !== OUTPUT_FOLDER_NAME) {
-          // If template specified, only include matching folder
-          if (template) {
-            if (entry.name === `_${template}`) {
-              foundFolders.push(join(targetDir, entry.name))
-            }
-          } else {
-            foundFolders.push(join(targetDir, entry.name))
-          }
-        }
+  private extractMethodNames(workflowFolders: string[]): string[] {
+    const methods: string[] = []
+    for (const folder of workflowFolders) {
+      const folderName = folder.split(/[/\\]/).pop() || ''
+      if (folderName.startsWith('_')) {
+        methods.push(folderName.slice(1))
       }
-    } catch {
-      // Directory can't be read - return empty
     }
 
-    return foundFolders
+    return methods
+  }
+
+  /**
+   * Find all IDE method folders (e.g., .claude/commands/{method}/, .claude/skills/{method}/).
+   * Searches within IDE configuration folders for method-specific subfolders.
+   *
+   * @param targetDir - Directory to search in
+   * @param template - Optional template/method name to filter by
+   * @returns Array of IDE method folder paths
+   */
+  private async findIdeMethodFolders(targetDir: string, template?: string): Promise<string[]> {
+    // Build list of all subfolder paths to check
+    const subfolderChecks: {ideRoot: string; subfolder: string}[] = []
+
+    for (const ide of Object.values(IDE_FOLDERS)) {
+      const ideRoot = join(targetDir, ide.root)
+      for (const subfolder of ide.methodSubfolders) {
+        subfolderChecks.push({ideRoot, subfolder})
+      }
+    }
+
+    // Check all subfolders in parallel
+    const subfolderResults = await Promise.all(
+      subfolderChecks.map(async ({ideRoot, subfolder}) => {
+        const subfolderPath = join(ideRoot, subfolder)
+
+        try {
+          const stat = await fs.stat(subfolderPath)
+          if (!stat.isDirectory()) return []
+
+          const entries = await fs.readdir(subfolderPath, {withFileTypes: true})
+          return entries
+            .filter((entry) => entry.isDirectory())
+            .filter((entry) => !template || entry.name === template)
+            .map((entry) => join(subfolderPath, entry.name))
+        } catch {
+          return []
+        }
+      }),
+    )
+
+    return subfolderResults.flat()
   }
 
   /**
@@ -635,77 +651,36 @@ export default class ClearCommand extends BaseCommand {
   }
 
   /**
-   * Find all IDE method folders (e.g., .claude/commands/{method}/, .claude/skills/{method}/).
-   * Searches within IDE configuration folders for method-specific subfolders.
+   * Find all workflow folders in the target directory.
+   * Looks for _{method}/ structure (e.g., _gsd/, _bmad/).
    *
    * @param targetDir - Directory to search in
-   * @param template - Optional template/method name to filter by
-   * @returns Array of IDE method folder paths
+   * @param template - Optional template/method name to filter by (e.g., 'bmad', 'gsd')
+   * @returns Array of workflow folder paths
    */
-  private async findIdeMethodFolders(targetDir: string, template?: string): Promise<string[]> {
+  private async findWorkflowFolders(targetDir: string, template?: string): Promise<string[]> {
     const foundFolders: string[] = []
 
-    for (const ide of Object.values(IDE_FOLDERS)) {
-      const ideRoot = join(targetDir, ide.root)
+    try {
+      const entries = await fs.readdir(targetDir, {withFileTypes: true})
 
-      // Check if IDE folder exists
-      try {
-        const stat = await fs.stat(ideRoot)
-        if (!stat.isDirectory()) continue
-      } catch {
-        continue
-      }
-
-      // Search each subfolder type (commands, skills, workflows)
-      for (const subfolder of ide.methodSubfolders) {
-        const subfolderPath = join(ideRoot, subfolder)
-
-        try {
-          const stat = await fs.stat(subfolderPath)
-          if (!stat.isDirectory()) continue
-        } catch {
-          continue
-        }
-
-        // Find method folders within the subfolder
-        try {
-          const entries = await fs.readdir(subfolderPath, {withFileTypes: true})
-
-          for (const entry of entries) {
-            if (entry.isDirectory()) {
-              // If template specified, only include matching folder
-              if (template) {
-                if (entry.name === template) {
-                  foundFolders.push(join(subfolderPath, entry.name))
-                }
-              } else {
-                foundFolders.push(join(subfolderPath, entry.name))
-              }
+      for (const entry of entries) {
+        // Look for directories starting with underscore (workflow folders)
+        if (entry.isDirectory() && entry.name.startsWith('_') && entry.name !== OUTPUT_FOLDER_NAME) {
+          // If template specified, only include matching folder
+          if (template) {
+            if (entry.name === `_${template}`) {
+              foundFolders.push(join(targetDir, entry.name))
             }
+          } else {
+            foundFolders.push(join(targetDir, entry.name))
           }
-        } catch {
-          // Subfolder can't be read - continue
         }
       }
+    } catch {
+      // Directory can't be read - return empty
     }
 
     return foundFolders
-  }
-
-  /**
-   * Extract method names from workflow folder names (e.g., _gsd -> gsd).
-   *
-   * @param workflowFolders - Array of workflow folder paths
-   * @returns Array of method names
-   */
-  private extractMethodNames(workflowFolders: string[]): string[] {
-    const methods: string[] = []
-    for (const folder of workflowFolders) {
-      const folderName = folder.split(/[/\\]/).pop() || ''
-      if (folderName.startsWith('_')) {
-        methods.push(folderName.slice(1))
-      }
-    }
-    return methods
   }
 }

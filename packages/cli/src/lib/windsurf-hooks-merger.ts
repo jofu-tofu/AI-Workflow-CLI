@@ -52,8 +52,8 @@ function mergeHookCommands(
  * @returns New merged hooks configuration
  */
 export function mergeWindsurfHooksConfig(
-  existing: WindsurfHooksConfig | undefined,
-  template: WindsurfHooksConfig | undefined,
+  existing: undefined | WindsurfHooksConfig,
+  template: undefined | WindsurfHooksConfig,
 ): WindsurfHooksConfig {
   // If no template hooks, return existing (or empty object)
   if (!template || Object.keys(template).length === 0) {
@@ -95,8 +95,8 @@ export function mergeWindsurfHooksConfig(
  * @returns New merged hooks configuration
  */
 export function mergeWindsurfHooks(
-  existing: WindsurfHooks | undefined,
-  template: WindsurfHooks | undefined,
+  existing: undefined | WindsurfHooks,
+  template: undefined | WindsurfHooks,
 ): WindsurfHooks {
   // If no template hooks, return existing (or empty hooks)
   if (!template || !template.hooks || Object.keys(template.hooks).length === 0) {
