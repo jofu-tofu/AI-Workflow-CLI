@@ -2,16 +2,6 @@
     "hooks": {
         "PreToolUse": [
             {
-                "matcher": "Edit|Write|Bash",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "python _cc-native/hooks/archive_plan.py",
-                        "timeout": 5000
-                    }
-                ]
-            },
-            {
                 "matcher": "Write",
                 "hooks": [
                     {
@@ -37,8 +27,9 @@
                 ]
             }
         ],
-        "Stop": [
+        "PermissionRequest": [
             {
+                "matcher": "ExitPlanMode",
                 "hooks": [
                     {
                         "type": "command",

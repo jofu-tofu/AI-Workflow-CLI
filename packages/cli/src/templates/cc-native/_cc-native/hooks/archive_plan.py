@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """
-PreToolUse hook - backup archiver that runs on ExitPlanMode.
+PermissionRequest hook - archives plan when user is prompted for ExitPlanMode approval.
 
-NOTE: Primary archiving now happens in add_plan_context.py (PreToolUse:Write),
-which runs BEFORE any permission prompts. This hook serves as a backup that:
-1. Updates the archive with post-review metadata if reviews completed
-2. Skips if plan was already archived with same content (idempotent)
+This hook triggers on PermissionRequest (ExitPlanMode), running AFTER:
+1. set_plan_state.py (creates state file with task_folder)
+2. cc-native-plan-review.py (runs review iterations)
 
-This hook triggers on PreToolUse (ExitPlanMode), running after set_plan_state.py
-and cc-native-plan-review.py. It ONLY archives if a state file exists for this
-plan, which is created by set_plan_state.py when ExitPlanMode fires.
+It archives the plan BEFORE the user sees the approval prompt, ensuring the plan
+is captured even if the user rejects or the session ends unexpectedly.
 
 State file: ~/.claude/plans/{plan-name}.state.json (adjacent to plan file)
 Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}/plan.md (uses task_folder from state)
@@ -77,28 +75,8 @@ def is_already_archived(out_path: Path, plan: str) -> bool:
     return existing_plan.strip() == plan.strip()
 
 
-def is_plan_file_edit(payload: Dict[str, Any], plan_path: str) -> bool:
-    """Check if this tool use is editing the plan file itself."""
-    tool_name = payload.get("tool_name", "")
-    tool_input = payload.get("tool_input", {})
-
-    if tool_name not in ("Edit", "Write"):
-        return False
-
-    file_path = tool_input.get("file_path", "")
-
-    # Normalize paths for comparison
-    try:
-        edit_path = Path(file_path).resolve()
-        target_path = Path(plan_path).resolve()
-        return edit_path == target_path
-    except Exception:
-        # Fallback to string comparison
-        return file_path == plan_path
-
-
 def main() -> int:
-    eprint("[archive_plan] Hook started")
+    eprint("[archive_plan] Hook started (PermissionRequest)")
 
     try:
         payload = json.load(sys.stdin)
@@ -108,10 +86,16 @@ def main() -> int:
 
     tool_name = payload.get("tool_name", "")
     session_id = str(payload.get("session_id", "unknown"))
+    hook_event_name = payload.get("hook_event_name", "")
 
-    eprint(f"[archive_plan] tool_name: {tool_name}, session_id: {session_id}")
+    eprint(f"[archive_plan] tool_name: {tool_name}, event: {hook_event_name}, session_id: {session_id}")
 
-    # Find plan file first (state file is keyed by plan path)
+    # Only process ExitPlanMode
+    if tool_name != "ExitPlanMode":
+        eprint(f"[archive_plan] Skipping: not ExitPlanMode (got {tool_name})")
+        return 0
+
+    # Find plan file (state file is keyed by plan path)
     plan_path_found = find_plan_file()
     if not plan_path_found:
         eprint("[archive_plan] No plan file found in ~/.claude/plans/ - skipping")
@@ -138,19 +122,19 @@ def main() -> int:
     plan_path = state.get("plan_path", "")
     project_dir = state.get("project_dir", os.getcwd())
 
-    # Skip if this is an edit to the plan file itself (let revision complete first)
-    if plan_path and is_plan_file_edit(payload, plan_path):
-        eprint("[archive_plan] Skipping: this is an edit to the plan file itself")
-        return 0
+    # Try to get plan content from payload first (PermissionRequest includes tool_input.plan)
+    tool_input = payload.get("tool_input", {})
+    plan = tool_input.get("plan", "")
 
-    # Read the plan from the stored path
-    plan = ""
-    if plan_path:
+    # Fallback: read from plan file if not in payload
+    if not plan and plan_path:
         try:
             plan = Path(plan_path).read_text(encoding="utf-8")
-            eprint(f"[archive_plan] Read plan from: {plan_path}")
+            eprint(f"[archive_plan] Read plan from file: {plan_path}")
         except Exception as e:
             eprint(f"[archive_plan] Failed to read plan file: {e}")
+    elif plan:
+        eprint("[archive_plan] Using plan content from payload")
 
     if not plan.strip():
         eprint("[archive_plan] Plan is empty, cleaning up state and skipping archive")
@@ -190,7 +174,7 @@ def main() -> int:
         f"# Plan - {now.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         f"**Session:** {session_id}\n"
         f"**Source:** {plan_path}\n"
-        f"**Archived:** Post-feedback (triggered by {tool_name or 'Stop'})\n"
+        f"**Archived:** PermissionRequest (before user approval)\n"
         f"**State Created:** {state.get('created_at', 'unknown')}\n\n"
         f"---\n\n"
     )
