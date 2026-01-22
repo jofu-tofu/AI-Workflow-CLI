@@ -1,11 +1,19 @@
 # Handoff Workflow
 
-Generate a handoff document summarizing the current session's work, decisions, and pending items.
+Generate a handoff document summarizing the current session's work, decisions, and pending items. Optionally update a plan document to track completed vs remaining tasks.
 
 ## Triggers
 
 - `/handoff` command
+- `/handoff path/to/PLAN.md` - with plan document integration
 - Phrases like "write a handoff", "create a session summary", "document what we did", "end session with notes"
+
+## Arguments
+
+- `$ARGUMENTS` - Optional path to a plan document. If provided, the handoff will:
+  1. Mark completed items in the plan with `[x]`
+  2. Add notes about partial progress
+  3. Append a "Session Progress" section to the plan
 
 ## Process
 
@@ -24,6 +32,12 @@ Generate a handoff document summarizing the current session's work, decisions, a
    ```
 
 3. Look for TODOs/FIXMEs mentioned in session
+
+4. **If plan document provided**: Read the plan and identify:
+   - Tasks that are now completed
+   - Tasks that are partially done
+   - Tasks that were attempted but blocked
+   - New tasks discovered during implementation
 
 ### Step 2: Get Timestamp
 
@@ -62,6 +76,7 @@ title: Session Handoff
 date: {ISO timestamp}
 session_id: {conversation ID if available}
 project: {project name from package.json, Cargo.toml, or directory name}
+plan_document: {path to plan if provided, or "none"}
 ---
 
 # Session Handoff — {Date}
@@ -97,6 +112,79 @@ project: {project name from package.json, Cargo.toml, or directory name}
 ## Context for Future Sessions
 {Non-obvious context: env quirks, stakeholder requirements}
 
+```
+
+### Step 5: Update Plan Document (if provided)
+
+If a plan document path was provided in `$ARGUMENTS`:
+
+1. **Read the plan document**
+2. **Identify completed items**:
+   - Find checkboxes `- [ ]` that match completed work
+   - Change them to `- [x]`
+3. **Add progress notes** to items that are partially complete:
+   - Append `(partial: {brief status})` to the line
+4. **Append Session Progress section** at the bottom:
+
+```markdown
+
+---
+
+## Session Progress Log
+
+### {Date} — Session {session_id or timestamp}
+
+**Completed this session:**
+- [x] {Task from plan that was completed}
+- [x] {Another completed task}
+
+**Partially completed:**
+- {Task} — {current state, what remains}
+
+**Blocked/Deferred:**
+- {Task} — {reason, what's needed}
+
+**New items discovered:**
+- [ ] {New task not in original plan}
+- [ ] {Another new task}
+
+---
+```
+
+5. **If no plan document was provided**:
+   - Create a new plan document at `_output/cc-native/plans/{YYYY-MM-DD}/session-plan.md`
+   - Use this template:
+
+```markdown
+---
+title: Session Plan
+created: {ISO timestamp}
+session_id: {session_id}
+---
+
+# Session Plan — {Date}
+
+## Completed
+- [x] {Completed task 1}
+- [x] {Completed task 2}
+
+## Pending
+- [ ] {Pending item from "Next Steps"}
+- [ ] {Another pending item}
+
+## Notes
+{Any relevant context for next session}
+
+---
+
+## Session Progress Log
+
+### {Date} — Initial Session
+
+**Completed this session:**
+{List of what was done}
+
+---
 ```
 
 ## Dead Ends Section Guidelines
@@ -136,9 +224,26 @@ To continue next session:
 ⚠️  {N} dead ends documented — avoid re-attempting these approaches
 ```
 
+If plan was updated:
+```
+✓ Updated plan document: {path}
+   - {N} items marked complete
+   - {N} items partially complete
+   - {N} new items added
+```
+
+If new plan was created:
+```
+✓ Created new plan document: _output/cc-native/plans/{date}/session-plan.md
+   Track future progress by running: /handoff _output/cc-native/plans/{date}/session-plan.md
+```
+
 ## Success Criteria
 
 - [ ] Handoff document created in task folder's `handoffs/` subfolder
 - [ ] Dead ends section captures all failed approaches with specific details
 - [ ] Next steps are actionable with file references
 - [ ] Git status reflects current state
+- [ ] If plan provided: checkboxes updated to reflect completion status
+- [ ] If plan provided: Session Progress Log appended
+- [ ] If no plan: new plan document created with session work
