@@ -36,6 +36,7 @@ from utils import (
     sanitize_filename,
     sanitize_title,
     extract_plan_title,
+    extract_task_from_context,
 )
 from state import get_state_file_path
 
@@ -106,8 +107,11 @@ def main() -> int:
 
     eprint(f"[set_plan_state] Found plan with {len(plan_content)} chars at: {plan_path}")
 
-    # Extract title and generate task folder path
+    # Extract title and generate task folder path (two-level fallback)
     title = extract_plan_title(plan_content)
+    if not title:
+        title = extract_task_from_context(plan_content)
+
     if title:
         slug = sanitize_title(title.lower())
     else:

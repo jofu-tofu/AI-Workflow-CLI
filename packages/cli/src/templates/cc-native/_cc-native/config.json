@@ -24,7 +24,7 @@
     "enabled": true,
     "timeout": 120,
     "blockOnFail": true,
-    "maxTurns": 1,
+    "maxTurns": 3,
     "orchestrator": {
       "enabled": true,
       "model": "haiku",
@@ -64,5 +64,13 @@
   "planContext": {
     "enabled": true,
     "offerClarifyingQuestions": true
+  },
+  "stuckDetection": {
+    "enabled": true,
+    "errorThreshold": 3,
+    "fileEditThreshold": 4,
+    "testFailureThreshold": 3,
+    "cooldown": 10,
+    "maxSuggestions": 3
   }
 }

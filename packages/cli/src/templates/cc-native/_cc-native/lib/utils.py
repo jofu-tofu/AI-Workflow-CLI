@@ -123,6 +123,24 @@ def extract_plan_title(plan: str) -> Optional[str]:
     return None
 
 
+def extract_task_from_context(plan: str) -> Optional[str]:
+    """Extract Task from Evaluation Context section as fallback title."""
+    # Look for **Task**: ... or **Task Summary**: ... patterns
+    patterns = [
+        r'\*\*Task\*\*:\s*(.+?)(?:\n|$)',
+        r'\*\*Task Summary\*\*:\s*(.+?)(?:\n|$)',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, plan)
+        if match:
+            task = match.group(1).strip()
+            # Truncate to reasonable title length
+            if len(task) > 50:
+                task = task[:47] + "..."
+            return task
+    return None
+
+
 # ---------------------------
 # Plan hash deduplication
 # ---------------------------

@@ -62,24 +62,27 @@ CONTEXT_REMINDER = """
 ## IMPORTANT: Add Evaluation Context
 
 Your plan will be reviewed by agents who have NO access to this conversation.
-Before completing this plan, ensure it includes an **Evaluation Context** section near the top with:
+Before completing this plan, ensure it includes:
 
-1. **Task Summary**: What is being built/changed and why
-2. **User's Goal**: The underlying problem the user wants solved
-3. **Key Constraints**: Technical requirements, preferences, or limitations mentioned
-4. **Relevant Codebase Context**: Important files, patterns, or architecture decisions that affect this plan
+1. **A title line** at the very top: `# Plan: <descriptive title>`
+2. **An Evaluation Context section** near the top with:
+   - **Task**: What is being built/changed and why
+   - **Goal**: The underlying problem the user wants solved
+   - **Constraints**: Technical requirements, preferences, or limitations mentioned
+   - **Codebase Context**: Important files, patterns, or architecture decisions
+
+Example:
+```markdown
+# Plan: Add OAuth2 Authentication
+
+## Evaluation Context
+**Task**: Implement OAuth2 flow for user service
+**Goal**: Enable secure third-party authentication
+**Constraints**: Must support Google and GitHub providers
+**Codebase Context**: Uses Express middleware pattern in src/auth/
+```
 
 This context allows reviewers to assess whether your plan actually addresses the user's needs—not just whether it's technically sound.
-
-Example section to include in your plan:
-```markdown
-## Evaluation Context
-
-**Task**: Add pre-tool hook to remind Claude to include context in plans
-**Goal**: Enable downstream review agents to evaluate plans without conversation access
-**Constraints**: Must be lightweight (runs on every Write), should not block execution
-**Codebase Context**: Uses cc-native hook system with PreToolUse matcher pattern
-```
 """.strip()
 
 

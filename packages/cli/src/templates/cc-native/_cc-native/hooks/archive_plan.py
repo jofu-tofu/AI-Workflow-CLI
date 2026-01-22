@@ -30,6 +30,7 @@ from utils import (
     sanitize_title,
     sanitize_filename,
     extract_plan_title,
+    extract_task_from_context,
     find_plan_file,
 )
 from state import (
@@ -149,10 +150,12 @@ def main() -> int:
         out_dir = Path(task_folder_path)
         eprint(f"[archive_plan] Using task_folder from state: {out_dir}")
     else:
-        # Fallback: generate folder (backwards compatibility)
+        # Fallback: generate folder (backwards compatibility, two-level fallback)
         base = Path(project_dir)
         date_folder = now.strftime("%Y-%m-%d")
         title = extract_plan_title(plan)
+        if not title:
+            title = extract_task_from_context(plan)
         if title:
             slug = sanitize_title(title.lower())
         else:

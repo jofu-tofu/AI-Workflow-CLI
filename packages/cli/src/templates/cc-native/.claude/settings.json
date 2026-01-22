@@ -1,5 +1,17 @@
 {
     "hooks": {
+        "PostToolUse": [
+            {
+                "matcher": "Bash|Edit",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python _cc-native/hooks/suggest-fresh-perspective.py",
+                        "timeout": 5000
+                    }
+                ]
+            }
+        ],
         "PreToolUse": [
             {
                 "matcher": "Write",
