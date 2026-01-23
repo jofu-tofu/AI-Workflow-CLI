@@ -74,9 +74,9 @@ _output/cc-native/
 
 ---
 
-## Configuration (`_cc-native/config.json`)
+## Configuration (`_cc-native/plan-review.config.json`)
 
-CC-Native settings are stored in `_cc-native/config.json`:
+CC-Native settings are stored in `_cc-native/plan-review.config.json`:
 
 ```json
 {

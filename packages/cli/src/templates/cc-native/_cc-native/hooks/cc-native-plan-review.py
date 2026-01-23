@@ -19,7 +19,7 @@ Features:
 - Returns feedback to Claude via hook additionalContext
 - Optional blocking on FAIL verdict
 
-Configuration: _cc-native/config.json -> planReview, agentReview
+Configuration: _cc-native/plan-review.config.json -> planReview, agentReview
 
 Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}/reviews/
   - review.json (combined review data)
@@ -119,7 +119,7 @@ DEFAULT_AGENT_MODEL: str = "sonnet"
 # ---------------------------
 
 def load_settings(proj_dir: Path) -> Dict[str, Any]:
-    """Load CC-Native settings from _cc-native/config.json"""
+    """Load CC-Native settings from _cc-native/plan-review.config.json"""
     defaults = {
         "planReview": {
             "enabled": True,

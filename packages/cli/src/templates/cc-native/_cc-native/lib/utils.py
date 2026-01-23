@@ -781,8 +781,8 @@ def write_combined_artifacts(
 # ---------------------------
 
 def load_config(project_dir: Path) -> Dict[str, Any]:
-    """Load full CC-Native config from _cc-native/config.json."""
-    settings_path = project_dir / "_cc-native" / "config.json"
+    """Load full CC-Native config from _cc-native/plan-review.config.json."""
+    settings_path = project_dir / "_cc-native" / "plan-review.config.json"
     if not settings_path.exists():
         return {}
     try:

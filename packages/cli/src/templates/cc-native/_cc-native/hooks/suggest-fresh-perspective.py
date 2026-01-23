@@ -10,7 +10,7 @@ Detection patterns:
 Behavior: Suggests (doesn't force) running /fresh-perspective.
 Non-blocking - always returns success.
 
-Configuration (in _cc-native/config.json):
+Configuration (in _cc-native/plan-review.config.json):
   "stuckDetection": {
     "enabled": true,           // Set to false to disable entirely
     "errorThreshold": 3,       // Errors before suggesting
@@ -69,8 +69,8 @@ def _int_or_default(value: Any, default: int) -> int:
 
 
 def load_config(project_dir: Path) -> Dict[str, Any]:
-    """Load stuckDetection config from _cc-native/config.json."""
-    config_path = project_dir / "_cc-native" / "config.json"
+    """Load stuckDetection config from _cc-native/plan-review.config.json."""
+    config_path = project_dir / "_cc-native" / "plan-review.config.json"
     if not config_path.exists():
         return DEFAULT_CONFIG.copy()
     try:
