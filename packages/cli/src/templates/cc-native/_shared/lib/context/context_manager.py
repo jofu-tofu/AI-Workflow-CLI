@@ -34,6 +34,8 @@ from .event_log import (
     EVENT_PLAN_CREATED,
     EVENT_PLAN_IMPLEMENTATION_STARTED,
     EVENT_PLAN_COMPLETED,
+    EVENT_HANDOFF_CREATED,
+    EVENT_HANDOFF_CLEARED,
 )
 
 
@@ -343,7 +345,14 @@ def get_all_contexts(
     if index_path.exists():
         try:
             index = json.loads(index_path.read_text(encoding='utf-8'))
-            for ctx_id, entry in index.get("contexts", {}).items():
+
+            # Validate contexts is a dict before iterating
+            contexts_data = index.get("contexts", {})
+            if not isinstance(contexts_data, dict):
+                eprint(f"[context_manager] WARNING: index['contexts'] is not a dict (type: {type(contexts_data).__name__}), treating as empty")
+                contexts_data = {}
+
+            for ctx_id, entry in contexts_data.items():
                 # Apply filters
                 if status and entry.get("status") != status:
                     continue
@@ -643,6 +652,14 @@ def update_handoff_status(
     context.in_flight.started_at = now
     context.last_active = now
 
+    # Append event (source of truth) - MUST happen before cache updates
+    append_event(
+        context_id,
+        EVENT_HANDOFF_CREATED,
+        project_root,
+        path=handoff_path
+    )
+
     # Update caches
     _write_context_cache(context, project_root)
     _update_index_cache(context, project_root)
@@ -674,10 +691,24 @@ def clear_handoff_status(context_id: str, project_root: Path = None) -> Optional
     now = now_iso()
 
     # Clear handoff state but preserve any artifact path (plan being implemented)
-    context.in_flight.mode = "none"
+    # If artifact_path exists, restore to "implementing" mode; otherwise "none"
+    if context.in_flight.artifact_path:
+        context.in_flight.mode = "implementing"
+    else:
+        context.in_flight.mode = "none"
     context.in_flight.handoff_path = None
-    context.in_flight.started_at = None
+    # Don't clear started_at if we're still implementing
+    if not context.in_flight.artifact_path:
+        context.in_flight.started_at = None
     context.last_active = now
+
+    # Append event (source of truth) - MUST happen before cache updates
+    append_event(
+        context_id,
+        EVENT_HANDOFF_CLEARED,
+        project_root,
+        restored_mode=context.in_flight.mode
+    )
 
     # Update caches
     _write_context_cache(context, project_root)

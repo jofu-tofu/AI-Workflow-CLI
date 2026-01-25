@@ -23,7 +23,7 @@ from ..base.utils import eprint, now_iso
 from .event_log import read_events
 
 
-def rebuild_context_from_events(context_dir: Path) -> Optional['Context']:
+def rebuild_context_from_events(context_dir: Path, project_root: Path = None) -> Optional['Context']:
     """
     Rebuild context.json by replaying events.jsonl.
 
@@ -32,6 +32,7 @@ def rebuild_context_from_events(context_dir: Path) -> Optional['Context']:
 
     Args:
         context_dir: Path to context directory
+        project_root: Project root directory (if known, avoids fragile path calculation)
 
     Returns:
         Rebuilt Context object, or None if events file doesn't exist
@@ -44,7 +45,14 @@ def rebuild_context_from_events(context_dir: Path) -> Optional['Context']:
         return None
 
     context_id = context_dir.name
-    events = read_events(context_id, context_dir.parent.parent.parent)  # _output/contexts/{id} -> project root
+
+    # Calculate project_root if not provided
+    # Structure: project_root/_output/contexts/{id}
+    if project_root is None:
+        # Traverse up: context_dir -> contexts -> _output -> project_root
+        project_root = context_dir.parent.parent.parent
+
+    events = read_events(context_id, project_root)
 
     if not events:
         return None
@@ -103,6 +111,12 @@ def rebuild_context_from_events(context_dir: Path) -> Optional['Context']:
         elif event_type == "handoff_created":
             context.in_flight.mode = "handoff_pending"
             context.in_flight.handoff_path = event.get("path")
+
+        elif event_type == "handoff_cleared":
+            # Restore to "implementing" if artifact exists, otherwise "none"
+            restored_mode = event.get("restored_mode", "none")
+            context.in_flight.mode = restored_mode
+            context.in_flight.handoff_path = None
 
     return context
 
@@ -279,13 +293,14 @@ def verify_cache_integrity(project_root: Path = None) -> Dict[str, Any]:
             derived = rebuild_context_from_events(ctx_dir)
 
             if derived:
+                has_issue = False
                 if cached.get("status") != derived.status:
                     report["issues"].append({
                         "context": context_id,
                         "issue": f"Status mismatch: cache={cached.get('status')}, events={derived.status}",
                         "severity": "warning"
                     })
-                    report["contexts_with_issues"] += 1
+                    has_issue = True
 
                 cached_mode = cached.get("in_flight", {}).get("mode", "none")
                 if cached_mode != derived.in_flight.mode:
@@ -294,6 +309,11 @@ def verify_cache_integrity(project_root: Path = None) -> Dict[str, Any]:
                         "issue": f"in_flight.mode mismatch: cache={cached_mode}, events={derived.in_flight.mode}",
                         "severity": "warning"
                     })
+                    has_issue = True
+
+                if has_issue:
+                    report["contexts_with_issues"] += 1
+                    report["ok"] = False
 
         except Exception as e:
             report["issues"].append({

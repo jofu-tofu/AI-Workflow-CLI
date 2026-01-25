@@ -38,6 +38,7 @@ EVENT_PLAN_CREATED = "plan_created"
 EVENT_PLAN_IMPLEMENTATION_STARTED = "plan_implementation_started"
 EVENT_PLAN_COMPLETED = "plan_completed"
 EVENT_HANDOFF_CREATED = "handoff_created"
+EVENT_HANDOFF_CLEARED = "handoff_cleared"
 
 
 @dataclass
@@ -102,6 +103,24 @@ def read_events(context_id: str, project_root: Path = None) -> List[Dict[str, An
                 events.append(event)
             except json.JSONDecodeError:
                 eprint(f"[event_log] WARNING: Skipping corrupted line {line_num} in {events_path}")
+
+    except UnicodeDecodeError as e:
+        eprint(f"[event_log] WARNING: Invalid UTF-8 in events file {events_path}, attempting fallback read")
+        # Try reading with error handling to salvage what we can
+        try:
+            content = events_path.read_text(encoding='utf-8', errors='replace')
+            for line_num, line in enumerate(content.splitlines(), 1):
+                line = line.strip()
+                if not line:
+                    continue
+
+                try:
+                    event = json.loads(line)
+                    events.append(event)
+                except json.JSONDecodeError:
+                    eprint(f"[event_log] WARNING: Skipping corrupted line {line_num} in {events_path}")
+        except Exception as fallback_error:
+            eprint(f"[event_log] ERROR: Fallback read failed: {fallback_error}")
 
     except Exception as e:
         eprint(f"[event_log] ERROR reading events file: {e}")

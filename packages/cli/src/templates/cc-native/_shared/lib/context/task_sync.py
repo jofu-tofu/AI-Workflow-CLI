@@ -35,6 +35,29 @@ from .event_log import (
 from ..base.utils import eprint
 
 
+def _escape_string(s: str) -> str:
+    """
+    Escape a string for safe embedding in quoted YAML-like format.
+
+    Handles backslashes, newlines, tabs, and quotes.
+
+    Args:
+        s: Input string
+
+    Returns:
+        Escaped string safe for embedding in double quotes
+    """
+    if not s:
+        return ""
+    # Order matters: escape backslashes first, then other special chars
+    s = s.replace('\\', '\\\\')
+    s = s.replace('\n', '\\n')
+    s = s.replace('\r', '\\r')
+    s = s.replace('\t', '\\t')
+    s = s.replace('"', '\\"')
+    return s
+
+
 def generate_hydration_instructions(
     context_id: str,
     project_root: Path = None
@@ -68,13 +91,15 @@ def generate_hydration_instructions(
         lines.append("")
         lines.append("```")
         lines.append("TaskCreate:")
-        lines.append(f'  subject: "{task.subject}"')
+        # Escape special characters for YAML-like format
+        subject_escaped = _escape_string(task.subject)
+        lines.append(f'  subject: "{subject_escaped}"')
         if task.description:
-            # Escape quotes in description
-            desc = task.description.replace('"', '\\"')
-            lines.append(f'  description: "{desc}"')
+            desc_escaped = _escape_string(task.description)
+            lines.append(f'  description: "{desc_escaped}"')
         if task.active_form:
-            lines.append(f'  activeForm: "{task.active_form}"')
+            active_form_escaped = _escape_string(task.active_form)
+            lines.append(f'  activeForm: "{active_form_escaped}"')
         lines.append(f'  metadata: {{"persistent_id": "{task.id}", "context": "{context_id}"}}')
         lines.append("```")
         lines.append("")

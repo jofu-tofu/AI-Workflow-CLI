@@ -59,5 +59,5 @@ def archive_plan_async(
                 print(f"[async_archive] Callback failed: {e}", file=sys.stderr)
 
     # Start background thread
-    thread = threading.Thread(target=_archive_worker, daemon=True)
+    thread = threading.Thread(target=_archive_worker, daemon=False)
     thread.start()

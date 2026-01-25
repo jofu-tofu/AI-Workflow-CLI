@@ -19,7 +19,7 @@ Usage in .claude/settings.json:
     "SessionStart": [{
       "hooks": [{
         "type": "command",
-        "command": "python _shared/hooks/session_start.py"
+        "command": "python .aiwcli/_shared/hooks/session_start.py"
       }]
     }]
   }
@@ -49,6 +49,7 @@ from lib.context.task_sync import (
     record_session_start,
 )
 from lib.context.plan_archive import mark_plan_implementation_started
+from lib.context.context_manager import clear_handoff_status
 from lib.base.utils import eprint, project_dir
 
 
@@ -81,6 +82,8 @@ def on_session_start():
             output = format_handoff_continuation(in_flight_ctx)
             output += "\n\n" + generate_hydration_instructions(in_flight_ctx.id, project_root)
             record_session_start(in_flight_ctx.id, project_root=project_root)
+            # Clear handoff status to prevent re-triggering on next /clear
+            clear_handoff_status(in_flight_ctx.id, project_root)
             print(output)
             return
 

@@ -46,6 +46,15 @@ def validate_context_id(context_id: str) -> str:
     if not context_id:
         raise ValueError("Context ID cannot be empty")
 
+    # SECURITY: Check for path traversal BEFORE any normalization
+    # This prevents encoded or case-variant attacks
+    if '..' in context_id or '/' in context_id or '\\' in context_id:
+        raise ValueError(f"Invalid context ID '{context_id}': path traversal not allowed")
+
+    # Also check for URL-encoded variants
+    if '%2e' in context_id.lower() or '%2f' in context_id.lower() or '%5c' in context_id.lower():
+        raise ValueError(f"Invalid context ID '{context_id}': encoded path traversal not allowed")
+
     if len(context_id) > MAX_CONTEXT_ID_LENGTH:
         raise ValueError(f"Context ID too long: {len(context_id)} > {MAX_CONTEXT_ID_LENGTH}")
 
@@ -63,10 +72,6 @@ def validate_context_id(context_id: str) -> str:
     # Check for consecutive special characters
     if '--' in normalized or '__' in normalized or '-_' in normalized or '_-' in normalized:
         raise ValueError(f"Invalid context ID '{context_id}': consecutive special characters not allowed")
-
-    # Check for path traversal
-    if '..' in normalized or '/' in context_id or '\\' in context_id:
-        raise ValueError(f"Invalid context ID '{context_id}': path traversal not allowed")
 
     return normalized
 
@@ -111,10 +116,31 @@ def get_context_dir(context_id: str, project_root: Path = None) -> Path:
         Path to _output/contexts/{context_id}/
 
     Raises:
-        ValueError: If context_id is invalid
+        ValueError: If context_id is invalid or path escapes expected directory
     """
     validated_id = validate_context_id(context_id)
-    return get_contexts_dir(project_root) / validated_id
+    contexts_dir = get_contexts_dir(project_root)
+    result_path = contexts_dir / validated_id
+
+    # SECURITY: Verify resolved path stays within contexts directory
+    # This prevents symlink attacks and any path manipulation we might have missed
+    try:
+        resolved = result_path.resolve()
+        contexts_resolved = contexts_dir.resolve()
+        # Check that resolved path starts with the contexts directory
+        # Use os.path for cross-platform compatibility
+        import os
+        resolved_str = os.path.normcase(str(resolved))
+        contexts_str = os.path.normcase(str(contexts_resolved))
+        if not resolved_str.startswith(contexts_str):
+            raise ValueError(f"Invalid context ID '{context_id}': path escapes contexts directory")
+    except (OSError, ValueError) as e:
+        if isinstance(e, ValueError):
+            raise
+        # OSError can occur if path doesn't exist yet, which is fine for creation
+        pass
+
+    return result_path
 
 
 def get_context_plans_dir(context_id: str, project_root: Path = None) -> Path:

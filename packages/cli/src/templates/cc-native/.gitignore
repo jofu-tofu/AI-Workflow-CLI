@@ -1,2 +1,2 @@
-# CC-Native output
-_output/cc-native/
+# CC-Native runtime output (context data, plans, handoffs)
+_output/

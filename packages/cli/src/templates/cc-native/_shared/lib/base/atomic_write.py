@@ -149,12 +149,23 @@ def atomic_append(
     # Ensure parent directory exists
     path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Check if file is being created (for permission setting)
+    is_new_file = not path.exists()
+
     for attempt in range(max_attempts):
         try:
             with open(path, 'a', encoding='utf-8') as f:
                 f.write(content)
                 f.flush()
                 os.fsync(f.fileno())  # Force write to disk
+
+            # Set restrictive permissions on newly created files (chmod 600)
+            if is_new_file:
+                try:
+                    os.chmod(path, 0o600)
+                except OSError:
+                    pass  # chmod may fail on some filesystems
+
             return (True, None)
 
         except Exception as e:

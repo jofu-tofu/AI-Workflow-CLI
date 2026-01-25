@@ -10,6 +10,8 @@ Used by:
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from datetime import datetime
+
 from .context_manager import (
     Context,
     get_all_contexts,
@@ -72,9 +74,12 @@ def get_in_flight_context(project_root: Path = None) -> Optional[Context]:
     if not in_flight_contexts:
         return None
 
-    # Return highest priority
+    # Return highest priority, with secondary sort by last_active (most recent) for determinism
     in_flight_contexts.sort(
-        key=lambda c: priority_order.get(c.in_flight.mode, 99)
+        key=lambda c: (
+            priority_order.get(c.in_flight.mode, 99),
+            -(parse_iso_timestamp(c.last_active) or datetime.min).timestamp() if c.last_active else 0
+        )
     )
     return in_flight_contexts[0]
 
@@ -309,8 +314,17 @@ def _format_relative_time(iso_timestamp: Optional[str]) -> str:
     if not dt:
         return iso_timestamp[:16]  # Fallback: show date/time portion
 
-    from datetime import datetime
     now = datetime.now()
+
+    # Handle timezone-aware vs naive datetime comparison
+    # If dt is timezone-aware, convert to naive for comparison
+    if dt.tzinfo is not None:
+        try:
+            # Convert to local time and strip timezone
+            dt = dt.replace(tzinfo=None)
+        except Exception:
+            return iso_timestamp[:16]  # Fallback on error
+
     diff = now - dt
 
     if diff.days == 0:

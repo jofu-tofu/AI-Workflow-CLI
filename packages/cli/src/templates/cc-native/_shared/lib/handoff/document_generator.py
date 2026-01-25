@@ -118,10 +118,7 @@ def generate_handoff_document(
         important_notes=important_notes or [],
     )
 
-    # Generate markdown content
-    markdown = _render_handoff_markdown(doc)
-
-    # Save to handoffs folder
+    # Compute file path BEFORE rendering markdown
     handoffs_dir = get_context_handoffs_dir(context_id, project_root)
     handoffs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -130,12 +127,18 @@ def generate_handoff_document(
     filename = f"{date_str}-session-{session_id}.md"
     file_path = handoffs_dir / filename
 
+    # Set file_path on doc BEFORE rendering markdown
+    doc.file_path = str(file_path)
+
+    # Generate markdown content
+    markdown = _render_handoff_markdown(doc)
+
+    # Save to handoffs folder
+
     success, error = atomic_write(file_path, markdown)
     if not success:
         eprint(f"[handoff] ERROR: Failed to write handoff document: {error}")
         return None
-
-    doc.file_path = str(file_path)
 
     # Record event
     append_event(
@@ -204,7 +207,11 @@ def _render_handoff_markdown(doc: HandoffDocument) -> str:
             status_text = f"[{task.get('status', 'pending').upper()}]"
             lines.append(f"- {status_icon} {status_text} {task.get('subject', 'Unknown')}")
             if task.get("description"):
-                lines.append(f"  - {task['description'][:100]}...")
+                desc = task['description']
+                if len(desc) > 100:
+                    lines.append(f"  - {desc[:100]}...")
+                else:
+                    lines.append(f"  - {desc}")
         lines.append("")
     else:
         lines.append("### Active Tasks")

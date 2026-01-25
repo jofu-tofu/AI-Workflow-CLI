@@ -44,8 +44,23 @@ def project_dir(payload: Optional[Dict[str, Any]] = None) -> Path:
 
     Returns:
         Path to project directory
+
+    Note:
+        CLAUDE_PROJECT_DIR is validated to be an absolute path when provided.
     """
     p = os.environ.get("CLAUDE_PROJECT_DIR")
+    if p:
+        # Validate that CLAUDE_PROJECT_DIR is an absolute path
+        path = Path(p)
+        if not path.is_absolute():
+            eprint(f"[utils] WARNING: CLAUDE_PROJECT_DIR is not absolute, using cwd instead")
+            p = None
+        else:
+            # Check for suspicious patterns
+            if '..' in str(path):
+                eprint(f"[utils] WARNING: CLAUDE_PROJECT_DIR contains '..' pattern, using cwd instead")
+                p = None
+
     if not p and payload:
         p = payload.get("cwd")
     if not p:
@@ -53,7 +68,15 @@ def project_dir(payload: Optional[Dict[str, Any]] = None) -> Path:
     return Path(p)
 
 
-def sanitize_filename(s: str, max_len: int = 32) -> str:
+# Windows reserved filenames that should be blocked
+_WINDOWS_RESERVED = frozenset([
+    'CON', 'PRN', 'AUX', 'NUL',
+    'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+    'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+])
+
+
+def sanitize_filename(s: str, max_len: int = 32, allow_leading_dot: bool = False) -> str:
     """
     Sanitize string for use in filename.
 
@@ -63,12 +86,24 @@ def sanitize_filename(s: str, max_len: int = 32) -> str:
     Args:
         s: Input string
         max_len: Maximum length (default: 32)
+        allow_leading_dot: Whether to allow leading dots (default: False for security)
 
     Returns:
         Sanitized filename-safe string
     """
     s = re.sub(r"[^A-Za-z0-9._-]+", "_", s)
-    return s.strip("._-")[:max_len] or "unknown"
+    result = s.strip("._-")[:max_len] or "unknown"
+
+    # Remove leading dots unless explicitly allowed (prevents hidden files)
+    if not allow_leading_dot:
+        result = result.lstrip('.')
+
+    # Check for Windows reserved names
+    base_name = result.split('.')[0].upper()
+    if base_name in _WINDOWS_RESERVED:
+        result = f"_{result}"
+
+    return result or "unknown"
 
 
 def sanitize_title(s: str, max_len: int = 50) -> str:
@@ -89,7 +124,14 @@ def sanitize_title(s: str, max_len: int = 50) -> str:
     s = s.replace(' ', '-')
     s = re.sub(r"[^a-z0-9._-]+", "_", s)
     s = re.sub(r"[-_]+", "-", s)
-    return s.strip("._-")[:max_len] or "unknown"
+    result = s.strip("._-")[:max_len] or "unknown"
+
+    # Check for Windows reserved names
+    base_name = result.split('.')[0].upper()
+    if base_name in _WINDOWS_RESERVED:
+        result = f"_{result}"
+
+    return result or "unknown"
 
 
 def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str:

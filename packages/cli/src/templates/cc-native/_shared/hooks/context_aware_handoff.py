@@ -21,6 +21,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 # Add parent directories to path for imports
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -36,7 +37,7 @@ from lib.handoff.document_generator import get_low_context_warning
 LOW_CONTEXT_THRESHOLD = 20
 
 
-def get_current_context_id() -> str | None:
+def get_current_context_id() -> Optional[str]:
     """
     Determine the current active context.
 
@@ -59,7 +60,7 @@ def get_current_context_id() -> str | None:
     return None
 
 
-def check_context_level(hook_input: dict) -> str | None:
+def check_context_level(hook_input: dict) -> Optional[str]:
     """
     Check context level and return warning if low.
 

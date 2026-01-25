@@ -19,7 +19,7 @@ Usage in .claude/settings.json:
       "matcher": "ExitPlanMode",
       "hooks": [{
         "type": "command",
-        "command": "python _shared/hooks/archive_plan.py",
+        "command": "python .aiwcli/_shared/hooks/archive_plan.py",
         "timeout": 5000
       }]
     }]
@@ -95,7 +95,24 @@ def on_exit_plan_mode():
     # Resolve plan path relative to project root
     plan_file = Path(plan_path)
     if not plan_file.is_absolute():
+        # Ensure we have a valid project_root
+        if project_root is None:
+            project_root = project_dir()
         plan_file = project_root / plan_path
+    else:
+        # On Windows, check if absolute path is on a different drive than project_root
+        # In that case, use the absolute path as-is
+        import sys
+        if sys.platform == 'win32':
+            try:
+                # Check if drives match (e.g., C: vs D:)
+                plan_drive = plan_file.drive.upper() if plan_file.drive else None
+                project_drive = project_root.drive.upper() if hasattr(project_root, 'drive') and project_root.drive else None
+                if plan_drive and project_drive and plan_drive != project_drive:
+                    # Different drives - use absolute path as-is
+                    pass  # plan_file is already set correctly
+            except Exception:
+                pass  # Fall through to use plan_file as-is
 
     if not plan_file.exists():
         eprint(f"[archive_plan] Plan file not found: {plan_file}")
