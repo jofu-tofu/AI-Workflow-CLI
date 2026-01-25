@@ -10,22 +10,36 @@ CC-Native uses Claude Code's native tools with minimal workflow overhead. Plan r
 
 ```
 packages/cli/src/templates/cc-native/
-├── _cc-native/
+├── _shared/                  # SHARED: Cross-method infrastructure (Phase 1)
+│   ├── lib/
+│   │   ├── base/             # Base utilities
+│   │   │   ├── atomic_write.py   # Cross-platform atomic file writes
+│   │   │   ├── constants.py      # Security and configuration constants
+│   │   │   └── utils.py          # Common functions
+│   │   └── context/          # Context management
+│   │       ├── context_manager.py  # Context CRUD operations
+│   │       ├── event_log.py        # JSONL append/read utilities
+│   │       └── cache.py            # Cache rebuild utilities
+│   └── hooks/
+│       └── session_start.py      # SessionStart hook (context discovery)
+├── _cc-native/               # METHOD-SPECIFIC: CC-Native template code
 │   ├── workflows/*.md        # Workflow definitions
 │   ├── hooks/                # Hook scripts
 │   │   ├── cc-native-plan-review.py   # Unified plan review (CLI + agents)
-│   │   ├── set_plan_state.py          # Sets plan state before review
 │   │   └── archive_plan.py            # Archives approved plans
-│   ├── lib/                  # Shared utilities
-│   │   └── utils.py          # Common functions for hooks
+│   ├── lib/                  # CC-Native specific utilities
+│   │   ├── utils.py          # Common functions for hooks
+│   │   ├── atomic_write.py   # Cross-platform atomic file writes
+│   │   ├── async_archive.py  # Non-blocking plan archival
+│   │   └── constants.py      # Security and configuration constants
 │   ├── scripts/              # Utility scripts
 │   │   └── aggregate_agents.py  # Auto-detect agents from frontmatter
-│   └── config.json           # CC-Native configuration
+│   └── plan-review.config.json  # Plan review configuration
 ├── .claude/commands/cc-native/  # Claude Code slash commands
 ├── .claude/agents/cc-native/    # Agent definitions for plan review
 ├── .claude/settings.json     # Hook wiring
 ├── .windsurf/workflows/cc-native/  # Windsurf workflows
-├── .gitignore                # Ignores _output/cc-native/
+├── .gitignore                # Ignores _output/
 ├── CC-NATIVE-README.md       # User documentation
 └── TEMPLATE-SCHEMA.md        # This file
 ```
@@ -56,20 +70,25 @@ packages/cli/src/templates/cc-native/
 
 ## Output Structure
 
-All outputs in `_output/cc-native/`:
+All outputs in `_output/`:
 
 ```
-_output/cc-native/
-├── findings.md           # Research findings (optional)
-├── plans/                # Archived approved plans
-│   ├── YYYY-MM-DD/       # Date-organized plan archives
-│   │   └── HHMMSS-session-{id}.md
-│   └── reviews/          # Combined review artifacts (CLI + agents)
-│       └── YYYY-MM-DD/
-│           ├── HHMMSS-session-{id}-plan.md      # Copy of plan
-│           ├── HHMMSS-session-{id}-review.json  # Combined JSON
-│           └── HHMMSS-session-{id}-review.md    # Combined Markdown
-└── scratch/              # Working notes
+_output/
+├── index.json                # Global context cache
+├── contexts/                 # Context folders (method-agnostic)
+│   └── {context-id}/
+│       ├── context.json      # Context state cache
+│       ├── events.jsonl      # Event log (source of truth)
+│       └── plans/            # Archived plans for this context
+│           └── YYYY-MM-DD-{slug}.md
+├── cc-native/                # CC-Native specific outputs
+│   ├── findings.md           # Research findings (optional)
+│   ├── reviews/              # Combined review artifacts (CLI + agents)
+│   │   └── YYYY-MM-DD/
+│   │       ├── HHMMSS-session-{id}-plan.md      # Copy of plan
+│   │       ├── HHMMSS-session-{id}-review.json  # Combined JSON
+│   │       └── HHMMSS-session-{id}-review.md    # Combined Markdown
+│   └── scratch/              # Working notes
 ```
 
 ---
@@ -130,6 +149,92 @@ CC-Native settings are stored in `_cc-native/plan-review.config.json`:
 | `agentReview.agentSelection.simple` | Agent count for simple plans | `0-0` |
 | `agentReview.agentSelection.medium` | Agent count for medium plans | `1-2` |
 | `agentReview.agentSelection.high` | Agent count for complex plans | `2-4` |
+
+### Environment Variables
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `CC_NATIVE_ROBUST_WRITES` | Enable atomic writes and retry logic | `true` |
+| `CC_NATIVE_NOTIFICATIONS` | Enable voice/visual notifications | `false` |
+
+---
+
+## Context Management (Phase 1 - Event Sourced)
+
+CC-Native uses **shared infrastructure** for cross-session context persistence:
+
+```
+_output/
+├── index.json                        # CACHE: Aggregates all contexts
+└── contexts/                         # All contexts (method-agnostic)
+    ├── feature-auth/
+    │   ├── context.json              # CACHE: Derived from events
+    │   ├── events.jsonl              # SOURCE OF TRUTH (append-only)
+    │   └── plans/                    # Archived plans for this context
+    │       └── 2026-01-25-auth.md
+    └── another-context/
+        ├── context.json
+        └── events.jsonl
+```
+
+### Data Hierarchy
+
+| Level | File | Role | Recovery |
+|-------|------|------|----------|
+| 1 (Truth) | `events.jsonl` | Append-only event log | Cannot be rebuilt |
+| 2 (Cache) | `context.json` | Current state snapshot | Rebuild from events |
+| 3 (Cache) | `index.json` | Global context index | Rebuild from context files |
+
+### Context Schema
+
+```json
+{
+  "id": "feature-auth",
+  "status": "active",
+  "summary": "JWT authentication system",
+  "method": "cc-native",
+  "created_at": "2026-01-20T10:00:00Z",
+  "last_active": "2026-01-25T09:00:00Z",
+  "in_flight": {
+    "mode": "implementing",
+    "artifact_path": "_output/contexts/feature-auth/plans/2026-01-25-auth.md",
+    "artifact_hash": "a1b2c3d4",
+    "started_at": "2026-01-25T09:00:00Z"
+  }
+}
+```
+
+### In-Flight Mode Values
+
+| Mode | Meaning | SessionStart Behavior |
+|------|---------|----------------------|
+| `none` | Normal context | Show in context picker |
+| `planning` | In plan mode | Continue planning |
+| `pending_implementation` | Plan approved | Auto-continue implementation |
+| `implementing` | Implementation active | Continue implementation |
+
+### Event Types
+
+```jsonl
+{"event":"context_created","timestamp":"2026-01-20T10:00:00Z","summary":"JWT auth","method":"cc-native"}
+{"event":"task_added","task_id":"aiw-1","subject":"Add JWT middleware","timestamp":"..."}
+{"event":"task_completed","task_id":"aiw-1","evidence":"tests pass","timestamp":"..."}
+{"event":"plan_created","path":"_output/contexts/.../plans/...","hash":"a1b2c3","timestamp":"..."}
+{"event":"context_completed","timestamp":"..."}
+```
+
+### Robust Writes
+
+When `CC_NATIVE_ROBUST_WRITES=true` (default):
+
+1. **Atomic writes** - Uses temp file + rename (POSIX) or MoveFileExW (Windows)
+2. **Retry logic** - 2 attempts with 500ms, 1s backoff (max 1.5s retry window)
+3. **Crash safety** - If process dies mid-write, original file remains intact
+
+**Why atomic writes?**
+- Prevents corruption if hook killed mid-write
+- Guarantees readers see complete file or nothing
+- Cross-platform (Windows + POSIX)
 
 ---
 
@@ -221,6 +326,7 @@ Each selected agent:
 
 | Version | Changes |
 |---------|---------|
+| 1.4.0 | **Phase 1 Shared Infrastructure**: Event-sourced context management in `_shared/`, contexts in `_output/contexts/`, atomic writes. **BREAKING**: Renamed config.json → plan-review.config.json |
 | 1.3.0 | Consolidated CLI + agent review into single unified hook with combined output |
 | 1.2.0 | Added multi-agent plan review via Claude Code agents, reordered hooks (archive last) |
 | 1.1.0 | Added plan review via Codex/Gemini with Claude feedback, config.json |

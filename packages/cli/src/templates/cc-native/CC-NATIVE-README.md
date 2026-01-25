@@ -89,3 +89,104 @@ The brackets indicate optional steps. Research only needs Clarify → Explore �
 - You need context gathering without context pollution
 - You want explicit control over each phase
 - You're tired of implicit behaviors causing issues
+
+---
+
+## Context Management (Phase 1 - Shared Infrastructure)
+
+CC-Native uses **event-sourced context management** via shared infrastructure in `_shared/`:
+
+```
+_output/contexts/
+├── feature-auth/                    # Context folder (method-agnostic)
+│   ├── context.json                 # Derived cache with current state
+│   ├── events.jsonl                 # SOURCE OF TRUTH (append-only)
+│   └── plans/                       # Archived plans for this context
+│       └── 2026-01-25-auth-plan.md
+└── another-context/
+    ├── context.json
+    └── events.jsonl
+```
+
+### Data Hierarchy
+
+| File | Role | Notes |
+|------|------|-------|
+| `events.jsonl` | **Source of truth** | Append-only, never modified |
+| `context.json` | Derived cache | Rebuilt from events if corrupted |
+| `_output/index.json` | Global cache | Aggregates all contexts |
+
+### Context Schema
+
+```json
+{
+  "id": "feature-auth",
+  "status": "active",
+  "summary": "JWT authentication system",
+  "method": "cc-native",
+  "in_flight": {
+    "mode": "implementing",
+    "artifact_path": "_output/contexts/feature-auth/plans/2026-01-25-auth.md",
+    "artifact_hash": "a1b2c3d4"
+  }
+}
+```
+
+### In-Flight Modes
+
+| Mode | Meaning |
+|------|---------|
+| `none` | Normal context, no special handling |
+| `planning` | Currently in plan mode |
+| `pending_implementation` | Plan approved, awaiting implementation |
+| `implementing` | Implementation in progress |
+
+### Why Event Sourcing?
+
+- **Crash recovery**: Replay events to rebuild state
+- **Audit trail**: Full history of all actions
+- **No orphan state**: Contexts always visible (no "in_progress" limbo)
+- **Cross-session**: State persists across `/clear` and session restarts
+
+---
+
+## Troubleshooting
+
+### Plan Archive Failures
+
+**Symptom:** Plan not appearing in `_output/contexts/{id}/plans/`
+
+**Check:**
+1. Context exists: `ls _output/contexts/`
+2. Events logged: `cat _output/contexts/{id}/events.jsonl`
+3. Hook logs in terminal output
+
+**Solutions:**
+- **Disk full:** Clear space (requires 10MB minimum)
+- **Permissions:** Check write access to `_output/`
+
+### Context Recovery
+
+**Symptom:** `context.json` appears corrupted
+
+**Fix:** Context can be rebuilt from events:
+```bash
+# Events are the source of truth - context.json is derived
+# Delete context.json and it will be rebuilt on next access
+rm _output/contexts/{id}/context.json
+```
+
+### Notification Issues
+
+**Symptom:** No voice/visual notifications after plan review
+
+**Check:**
+```bash
+# Notifications disabled by default
+echo $CC_NATIVE_NOTIFICATIONS  # Should be 'true'
+```
+
+**Enable:**
+```bash
+export CC_NATIVE_NOTIFICATIONS=true
+```
