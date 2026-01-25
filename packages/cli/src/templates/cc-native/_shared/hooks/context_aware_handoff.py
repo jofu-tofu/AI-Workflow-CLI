@@ -127,3 +127,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# Export for use by unified hook
+__all__ = ["check_context_level", "get_current_context_id"]

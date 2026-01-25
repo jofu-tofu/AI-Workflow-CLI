@@ -735,3 +735,31 @@ def get_context_with_handoff_pending(project_root: Path = None) -> Optional[Cont
             return context
 
     return None
+
+
+def create_context_from_prompt(user_prompt: str, project_root: Path = None) -> Context:
+    """
+    Auto-create a context from the user's prompt.
+
+    Used by the context enforcer hook when no context exists.
+    Creates a context with the prompt as summary (truncated to 100 chars).
+
+    Args:
+        user_prompt: The user's prompt text
+        project_root: Project root directory
+
+    Returns:
+        Newly created Context object
+    """
+    # Truncate prompt to first 100 chars for summary
+    summary = user_prompt.strip()[:100]
+    if len(user_prompt.strip()) > 100:
+        summary += "..."
+
+    return create_context(
+        context_id=None,  # Auto-generate from summary
+        summary=summary,
+        method="auto-created",
+        tags=["auto-created"],
+        project_root=project_root
+    )

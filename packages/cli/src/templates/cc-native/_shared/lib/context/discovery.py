@@ -297,6 +297,157 @@ def format_ready_for_new_work() -> str:
     return "No active contexts. Ready for new work."
 
 
+def parse_context_choice_from_prompt(prompt: str, contexts: List[Context]) -> Optional[str]:
+    """
+    Parse context selection from user prompt.
+
+    Looks for patterns like:
+    - "continue feature-auth" or "resume feature-auth"
+    - "1" or "2" (number selection)
+    - Context ID mentioned in prompt
+
+    Args:
+        prompt: User's prompt text
+        contexts: Available contexts to match against
+
+    Returns:
+        Context ID if match found, None otherwise
+    """
+    if not prompt or not contexts:
+        return None
+
+    prompt_lower = prompt.lower().strip()
+
+    # Check for number selection (1, 2, 3, etc.)
+    # Match single digit at start or "option 1", "number 1", etc.
+    import re
+    number_match = re.match(r'^(\d+)$', prompt_lower)
+    if number_match:
+        idx = int(number_match.group(1)) - 1  # 1-indexed
+        if 0 <= idx < len(contexts):
+            return contexts[idx].id
+
+    # Check for "continue X" or "resume X" patterns
+    continue_match = re.match(r'^(?:continue|resume|work on|back to)\s+(.+)$', prompt_lower)
+    if continue_match:
+        target = continue_match.group(1).strip()
+        # Try to match against context IDs
+        for ctx in contexts:
+            if ctx.id.lower() == target or target in ctx.id.lower():
+                return ctx.id
+
+    # Check if any context ID appears in the prompt
+    for ctx in contexts:
+        if ctx.id.lower() in prompt_lower:
+            return ctx.id
+
+    return None
+
+
+def format_context_selection_required(contexts: List[Context]) -> str:
+    """
+    Format urgent picker prompt when multiple contexts require selection.
+
+    Used by context enforcer hook when context cannot be auto-determined.
+
+    Args:
+        contexts: Available contexts to choose from
+
+    Returns:
+        Formatted system reminder with context choices
+    """
+    lines = [
+        "## Context Selection Required",
+        "",
+        "Multiple active contexts exist. Please indicate which to continue:",
+        "",
+    ]
+
+    for i, ctx in enumerate(contexts, 1):
+        time_str = _format_relative_time(ctx.last_active)
+
+        # Add status indicator for in-flight work
+        status = ""
+        if ctx.in_flight and ctx.in_flight.mode != "none":
+            mode_display = {
+                "planning": "[Planning]",
+                "pending_implementation": "[Plan Ready]",
+                "implementing": "[Implementing]",
+                "handoff_pending": "[Handoff Pending]",
+            }
+            status = f" {mode_display.get(ctx.in_flight.mode, '')}"
+
+        lines.append(f"{i}. **{ctx.id}**{status} - {ctx.summary} [{time_str}]")
+
+    lines.extend([
+        "",
+        "Say the number/name, or describe your new work (a context will be created).",
+    ])
+
+    return "\n".join(lines)
+
+
+def format_active_context_reminder(context: Context) -> str:
+    """
+    Format system reminder for active context.
+
+    Used by context enforcer hook to inject context awareness.
+
+    Args:
+        context: Active context
+
+    Returns:
+        Formatted system reminder
+    """
+    time_str = _format_relative_time(context.last_active)
+
+    # Build mode display
+    mode_display = "Active"
+    if context.in_flight and context.in_flight.mode != "none":
+        mode_map = {
+            "planning": "Planning",
+            "pending_implementation": "Plan Ready",
+            "implementing": "Implementing",
+            "handoff_pending": "Handoff Pending",
+        }
+        mode_display = mode_map.get(context.in_flight.mode, mode_display)
+
+    lines = [
+        f"## Active Context: {context.id}",
+        "",
+        f"**Summary:** {context.summary}",
+        f"**Mode:** {mode_display}",
+        f"**Last Active:** {time_str}",
+        "",
+        f'All work belongs to context "{context.id}".',
+        "Tasks created with TaskCreate will be persisted to this context.",
+    ]
+
+    return "\n".join(lines)
+
+
+def format_context_created(context: Context) -> str:
+    """
+    Format notification that a new context was auto-created.
+
+    Args:
+        context: Newly created context
+
+    Returns:
+        Formatted system reminder
+    """
+    lines = [
+        f"## Context Created: {context.id}",
+        "",
+        f"**Summary:** {context.summary}",
+        "",
+        "A new context has been created for this work.",
+        "Tasks created with TaskCreate will be persisted to this context.",
+    ]
+
+    return "\n".join(lines)
+
+
 def _format_relative_time(iso_timestamp: Optional[str]) -> str:
     """
     Format ISO timestamp as relative time string.
