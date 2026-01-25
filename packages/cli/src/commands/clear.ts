@@ -340,11 +340,19 @@ async function updateIdeSettings(
     await fs.writeFile(backupPath, content, 'utf8')
     result.backedUp = true
 
-    // Remove method-specific top-level keys
+    // Remove method-specific entries from methods tracking object
     let modified = false
-    for (const method of methodsToRemove) {
-      if (method in settings) {
-        delete settings[method]
+    if (settings.methods && typeof settings.methods === 'object') {
+      for (const method of methodsToRemove) {
+        if (method in settings.methods) {
+          delete settings.methods[method]
+          modified = true
+        }
+      }
+
+      // Remove methods object if empty
+      if (Object.keys(settings.methods).length === 0) {
+        delete settings.methods
         modified = true
       }
     }
@@ -566,10 +574,17 @@ export default class ClearCommand extends BaseCommand {
           try {
             const content = await fs.readFile(settingsPath, 'utf8')
             const settings = JSON.parse(content)
-            // Remove method keys that would be removed
-            for (const method of methodsToRemove) {
-              if (method in settings) {
-                delete settings[method]
+            // Remove method entries from methods tracking object
+            if (settings.methods && typeof settings.methods === 'object') {
+              for (const method of methodsToRemove) {
+                if (method in settings.methods) {
+                  delete settings.methods[method]
+                }
+              }
+
+              // Remove methods object if empty
+              if (Object.keys(settings.methods).length === 0) {
+                delete settings.methods
               }
             }
 

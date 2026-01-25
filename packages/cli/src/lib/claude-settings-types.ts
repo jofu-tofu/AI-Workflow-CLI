@@ -69,6 +69,22 @@ export type EnabledPlugins = Record<string, boolean>
 export type EnvConfig = Record<string, string>
 
 /**
+ * Method installation tracking metadata
+ */
+export interface MethodTracking {
+  /** IDEs configured for this method */
+  ides?: string[]
+  /** ISO timestamp when method was installed */
+  installedAt: string
+}
+
+/**
+ * Methods tracking object
+ * Maps method names to their installation metadata
+ */
+export type MethodsConfig = Record<string, MethodTracking>
+
+/**
  * Complete Claude Code settings.json structure
  */
 export interface ClaudeSettings {
@@ -80,6 +96,8 @@ export interface ClaudeSettings {
   env?: EnvConfig
   /** Hook configurations */
   hooks?: HooksConfig
+  /** Installed methods tracking */
+  methods?: MethodsConfig
   /** Default model to use */
   model?: string
   /** Tool permissions */

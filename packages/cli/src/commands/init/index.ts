@@ -233,6 +233,9 @@ export default class Init extends BaseCommand {
         this.logSuccess(`✓ Merged shared settings into .claude/settings.json`)
       }
 
+      // Track method installation in settings.json
+      await this.trackMethodInstallation(targetDir, method, ides)
+
       // Merge hooks if Claude IDE is selected
       if (flags.ide.includes('claude')) {
         await this.mergeTemplateHooks(targetDir, templatePath)
@@ -446,6 +449,40 @@ export default class Init extends BaseCommand {
       username,
       projectName,
       confirmed,
+    }
+  }
+
+  /**
+   * Track method installation in settings.json
+   *
+   * Adds method entry to the methods object with installation metadata.
+   *
+   * @param targetDir - Project directory
+   * @param method - Method name being installed
+   * @param ides - IDEs configured for this method
+   */
+  private async trackMethodInstallation(targetDir: string, method: string, ides: string[]): Promise<void> {
+    try {
+      const settingsPath = getTargetSettingsFile(targetDir)
+      const existingSettings = (await readClaudeSettings(settingsPath)) || {}
+
+      // Add method tracking
+      const updatedSettings = {
+        ...existingSettings,
+        methods: {
+          ...existingSettings.methods,
+          [method]: {
+            ides,
+            installedAt: new Date().toISOString(),
+          },
+        },
+      }
+
+      await writeClaudeSettings(settingsPath, updatedSettings)
+      this.logSuccess(`✓ Method '${method}' tracked in settings.json`)
+    } catch (error) {
+      const err = error as Error
+      this.warn(`Failed to track method installation: ${err.message}`)
     }
   }
 }
