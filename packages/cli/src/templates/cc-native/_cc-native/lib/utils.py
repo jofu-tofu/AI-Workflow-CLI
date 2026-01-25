@@ -21,6 +21,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .atomic_write import atomic_write
+from .constants import ENABLE_ROBUST_PLAN_WRITES
+
 
 # ---------------------------
 # Constants
@@ -745,33 +748,70 @@ def write_combined_artifacts(
         out_dir = base / "_output" / "cc-native" / "plans" / date_folder / slug / "reviews"
         eprint(f"[utils] Generated task folder: {out_dir}")
 
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # Check directory creation explicitly
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    except PermissionError as e:
+        eprint(f"[utils] FATAL: Cannot create directory {out_dir}: {e}")
+        raise
 
-    # Write combined JSON (simplified filename since folder provides context)
+    # JSON write with atomic operation
     json_path = out_dir / "review.json"
     json_data = build_combined_json(result)
-    json_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    try:
+        if ENABLE_ROBUST_PLAN_WRITES:
+            success, error = atomic_write(json_path, json.dumps(json_data, indent=2, ensure_ascii=False))
+            if not success:
+                raise IOError(f"Atomic write failed: {error}")
+        else:
+            json_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        eprint(f"[utils] FATAL: Failed to write {json_path.name}: {e}")
+        raise
 
-    # Write combined Markdown
+    # Markdown write with atomic operation
     md_path = out_dir / "review.md"
     md_content = format_combined_markdown(result, settings)
-    md_path.write_text(md_content, encoding="utf-8")
+    try:
+        if ENABLE_ROBUST_PLAN_WRITES:
+            success, error = atomic_write(md_path, md_content)
+            if not success:
+                raise IOError(f"Atomic write failed: {error}")
+        else:
+            md_path.write_text(md_content, encoding="utf-8")
+    except Exception as e:
+        eprint(f"[utils] FATAL: Failed to write {md_path.name}: {e}")
+        raise
 
-    # Write individual reviewer results
+    # Individual reviewer writes (non-critical - continue on failure)
     for name, r in result.cli_reviewers.items():
         if r.data:
             reviewer_path = out_dir / f"{name}.json"
-            reviewer_path.write_text(
-                json.dumps(r.data, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
+            try:
+                content = json.dumps(r.data, indent=2, ensure_ascii=False)
+                if ENABLE_ROBUST_PLAN_WRITES:
+                    success, error = atomic_write(reviewer_path, content)
+                    if not success:
+                        eprint(f"[utils] WARNING: Failed to write {reviewer_path.name}: {error}")
+                else:
+                    reviewer_path.write_text(content, encoding="utf-8")
+            except Exception as e:
+                eprint(f"[utils] WARNING: Failed to write {reviewer_path.name}: {e}")
+                # Continue - individual reviewer failures not critical
     for name, r in result.agents.items():
         if r.data:
             reviewer_path = out_dir / f"{sanitize_filename(name)}.json"
-            reviewer_path.write_text(
-                json.dumps(r.data, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
+            try:
+                content = json.dumps(r.data, indent=2, ensure_ascii=False)
+                if ENABLE_ROBUST_PLAN_WRITES:
+                    success, error = atomic_write(reviewer_path, content)
+                    if not success:
+                        eprint(f"[utils] WARNING: Failed to write {reviewer_path.name}: {error}")
+                else:
+                    reviewer_path.write_text(content, encoding="utf-8")
+            except Exception as e:
+                eprint(f"[utils] WARNING: Failed to write {reviewer_path.name}: {e}")
+                # Continue - individual reviewer failures not critical
 
     return md_path
 

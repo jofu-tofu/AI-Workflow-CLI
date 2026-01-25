@@ -13,10 +13,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from .constants import validate_plan_path, PLANS_DIR
+from .atomic_write import atomic_write
+
 
 # ---------------------------
 # Constants
 # ---------------------------
+
+STATE_SCHEMA_VERSION = "1.0.0"
 
 DEFAULT_REVIEW_ITERATIONS: Dict[str, int] = {
     "simple": 1,
@@ -39,42 +44,84 @@ def eprint(*args: Any) -> None:
 # ---------------------------
 
 def get_state_file_path(plan_path: str) -> Path:
-    """Derive state file path from plan file path.
+    """Derive state file path from plan file path with security validation.
 
     The state file is stored adjacent to the plan file with a .state.json extension.
     This prevents state loss when session IDs change or temp files are cleaned up.
 
     Example: ~/.claude/plans/foo.md -> ~/.claude/plans/foo.state.json
+
+    Raises:
+        ValueError: If plan_path is invalid or insecure
     """
-    plan_file = Path(plan_path)
-    return plan_file.with_suffix('.state.json')
+    # SECURITY: Validate path before any operations
+    validated_path = validate_plan_path(plan_path)
+
+    # State file is always adjacent to plan file
+    return validated_path.with_suffix('.state.json')
 
 
 def load_state(plan_path: str) -> Optional[Dict[str, Any]]:
-    """Load state file for this plan if it exists."""
-    state_file = get_state_file_path(plan_path)
-
-    if not state_file.exists():
-        return None
-
+    """Load state file with schema validation and migration."""
     try:
-        return json.loads(state_file.read_text(encoding="utf-8"))
+        state_file = get_state_file_path(plan_path)  # Validates path
+
+        if not state_file.exists():
+            return None
+
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+
+        # Handle schema version (backward compatible)
+        schema_version = state.get("schema_version")
+
+        if schema_version is None:
+            # Existing state files without version - auto-migrate
+            state["schema_version"] = STATE_SCHEMA_VERSION
+            eprint(f"[state] Migrated state file to schema v{STATE_SCHEMA_VERSION}")
+        elif schema_version != STATE_SCHEMA_VERSION:
+            eprint(f"[state] WARNING: Schema mismatch (expected {STATE_SCHEMA_VERSION}, got {schema_version})")
+            # For now, accept with warning - add migration logic here if schema changes
+
+        return state
+
+    except ValueError as e:
+        eprint(f"[state] SECURITY: Invalid plan path: {e}")
+        return None
     except Exception as e:
-        eprint(f"[state] Failed to read state file: {e}")
+        eprint(f"[state] ERROR: Failed to load state: {e}")
         return None
 
 
 def save_state(plan_path: str, state: Dict[str, Any]) -> bool:
-    """Save state file for this plan.
+    """Save state file with schema version and validation.
 
     Returns True on success, False on failure.
     """
-    state_file = get_state_file_path(plan_path)
     try:
-        state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        state_file = get_state_file_path(plan_path)  # Validates path
+
+        state_with_version = {
+            "schema_version": STATE_SCHEMA_VERSION,
+            **state
+        }
+
+        # Use atomic write
+        success, error = atomic_write(
+            state_file,
+            json.dumps(state_with_version, indent=2)
+        )
+
+        if not success:
+            eprint(f"[state] Failed to save state: {error}")
+            return False
+
         return True
+
+    except ValueError as e:
+        eprint(f"[state] SECURITY: Invalid plan path: {e}")
+        return False
     except Exception as e:
-        eprint(f"[state] Failed to save state file: {e}")
+        eprint(f"[state] ERROR: {e}")
         return False
 
 
@@ -83,12 +130,15 @@ def delete_state(plan_path: str) -> bool:
 
     Returns True if deleted or didn't exist, False on error.
     """
-    state_file = get_state_file_path(plan_path)
     try:
+        state_file = get_state_file_path(plan_path)
         if state_file.exists():
             state_file.unlink()
             eprint(f"[state] Deleted state file: {state_file}")
         return True
+    except ValueError as e:
+        eprint(f"[state] SECURITY: Invalid plan path in delete: {e}")
+        return False
     except Exception as e:
         eprint(f"[state] Warning: failed to delete state file: {e}")
         return False

@@ -38,6 +38,8 @@ from state import (
     load_state,
     delete_state,
 )
+from constants import ENABLE_ROBUST_PLAN_WRITES, validate_plan_path
+from async_archive import archive_plan_async
 
 
 def extract_plan_content_from_archive(archive_path: Path) -> Optional[str]:
@@ -101,6 +103,13 @@ def main() -> int:
     if not plan_path_found:
         eprint("[archive_plan] No plan file found in ~/.claude/plans/ - skipping")
         return 0
+
+    # SECURITY: Validate plan_path BEFORE any operations
+    try:
+        validated_plan_path = validate_plan_path(plan_path_found)
+    except ValueError as e:
+        eprint(f"[archive_plan] SECURITY: Invalid plan path blocked: {e}")
+        return 0  # Non-blocking, but log security issue
 
     # Check for state file - this is the key gate
     state = load_state(plan_path_found)
@@ -182,16 +191,26 @@ def main() -> int:
         f"---\n\n"
     )
 
-    # Write the archived plan
-    try:
-        out_path.write_text(header + plan + "\n", encoding="utf-8")
-        eprint(f"[archive_plan] Saved plan to: {out_path}")
-    except Exception as e:
-        eprint(f"[archive_plan] Failed to write archive: {e}")
-        return 0
+    # Archive asynchronously (non-blocking)
+    def on_archive_complete(success: bool, error: Optional[str]):
+        if success:
+            eprint(f"[archive_plan] Background archive completed: {out_path}")
+            # Delete state file only after successful archive
+            delete_state(plan_path_found)
+        else:
+            eprint(f"[archive_plan] Background archive failed: {error}")
 
-    # Delete state file to prevent duplicate archives
-    delete_state(plan_path_found)
+    if ENABLE_ROBUST_PLAN_WRITES:
+        archive_plan_async(out_path, header, plan, callback=on_archive_complete)
+        eprint(f"[archive_plan] Started background archival to: {out_path}")
+    else:
+        # Legacy synchronous behavior
+        try:
+            out_path.write_text(header + plan + "\n", encoding="utf-8")
+            eprint(f"[archive_plan] Saved plan to: {out_path}")
+            delete_state(plan_path_found)
+        except Exception as e:
+            eprint(f"[archive_plan] Failed to write archive: {e}")
 
     return 0
 
