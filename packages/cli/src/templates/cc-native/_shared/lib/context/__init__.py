@@ -11,6 +11,9 @@ from .context_manager import (
     update_plan_status,
     get_context_with_pending_plan,
     get_context_with_in_flight_work,
+    update_handoff_status,
+    clear_handoff_status,
+    get_context_with_handoff_pending,
 )
 from .event_log import (
     Task,
@@ -71,6 +74,9 @@ __all__ = [
     "update_plan_status",
     "get_context_with_pending_plan",
     "get_context_with_in_flight_work",
+    "update_handoff_status",
+    "clear_handoff_status",
+    "get_context_with_handoff_pending",
     # Event Log
     "append_event",
     "read_events",

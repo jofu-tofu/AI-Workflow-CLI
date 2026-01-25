@@ -610,3 +610,97 @@ def get_context_with_in_flight_work(project_root: Path = None) -> Optional[Conte
             return context
 
     return None
+
+
+def update_handoff_status(
+    context_id: str,
+    handoff_path: str,
+    project_root: Path = None
+) -> Optional[Context]:
+    """
+    Update context to indicate a handoff is pending.
+
+    Called by handoff document generator after creating handoff document.
+    Sets in_flight.mode = "handoff_pending" and in_flight.handoff_path.
+
+    Args:
+        context_id: Context identifier
+        handoff_path: Path to the handoff document
+        project_root: Project root directory
+
+    Returns:
+        Updated Context or None if not found
+    """
+    context = get_context(context_id, project_root)
+    if not context:
+        return None
+
+    now = now_iso()
+
+    # Update in_flight state
+    context.in_flight.mode = "handoff_pending"
+    context.in_flight.handoff_path = handoff_path
+    context.in_flight.started_at = now
+    context.last_active = now
+
+    # Update caches
+    _write_context_cache(context, project_root)
+    _update_index_cache(context, project_root)
+
+    eprint(f"[context_manager] Set handoff pending for: {context_id}")
+    return context
+
+
+def clear_handoff_status(context_id: str, project_root: Path = None) -> Optional[Context]:
+    """
+    Clear handoff pending status after resumption.
+
+    Called by SessionStart after successfully resuming from handoff.
+
+    Args:
+        context_id: Context identifier
+        project_root: Project root directory
+
+    Returns:
+        Updated Context or None if not found
+    """
+    context = get_context(context_id, project_root)
+    if not context:
+        return None
+
+    if context.in_flight.mode != "handoff_pending":
+        return context  # Nothing to clear
+
+    now = now_iso()
+
+    # Clear handoff state but preserve any artifact path (plan being implemented)
+    context.in_flight.mode = "none"
+    context.in_flight.handoff_path = None
+    context.in_flight.started_at = None
+    context.last_active = now
+
+    # Update caches
+    _write_context_cache(context, project_root)
+    _update_index_cache(context, project_root)
+
+    eprint(f"[context_manager] Cleared handoff status for: {context_id}")
+    return context
+
+
+def get_context_with_handoff_pending(project_root: Path = None) -> Optional[Context]:
+    """
+    Find context with handoff pending (highest priority for SessionStart).
+
+    Args:
+        project_root: Project root directory
+
+    Returns:
+        Context with handoff pending, or None if not found
+    """
+    contexts = get_all_contexts(status="active", project_root=project_root)
+
+    for context in contexts:
+        if context.in_flight and context.in_flight.mode == "handoff_pending":
+            return context
+
+    return None
