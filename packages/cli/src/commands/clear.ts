@@ -461,9 +461,6 @@ export default class ClearCommand extends BaseCommand {
       const outputMethodFolders = await this.findOutputFolders(targetDir, flags.template)
       const ideMethodFolders = await this.findIdeMethodFolders(targetDir, flags.template)
 
-      // Track what will be cleared for gitignore update
-      const foldersToRemoveFromGitignore: string[] = []
-
       // Nothing to clear
       if (workflowFolders.length === 0 && outputMethodFolders.length === 0 && ideMethodFolders.length === 0) {
         const msg = flags.template
@@ -476,13 +473,12 @@ export default class ClearCommand extends BaseCommand {
       // Show what will be deleted
       this.log('')
 
-      // Workflow folders (_{method}/) - will be deleted entirely
+      // Workflow folders (.aiwcli/_{method}/) - will be deleted entirely
       if (workflowFolders.length > 0) {
         this.logInfo(`Workflow folders to remove (${workflowFolders.length}):`)
         for (const folder of workflowFolders) {
           const folderName = folder.replace(targetDir + '\\', '').replace(targetDir + '/', '')
           this.log(`  ${folderName}/`)
-          foldersToRemoveFromGitignore.push(folderName)
         }
 
         this.log('')
@@ -668,9 +664,21 @@ export default class ClearCommand extends BaseCommand {
         // _output doesn't exist or can't be accessed
       }
 
-      // Update .gitignore to remove cleared folder patterns
-      if (foldersToRemoveFromGitignore.length > 0) {
-        await updateGitignoreAfterClear(targetDir, foldersToRemoveFromGitignore)
+      // Check if .aiwcli container is now empty and remove it
+      let removedAiwcliContainer = false
+      try {
+        if (await isDirectoryEmpty(containerDir)) {
+          await removeDirectory(containerDir)
+          this.logDebug(`Removed empty ${AIWCLI_CONTAINER}/ folder`)
+          removedAiwcliContainer = true
+        }
+      } catch {
+        // .aiwcli doesn't exist or can't be accessed
+      }
+
+      // Update .gitignore to remove .aiwcli if the container was deleted
+      if (removedAiwcliContainer) {
+        await updateGitignoreAfterClear(targetDir, [AIWCLI_CONTAINER])
         this.logDebug('Updated .gitignore')
       }
 
@@ -740,6 +748,10 @@ export default class ClearCommand extends BaseCommand {
         parts.push(`${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder`)
       }
 
+      if (removedAiwcliContainer) {
+        parts.push(`${AIWCLI_CONTAINER}/ folder`)
+      }
+
       if (removedClaudeDir) {
         parts.push(`${IDE_FOLDERS.claude.root}/ folder`)
       }
@@ -750,7 +762,7 @@ export default class ClearCommand extends BaseCommand {
 
       this.logSuccess(`Cleared: ${parts.join(', ')}.`)
 
-      if (foldersToRemoveFromGitignore.length > 0) {
+      if (removedAiwcliContainer) {
         this.logSuccess('Updated .gitignore.')
       }
 
