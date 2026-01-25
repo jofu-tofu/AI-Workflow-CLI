@@ -8,8 +8,14 @@ import BaseCommand from '../lib/base-command.js'
 import {EXIT_CODES} from '../types/exit-codes.js'
 
 /**
+ * Container folder for method-specific files
+ * This keeps template infrastructure separate from IDE config
+ */
+const AIWCLI_CONTAINER = '.aiwcli'
+
+/**
  * The output folder name that contains method subdirectories.
- * Structure: _output/{method}/ (e.g., _output/bmad/, _output/gsd/)
+ * Structure: .aiwcli/_output/{method}/ (e.g., .aiwcli/_output/bmad/, .aiwcli/_output/gsd/)
  */
 const OUTPUT_FOLDER_NAME = '_output'
 
@@ -512,13 +518,14 @@ export default class ClearCommand extends BaseCommand {
       }
 
       // Check if _output will be empty after clearing
-      const outputDir = join(targetDir, OUTPUT_FOLDER_NAME)
+      const containerDir = join(targetDir, AIWCLI_CONTAINER)
+      const outputDir = join(containerDir, OUTPUT_FOLDER_NAME)
       const allMethodFolders = await this.findOutputFolders(targetDir)
       const willOutputBeEmpty =
         allMethodFolders.length > 0 && allMethodFolders.length === outputMethodFolders.length
 
       if (willOutputBeEmpty) {
-        this.logInfo(`${OUTPUT_FOLDER_NAME}/ folder will be removed (will be empty)`)
+        this.logInfo(`${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder will be removed (will be empty)`)
         this.log('')
       }
 
@@ -654,7 +661,7 @@ export default class ClearCommand extends BaseCommand {
       try {
         if (await isDirectoryEmpty(outputDir)) {
           await removeDirectory(outputDir)
-          this.logDebug(`Removed empty ${OUTPUT_FOLDER_NAME}/ folder`)
+          this.logDebug(`Removed empty ${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder`)
           removedOutputDir = true
         }
       } catch {
@@ -730,7 +737,7 @@ export default class ClearCommand extends BaseCommand {
       }
 
       if (removedOutputDir) {
-        parts.push(`${OUTPUT_FOLDER_NAME}/ folder`)
+        parts.push(`${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder`)
       }
 
       if (removedClaudeDir) {
@@ -831,14 +838,15 @@ export default class ClearCommand extends BaseCommand {
 
   /**
    * Find all output folders in the target directory.
-   * Looks for _output/{method}/ structure.
+   * Looks for .aiwcli/_output/{method}/ structure.
    *
    * @param targetDir - Directory to search in
    * @param template - Optional template/method name to filter by (e.g., 'bmad', 'gsd')
    * @returns Array of output folder paths
    */
   private async findOutputFolders(targetDir: string, template?: string): Promise<string[]> {
-    const outputDir = join(targetDir, OUTPUT_FOLDER_NAME)
+    const containerDir = join(targetDir, AIWCLI_CONTAINER)
+    const outputDir = join(containerDir, OUTPUT_FOLDER_NAME)
 
     // Check if _output folder exists
     try {
@@ -885,7 +893,7 @@ export default class ClearCommand extends BaseCommand {
 
   /**
    * Find all workflow folders in the target directory.
-   * Looks for _{method}/ structure (e.g., _gsd/, _bmad/).
+   * Looks for .aiwcli/_{method}/ structure (e.g., .aiwcli/_gsd/, .aiwcli/_bmad/).
    *
    * @param targetDir - Directory to search in
    * @param template - Optional template/method name to filter by (e.g., 'bmad', 'gsd')
@@ -893,9 +901,10 @@ export default class ClearCommand extends BaseCommand {
    */
   private async findWorkflowFolders(targetDir: string, template?: string): Promise<string[]> {
     const foundFolders: string[] = []
+    const containerDir = join(targetDir, AIWCLI_CONTAINER)
 
     try {
-      const entries = await fs.readdir(targetDir, {withFileTypes: true})
+      const entries = await fs.readdir(containerDir, {withFileTypes: true})
 
       for (const entry of entries) {
         // Look for directories starting with underscore (workflow folders)
@@ -903,10 +912,10 @@ export default class ClearCommand extends BaseCommand {
           // If template specified, only include matching folder
           if (template) {
             if (entry.name === `_${template}`) {
-              foundFolders.push(join(targetDir, entry.name))
+              foundFolders.push(join(containerDir, entry.name))
             }
           } else {
-            foundFolders.push(join(targetDir, entry.name))
+            foundFolders.push(join(containerDir, entry.name))
           }
         }
       }
