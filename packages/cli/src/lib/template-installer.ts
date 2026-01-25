@@ -4,6 +4,113 @@ import {join} from 'node:path'
 import {mergeTemplateContent} from './template-merger.js'
 
 /**
+ * Deep merge two settings objects, combining hook arrays.
+ * Used to merge _shared/settings.json into .claude/settings.json
+ */
+function deepMergeSettings(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
+  const result = {...target}
+
+  for (const key of Object.keys(source)) {
+    // Skip comment fields
+    if (key.startsWith('$') || key.startsWith('_')) {
+      continue
+    }
+
+    const sourceValue = source[key]
+    const targetValue = result[key]
+
+    if (key === 'hooks' && typeof sourceValue === 'object' && sourceValue !== null) {
+      // Special handling for hooks - merge by event type
+      result[key] = mergeHooks(
+        (targetValue as Record<string, unknown[]>) || {},
+        sourceValue as Record<string, unknown[]>,
+      )
+    } else if (Array.isArray(sourceValue) && Array.isArray(targetValue)) {
+      // Concatenate arrays
+      result[key] = [...targetValue, ...sourceValue]
+    } else if (typeof sourceValue === 'object' && sourceValue !== null && typeof targetValue === 'object' && targetValue !== null) {
+      // Recursively merge objects
+      result[key] = deepMergeSettings(targetValue as Record<string, unknown>, sourceValue as Record<string, unknown>)
+    } else {
+      // Override with source value
+      result[key] = sourceValue
+    }
+  }
+
+  return result
+}
+
+/**
+ * Merge hook configurations, combining arrays for each event type.
+ */
+function mergeHooks(
+  target: Record<string, unknown[]>,
+  source: Record<string, unknown[]>,
+): Record<string, unknown[]> {
+  const result: Record<string, unknown[]> = {...target}
+
+  for (const eventType of Object.keys(source)) {
+    const targetHooks = result[eventType]
+    const sourceHooks = source[eventType]
+
+    if (targetHooks && sourceHooks) {
+      // Append source hooks to existing event type
+      result[eventType] = [...targetHooks, ...sourceHooks]
+    } else if (sourceHooks) {
+      // New event type
+      result[eventType] = sourceHooks
+    }
+  }
+
+  return result
+}
+
+/**
+ * Merge settings from a shared folder into the IDE settings file.
+ * Looks for settings.json in the shared folder and merges into .claude/settings.json
+ */
+async function mergeSharedSettings(targetDir: string, sharedFolderName: string): Promise<boolean> {
+  const sharedSettingsPath = join(targetDir, sharedFolderName, 'settings.json')
+  const ideSettingsPath = join(targetDir, '.claude', 'settings.json')
+
+  // Check if shared settings exists
+  if (!(await pathExists(sharedSettingsPath))) {
+    return false
+  }
+
+  // Check if IDE settings exists
+  if (!(await pathExists(ideSettingsPath))) {
+    return false
+  }
+
+  try {
+    // Read both settings files
+    const sharedContent = await fs.readFile(sharedSettingsPath, 'utf8')
+    const ideContent = await fs.readFile(ideSettingsPath, 'utf8')
+
+    const sharedSettings = JSON.parse(sharedContent) as Record<string, unknown>
+    const ideSettings = JSON.parse(ideContent) as Record<string, unknown>
+
+    // Merge shared settings into IDE settings
+    const mergedSettings = deepMergeSettings(ideSettings, sharedSettings)
+
+    // Write merged settings back
+    await fs.writeFile(ideSettingsPath, JSON.stringify(mergedSettings, null, 4) + '\n', 'utf8')
+
+    return true
+  } catch {
+    // Silently fail on parse/write errors
+    return false
+  }
+}
+
+/**
+ * Container folder for method-specific files
+ * This keeps template infrastructure separate from IDE config
+ */
+const AIWCLI_CONTAINER = '.aiwcli'
+
+/**
  * Configuration for template installation
  */
 export interface TemplateInstallConfig {
@@ -57,6 +164,8 @@ export interface InstallationResult {
   mergedFileCount: number
   /** List of folder names that had content merged */
   mergedFolders: string[]
+  /** Whether shared settings were merged into IDE settings */
+  sharedSettingsMerged: boolean
   /** List of folder names that were skipped (already exist) */
   skippedFolders: string[]
   /** Absolute path to the template that was installed */
@@ -103,8 +212,13 @@ export async function checkTemplateStatus(
   let workflowFolder: null | string = null
   let workflowFolderExists = false
 
-  // Filter entries to only include relevant items (skip non-selected IDE folders)
+  // Filter entries to only include relevant items (skip non-selected IDE folders and excluded patterns)
   const relevantEntries = entries.filter((entry) => {
+    // Skip excluded patterns (test files, cache, etc.)
+    if (shouldExclude(entry.name)) {
+      return false
+    }
+
     if (entry.name.startsWith('.') && entry.isDirectory()) {
       const ideName = entry.name.slice(1)
       return ides.includes(ideName)
@@ -114,8 +228,13 @@ export async function checkTemplateStatus(
   })
 
   // Check all entries in parallel
+  // Non-dot folders go into .aiwcli/, dot folders stay at project root
+  const containerDir = join(targetDir, AIWCLI_CONTAINER)
   const statusChecks = relevantEntries.map(async (entry) => {
-    const targetPath = join(targetDir, entry.name)
+    // Dot folders (IDE folders) are at project root, non-dot folders are in .aiwcli/
+    const targetPath = entry.name.startsWith('.')
+      ? join(targetDir, entry.name)
+      : join(containerDir, entry.name)
     const exists = await pathExists(targetPath)
     return {
       name: entry.name,
@@ -149,24 +268,52 @@ export async function checkTemplateStatus(
 }
 
 /**
- * Copy directory recursively with proper error handling
+ * Patterns to exclude when copying template directories.
+ * These are development/test artifacts that shouldn't be packaged.
+ */
+const EXCLUDED_PATTERNS = [
+  '_output',
+  '__pycache__',
+  '.pytest_cache',
+  'conftest.py',
+  /^test_.*\.py$/,
+  /.*\.pyc$/,
+]
+
+/**
+ * Check if a filename should be excluded from copying
+ */
+function shouldExclude(name: string): boolean {
+  return EXCLUDED_PATTERNS.some((pattern) => {
+    if (typeof pattern === 'string') {
+      return name === pattern
+    }
+    return pattern.test(name)
+  })
+}
+
+/**
+ * Copy directory recursively with proper error handling.
+ * Excludes test files, cache directories, and output folders.
  */
 export async function copyDir(src: string, dest: string): Promise<void> {
   await fs.mkdir(dest, {recursive: true})
 
   const entries = await fs.readdir(src, {withFileTypes: true})
 
-  const operations = entries.map(async (entry) => {
-    const srcPath = join(src, entry.name)
-    const destPath = join(dest, entry.name)
+  const operations = entries
+    .filter((entry) => !shouldExclude(entry.name))
+    .map(async (entry) => {
+      const srcPath = join(src, entry.name)
+      const destPath = join(dest, entry.name)
 
-    try {
-      return entry.isDirectory() ? await copyDir(srcPath, destPath) : await fs.copyFile(srcPath, destPath)
-    } catch (error) {
-      const err = error as Error
-      throw new Error(`Failed to copy ${srcPath} to ${destPath}: ${err.message}`)
-    }
-  })
+      try {
+        return entry.isDirectory() ? await copyDir(srcPath, destPath) : await fs.copyFile(srcPath, destPath)
+      } catch (error) {
+        const err = error as Error
+        throw new Error(`Failed to copy ${srcPath} to ${destPath}: ${err.message}`)
+      }
+    })
 
   await Promise.all(operations)
 }
@@ -200,9 +347,9 @@ export async function installTemplate(
     )
   }
 
-  // Scan template directory to classify folders
+  // Scan template directory to classify folders (excluding test/cache patterns)
   const entries = await fs.readdir(templatePath, {withFileTypes: true})
-  const directories = entries.filter((entry) => entry.isDirectory())
+  const directories = entries.filter((entry) => entry.isDirectory() && !shouldExclude(entry.name))
 
   const nonDotFolders: string[] = []
   const dotFolders: Map<string, string> = new Map() // ide name -> folder name
@@ -233,10 +380,15 @@ export async function installTemplate(
   const mergedFolders: string[] = []
   let mergedFileCount = 0
 
-  // Install non-dot folders (skip if already exist and skipExisting is true)
+  // Create .aiwcli container folder for method-specific files
+  const containerDir = join(targetDir, AIWCLI_CONTAINER)
+  await fs.mkdir(containerDir, {recursive: true})
+
+  // Install non-dot folders into .aiwcli/ container (skip if already exist and skipExisting is true)
   const nonDotInstalls = nonDotFolders.map(async (folder) => {
     const srcPath = join(templatePath, folder)
-    const destPath = join(targetDir, folder)
+    // Destination is inside .aiwcli/ container
+    const destPath = join(containerDir, folder)
 
     if (skipExisting && (await pathExists(destPath))) {
       return {folder, skipped: true}
@@ -301,11 +453,20 @@ export async function installTemplate(
     }
   }
 
+  // Merge settings from _shared folder if it exists (now inside .aiwcli/)
+  // This allows shared infrastructure to contribute hooks to .claude/settings.json
+  let sharedSettingsMerged = false
+  const sharedPath = join(AIWCLI_CONTAINER, '_shared')
+  if (installedFolders.includes('_shared') || (await pathExists(join(targetDir, sharedPath)))) {
+    sharedSettingsMerged = await mergeSharedSettings(targetDir, sharedPath)
+  }
+
   return {
     installedFolders,
     skippedFolders,
     mergedFolders,
     mergedFileCount,
+    sharedSettingsMerged,
     templatePath,
   }
 }

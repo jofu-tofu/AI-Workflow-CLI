@@ -80,7 +80,7 @@ describe('Template Installer', () => {
       await fs.writeFile(join(mockTemplateDir, '.claude', 'settings.json'), 'claude settings', 'utf8')
     })
 
-    it('should install all non-dot folders automatically', async () => {
+    it('should install all non-dot folders inside .aiwcli container', async () => {
       const result = await installTemplate({
         templateName: 'mock',
         targetDir: testDir,
@@ -90,9 +90,12 @@ describe('Template Installer', () => {
         templatePath: mockTemplateDir,
       })
 
-      // Verify non-dot folders installed
-      expect(await pathExists(join(testDir, '_bmad'))).to.be.true
-      expect(await pathExists(join(testDir, 'GSR'))).to.be.true
+      // Verify .aiwcli container created
+      expect(await pathExists(join(testDir, '.aiwcli'))).to.be.true
+
+      // Verify non-dot folders installed inside .aiwcli
+      expect(await pathExists(join(testDir, '.aiwcli', '_bmad'))).to.be.true
+      expect(await pathExists(join(testDir, '.aiwcli', 'GSR'))).to.be.true
 
       // Verify result includes non-dot folders
       expect(result.installedFolders).to.include('_bmad')
@@ -212,10 +215,11 @@ describe('Template Installer', () => {
         templatePath: mockTemplateDir,
       })
 
-      // Verify files copied with correct content
-      const bmadConfig = await fs.readFile(join(testDir, '_bmad', 'config.yaml'), 'utf8')
+      // Verify non-dot folder files copied inside .aiwcli
+      const bmadConfig = await fs.readFile(join(testDir, '.aiwcli', '_bmad', 'config.yaml'), 'utf8')
       expect(bmadConfig).to.equal('bmad config')
 
+      // Verify IDE folder files copied at root level
       const claudeSettings = await fs.readFile(join(testDir, '.claude', 'settings.json'), 'utf8')
       expect(claudeSettings).to.equal('claude settings')
     })
@@ -312,11 +316,16 @@ describe('Template Installer', () => {
         templatePath: mockTemplateDir,
       })
 
-      // Only .vscode should be installed (plus non-dot _bmad)
+      // Only .vscode should be installed at root (non-dot _bmad inside .aiwcli)
       expect(result.installedFolders).to.include('.vscode')
       expect(result.installedFolders).to.include('_bmad')
       expect(result.installedFolders).to.not.include('.claude')
       expect(result.installedFolders).to.not.include('.windsurf')
+
+      // Verify .vscode at root level
+      expect(await pathExists(join(testDir, '.vscode'))).to.be.true
+      // Verify _bmad inside .aiwcli
+      expect(await pathExists(join(testDir, '.aiwcli', '_bmad'))).to.be.true
     })
   })
 })

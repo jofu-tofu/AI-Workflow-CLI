@@ -207,8 +207,15 @@ export default class Init extends BaseCommand {
         this.logSuccess('✓ Configuration files generated')
       }
 
-      // Collect all folders that need gitignore entries (both installed and existing)
-      const foldersForGitignore = [...result.installedFolders, ...result.skippedFolders]
+      // Collect all folders that need gitignore entries
+      // Note: Non-dot folders are now inside .aiwcli/ and should be tracked in git
+      // Only output directories should be gitignored
+      const foldersForGitignore: string[] = []
+
+      // CC-Native: output folder for runtime data (contexts, plans, handoffs)
+      if (method === 'cc-native') {
+        foldersForGitignore.push('_output')
+      }
 
       // BMAD-specific post-install: add output directories to gitignore
       if (method === 'bmad') {
@@ -226,6 +233,10 @@ export default class Init extends BaseCommand {
 
       if (result.skippedFolders.length > 0) {
         this.logInfo(`✓ Skipped (already exist): ${result.skippedFolders.join(', ')}`)
+      }
+
+      if (result.sharedSettingsMerged) {
+        this.logSuccess(`✓ Merged shared settings into .claude/settings.json`)
       }
 
       // Merge hooks if Claude IDE is selected
