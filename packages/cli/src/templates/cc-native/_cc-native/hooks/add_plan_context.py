@@ -18,15 +18,21 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
-# Add lib directory to path for imports
+# Add lib directories to path for imports
 _hook_dir = Path(__file__).resolve().parent
-_lib_dir = _hook_dir.parent / "lib"
-sys.path.insert(0, str(_lib_dir))
+_cc_native_lib_dir = _hook_dir.parent / "lib"
+_shared_lib_dir = _hook_dir.parent.parent / "_shared" / "lib"
+sys.path.insert(0, str(_cc_native_lib_dir))
+sys.path.insert(0, str(_shared_lib_dir))
 
 from utils import (
     eprint,
     was_questions_offered,
     mark_questions_offered,
+)
+from templates.plan_context import (
+    get_evaluation_context_reminder,
+    get_questions_offer_template,
 )
 
 
@@ -58,76 +64,8 @@ def load_plan_context_config(proj_dir: Path) -> Dict[str, Any]:
         return defaults
 
 
-CONTEXT_REMINDER = """
-## IMPORTANT: Add Evaluation Context
-
-Your plan will be reviewed by agents who have NO access to this conversation.
-Before completing this plan, ensure it includes:
-
-1. **A title line** at the very top: `# Plan: <descriptive title>`
-2. **An Evaluation Context section** near the top with:
-   - **Task**: What is being built/changed and why
-   - **Goal**: The underlying problem the user wants solved
-   - **Constraints**: Technical requirements, preferences, or limitations mentioned
-   - **Codebase Context**: Important files, patterns, or architecture decisions
-
-Example:
-```markdown
-# Plan: Add OAuth2 Authentication
-
-## Evaluation Context
-**Task**: Implement OAuth2 flow for user service
-**Goal**: Enable secure third-party authentication
-**Constraints**: Must support Google and GitHub providers
-**Codebase Context**: Uses Express middleware pattern in src/auth/
-```
-
-This context allows reviewers to assess whether your plan actually addresses the user's needs—not just whether it's technically sound.
-""".strip()
-
-
-QUESTIONS_OFFER_CONTEXT = """
-## First Plan Write - Optional Clarifying Questions
-
-Your initial plan has been saved. Before finalizing, ask the user if they'd like to answer clarifying questions to refine it.
-
-**Use AskUserQuestion now with this question:**
-
-Header: "Questions?"
-Question: "I've drafted an initial plan. Would you like to answer a few clarifying questions so I can refine it?"
-Options:
-- "Yes, ask me questions" (description: "I'll interview you about technical details, constraints, and preferences, then update the plan")
-- "No, proceed as-is" (description: "Skip questions and proceed with the current plan")
-
-### If user chooses YES - Interview them about:
-
-1. **Technical Implementation**
-   - Preferred approaches or patterns?
-   - Technologies/libraries to use or avoid?
-   - Performance or scalability requirements?
-
-2. **Constraints & Requirements**
-   - Hard constraints that must be respected?
-   - Deadlines or scope limitations?
-   - Dependencies on other systems?
-
-3. **Edge Cases & Concerns**
-   - Known edge cases to handle?
-   - Security or privacy considerations?
-   - Error handling preferences?
-
-4. **Tradeoffs**
-   - Speed vs. quality preferences?
-   - Simplicity vs. flexibility?
-   - What's acceptable to defer to later?
-
-Ask 2-4 focused questions using AskUserQuestion. Don't ask obvious questions - focus on things that would meaningfully change the plan.
-
-After gathering answers, **update the plan file** with the refined content before calling ExitPlanMode.
-
-### If user chooses NO:
-Proceed directly to ExitPlanMode with the current plan.
-""".strip()
+CONTEXT_REMINDER = get_evaluation_context_reminder()
+QUESTIONS_OFFER_CONTEXT = get_questions_offer_template()
 
 
 def inject_evaluation_context() -> int:
