@@ -1,5 +1,5 @@
 import {promises as fs} from 'node:fs'
-import {join} from 'node:path'
+import {dirname, join} from 'node:path'
 
 import {mergeTemplateContent} from './template-merger.js'
 
@@ -66,33 +66,38 @@ function mergeHooks(
 }
 
 /**
- * Merge settings from a shared folder into the IDE settings file.
- * Looks for settings.json in the shared folder and merges into .claude/settings.json
+ * Merge settings from a source settings.json file into the IDE settings file.
+ * Reads from the provided source path and merges into .claude/settings.json at project root.
+ *
+ * @param targetDir - Project root directory
+ * @param sourceSettingsPath - Absolute path to source settings.json file
+ * @returns true if merge successful, false otherwise
  */
-async function mergeSharedSettings(targetDir: string, sharedFolderName: string): Promise<boolean> {
-  const sharedSettingsPath = join(targetDir, sharedFolderName, 'settings.json')
+async function mergeSharedSettingsFromSource(targetDir: string, sourceSettingsPath: string): Promise<boolean> {
   const ideSettingsPath = join(targetDir, '.claude', 'settings.json')
 
-  // Check if shared settings exists
-  if (!(await pathExists(sharedSettingsPath))) {
-    return false
-  }
-
-  // Check if IDE settings exists
-  if (!(await pathExists(ideSettingsPath))) {
+  // Check if source settings exists
+  if (!(await pathExists(sourceSettingsPath))) {
     return false
   }
 
   try {
-    // Read both settings files
-    const sharedContent = await fs.readFile(sharedSettingsPath, 'utf8')
-    const ideContent = await fs.readFile(ideSettingsPath, 'utf8')
+    // Read source settings
+    const sourceContent = await fs.readFile(sourceSettingsPath, 'utf8')
+    const sourceSettings = JSON.parse(sourceContent) as Record<string, unknown>
 
-    const sharedSettings = JSON.parse(sharedContent) as Record<string, unknown>
-    const ideSettings = JSON.parse(ideContent) as Record<string, unknown>
+    // Read IDE settings (create empty object if doesn't exist)
+    let ideSettings: Record<string, unknown> = {}
+    if (await pathExists(ideSettingsPath)) {
+      const ideContent = await fs.readFile(ideSettingsPath, 'utf8')
+      ideSettings = JSON.parse(ideContent) as Record<string, unknown>
+    } else {
+      // Create .claude directory if it doesn't exist
+      await fs.mkdir(dirname(ideSettingsPath), {recursive: true})
+    }
 
-    // Merge shared settings into IDE settings
-    const mergedSettings = deepMergeSettings(ideSettings, sharedSettings)
+    // Merge source settings into IDE settings
+    const mergedSettings = deepMergeSettings(ideSettings, sourceSettings)
 
     // Write merged settings back
     await fs.writeFile(ideSettingsPath, JSON.stringify(mergedSettings, null, 4) + '\n', 'utf8')
@@ -288,6 +293,7 @@ function shouldExclude(name: string): boolean {
     if (typeof pattern === 'string') {
       return name === pattern
     }
+
     return pattern.test(name)
   })
 }
@@ -295,20 +301,37 @@ function shouldExclude(name: string): boolean {
 /**
  * Copy directory recursively with proper error handling.
  * Excludes test files, cache directories, and output folders.
+ *
+ * @param src - Source directory path
+ * @param dest - Destination directory path
+ * @param excludeIdeFolders - If true, exclude IDE config folders (.claude, .windsurf, etc.)
  */
-export async function copyDir(src: string, dest: string): Promise<void> {
+export async function copyDir(src: string, dest: string, excludeIdeFolders: boolean = false): Promise<void> {
   await fs.mkdir(dest, {recursive: true})
 
   const entries = await fs.readdir(src, {withFileTypes: true})
 
   const operations = entries
-    .filter((entry) => !shouldExclude(entry.name))
+    .filter((entry) => {
+      // Standard exclusions (test files, cache, etc.)
+      if (shouldExclude(entry.name)) {
+        return false
+      }
+
+      // Exclude IDE config folders if requested (used for _shared folder)
+      // These folders are used for settings merging, not direct installation
+      if (excludeIdeFolders && entry.isDirectory() && entry.name.startsWith('.')) {
+        return false
+      }
+
+      return true
+    })
     .map(async (entry) => {
       const srcPath = join(src, entry.name)
       const destPath = join(dest, entry.name)
 
       try {
-        return entry.isDirectory() ? await copyDir(srcPath, destPath) : await fs.copyFile(srcPath, destPath)
+        return entry.isDirectory() ? await copyDir(srcPath, destPath, excludeIdeFolders) : await fs.copyFile(srcPath, destPath)
       } catch (error) {
         const err = error as Error
         throw new Error(`Failed to copy ${srcPath} to ${destPath}: ${err.message}`)
@@ -407,6 +430,22 @@ export async function installTemplate(
     }
   }
 
+  // Install root-level _shared directory (shared across all templates)
+  // This is at templates/_shared, not inside the specific template directory
+  // Exclude IDE config folders (.claude, .windsurf) - they are used for settings merging only
+  const templatesRoot = dirname(templatePath)
+  const rootSharedSrc = join(templatesRoot, '_shared')
+  const rootSharedDest = join(containerDir, '_shared')
+
+  if (await pathExists(rootSharedSrc)) {
+    if (skipExisting && (await pathExists(rootSharedDest))) {
+      skippedFolders.push('_shared')
+    } else {
+      await copyDir(rootSharedSrc, rootSharedDest, true) // excludeIdeFolders = true
+      installedFolders.push('_shared')
+    }
+  }
+
   // Install matching IDE folders
   // If folder exists, merge content recursively by looking for method name folders
   const ideInstalls = ides.map(async (ide) => {
@@ -453,12 +492,14 @@ export async function installTemplate(
     }
   }
 
-  // Merge settings from _shared folder if it exists (now inside .aiwcli/)
+  // Merge settings from _shared template folder
+  // Read from template source (not installed copy) since IDE folders are excluded from installation
   // This allows shared infrastructure to contribute hooks to .claude/settings.json
   let sharedSettingsMerged = false
-  const sharedPath = join(AIWCLI_CONTAINER, '_shared')
-  if (installedFolders.includes('_shared') || (await pathExists(join(targetDir, sharedPath)))) {
-    sharedSettingsMerged = await mergeSharedSettings(targetDir, sharedPath)
+  const sharedTemplatePath = join(templatesRoot, '_shared')
+  if (await pathExists(sharedTemplatePath)) {
+    const sharedSettingsPath = join(sharedTemplatePath, '.claude', 'settings.json')
+    sharedSettingsMerged = await mergeSharedSettingsFromSource(targetDir, sharedSettingsPath)
   }
 
   return {
