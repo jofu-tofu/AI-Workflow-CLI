@@ -169,5 +169,35 @@ node_modules/
       // Should end with newline
       expect(content).to.match(/\n$/)
     })
+
+    it('should add only missing patterns when some already exist', async () => {
+      const gitignorePath = join(testDir, '.gitignore')
+
+      // First installation with .aiwcli
+      await updateGitignore(testDir, ['.aiwcli'])
+
+      const firstContent = await fs.readFile(gitignorePath, 'utf8')
+      const firstLineCount = firstContent.split('\n').filter((line) => line.trim()).length
+
+      // Second installation with .aiwcli (existing) and _bmad (new)
+      await updateGitignore(testDir, ['.aiwcli', '_bmad'])
+
+      const secondContent = await fs.readFile(gitignorePath, 'utf8')
+
+      // .aiwcli should appear exactly once
+      const aiwcliMatches = secondContent.match(/\.aiwcli\//g) || []
+      expect(aiwcliMatches.length).to.equal(1)
+
+      // _bmad should be added
+      expect(secondContent).to.include('_bmad/')
+
+      // Header should still appear only once
+      const headerMatches = secondContent.match(/# AIW Installation/g) || []
+      expect(headerMatches.length).to.equal(1)
+
+      // Should have added only one new line (_bmad/)
+      const secondLineCount = secondContent.split('\n').filter((line) => line.trim()).length
+      expect(secondLineCount).to.equal(firstLineCount + 1)
+    })
   })
 })
