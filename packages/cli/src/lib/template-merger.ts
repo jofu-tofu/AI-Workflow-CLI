@@ -134,6 +134,31 @@ export async function mergeTemplateContent(
     skippedFiles: [],
   }
 
+  // First, copy root-level files from the template IDE folder (e.g., settings.json)
+  // These are files directly in .claude/ that aren't in method-specific subfolders
+  try {
+    const entries = await fs.readdir(templateIdePath, {withFileTypes: true})
+    const rootFiles = entries.filter((entry) => entry.isFile())
+
+    await Promise.all(
+      rootFiles.map(async (file) => {
+        const srcPath = join(templateIdePath, file.name)
+        const destPath = join(targetIdePath, file.name)
+
+        // Only copy if it doesn't exist (skip existing behavior)
+        const exists = await pathExists(destPath)
+        if (exists) {
+          result.skippedFiles.push(destPath)
+        } else {
+          await fs.copyFile(srcPath, destPath)
+          result.copiedFiles.push(destPath)
+        }
+      }),
+    )
+  } catch {
+    // Ignore errors (permission issues, missing directory, etc.)
+  }
+
   // Find all folders matching the method name in the template
   const methodFolders = await findMethodFolders(templateIdePath, methodName)
 
