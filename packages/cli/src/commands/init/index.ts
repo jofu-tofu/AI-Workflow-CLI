@@ -1,5 +1,6 @@
 import {promises as fs} from 'node:fs'
-import {basename, join} from 'node:path'
+import {basename, dirname, join} from 'node:path'
+import {fileURLToPath} from 'node:url'
 
 import {checkbox, confirm, input, select} from '@inquirer/prompts'
 import {Flags} from '@oclif/core'
@@ -114,14 +115,8 @@ export default class Init extends BaseCommand {
         ides = wizardResult.ides
         username = wizardResult.username
         projectName = wizardResult.projectName
-      } else {
-        // Use flags (require method in non-interactive mode)
-        if (!flags.method) {
-          this.error('Template method is required. Use --method <template> or --interactive for guided setup.', {
-            exit: EXIT_CODES.INVALID_USAGE,
-          })
-        }
-
+      } else if (flags.method) {
+        // Use flags (method specified)
         // Validate template exists
         if (!availableTemplates.includes(flags.method)) {
           this.error(`Template '${flags.method}' not found. Available templates: ${availableTemplates.join(', ')}`, {
@@ -133,6 +128,10 @@ export default class Init extends BaseCommand {
         ides = flags.ide
         username = await detectUsername()
         projectName = detectProjectName(targetDir)
+      } else {
+        // Minimal install mode - install only _shared folder
+        await this.performMinimalInstall(targetDir)
+        return
       }
 
       // Validate write permissions
@@ -280,6 +279,48 @@ export default class Init extends BaseCommand {
   }
 
   /**
+   * Copy directory recursively, excluding test files and cache
+   *
+   * @param src - Source directory path
+   * @param dest - Destination directory path
+   * @param excludeIdeFolders - If true, exclude IDE config folders (.claude, .windsurf, etc.)
+   */
+  private async copyDirectory(src: string, dest: string, excludeIdeFolders: boolean = false): Promise<void> {
+    await fs.mkdir(dest, {recursive: true})
+
+    const entries = await fs.readdir(src, {withFileTypes: true})
+
+    const operations = entries
+      .filter((entry) => {
+        // Standard exclusions (test files, cache, etc.)
+        if (this.shouldExcludeFile(entry.name)) {
+          return false
+        }
+
+        // Exclude IDE config folders if requested (used for _shared folder)
+        // These folders are used for settings merging, not direct installation
+        if (excludeIdeFolders && entry.isDirectory() && entry.name.startsWith('.')) {
+          return false
+        }
+
+        return true
+      })
+      .map(async (entry) => {
+        const srcPath = join(src, entry.name)
+        const destPath = join(dest, entry.name)
+
+        try {
+          return entry.isDirectory() ? await this.copyDirectory(srcPath, destPath, excludeIdeFolders) : await fs.copyFile(srcPath, destPath)
+        } catch (error) {
+          const err = error as Error
+          throw new Error(`Failed to copy ${srcPath} to ${destPath}: ${err.message}`)
+        }
+      })
+
+    await Promise.all(operations)
+  }
+
+  /**
    * Get description for a template
    *
    * @param template - Template name
@@ -290,6 +331,7 @@ export default class Init extends BaseCommand {
       bmad: 'BMAD Method - AI-driven development workflow with agents',
       gsd: 'GSD Method - Get Stuff Done project management',
     }
+
     return descriptions[template] || 'Custom template'
   }
 
@@ -367,6 +409,86 @@ export default class Init extends BaseCommand {
       this.warn(`Failed to merge Windsurf template hooks: ${err.message}`)
       // Don't fail the entire installation if hook merging fails
     }
+  }
+
+  /**
+   * Check if a path exists
+   */
+  private async pathExists(path: string): Promise<boolean> {
+    try {
+      await fs.access(path)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Perform minimal installation - install only _shared folder
+   *
+   * @param targetDir - Project directory
+   */
+  private async performMinimalInstall(targetDir: string): Promise<void> {
+    this.logInfo('Performing minimal installation (_shared folder only)...')
+    this.log('')
+
+    // Verify write permissions
+    try {
+      const testFile = join(targetDir, '.aiwcli-write-test')
+      await fs.writeFile(testFile, '', 'utf8')
+      await fs.unlink(testFile)
+    } catch {
+      this.error('Permission denied. Cannot write to current directory.', {
+        exit: EXIT_CODES.ENVIRONMENT_ERROR,
+      })
+    }
+
+    // Create .aiwcli container directory
+    const containerDir = join(targetDir, '.aiwcli')
+    await fs.mkdir(containerDir, {recursive: true})
+
+    // Check if _shared already exists
+    const sharedDestPath = join(containerDir, '_shared')
+    const sharedExists = await this.pathExists(sharedDestPath)
+
+    if (sharedExists) {
+      this.logInfo('✓ _shared folder already exists - skipping')
+    } else {
+      // Find _shared source folder in templates
+      // For ES modules: import.meta.url gives file:// URL, convert to path
+      const currentFilePath = fileURLToPath(import.meta.url)
+      const currentDir = dirname(currentFilePath)
+      // currentDir is dist/commands/init/, go up to dist/ then add templates/
+      const templatesRoot = join(dirname(dirname(currentDir)), 'templates')
+      const sharedSrcPath = join(templatesRoot, '_shared')
+
+      // Verify _shared source exists
+      if (!(await this.pathExists(sharedSrcPath))) {
+        this.error(`Shared folder not found at ${sharedSrcPath}. This indicates a corrupted installation.`, {
+          exit: EXIT_CODES.ENVIRONMENT_ERROR,
+        })
+      }
+
+      // Copy _shared folder
+      // Exclude IDE config folders (.claude, .windsurf) - they are used for settings merging only
+      await this.copyDirectory(sharedSrcPath, sharedDestPath, true)
+      this.logSuccess('✓ Installed _shared folder')
+    }
+
+    // Update .gitignore if git repository exists
+    const hasGit = await detectGitRepository(targetDir)
+
+    if (hasGit) {
+      await updateGitignore(targetDir, ['.aiwcli'])
+      this.logSuccess('✓ .gitignore updated')
+    }
+
+    this.log('')
+    this.logSuccess('✓ Minimal installation completed successfully')
+    this.log('')
+    this.logInfo('Next steps:')
+    this.logInfo('  aiw init --method <template>    Install a full template method (bmad, gsd, etc.)')
+    this.logInfo('  aiw init --interactive          Run interactive setup wizard')
   }
 
   /**
@@ -450,6 +572,28 @@ export default class Init extends BaseCommand {
       projectName,
       confirmed,
     }
+  }
+
+  /**
+   * Check if a file should be excluded from copying
+   */
+  private shouldExcludeFile(name: string): boolean {
+    const excludedPatterns = [
+      '_output',
+      '__pycache__',
+      '.pytest_cache',
+      'conftest.py',
+      /^test_.*\.py$/,
+      /.*\.pyc$/,
+    ]
+
+    return excludedPatterns.some((pattern) => {
+      if (typeof pattern === 'string') {
+        return name === pattern
+      }
+
+      return pattern.test(name)
+    })
   }
 
   /**

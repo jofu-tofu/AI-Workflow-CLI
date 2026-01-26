@@ -48,18 +48,15 @@ describe('Init Command Structure - Integration Tests', () => {
   })
 
   describe('Flag Requirements', () => {
-    it('validates --method flag is required', () => {
-      try {
-        execSync(`${bin} init`, {
-          encoding: 'utf8',
-          stdio: 'pipe',
-        })
-        expect.fail('Should error when --method flag is missing')
-      } catch (error: unknown) {
-        const err = error as {stderr: Buffer}
-        const stderr = err.stderr.toString()
-        expect(stderr).to.match(/Missing required flag method|--method/i)
-      }
+    it('validates minimal install when --method flag is omitted', () => {
+      const output = execSync(`${bin} init`, {
+        encoding: 'utf8',
+        stdio: 'pipe',
+      })
+
+      // Should perform minimal install
+      expect(output).to.match(/minimal installation|_shared folder/i)
+      expect(output).to.match(/completed successfully/i)
     })
 
     it('validates error when template does not exist', () => {
