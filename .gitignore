@@ -136,6 +136,7 @@ NUL
 _bmad-output/
 
 # AIW Installation (user-installed, not template source)
+.aiwcli/
 /_gsd/
 /_GSD_OUTPUT/
 /_cc-native/

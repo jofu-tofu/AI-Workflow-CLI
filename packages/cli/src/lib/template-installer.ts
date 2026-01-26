@@ -1,6 +1,7 @@
 import {promises as fs} from 'node:fs'
 import {dirname, join} from 'node:path'
 
+import {IdePathResolver} from './ide-path-resolver.js'
 import {mergeTemplateContent} from './template-merger.js'
 
 /**
@@ -74,7 +75,8 @@ function mergeHooks(
  * @returns true if merge successful, false otherwise
  */
 async function mergeSharedSettingsFromSource(targetDir: string, sourceSettingsPath: string): Promise<boolean> {
-  const ideSettingsPath = join(targetDir, '.claude', 'settings.json')
+  const resolver = new IdePathResolver(targetDir)
+  const ideSettingsPath = resolver.getClaudeSettings()
 
   // Check if source settings exists
   if (!(await pathExists(sourceSettingsPath))) {
@@ -108,12 +110,6 @@ async function mergeSharedSettingsFromSource(targetDir: string, sourceSettingsPa
     return false
   }
 }
-
-/**
- * Container folder for method-specific files
- * This keeps template infrastructure separate from IDE config
- */
-const AIWCLI_CONTAINER = '.aiwcli'
 
 /**
  * Configuration for template installation
@@ -234,11 +230,12 @@ export async function checkTemplateStatus(
 
   // Check all entries in parallel
   // Non-dot folders go into .aiwcli/, dot folders stay at project root
-  const containerDir = join(targetDir, AIWCLI_CONTAINER)
+  const resolver = new IdePathResolver(targetDir)
+  const containerDir = resolver.getAiwcliContainer()
   const statusChecks = relevantEntries.map(async (entry) => {
     // Dot folders (IDE folders) are at project root, non-dot folders are in .aiwcli/
     const targetPath = entry.name.startsWith('.')
-      ? join(targetDir, entry.name)
+      ? resolver.getIdeDir(entry.name.slice(1))
       : join(containerDir, entry.name)
     const exists = await pathExists(targetPath)
     return {
@@ -404,7 +401,8 @@ export async function installTemplate(
   let mergedFileCount = 0
 
   // Create .aiwcli container folder for method-specific files
-  const containerDir = join(targetDir, AIWCLI_CONTAINER)
+  const resolver = new IdePathResolver(targetDir)
+  const containerDir = resolver.getAiwcliContainer()
   await fs.mkdir(containerDir, {recursive: true})
 
   // Install non-dot folders into .aiwcli/ container (skip if already exist and skipExisting is true)
@@ -452,7 +450,7 @@ export async function installTemplate(
     const folderName = dotFolders.get(ide)
     if (folderName) {
       const srcPath = join(templatePath, folderName)
-      const destPath = join(targetDir, folderName)
+      const destPath = resolver.getIdeDir(ide)
 
       if (await pathExists(destPath)) {
         if (skipExisting) {
@@ -492,22 +490,15 @@ export async function installTemplate(
     }
   }
 
-  // Merge settings from _shared template folder
-  // Read from template source (not installed copy) since IDE folders are excluded from installation
-  // This allows shared infrastructure to contribute hooks to .claude/settings.json
-  let sharedSettingsMerged = false
-  const sharedTemplatePath = join(templatesRoot, '_shared')
-  if (await pathExists(sharedTemplatePath)) {
-    const sharedSettingsPath = join(sharedTemplatePath, '.claude', 'settings.json')
-    sharedSettingsMerged = await mergeSharedSettingsFromSource(targetDir, sharedSettingsPath)
-  }
+  // Settings merging is now handled by the caller via mergeMethodsSettings()
+  // This allows unified merging of _shared + method-specific settings
 
   return {
     installedFolders,
     skippedFolders,
     mergedFolders,
     mergedFileCount,
-    sharedSettingsMerged,
+    sharedSettingsMerged: false, // Deprecated, kept for backwards compatibility
     templatePath,
   }
 }

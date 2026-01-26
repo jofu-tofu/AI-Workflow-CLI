@@ -9,6 +9,6 @@ Generate a handoff document summarizing the current session's work, decisions, a
 
 - `$ARGUMENTS` - Optional path to a plan document to update with progress tracking
 
-Load and execute `_cc-native/workflows/handoff.md`.
+Load and execute `_shared/workflows/handoff.md`.
 
-Follow the Gather → Analyze → Write → Update Plan pattern using native tools.
+Follow the Gather → Analyze → Write → Update Context pattern.

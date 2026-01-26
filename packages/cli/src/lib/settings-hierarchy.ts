@@ -3,6 +3,7 @@ import {homedir} from 'node:os'
 import {join} from 'node:path'
 
 import type {ClaudeSettings, SettingsLocation} from './claude-settings-types.js'
+import {IdePathResolver} from './ide-path-resolver.js'
 
 /**
  * Discover Claude settings files in the hierarchy
@@ -110,5 +111,6 @@ export async function writeClaudeSettings(path: string, settings: ClaudeSettings
  * @returns Path to target settings file
  */
 export function getTargetSettingsFile(projectDir: string): string {
-  return join(projectDir, '.claude', 'settings.json')
+  const resolver = new IdePathResolver(projectDir)
+  return resolver.getClaudeSettings()
 }

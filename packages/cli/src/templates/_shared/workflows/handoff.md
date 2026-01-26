@@ -17,7 +17,18 @@ Generate a handoff document summarizing the current session's work, decisions, a
 
 ## Process
 
-### Step 1: Gather Information
+### Step 1: Get Context ID
+
+Extract the `context_id` from the system reminder injected by the context enforcer hook.
+
+Look for the pattern in the system reminder:
+```
+Active Context: {context_id}
+```
+
+If no active context is found, inform the user and stop - handoffs require an active context.
+
+### Step 2: Gather Information
 
 1. Review conversation history for:
    - Completed tasks and implementations
@@ -39,34 +50,7 @@ Generate a handoff document summarizing the current session's work, decisions, a
    - Tasks that were attempted but blocked
    - New tasks discovered during implementation
 
-### Step 2: Get Timestamp
-
-**IMPORTANT**: Before creating the handoff file, get the current local time:
-
-```bash
-date "+%Y-%m-%d-%H%M"
-```
-
-Use this output for the filename timestamp. Do NOT guess or use any other time source.
-
-### Step 3: Determine Output Location
-
-1. **Check for active task folder**:
-   - Look for most recent `.state.json` file in `~/.claude/plans/`
-   - If found and contains `task_folder` key, use that path
-
-2. **Fallback: Create session folder**:
-   - Sanitize session_id for use as folder name (alphanumeric, hyphens, max 32 chars)
-   - Path: `_output/cc-native/sessions/{YYYY-MM-DD}/session-{sanitized_id}/`
-
-3. **Write to handoffs subfolder**:
-   - **Output**: `{task_folder_or_session_folder}/handoffs/HANDOFF-{HHMM}.md`
-
-**Examples**:
-- With task folder: `_output/cc-native/plans/2025-01-14/my-feature/handoffs/HANDOFF-1430.md`
-- Standalone session: `_output/cc-native/sessions/2025-01-14/session-abc123/handoffs/HANDOFF-1430.md`
-
-### Step 4: Generate Document
+### Step 3: Generate Document
 
 Use this template:
 
@@ -76,6 +60,7 @@ title: Session Handoff
 date: {ISO timestamp}
 session_id: {conversation ID if available}
 project: {project name from package.json, Cargo.toml, or directory name}
+context_id: {context_id from Step 1}
 plan_document: {path to plan if provided, or "none"}
 ---
 
@@ -114,7 +99,7 @@ plan_document: {path to plan if provided, or "none"}
 
 ```
 
-### Step 5: Update Plan Document (if provided)
+### Step 4: Update Plan Document (if provided)
 
 If a plan document path was provided in `$ARGUMENTS`:
 
@@ -152,40 +137,24 @@ If a plan document path was provided in `$ARGUMENTS`:
 ```
 
 5. **If no plan document was provided**:
-   - Create a new plan document at `_output/cc-native/plans/{YYYY-MM-DD}/session-plan.md`
-   - Use this template:
+   - Skip plan creation - the handoff document serves as the session record
 
-```markdown
----
-title: Session Plan
-created: {ISO timestamp}
-session_id: {session_id}
----
+### Step 5: Save and Update Status
 
-# Session Plan — {Date}
+Instead of writing the file directly, pipe your handoff content to the save script:
 
-## Completed
-- [x] {Completed task 1}
-- [x] {Completed task 2}
-
-## Pending
-- [ ] {Pending item from "Next Steps"}
-- [ ] {Another pending item}
-
-## Notes
-{Any relevant context for next session}
-
----
-
-## Session Progress Log
-
-### {Date} — Initial Session
-
-**Completed this session:**
-{List of what was done}
-
----
+```bash
+python .aiwcli/_shared/scripts/save_handoff.py "{context_id}" <<'EOF'
+{Your complete handoff markdown content from Step 3}
+EOF
 ```
+
+This script:
+1. Saves the handoff to `_output/contexts/{context_id}/handoffs/HANDOFF-{HHMM}.md`
+2. Sets `in_flight.mode = "handoff_pending"`
+3. Records the event in the context's event log
+
+The next session will automatically detect the handoff and offer to resume.
 
 ## Dead Ends Section Guidelines
 
@@ -216,10 +185,10 @@ This section is critical for preventing context rot across sessions. Be specific
 After creating file, output:
 
 ```
-✓ Created _output/cc-native/plans/2025-01-14/my-feature/handoffs/HANDOFF-1430.md
+✓ Created _output/contexts/{context_id}/handoffs/HANDOFF-{HHMM}.md
 
 To continue next session:
-  "Load _output/cc-native/plans/2025-01-14/my-feature/handoffs/HANDOFF-1430.md and continue from next steps"
+  "Load _output/contexts/{context_id}/handoffs/HANDOFF-{HHMM}.md and continue from next steps"
 
 ⚠️  {N} dead ends documented — avoid re-attempting these approaches
 ```
@@ -232,18 +201,12 @@ If plan was updated:
    - {N} new items added
 ```
 
-If new plan was created:
-```
-✓ Created new plan document: _output/cc-native/plans/{date}/session-plan.md
-   Track future progress by running: /handoff _output/cc-native/plans/{date}/session-plan.md
-```
-
 ## Success Criteria
 
-- [ ] Handoff document created in task folder's `handoffs/` subfolder
+- [ ] Handoff document created in context's `handoffs/` subfolder
 - [ ] Dead ends section captures all failed approaches with specific details
 - [ ] Next steps are actionable with file references
 - [ ] Git status reflects current state
 - [ ] If plan provided: checkboxes updated to reflect completion status
 - [ ] If plan provided: Session Progress Log appended
-- [ ] If no plan: new plan document created with session work
+- [ ] Context state updated to indicate handoff pending

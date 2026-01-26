@@ -66,6 +66,16 @@
             "timeout": 3000
           }
         ]
+      },
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .aiwcli/_shared/hooks/archive_plan.py",
+            "timeout": 5000
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -91,18 +101,6 @@
             "type": "command",
             "command": "python .aiwcli/_cc-native/hooks/cc-native-plan-review.py",
             "timeout": 600000
-          }
-        ]
-      }
-    ],
-    "PermissionRequest": [
-      {
-        "matcher": "ExitPlanMode",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python .aiwcli/_shared/hooks/archive_plan.py",
-            "timeout": 5000
           }
         ]
       }

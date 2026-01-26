@@ -9,6 +9,7 @@ import BaseCommand from '../../lib/base-command.js'
 import {detectUsername, generateBmadConfigs} from '../../lib/bmad-installer.js'
 import {updateGitignore} from '../../lib/gitignore-manager.js'
 import {mergeClaudeSettings} from '../../lib/hooks-merger.js'
+import {IdePathResolver} from '../../lib/ide-path-resolver.js'
 import {getTargetSettingsFile, readClaudeSettings, writeClaudeSettings} from '../../lib/settings-hierarchy.js'
 import {checkTemplateStatus, installTemplate} from '../../lib/template-installer.js'
 import {getAvailableTemplates, getTemplatePath} from '../../lib/template-resolver.js'
@@ -96,43 +97,62 @@ export default class Init extends BaseCommand {
       // Get available templates for validation
       const availableTemplates = await getAvailableTemplates()
 
-      // Determine configuration: interactive or flags
-      let method: string
-      let ides: string[]
-      let username: string
-      let projectName: string
+      // Check git repository early (needed by both install paths)
+      const hasGit = await detectGitRepository(targetDir)
 
-      if (flags.interactive) {
-        // Run interactive wizard
-        const wizardResult = await this.runInteractiveWizard(targetDir, availableTemplates)
+      // Resolve installation configuration from flags or interactive wizard
+      const config = await this.resolveInstallationConfig(flags, targetDir, availableTemplates)
 
-        if (!wizardResult.confirmed) {
-          this.log('Installation cancelled.')
-          return
+      // If config is null, perform minimal install (shared folder only)
+      if (!config) {
+        this.logInfo('Performing minimal installation (_shared folder only)...')
+        this.log('')
+
+        // Create .aiwcli container and install _shared
+        const resolver = new IdePathResolver(targetDir)
+        const containerDir = resolver.getAiwcliContainer()
+        await fs.mkdir(containerDir, {recursive: true})
+
+        const sharedDestPath = resolver.getSharedFolder()
+        const sharedExists = await this.pathExists(sharedDestPath)
+
+        if (!sharedExists) {
+          const currentFilePath = fileURLToPath(import.meta.url)
+          const currentDir = dirname(currentFilePath)
+          const templatesRoot = join(dirname(dirname(currentDir)), 'templates')
+          const sharedSrcPath = join(templatesRoot, '_shared')
+
+          if (!(await this.pathExists(sharedSrcPath))) {
+            this.error(`Shared folder not found at ${sharedSrcPath}. This indicates a corrupted installation.`, {
+              exit: EXIT_CODES.ENVIRONMENT_ERROR,
+            })
+          }
+
+          await this.copyDirectory(sharedSrcPath, sharedDestPath, true)
+          this.logSuccess('✓ Installed _shared folder')
+        } else {
+          this.logInfo('✓ _shared folder already exists - skipping')
         }
 
-        method = wizardResult.method
-        ides = wizardResult.ides
-        username = wizardResult.username
-        projectName = wizardResult.projectName
-      } else if (flags.method) {
-        // Use flags (method specified)
-        // Validate template exists
-        if (!availableTemplates.includes(flags.method)) {
-          this.error(`Template '${flags.method}' not found. Available templates: ${availableTemplates.join(', ')}`, {
-            exit: EXIT_CODES.INVALID_USAGE,
-          })
+        // Merge settings from _shared template
+        await this.mergeMethodsSettings(targetDir, ['_shared'], ['claude'])
+
+        // Update .gitignore if git repository exists
+        if (hasGit) {
+          await updateGitignore(targetDir, ['.aiwcli'])
+          this.logSuccess('✓ .gitignore updated')
         }
 
-        method = flags.method
-        ides = flags.ide
-        username = await detectUsername()
-        projectName = detectProjectName(targetDir)
-      } else {
-        // Minimal install mode - install only _shared folder
-        await this.performMinimalInstall(targetDir)
+        this.log('')
+        this.logSuccess('✓ Minimal installation completed successfully')
+        this.log('')
+        this.logInfo('Next steps:')
+        this.logInfo('  aiw init --method <template>    Install a full template method (bmad, gsd, etc.)')
+        this.logInfo('  aiw init --interactive          Run interactive setup wizard')
         return
       }
+
+      const {method, ides, username, projectName} = config
 
       // Validate write permissions
       try {
@@ -144,8 +164,6 @@ export default class Init extends BaseCommand {
           exit: EXIT_CODES.ENVIRONMENT_ERROR,
         })
       }
-
-      const hasGit = await detectGitRepository(targetDir)
 
       // Get template path
       const templatePath = await getTemplatePath(method)
@@ -228,28 +246,14 @@ export default class Init extends BaseCommand {
         this.logInfo(`✓ Skipped (already exist): ${result.skippedFolders.join(', ')}`)
       }
 
-      if (result.sharedSettingsMerged) {
-        this.logSuccess(`✓ Merged shared settings into .claude/settings.json`)
-      }
-
-      // Track method installation in settings.json
-      await this.trackMethodInstallation(targetDir, method, ides)
-
-      // Merge hooks if Claude IDE is selected
-      if (flags.ide.includes('claude')) {
-        await this.mergeTemplateHooks(targetDir, templatePath)
-      }
-
-      // Merge hooks if Windsurf IDE is selected
-      if (flags.ide.includes('windsurf')) {
-        await this.mergeWindsurfTemplateHooks(targetDir, templatePath)
-      }
-
-      // Update .gitignore if git repository exists
-      if (hasGit) {
-        await updateGitignore(targetDir, foldersForGitignore)
-        this.logSuccess('✓ .gitignore updated')
-      }
+      // Perform post-installation actions (settings tracking, hook merging, gitignore updates)
+      await this.performPostInstallActions({
+        targetDir,
+        method,
+        ides,
+        hasGit,
+        foldersForGitignore,
+      })
 
       this.log('')
       this.logSuccess(`✓ ${method} initialized successfully`)
@@ -336,40 +340,56 @@ export default class Init extends BaseCommand {
   }
 
   /**
-   * Merge template hooks into project settings
+   * Merge settings from multiple method templates into project settings.
+   * Processes methods in order, allowing later methods to override earlier ones.
    *
    * @param targetDir - Project directory
-   * @param templatePath - Template source path
+   * @param methods - Array of method names to merge (e.g., ['_shared', 'cc-native'])
+   * @param ides - IDEs being configured (for IDE-specific merging)
    */
-  private async mergeTemplateHooks(targetDir: string, templatePath: string): Promise<void> {
-    try {
-      // Read template settings
-      const templateSettingsPath = join(templatePath, '.claude', 'settings.json')
-      const templateSettings = await readClaudeSettings(templateSettingsPath)
+  private async mergeMethodsSettings(targetDir: string, methods: string[], ides: string[]): Promise<void> {
+    const targetSettingsPath = getTargetSettingsFile(targetDir)
+    let projectSettings = (await readClaudeSettings(targetSettingsPath)) || {}
 
-      // If template has no settings or no hooks, nothing to merge
-      if (!templateSettings || !templateSettings.hooks || Object.keys(templateSettings.hooks).length === 0) {
-        this.logInfo('No hooks in template to merge')
-        return
+    for (const method of methods) {
+      try {
+        // Get template path for this method
+        let templatePath: string
+        if (method === '_shared') {
+          // Special case: _shared is at templates/_shared
+          const currentFilePath = fileURLToPath(import.meta.url)
+          const currentDir = dirname(currentFilePath)
+          const templatesRoot = join(dirname(dirname(currentDir)), 'templates')
+          templatePath = join(templatesRoot, '_shared')
+        } else {
+          // Named method templates
+          templatePath = await getTemplatePath(method)
+        }
+
+        // Merge Claude settings if claude IDE is selected
+        if (ides.includes('claude')) {
+          const templateSettingsPath = join(templatePath, '.claude', 'settings.json')
+          const templateSettings = await readClaudeSettings(templateSettingsPath)
+
+          if (templateSettings) {
+            projectSettings = mergeClaudeSettings(projectSettings, templateSettings)
+            this.logSuccess(`✓ Merged ${method} settings into .claude/settings.json`)
+          }
+        }
+
+        // Merge Windsurf hooks if windsurf IDE is selected
+        if (ides.includes('windsurf')) {
+          await this.mergeWindsurfTemplateHooks(targetDir, templatePath)
+        }
+      } catch (error) {
+        const err = error as Error
+        this.warn(`Failed to merge ${method} settings: ${err.message}`)
       }
+    }
 
-      // Get target settings file path
-      const targetSettingsPath = getTargetSettingsFile(targetDir)
-
-      // Read existing project settings
-      const existingSettings = await readClaudeSettings(targetSettingsPath)
-
-      // Merge settings
-      const mergedSettings = mergeClaudeSettings(existingSettings, templateSettings)
-
-      // Write merged settings
-      await writeClaudeSettings(targetSettingsPath, mergedSettings)
-
-      this.logSuccess('✓ Template hooks merged into project settings')
-    } catch (error) {
-      const err = error as Error
-      this.warn(`Failed to merge template hooks: ${err.message}`)
-      // Don't fail the entire installation if hook merging fails
+    // Write merged Claude settings
+    if (ides.includes('claude')) {
+      await writeClaudeSettings(targetSettingsPath, projectSettings)
     }
   }
 
@@ -424,71 +444,99 @@ export default class Init extends BaseCommand {
   }
 
   /**
-   * Perform minimal installation - install only _shared folder
+   * Perform post-installation actions.
    *
-   * @param targetDir - Project directory
+   * Handles:
+   * - Method tracking in settings.json
+   * - Settings/hooks merging for all methods
+   * - .gitignore updates
+   *
+   * @param config - Post-install configuration
+   * @param config.targetDir - Project directory
+   * @param config.method - Method name that was installed
+   * @param config.ides - IDEs that were configured
+   * @param config.hasGit - Whether git repository exists
+   * @param config.foldersForGitignore - Folders to add to .gitignore
    */
-  private async performMinimalInstall(targetDir: string): Promise<void> {
-    this.logInfo('Performing minimal installation (_shared folder only)...')
-    this.log('')
+  private async performPostInstallActions(config: {
+    foldersForGitignore: string[]
+    hasGit: boolean
+    ides: string[]
+    method: string
+    targetDir: string
+  }): Promise<void> {
+    const {targetDir, method, ides, hasGit, foldersForGitignore} = config
 
-    // Verify write permissions
-    try {
-      const testFile = join(targetDir, '.aiwcli-write-test')
-      await fs.writeFile(testFile, '', 'utf8')
-      await fs.unlink(testFile)
-    } catch {
-      this.error('Permission denied. Cannot write to current directory.', {
-        exit: EXIT_CODES.ENVIRONMENT_ERROR,
-      })
+    // Track method installation in settings.json
+    await this.trackMethodInstallation(targetDir, method, ides)
+
+    // Merge settings from _shared and method templates
+    await this.mergeMethodsSettings(targetDir, ['_shared', method], ides)
+
+    // Update .gitignore if git repository exists
+    if (hasGit) {
+      await updateGitignore(targetDir, foldersForGitignore)
+      this.logSuccess('✓ .gitignore updated')
+    }
+  }
+
+  /**
+   * Resolve installation configuration from flags or interactive wizard.
+   *
+   * Determines what to install based on:
+   * - Interactive wizard input
+   * - Command-line flags
+   * - Minimal install mode (no method specified)
+   *
+   * @param flags - Parsed command flags
+   * @param flags.interactive - Run interactive wizard
+   * @param flags.method - Template method to install
+   * @param flags.ide - IDEs to configure
+   * @param targetDir - Target directory for installation
+   * @param availableTemplates - List of available template names
+   * @returns Installation configuration or null for minimal install
+   */
+  private async resolveInstallationConfig(
+    flags: {ide: string[]; interactive: boolean; method?: string | undefined},
+    targetDir: string,
+    availableTemplates: string[],
+  ): Promise<null | {ides: string[]; method: string; projectName: string; username: string}> {
+    if (flags.interactive) {
+      // Run interactive wizard
+      const wizardResult = await this.runInteractiveWizard(targetDir, availableTemplates)
+
+      if (!wizardResult.confirmed) {
+        this.log('Installation cancelled.')
+        return null
+      }
+
+      return {
+        method: wizardResult.method,
+        ides: wizardResult.ides,
+        username: wizardResult.username,
+        projectName: wizardResult.projectName,
+      }
     }
 
-    // Create .aiwcli container directory
-    const containerDir = join(targetDir, '.aiwcli')
-    await fs.mkdir(containerDir, {recursive: true})
-
-    // Check if _shared already exists
-    const sharedDestPath = join(containerDir, '_shared')
-    const sharedExists = await this.pathExists(sharedDestPath)
-
-    if (sharedExists) {
-      this.logInfo('✓ _shared folder already exists - skipping')
-    } else {
-      // Find _shared source folder in templates
-      // For ES modules: import.meta.url gives file:// URL, convert to path
-      const currentFilePath = fileURLToPath(import.meta.url)
-      const currentDir = dirname(currentFilePath)
-      // currentDir is dist/commands/init/, go up to dist/ then add templates/
-      const templatesRoot = join(dirname(dirname(currentDir)), 'templates')
-      const sharedSrcPath = join(templatesRoot, '_shared')
-
-      // Verify _shared source exists
-      if (!(await this.pathExists(sharedSrcPath))) {
-        this.error(`Shared folder not found at ${sharedSrcPath}. This indicates a corrupted installation.`, {
-          exit: EXIT_CODES.ENVIRONMENT_ERROR,
+    if (flags.method) {
+      // Use flags (method specified)
+      // Validate template exists
+      if (!availableTemplates.includes(flags.method)) {
+        this.error(`Template '${flags.method}' not found. Available templates: ${availableTemplates.join(', ')}`, {
+          exit: EXIT_CODES.INVALID_USAGE,
         })
       }
 
-      // Copy _shared folder
-      // Exclude IDE config folders (.claude, .windsurf) - they are used for settings merging only
-      await this.copyDirectory(sharedSrcPath, sharedDestPath, true)
-      this.logSuccess('✓ Installed _shared folder')
+      return {
+        method: flags.method,
+        ides: flags.ide,
+        username: await detectUsername(),
+        projectName: detectProjectName(targetDir),
+      }
     }
 
-    // Update .gitignore if git repository exists
-    const hasGit = await detectGitRepository(targetDir)
-
-    if (hasGit) {
-      await updateGitignore(targetDir, ['.aiwcli'])
-      this.logSuccess('✓ .gitignore updated')
-    }
-
-    this.log('')
-    this.logSuccess('✓ Minimal installation completed successfully')
-    this.log('')
-    this.logInfo('Next steps:')
-    this.logInfo('  aiw init --method <template>    Install a full template method (bmad, gsd, etc.)')
-    this.logInfo('  aiw init --interactive          Run interactive setup wizard')
+    // Minimal install mode - install only _shared folder
+    return null
   }
 
   /**
