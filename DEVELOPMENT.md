@@ -1,16 +1,12 @@
 # Development Guide - AI Workflow CLI
 
-## Context & Motivation
+## Before Starting Development
 
-The AI Workflow CLI architecture requires `AIW_DIR` to locate code and data across the entire codebase. Without proper configuration, tests access wrong paths, create files in incorrect locations, and development work pollutes production environments. This guide ensures isolated development with reliable test execution.
+Read this section before any development or testing work. These steps prevent path errors, test failures, and cross-environment pollution.
 
-## Critical Environment Setup
+### Step 1: Set AIW_DIR Environment Variable
 
-Before running ANY tests or development commands, configure your environment. This prevents path errors, wrong file locations, and cross-environment pollution.
-
-### Step 1: Set AIW_DIR
-
-Navigate to your development worktree root, then set the environment variable:
+Navigate to your development worktree root and set:
 
 **PowerShell (Windows):**
 ```powershell
@@ -32,11 +28,11 @@ echo $env:AIW_DIR
 echo $AIW_DIR
 ```
 
-**Expected output:** Your current worktree directory path
+Output should show your current worktree path.
 
-### Step 3: Run Initial Test
+### Step 3: Run Tests
 
-Tests must be run from the `packages/cli/` directory using npm (not bun):
+Tests run from `packages/cli/` using npm (not bun):
 
 ```bash
 cd packages/cli
@@ -44,83 +40,212 @@ npm test
 ```
 
 **Success:** All tests pass (577 tests)
-**Failure:** If tests fail with path errors, AIW_DIR not set correctly - repeat Step 1
+**Failure:** If tests fail with path errors, AIW_DIR is not set correctly—repeat Step 1
 
-> **Note:** This project uses Mocha via npm scripts. Running `bun test` from the repo root will fail because:
-> - Tests expect to run from `packages/cli/` directory
-> - The test runner is Mocha, not Bun's built-in test framework
-> - Tests require a build step (`test:build`) that compiles TypeScript to `dist-test/`
+---
 
-## How AIW_DIR Works
+## Architecture Understanding
 
-The AI Workflow CLI uses `AIW_DIR` as the root path for resource location:
+This section explains the template system architecture. Understanding this prevents synchronization errors and ensures correct development patterns.
 
-**This repository locations:**
-- `$AIW_DIR/packages/cli/` - CLI source code
-- `$AIW_DIR/packages/cli/src/templates/` - Template definitions (bmad, gsd)
-- `$AIW_DIR/examples/` - Example workflow files
+### Working Directory vs Template Directory
 
-**Environment isolation:**
-- **Development:** `AIW_DIR=$(pwd)` - Your worktree (isolated testing)
-- **Production:** `AIW_DIR=~/.aiw` - Global installation (live system)
+| Location | Purpose | When to Modify |
+|----------|---------|----------------|
+| `.aiwcli/` | Runtime hooks and libraries | During development |
+| `packages/cli/src/templates/cc-native/` | Distribution template | After `.aiwcli/` changes |
 
-## Development vs Production
+**Synchronization Rule:** Changes to `.aiwcli/` must be synchronized to `packages/cli/src/templates/cc-native/`. This ensures new project initializations receive updates.
 
-| Environment | AIW_DIR Value | Purpose |
-|-------------|---------------|---------|
-| **Development** | `$(pwd)` (worktree root) | Isolated testing in development branch |
-| **Production** | `~/.aiw` or `$HOME\.aiw` | Deployed global AI Workflow CLI |
+### Files Requiring Synchronization
 
-## Project Structure
+| Source | Target |
+|--------|--------|
+| `.aiwcli/_shared/hooks/*.py` | `packages/cli/src/templates/cc-native/_shared/hooks/` |
+| `.aiwcli/_shared/lib/**/*.py` | `packages/cli/src/templates/cc-native/_shared/lib/` |
+| `.aiwcli/_cc-native/**/*.py` | `packages/cli/src/templates/cc-native/_cc-native/` |
+| `.claude/settings.json` | `packages/cli/src/templates/cc-native/.claude/settings.json` |
 
-This repository contains the AI Workflow CLI source code:
+### Directory Structure
 
 ```
-aiwcli/
-├── packages/cli/           # CLI package
-│   ├── src/
-│   │   ├── commands/       # CLI commands (launch, init)
-│   │   ├── lib/            # Library code
-│   │   ├── templates/      # Built-in templates (bmad, gsd)
-│   │   └── types/          # TypeScript type definitions
-│   └── test/               # Test files
-├── examples/               # Example workflow files
-└── docs/                   # Project documentation
+.aiwcli/
+├── _shared/                    # Cross-method infrastructure
+│   ├── hooks/                  # Shared hook scripts
+│   │   ├── user_prompt_submit.py    # Context binding, task hydration
+│   │   ├── context_monitor.py       # Context usage monitoring
+│   │   ├── context_enforcer.py      # Context enforcement
+│   │   ├── archive_plan.py          # Plan archival on ExitPlanMode
+│   │   ├── task_create_capture.py   # Task persistence
+│   │   └── task_update_capture.py   # Task status changes
+│   └── lib/
+│       ├── base/               # Core utilities
+│       │   ├── atomic_write.py      # Cross-platform crash-safe writes
+│       │   ├── constants.py         # Security constants, paths
+│       │   ├── inference.py         # Inference model utilities
+│       │   └── utils.py             # Common functions
+│       ├── context/            # Context management
+│       │   ├── context_manager.py   # CRUD operations (1,169 lines)
+│       │   ├── event_log.py         # JSONL append/read
+│       │   ├── cache.py             # Cache rebuild
+│       │   ├── discovery.py         # Context discovery
+│       │   ├── task_sync.py         # Task persistence
+│       │   └── plan_archive.py      # Plan archival
+│       ├── handoff/            # Session handoff
+│       │   └── document_generator.py
+│       └── templates/          # Output formatters
+│           ├── formatters.py        # Mode displays, icons, task rendering
+│           └── plan_context.py      # Plan evaluation templates
+│
+└── _cc-native/                 # Method-specific code
+    ├── hooks/
+    │   ├── cc-native-plan-review.py     # Multi-step plan review
+    │   ├── suggest-fresh-perspective.py # Stuck detection
+    │   └── add_plan_context.py          # Clarifying questions offer
+    ├── lib/
+    │   ├── orchestrator.py      # Multi-agent orchestration
+    │   ├── async_archive.py     # Non-blocking plan archive
+    │   └── reviewers/           # Plan review implementations
+    │       ├── base.py              # Abstract base reviewer
+    │       ├── agent.py             # Claude Code agent reviewer
+    │       ├── codex.py             # Codex CLI reviewer
+    │       └── gemini.py            # Google Gemini reviewer
+    └── plan-review.config.json  # Plan review configuration
+
+_output/
+├── index.json                   # Global context cache
+└── contexts/                    # Event-sourced context management
+    └── {context-id}/
+        ├── events.jsonl         # SOURCE OF TRUTH (append-only)
+        ├── context.json         # Derived cache
+        └── plans/               # Archived approved plans
 ```
 
-### Key Commands
+### Hook System
 
-- `aiw launch` - Launch Claude Code with AI Workflow CLI context
-- `aiw init` - Initialize project with workflow templates
+Hooks are Python scripts triggered by Claude Code lifecycle events. Configuration lives in `.claude/settings.json`.
 
-### Working with Claude Code Settings
+**Hook Lifecycle Events:**
 
-This repository includes a `.claude/` directory with project-specific settings. Claude Code uses these settings when working in this directory.
+| Event | When Triggered | Example Hooks |
+|-------|----------------|---------------|
+| `UserPromptSubmit` | User sends message | `user_prompt_submit.py` (context binding, task hydration) |
+| `PreToolUse` | Before tool executes | `cc-native-plan-review.py` (plan validation) |
+| `PostToolUse` | After tool completes | `context_monitor.py` (context tracking), `archive_plan.py` |
+
+**Shared Hooks** (`.aiwcli/_shared/hooks/`):
+- `user_prompt_submit.py` - Context enforcement, session binding, task hydration
+- `context_monitor.py` - Context usage monitoring (40% warning, 25% urgent)
+- `context_enforcer.py` - Determines active context, blocks if needed
+- `archive_plan.py` - Archives approved plans on ExitPlanMode
+- `task_create_capture.py` - Captures task creation events
+- `task_update_capture.py` - Captures task status changes
+
+**Method-Specific Hooks** (`.aiwcli/_cc-native/hooks/`):
+- `cc-native-plan-review.py` - Multi-step plan review (CLI + agents)
+- `suggest-fresh-perspective.py` - Stuck detection (error/edit/test thresholds)
+- `add_plan_context.py` - Offers clarifying questions on first plan write
+
+### Event Sourcing Model
+
+Context management uses event sourcing with three-layer caching:
+
+```
+events.jsonl (SOURCE OF TRUTH)
+    ↓ replay events
+context.json (L1 cache)
+    ↓ derive
+index.json (L2 cache)
+```
+
+**Data Hierarchy:**
+
+| Level | File | Role | Recovery |
+|-------|------|------|----------|
+| Source of Truth | `events.jsonl` | Append-only event log | Cannot be rebuilt |
+| L1 Cache | `context.json` | Current state snapshot | Rebuild from events |
+| L2 Cache | `index.json` | Global context index | Rebuild from context files |
+
+**Event Types:**
+- `context_created`, `context_completed`
+- `task_added`, `task_completed`
+- `plan_created`, `planning_started`
+- `session_bound`
+
+### In-Flight State Machine
+
+Tracks work status via `InFlightState` dataclass:
+
+| Mode | Meaning | Behavior |
+|------|---------|----------|
+| `none` | Normal context | Show in context picker |
+| `planning` | In plan mode | Continue planning |
+| `pending_implementation` | Plan approved | Auto-continue implementation |
+| `implementing` | Implementation active | Continue implementation |
+
+**State Transitions:**
+- `none` → `planning` (EnterPlanMode)
+- `planning` → `pending_implementation` (ExitPlanMode + plan archived)
+- `pending_implementation` → `implementing` (implementation tools used)
+
+---
+
+## Development Workflow
+
+### Modifying Hooks
+
+1. Edit the hook in `.aiwcli/_shared/hooks/` or `.aiwcli/_cc-native/hooks/`
+2. Test by running Claude Code with the modified hook
+3. Synchronize to `packages/cli/src/templates/cc-native/`
+4. Run tests: `cd packages/cli && npm test`
+
+### Modifying Libraries
+
+1. Edit the library in `.aiwcli/_shared/lib/` or `.aiwcli/_cc-native/lib/`
+2. Test dependent hooks manually
+3. Synchronize to `packages/cli/src/templates/cc-native/`
+4. Run tests: `cd packages/cli && npm test`
+
+### Adding New Hooks
+
+1. Create the hook script in the appropriate directory
+2. Add hook wiring to `.claude/settings.json`:
+   ```json
+   {
+     "hooks": {
+       "PostToolUse": [{
+         "matcher": "ToolName",
+         "hooks": [{
+           "type": "command",
+           "command": "python .aiwcli/_shared/hooks/your-hook.py",
+           "timeout": 5000
+         }]
+       }]
+     }
+   }
+   ```
+3. Synchronize both the hook and settings.json to the template directory
+4. Document the hook in TEMPLATE-SCHEMA.md
+
+---
 
 ## Running Tests
 
-All test commands must be run from `packages/cli/`:
+All test commands run from `packages/cli/`:
 
 ```bash
 cd packages/cli
 
-# All tests (builds first, then runs Mocha)
-npm test
-
-# Unit tests only
-npm run test:unit
-
-# Integration tests only
-npm run test:integration
-
-# Watch mode (re-runs on file changes)
-npm run test:watch
-
-# With coverage
-npm run test:coverage
+npm test              # All tests (577 tests)
+npm run test:unit     # Unit tests only
+npm run test:integration  # Integration tests only
+npm run test:watch    # Watch mode
+npm run test:coverage # With coverage
 ```
 
-**Important:** Do NOT use `bun test` from the repo root - it will fail.
+**Important:** Use `npm test`, not `bun test`. Tests use Mocha, not Bun's test framework.
+
+---
 
 ## Watch Mode Development
 
@@ -129,14 +254,9 @@ For continuous development with automatic rebuilding and testing:
 ```bash
 cd packages/cli
 
-# Combined watch: rebuilds code AND runs tests on changes
-npm run watch
-
-# TypeScript only: watch and rebuild on source changes
-npm run dev:watch
-
-# Tests only: watch and re-run tests on changes
-npm run test:watch
+npm run watch         # Rebuilds code AND runs tests on changes
+npm run dev:watch     # TypeScript compilation + template sync
+npm run test:watch    # Mocha in watch mode
 ```
 
 **Available watch scripts:**
@@ -149,61 +269,74 @@ npm run test:watch
 | `npm run build:watch` | TypeScript compiler only |
 | `npm run templates:watch` | Template file sync only |
 
-## Standard Development Workflow
+---
 
-Follow this pattern for all development work:
+## Project Structure
 
-1. **Create branch/worktree** for your feature or fix
-2. **Navigate to worktree root** in your terminal
-3. **Set AIW_DIR** using commands in Step 1 above
-4. **Verify configuration** using Step 2 above
-5. **Run initial tests** to confirm environment is correct
-6. **Develop changes** iteratively
-7. **Run tests frequently** during development
-8. **Verify all tests pass** before committing
-9. **Commit and push** when complete
+```
+aiwcli/
+├── packages/cli/           # CLI package
+│   ├── src/
+│   │   ├── commands/       # CLI commands (launch, init, branch)
+│   │   ├── lib/            # Library code
+│   │   ├── templates/      # Built-in templates (bmad, cc-native, gsd)
+│   │   └── types/          # TypeScript type definitions
+│   └── test/               # Test files
+├── examples/               # Example workflow files
+├── docs/                   # Project documentation
+├── .aiwcli/                # Working directory (development)
+└── .claude/                # Claude Code settings
+```
+
+---
 
 ## Troubleshooting
 
-Use this section to resolve common development issues.
-
-### Issue: Tests fail with "path not found" errors
+### Tests fail with "path not found" errors
 
 **Cause:** AIW_DIR environment variable not set
 
-**Solution:**
+**Fix:**
 1. Navigate to worktree root
-2. Run: `$env:AIW_DIR = $PWD.Path` (PowerShell) or `export AIW_DIR="$(pwd)"` (Bash)
+2. Set AIW_DIR: `$env:AIW_DIR = $PWD.Path` (PowerShell) or `export AIW_DIR="$(pwd)"` (Bash)
 3. Verify: `echo $env:AIW_DIR` should show your worktree path
 4. Run tests again
 
-### Issue: Files created in unexpected locations
+### Files created in unexpected locations
 
 **Cause:** AIW_DIR points to wrong directory
 
-**Solution:**
+**Fix:**
 1. Check current AIW_DIR: `echo $env:AIW_DIR`
 2. Compare to current directory: `pwd`
 3. If different, set AIW_DIR to current directory
 4. Verify configuration
 
-### Issue: Cannot find types or modules
+### Hook changes not taking effect
 
-**Cause:** Dependencies not installed
+**Cause:** Template directory not synchronized
 
-**Solution:**
-1. Run: `bun install`
-2. Wait for installation to complete
-3. Run tests again
+**Fix:** Copy modified files from `.aiwcli/` to `packages/cli/src/templates/cc-native/`
 
-### Issue: Tests pass locally but fail in CI
+### Context recovery
 
-**Cause:** CI environment missing AIW_DIR configuration
+**Symptom:** `context.json` appears corrupted
 
-**Solution:**
-1. Check CI configuration file
-2. Ensure AIW_DIR is set in CI environment
-3. Verify CI uses correct directory structure
+**Fix:** Delete context.json and it will be rebuilt from events.jsonl on next access:
+```bash
+rm _output/contexts/{id}/context.json
+```
+
+---
+
+## Environment Configuration
+
+| Environment | AIW_DIR Value | Purpose |
+|-------------|---------------|---------|
+| Development | `$(pwd)` (worktree root) | Isolated testing in development branch |
+| Production | `~/.aiw` or `$HOME\.aiw` | Deployed global AI Workflow CLI |
+
+---
 
 ## Deployment Checklist
 
@@ -213,40 +346,37 @@ Complete all items before deploying to production:
 - [ ] All tests passing: `npm test` (from `packages/cli/`) shows no failures
 - [ ] Code review approved by team member
 - [ ] Documentation updated to reflect changes
-- [ ] No debug code or console.logs in production code
-- [ ] All dependencies in package.json are production-ready
+- [ ] Template directory synchronized with working directory
 
 **Environment Configuration:**
 - [ ] Set AIW_DIR to production path
   - PowerShell: `$env:AIW_DIR = "$HOME\.aiw"`
   - Bash: `export AIW_DIR="$HOME/.aiw"`
-- [ ] Verify production AIW_DIR: `echo $env:AIW_DIR`
 
 **Deployment Steps:**
 - [ ] Build and publish package: `npm publish`
-- [ ] Run production smoke tests
 - [ ] Verify all features work in production environment
 
-**Post-Deployment:**
-- [ ] Monitor logs for errors
-- [ ] Verify data is being written to correct locations
-- [ ] Test critical user workflows
+---
 
 ## Success Criteria
 
 Development environment is correctly configured when:
 
-✅ AIW_DIR environment variable is set and verified
-✅ `npm test` (from `packages/cli/`) runs without errors
-✅ All 577 tests pass
-✅ Files are created in worktree, not in global .aiw directory
-✅ Changes can be made without affecting production environment
+- AIW_DIR environment variable is set and verified
+- `npm test` (from `packages/cli/`) runs without errors
+- All 577 tests pass
+- Files are created in worktree, not in global .aiw directory
+- Changes can be made without affecting production environment
+
+---
 
 ## Development Best Practices
 
 1. **Set AIW_DIR first** - Every development session starts with environment configuration
-2. **Verify before running** - Always check AIW_DIR is correct before tests or code execution
-3. **Test frequently** - Run tests after each meaningful change
-4. **Isolate environments** - Keep development and production strictly separated via AIW_DIR
-5. **Follow patterns** - Match existing code structure and conventions
-6. **Document changes** - Update relevant documentation when modifying behavior
+2. **Verify before running** - Check AIW_DIR is correct before tests or code execution
+3. **Synchronize after changes** - Copy modified files to template directory
+4. **Test frequently** - Run tests after each meaningful change
+5. **Isolate environments** - Keep development and production strictly separated via AIW_DIR
+6. **Follow patterns** - Match existing code structure and conventions
+7. **Document changes** - Update TEMPLATE-SCHEMA.md when modifying hook behavior

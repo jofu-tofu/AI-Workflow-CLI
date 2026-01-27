@@ -110,6 +110,60 @@ These integrate directly with Claude Code's hook system.
 
 ---
 
+## Architecture Overview
+
+Understanding this architecture is essential for development work. See [DEVELOPMENT.md](./DEVELOPMENT.md) for detailed development instructions.
+
+### Template System
+
+AIW uses a template-based architecture with two key locations:
+
+| Location | Purpose | When Modified |
+|----------|---------|---------------|
+| `.aiwcli/` | Working directory (runtime hooks and libraries) | During development |
+| `packages/cli/src/templates/cc-native/` | Template directory (distribution source) | After `.aiwcli/` changes |
+
+**Synchronization Rule:** Changes to `.aiwcli/` must be synchronized to `packages/cli/src/templates/cc-native/` to ensure new project initializations receive updates.
+
+### Directory Structure
+
+```
+.aiwcli/
+├── _shared/                    # Cross-method infrastructure
+│   ├── hooks/                  # UserPromptSubmit, context_monitor, archive_plan, task capture
+│   └── lib/                    # base/, context/, handoff/, templates/
+└── _cc-native/                 # Method-specific code
+    ├── hooks/                  # plan-review, stuck-detection, plan-context
+    └── lib/                    # reviewers/, orchestrator
+
+_output/
+└── contexts/                   # Event-sourced context management
+    └── {context-id}/
+        ├── events.jsonl        # SOURCE OF TRUTH (append-only)
+        ├── context.json        # Derived cache
+        └── plans/              # Archived approved plans
+```
+
+### Data Hierarchy (Event Sourcing)
+
+| Level | File | Role |
+|-------|------|------|
+| Source of Truth | `events.jsonl` | Append-only event log (never modified) |
+| L1 Cache | `context.json` | Derived from events (rebuilds if corrupted) |
+| L2 Cache | `index.json` | Aggregates all contexts |
+
+### Hook Lifecycle
+
+Hooks are Python scripts triggered by Claude Code lifecycle events. Configuration in `.claude/settings.json`.
+
+| Event | When Triggered | Example Hooks |
+|-------|----------------|---------------|
+| `UserPromptSubmit` | User sends message | Context binding, task hydration |
+| `PreToolUse` | Before tool executes | Plan review, validation |
+| `PostToolUse` | After tool completes | Context monitoring, archival |
+
+---
+
 ## Example Workflows
 
 ### Solo Developer Flow
@@ -164,7 +218,7 @@ git commit -m "Add AI workflow templates"
 | Template | Description |
 |----------|-------------|
 | **bmad** | Full BMAD methodology with agents for analyst, architect, dev, PM, and more |
-| **cc-native** | Claude Code native features—planning, agents, hooks |
+| **cc-native** | Claude Code native features—planning, agents, hooks, event-sourced context management |
 | **gsd** | Get Stuff Done—streamlined productivity workflows |
 | **planning-with-files** | File-based project planning system |
 
