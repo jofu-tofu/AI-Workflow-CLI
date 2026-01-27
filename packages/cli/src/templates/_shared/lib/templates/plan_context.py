@@ -110,7 +110,7 @@ Options:
    - Simplicity vs. flexibility?
    - What's acceptable to defer to later?
 
-Ask 2-4 focused questions using AskUserQuestion. Don't ask obvious questions - focus on things that would meaningfully change the plan.
+Ask focused, **non-obvious** questions using AskUserQuestion (max 12). Questions should surface hidden constraints, unstated assumptions, or preferences that aren't evident from the original request - things that would meaningfully change the plan.
 
 After gathering answers, **update the plan file** with the refined content before calling ExitPlanMode.
 
