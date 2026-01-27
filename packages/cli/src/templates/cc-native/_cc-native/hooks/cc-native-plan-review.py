@@ -506,61 +506,80 @@ def main() -> int:
     detected_complexity: str = "medium"  # Will be updated by orchestrator
 
     # ============================================
-    # PHASE 1: CLI Reviewers (Codex/Gemini)
+    # PHASE 1 & 2: CLI Reviewers + Orchestrator (PARALLEL)
     # ============================================
-    if plan_review_enabled:
-        eprint("[cc-native-plan-review] === PHASE 1: CLI Reviewers ===")
-        reviewers_config = plan_settings.get("reviewers", {})
-        codex_enabled = reviewers_config.get("codex", {}).get("enabled", True)
-        gemini_enabled = reviewers_config.get("gemini", {}).get("enabled", False)
+    # Run CLI reviewers and orchestrator concurrently for speed
+    reviewers_config = plan_settings.get("reviewers", {}) if plan_review_enabled else {}
+    codex_enabled = plan_review_enabled and reviewers_config.get("codex", {}).get("enabled", True)
+    gemini_enabled = plan_review_enabled and reviewers_config.get("gemini", {}).get("enabled", False)
 
-        eprint(f"[cc-native-plan-review] Codex enabled: {codex_enabled}, Gemini enabled: {gemini_enabled}")
+    agent_library = load_agent_library(base, agent_settings) if agent_review_enabled else []
+    enabled_agents = [a for a in agent_library if a.enabled]
+    timeout = agent_settings.get("timeout", 120)
+    legacy_mode = agent_settings.get("legacyMode", False)
 
-        if codex_enabled:
-            result = run_codex_review(plan, REVIEW_SCHEMA, plan_settings)
-            cli_results["codex"] = result
-            if result.verdict and result.verdict not in ("skip", "error"):
-                all_verdicts.append(result.verdict)
-        else:
-            eprint("[cc-native-plan-review] Skipping Codex (disabled)")
+    orch_settings = agent_settings.get("orchestrator", DEFAULT_ORCHESTRATOR)
+    orchestrator_config = OrchestratorConfig(
+        enabled=orch_settings.get("enabled", True) and agent_review_enabled,
+        model=orch_settings.get("model", "haiku"),
+        timeout=orch_settings.get("timeout", 30),
+        max_turns=orch_settings.get("maxTurns", 3),
+    )
 
-        if gemini_enabled:
-            result = run_gemini_review(plan, REVIEW_SCHEMA, plan_settings)
-            cli_results["gemini"] = result
-            if result.verdict and result.verdict not in ("skip", "error"):
-                all_verdicts.append(result.verdict)
-        else:
-            eprint("[cc-native-plan-review] Skipping Gemini (disabled)")
+    eprint(f"[cc-native-plan-review] Codex enabled: {codex_enabled}, Gemini enabled: {gemini_enabled}")
+    eprint(f"[cc-native-plan-review] Agent library: {[a.name for a in agent_library]}")
+    eprint(f"[cc-native-plan-review] Enabled agents: {[a.name for a in enabled_agents]}")
+    eprint(f"[cc-native-plan-review] Orchestrator enabled: {orchestrator_config.enabled}")
+
+    # Run CLI reviewers + orchestrator in parallel
+    phase1_tasks = []
+    if codex_enabled:
+        phase1_tasks.append(("codex", lambda: run_codex_review(plan, REVIEW_SCHEMA, plan_settings)))
+    if gemini_enabled:
+        phase1_tasks.append(("gemini", lambda: run_gemini_review(plan, REVIEW_SCHEMA, plan_settings)))
+    if orchestrator_config.enabled and enabled_agents and not legacy_mode:
+        phase1_tasks.append(("orchestrator", lambda: run_orchestrator(plan, enabled_agents, orchestrator_config, agent_settings)))
+
+    eprint(f"[cc-native-plan-review] === PHASE 1: Running {len(phase1_tasks)} tasks in parallel ===")
+
+    phase1_results: Dict[str, Any] = {}
+    if phase1_tasks:
+        with ThreadPoolExecutor(max_workers=len(phase1_tasks)) as executor:
+            futures = {executor.submit(task_fn): name for name, task_fn in phase1_tasks}
+            for future in as_completed(futures):
+                name = futures[future]
+                try:
+                    phase1_results[name] = future.result()
+                    eprint(f"[cc-native-plan-review] {name} completed")
+                except Exception as ex:
+                    eprint(f"[cc-native-plan-review] {name} failed: {ex}")
+                    phase1_results[name] = None
+
+    # Collect CLI results
+    if "codex" in phase1_results and phase1_results["codex"]:
+        cli_results["codex"] = phase1_results["codex"]
+        if phase1_results["codex"].verdict and phase1_results["codex"].verdict not in ("skip", "error"):
+            all_verdicts.append(phase1_results["codex"].verdict)
+    if "gemini" in phase1_results and phase1_results["gemini"]:
+        cli_results["gemini"] = phase1_results["gemini"]
+        if phase1_results["gemini"].verdict and phase1_results["gemini"].verdict not in ("skip", "error"):
+            all_verdicts.append(phase1_results["gemini"].verdict)
+
+    # Get orchestrator result
+    if "orchestrator" in phase1_results and phase1_results["orchestrator"]:
+        orch_result = phase1_results["orchestrator"]
 
     # ============================================
-    # PHASE 2 & 3: Orchestrator + Agent Reviews
+    # PHASE 2: Agent Selection (from orchestrator result)
     # ============================================
     if agent_review_enabled:
-        eprint("[cc-native-plan-review] === PHASE 2: Orchestrator ===")
-
-        agent_library = load_agent_library(base, agent_settings)
-        timeout = agent_settings.get("timeout", 120)
-        legacy_mode = agent_settings.get("legacyMode", False)
-
-        orch_settings = agent_settings.get("orchestrator", DEFAULT_ORCHESTRATOR)
-        orchestrator_config = OrchestratorConfig(
-            enabled=orch_settings.get("enabled", True),
-            model=orch_settings.get("model", "haiku"),
-            timeout=orch_settings.get("timeout", 30),
-            max_turns=orch_settings.get("maxTurns", 3),
-        )
-
-        enabled_agents = [a for a in agent_library if a.enabled]
-        eprint(f"[cc-native-plan-review] Agent library: {[a.name for a in agent_library]}")
-        eprint(f"[cc-native-plan-review] Enabled agents: {[a.name for a in enabled_agents]}")
-        eprint(f"[cc-native-plan-review] Legacy mode: {legacy_mode}")
-        eprint(f"[cc-native-plan-review] Orchestrator enabled: {orchestrator_config.enabled}")
+        eprint("[cc-native-plan-review] === PHASE 2: Agent Selection ===")
 
         selected_agents: List[AgentConfig] = []
 
         if enabled_agents:
-            if orchestrator_config.enabled and not legacy_mode:
-                orch_result = run_orchestrator(plan, enabled_agents, orchestrator_config, agent_settings)
+            if orch_result and not legacy_mode:
+                # Use orchestrator result from phase 1
                 detected_complexity = orch_result.complexity
 
                 if orch_result.complexity == "simple" and not orch_result.selected_agents:
@@ -584,12 +603,15 @@ def main() -> int:
             iteration_state = get_iteration_state_from_context(reviews_dir, detected_complexity, agent_settings)
             eprint(f"[cc-native-plan-review] Iteration state: {iteration_state['current']}/{iteration_state['max']} ({detected_complexity})")
 
-        # PHASE 3: Run selected agents
+        # PHASE 3: Run selected agents in parallel
         if selected_agents:
             eprint("[cc-native-plan-review] === PHASE 3: Agent Reviews ===")
             max_turns = agent_settings.get("maxTurns", 3)
+            max_parallel = agent_settings.get("maxParallelAgents", 0)  # 0 = unlimited
+            num_workers = len(selected_agents) if max_parallel <= 0 else min(max_parallel, len(selected_agents))
+            eprint(f"[cc-native-plan-review] Launching {len(selected_agents)} agents in parallel (workers={num_workers})")
 
-            with ThreadPoolExecutor(max_workers=len(selected_agents)) as executor:
+            with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 futures = {
                     executor.submit(run_agent_review, plan, agent, REVIEW_SCHEMA, timeout, max_turns): agent
                     for agent in selected_agents

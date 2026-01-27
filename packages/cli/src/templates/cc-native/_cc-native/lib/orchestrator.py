@@ -24,10 +24,10 @@ from reviewers.base import AgentConfig, OrchestratorConfig
 # ---------------------------
 
 DEFAULT_AGENT_SELECTION: Dict[str, Any] = {
-    "simple": {"min": 0, "max": 0},
-    "medium": {"min": 1, "max": 2},
-    "high": {"min": 2, "max": 4},
-    "fallbackCount": 2,
+    "simple": {"min": 3, "max": 3},
+    "medium": {"min": 8, "max": 8},
+    "high": {"min": 12, "max": 12},
+    "fallbackCount": 3,
 }
 
 DEFAULT_COMPLEXITY_CATEGORIES: List[str] = [
