@@ -35,3 +35,18 @@ Changes to the working directory (`.aiwcli/`) should also be applied to the temp
 - Updating settings.json hook configurations
 
 **Note:** The `dist/` directory is auto-generated during build - only update `src/templates/`.
+
+## Hook Development
+
+**Verify hook API format before writing or modifying hooks.**
+
+The Claude Code hook API evolves frequently. Incorrect field names or structures fail silently—the hook runs but produces no effect.
+
+**Required workflow:**
+1. Use the `claude-code-guide` agent to verify current hook format
+2. Confirm field names for your specific hook type (PreToolUse, PostToolUse, etc.)
+3. Write or modify the hook code
+
+**Example verification queries:**
+- "What is the correct output format for PreToolUse hooks that block tool execution?"
+- "What fields are available in PostToolUse hook input?"
