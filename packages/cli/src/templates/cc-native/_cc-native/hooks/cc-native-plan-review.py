@@ -477,7 +477,8 @@ def main() -> int:
         eprint("[cc-native-plan-review] Skipping: no active context found")
         return 0
 
-    reviews_dir = get_context_reviews_dir(active_context.id, base)
+    # Get base reviews dir from shared lib, then add cc-native namespace
+    reviews_dir = get_context_reviews_dir(active_context.id, base) / "cc-native"
     eprint(f"[cc-native-plan-review] Using context reviews dir: {reviews_dir}")
 
     # Check if we've exhausted review iterations from context
