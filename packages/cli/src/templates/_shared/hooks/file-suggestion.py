@@ -2,9 +2,9 @@
 """File suggestion hook for Claude Code.
 
 Suggests relevant files to include in context based on the current session:
+- Context file (context.json) for the active context
 - Plans from the active context's plans/ directory
 - Handoffs from the active context's handoffs/ directory
-- Reviews from the active context's reviews/ directory
 
 Hook input (from Claude Code):
 {
@@ -31,8 +31,7 @@ from lib.base.utils import eprint, project_dir
 from lib.base.constants import (
     get_context_plans_dir,
     get_context_handoffs_dir,
-    get_context_reviews_dir,
-    get_context_dir,
+    get_context_file_path,
 )
 from lib.context.context_manager import (
     get_context_by_session_id,
@@ -46,9 +45,9 @@ def get_context_files(context_id: str, project_root: Path) -> List[str]:
     Get all relevant files for a context.
 
     Collects:
+    - Context file (context.json)
     - Plans (most recent first)
     - Handoffs (most recent first)
-    - Reviews (most recent first)
 
     Args:
         context_id: Context identifier
@@ -58,6 +57,12 @@ def get_context_files(context_id: str, project_root: Path) -> List[str]:
         List of absolute file paths, sorted by modification time (most recent first)
     """
     files = []
+
+    # Get context.json file first
+    context_file = get_context_file_path(context_id, project_root)
+    if context_file.exists():
+        files.append(str(context_file))
+        eprint(f"[file-suggestion] Found context file for {context_id}")
 
     # Get plans directory
     plans_dir = get_context_plans_dir(context_id, project_root)
@@ -75,15 +80,6 @@ def get_context_files(context_id: str, project_root: Path) -> List[str]:
         handoff_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         files.extend([str(p) for p in handoff_files])
         eprint(f"[file-suggestion] Found {len(handoff_files)} handoffs in {context_id}")
-
-    # Get reviews directory
-    reviews_dir = get_context_reviews_dir(context_id, project_root)
-    if reviews_dir.exists():
-        # Get markdown reviews
-        review_files = list(reviews_dir.glob("*.md"))
-        review_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-        files.extend([str(p) for p in review_files])
-        eprint(f"[file-suggestion] Found {len(review_files)} reviews in {context_id}")
 
     return files
 
