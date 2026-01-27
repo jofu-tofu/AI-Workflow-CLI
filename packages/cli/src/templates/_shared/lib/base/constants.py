@@ -15,6 +15,7 @@ from pathlib import Path
 # Directory names (relative to project root)
 OUTPUT_DIR = "_output"
 CONTEXTS_DIR = "contexts"
+ARCHIVE_DIR = "archive"
 INDEX_FILENAME = "index.json"
 
 # Context ID validation
@@ -199,6 +200,20 @@ def get_context_handoffs_dir(context_id: str, project_root: Path = None) -> Path
     return get_context_dir(context_id, project_root) / "handoffs"
 
 
+def get_context_reviews_dir(context_id: str, project_root: Path = None) -> Path:
+    """
+    Get the reviews directory for a specific context.
+
+    Args:
+        context_id: Context identifier
+        project_root: Project root directory (default: cwd)
+
+    Returns:
+        Path to _output/contexts/{context_id}/reviews/
+    """
+    return get_context_dir(context_id, project_root) / "reviews"
+
+
 def get_index_path(project_root: Path = None) -> Path:
     """
     Get the global index file path.
@@ -238,3 +253,47 @@ def get_events_file_path(context_id: str, project_root: Path = None) -> Path:
         Path to _output/contexts/{context_id}/events.jsonl
     """
     return get_context_dir(context_id, project_root) / "events.jsonl"
+
+
+def get_archive_dir(project_root: Path = None) -> Path:
+    """
+    Get the archive directory path.
+
+    Args:
+        project_root: Project root directory (default: cwd)
+
+    Returns:
+        Path to _output/contexts/archive/
+    """
+    return get_contexts_dir(project_root) / ARCHIVE_DIR
+
+
+def get_archive_context_dir(context_id: str, project_root: Path = None) -> Path:
+    """
+    Get the archive directory for a specific context.
+
+    Args:
+        context_id: Context identifier
+        project_root: Project root directory (default: cwd)
+
+    Returns:
+        Path to _output/contexts/archive/{context_id}/
+
+    Raises:
+        ValueError: If context_id is invalid
+    """
+    validated_id = validate_context_id(context_id)
+    return get_archive_dir(project_root) / validated_id
+
+
+def get_archive_index_path(project_root: Path = None) -> Path:
+    """
+    Get the archive index file path.
+
+    Args:
+        project_root: Project root directory (default: cwd)
+
+    Returns:
+        Path to _output/contexts/archive/index.json
+    """
+    return get_archive_dir(project_root) / INDEX_FILENAME

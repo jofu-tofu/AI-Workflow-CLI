@@ -27,6 +27,7 @@ from ..base.utils import eprint, now_iso
 EVENT_CONTEXT_CREATED = "context_created"
 EVENT_CONTEXT_COMPLETED = "context_completed"
 EVENT_CONTEXT_REOPENED = "context_reopened"
+EVENT_CONTEXT_ARCHIVED = "context_archived"
 EVENT_METADATA_UPDATED = "metadata_updated"
 EVENT_TASK_ADDED = "task_added"
 EVENT_TASK_STARTED = "task_started"

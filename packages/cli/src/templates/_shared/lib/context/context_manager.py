@@ -14,6 +14,8 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import shutil
+
 from ..base.atomic_write import atomic_write
 from ..base.constants import (
     get_context_dir,
@@ -21,6 +23,9 @@ from ..base.constants import (
     get_context_file_path,
     get_events_file_path,
     get_index_path,
+    get_archive_dir,
+    get_archive_context_dir,
+    get_archive_index_path,
     validate_context_id,
 )
 from ..base.utils import eprint, now_iso, generate_context_id
@@ -30,6 +35,7 @@ from .event_log import (
     EVENT_CONTEXT_CREATED,
     EVENT_CONTEXT_COMPLETED,
     EVENT_CONTEXT_REOPENED,
+    EVENT_CONTEXT_ARCHIVED,
     EVENT_METADATA_UPDATED,
     EVENT_PLANNING_STARTED,
     EVENT_PLAN_CREATED,
@@ -152,6 +158,192 @@ def _update_index_cache(context: Context, project_root: Path = None) -> bool:
         eprint(f"[context_manager] WARNING: Failed to write index cache: {error}")
 
     return success
+
+
+def _remove_from_index_cache(context_id: str, project_root: Path = None) -> bool:
+    """
+    Remove context from main index.json.
+
+    Args:
+        context_id: Context identifier to remove
+        project_root: Project root directory
+
+    Returns:
+        True if successful (or entry didn't exist)
+    """
+    index_path = get_index_path(project_root)
+
+    if not index_path.exists():
+        return True  # Nothing to remove
+
+    try:
+        index = json.loads(index_path.read_text(encoding='utf-8'))
+    except Exception as e:
+        eprint(f"[context_manager] WARNING: Failed to read index: {e}")
+        return False
+
+    # Remove entry if exists
+    if context_id in index.get("contexts", {}):
+        del index["contexts"][context_id]
+        index["updated_at"] = now_iso()
+
+        # Write index
+        content = json.dumps(index, indent=2, ensure_ascii=False)
+        success, error = atomic_write(index_path, content)
+
+        if not success:
+            eprint(f"[context_manager] WARNING: Failed to write index: {error}")
+            return False
+
+    return True
+
+
+def _update_archive_index_cache(context: Context, project_root: Path = None) -> bool:
+    """
+    Add context to archive/index.json.
+
+    Args:
+        context: Context to add to archive index
+        project_root: Project root directory
+
+    Returns:
+        True if successful
+    """
+    archive_dir = get_archive_dir(project_root)
+    archive_index_path = get_archive_index_path(project_root)
+
+    # Create archive dir if needed
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load existing archive index or create new
+    archive_index = {"version": "2.0", "updated_at": now_iso(), "contexts": {}}
+
+    if archive_index_path.exists():
+        try:
+            archive_index = json.loads(archive_index_path.read_text(encoding='utf-8'))
+        except Exception as e:
+            eprint(f"[context_manager] WARNING: Failed to read archive index, recreating: {e}")
+
+    # Add context entry
+    archive_index["contexts"][context.id] = context.to_index_entry()
+    archive_index["updated_at"] = now_iso()
+
+    # Write archive index
+    content = json.dumps(archive_index, indent=2, ensure_ascii=False)
+    success, error = atomic_write(archive_index_path, content)
+
+    if not success:
+        eprint(f"[context_manager] WARNING: Failed to write archive index: {error}")
+
+    return success
+
+
+def _remove_from_archive_index_cache(context_id: str, project_root: Path = None) -> bool:
+    """
+    Remove context from archive/index.json.
+
+    Args:
+        context_id: Context identifier to remove
+        project_root: Project root directory
+
+    Returns:
+        True if successful (or entry didn't exist)
+    """
+    archive_index_path = get_archive_index_path(project_root)
+
+    if not archive_index_path.exists():
+        return True  # Nothing to remove
+
+    try:
+        archive_index = json.loads(archive_index_path.read_text(encoding='utf-8'))
+    except Exception as e:
+        eprint(f"[context_manager] WARNING: Failed to read archive index: {e}")
+        return False
+
+    # Remove entry if exists
+    if context_id in archive_index.get("contexts", {}):
+        del archive_index["contexts"][context_id]
+        archive_index["updated_at"] = now_iso()
+
+        # Write archive index
+        content = json.dumps(archive_index, indent=2, ensure_ascii=False)
+        success, error = atomic_write(archive_index_path, content)
+
+        if not success:
+            eprint(f"[context_manager] WARNING: Failed to write archive index: {error}")
+            return False
+
+    return True
+
+
+def archive_context(context_id: str, project_root: Path = None) -> Optional[Context]:
+    """
+    Move completed context to archive.
+
+    1. Verify context exists and is completed
+    2. Move folder to archive location
+    3. Update context.folder to new path
+    4. Append context_archived event
+    5. Remove from main index
+    6. Add to archive index
+
+    Args:
+        context_id: Context identifier
+        project_root: Project root directory
+
+    Returns:
+        Archived Context or None if archiving failed
+    """
+    # Get context (try active location first)
+    context = get_context(context_id, project_root)
+    if not context:
+        eprint(f"[context_manager] Cannot archive: context '{context_id}' not found")
+        return None
+
+    if context.status != "completed":
+        eprint(f"[context_manager] Cannot archive: context '{context_id}' not completed")
+        return None
+
+    # Get source and destination paths
+    source_dir = get_context_dir(context_id, project_root)
+    archive_dest = get_archive_context_dir(context_id, project_root)
+
+    # Check if already archived
+    if archive_dest.exists():
+        eprint(f"[context_manager] Cannot archive: archive folder already exists for '{context_id}'")
+        return None
+
+    # Create archive parent directory
+    archive_dest.parent.mkdir(parents=True, exist_ok=True)
+
+    # Move folder to archive
+    try:
+        shutil.move(str(source_dir), str(archive_dest))
+    except Exception as e:
+        eprint(f"[context_manager] ERROR: Failed to move context to archive: {e}")
+        return None
+
+    # Update context folder path
+    context.folder = str(archive_dest)
+
+    # Append context_archived event (to the new location)
+    append_event(
+        context_id,
+        EVENT_CONTEXT_ARCHIVED,
+        project_root,
+        archived_from=str(source_dir),
+        archived_to=str(archive_dest)
+    )
+
+    # Update cache in new location
+    _write_context_cache(context, project_root)
+
+    # Remove from main index, add to archive index
+    _remove_from_index_cache(context_id, project_root)
+    _update_archive_index_cache(context, project_root)
+
+    eprint(f"[context_manager] Archived context: {context_id}")
+    return context
 
 
 def _load_context_from_cache(context_id: str, project_root: Path = None) -> Optional[Context]:
@@ -448,9 +640,10 @@ def update_context(
 
 def complete_context(context_id: str, project_root: Path = None) -> Optional[Context]:
     """
-    Mark a context as completed.
+    Mark a context as completed and archive it.
 
     User-driven completion - AI should not auto-complete.
+    After marking completed, automatically archives to _output/contexts/archive/.
 
     Args:
         context_id: Context identifier
@@ -478,7 +671,10 @@ def complete_context(context_id: str, project_root: Path = None) -> Optional[Con
     _update_index_cache(context, project_root)
 
     eprint(f"[context_manager] Completed context: {context_id}")
-    return context
+
+    # Archive the completed context
+    archived = archive_context(context_id, project_root)
+    return archived if archived else context
 
 
 def reopen_context(context_id: str, project_root: Path = None) -> Optional[Context]:
@@ -486,6 +682,7 @@ def reopen_context(context_id: str, project_root: Path = None) -> Optional[Conte
     Reopen a completed context.
 
     Rare operation - usually for fixing mistakes.
+    If context is archived, moves it back from archive to active location.
 
     Args:
         context_id: Context identifier
@@ -494,7 +691,18 @@ def reopen_context(context_id: str, project_root: Path = None) -> Optional[Conte
     Returns:
         Updated Context or None if not found
     """
+    # First try to get from active location
     context = get_context(context_id, project_root)
+
+    # If not found, check archive
+    if not context:
+        context = _get_archived_context(context_id, project_root)
+        if context:
+            # Restore from archive
+            context = _restore_from_archive(context_id, project_root)
+            if not context:
+                return None
+
     if not context:
         return None
 
@@ -513,6 +721,90 @@ def reopen_context(context_id: str, project_root: Path = None) -> Optional[Conte
     _update_index_cache(context, project_root)
 
     eprint(f"[context_manager] Reopened context: {context_id}")
+    return context
+
+
+def _get_archived_context(context_id: str, project_root: Path = None) -> Optional[Context]:
+    """
+    Load context from archive location.
+
+    Args:
+        context_id: Context identifier
+        project_root: Project root directory
+
+    Returns:
+        Context or None if not found in archive
+    """
+    archive_dir = get_archive_context_dir(context_id, project_root)
+    context_file = archive_dir / "context.json"
+
+    if not context_file.exists():
+        return None
+
+    try:
+        data = json.loads(context_file.read_text(encoding='utf-8'))
+        in_flight_data = data.get("in_flight", {})
+        return Context(
+            id=data["id"],
+            status=data.get("status", "completed"),
+            summary=data.get("summary", ""),
+            method=data.get("method"),
+            tags=data.get("tags", []),
+            created_at=data.get("created_at"),
+            last_active=data.get("last_active"),
+            folder=str(archive_dir),
+            in_flight=InFlightState(
+                mode=in_flight_data.get("mode", "none"),
+                artifact_path=in_flight_data.get("artifact_path"),
+                artifact_hash=in_flight_data.get("artifact_hash"),
+                started_at=in_flight_data.get("started_at"),
+                session_ids=in_flight_data.get("session_ids"),
+                handoff_path=in_flight_data.get("handoff_path"),
+            )
+        )
+    except Exception as e:
+        eprint(f"[context_manager] WARNING: Failed to load archived context: {e}")
+        return None
+
+
+def _restore_from_archive(context_id: str, project_root: Path = None) -> Optional[Context]:
+    """
+    Move context from archive back to active location.
+
+    Args:
+        context_id: Context identifier
+        project_root: Project root directory
+
+    Returns:
+        Restored Context or None if restore failed
+    """
+    archive_dir = get_archive_context_dir(context_id, project_root)
+    active_dir = get_context_dir(context_id, project_root)
+
+    if not archive_dir.exists():
+        eprint(f"[context_manager] Cannot restore: archive folder not found for '{context_id}'")
+        return None
+
+    if active_dir.exists():
+        eprint(f"[context_manager] Cannot restore: active folder already exists for '{context_id}'")
+        return None
+
+    # Move folder back to active location
+    try:
+        shutil.move(str(archive_dir), str(active_dir))
+    except Exception as e:
+        eprint(f"[context_manager] ERROR: Failed to restore context from archive: {e}")
+        return None
+
+    # Load context from new location
+    context = _load_context_from_cache(context_id, project_root)
+    if context:
+        context.folder = str(active_dir)
+
+        # Remove from archive index
+        _remove_from_archive_index_cache(context_id, project_root)
+
+    eprint(f"[context_manager] Restored context from archive: {context_id}")
     return context
 
 
@@ -745,6 +1037,35 @@ def get_context_with_handoff_pending(project_root: Path = None) -> Optional[Cont
             return context
 
     return None
+
+
+def get_all_in_flight_contexts(project_root: Path = None) -> List[Context]:
+    """
+    Return all contexts with truly in-flight work requiring attention.
+
+    In-flight modes (require continuation/action):
+    - planning: Active planning session
+    - pending_implementation: Plan created, awaiting implementation
+    - handoff_pending: Handoff document created, awaiting pickup
+
+    NOT in-flight (normal working state):
+    - implementing: Active work, but doesn't block new context creation
+    - none: No active work
+
+    Used by context enforcer to determine auto-selection behavior:
+    - 0 in-flight: auto-create new context
+    - 1 in-flight: auto-select that context
+    - Multiple: show picker
+
+    Args:
+        project_root: Project root directory
+
+    Returns:
+        List of contexts with in-flight work requiring attention
+    """
+    IN_FLIGHT_MODES = {"planning", "pending_implementation", "handoff_pending"}
+    contexts = get_all_contexts(status="active", project_root=project_root)
+    return [c for c in contexts if c.in_flight and c.in_flight.mode in IN_FLIGHT_MODES]
 
 
 def get_context_by_session_id(session_id: str, project_root: Path = None) -> Optional[Context]:

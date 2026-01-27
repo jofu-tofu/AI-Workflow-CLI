@@ -8,6 +8,7 @@ from .context_manager import (
     update_context,
     complete_context,
     reopen_context,
+    archive_context,
     update_plan_status,
     get_context_with_pending_plan,
     get_context_with_in_flight_work,
@@ -26,6 +27,7 @@ from .event_log import (
 )
 from .cache import (
     rebuild_index_from_folders,
+    rebuild_archive_index,
     rebuild_context_from_events,
     rebuild_all_caches,
     verify_cache_integrity,
@@ -71,6 +73,7 @@ __all__ = [
     "update_context",
     "complete_context",
     "reopen_context",
+    "archive_context",
     "update_plan_status",
     "get_context_with_pending_plan",
     "get_context_with_in_flight_work",
@@ -85,6 +88,7 @@ __all__ = [
     "get_pending_tasks",
     # Cache
     "rebuild_index_from_folders",
+    "rebuild_archive_index",
     "rebuild_context_from_events",
     "rebuild_all_caches",
     "verify_cache_integrity",

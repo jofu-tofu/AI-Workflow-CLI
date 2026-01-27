@@ -18,6 +18,9 @@ from ..base.constants import (
     get_context_file_path,
     get_events_file_path,
     get_index_path,
+    get_archive_dir,
+    get_archive_index_path,
+    ARCHIVE_DIR,
 )
 from ..base.utils import eprint, now_iso
 from .event_log import read_events
@@ -131,6 +134,9 @@ def rebuild_index_from_folders(project_root: Path = None) -> Dict[str, Any]:
     This is the recovery mechanism when index.json is
     corrupted or out of sync.
 
+    Note: Skips the archive/ folder - archived contexts are not included
+    in the main index.
+
     Args:
         project_root: Project root directory
 
@@ -149,6 +155,10 @@ def rebuild_index_from_folders(project_root: Path = None) -> Dict[str, Any]:
 
     for ctx_dir in contexts_dir.iterdir():
         if not ctx_dir.is_dir():
+            continue
+
+        # Skip archive folder - archived contexts have their own index
+        if ctx_dir.name == ARCHIVE_DIR:
             continue
 
         # Try to read context.json first
@@ -179,11 +189,71 @@ def rebuild_index_from_folders(project_root: Path = None) -> Dict[str, Any]:
     return index
 
 
+def rebuild_archive_index(project_root: Path = None) -> Dict[str, Any]:
+    """
+    Rebuild archive/index.json by scanning archive folder.
+
+    This is the recovery mechanism when archive index is
+    corrupted or out of sync.
+
+    Args:
+        project_root: Project root directory
+
+    Returns:
+        Rebuilt archive index dictionary
+    """
+    archive_index = {
+        "version": "2.0",
+        "updated_at": now_iso(),
+        "contexts": {}
+    }
+
+    archive_dir = get_archive_dir(project_root)
+    if not archive_dir.exists():
+        return archive_index
+
+    for ctx_dir in archive_dir.iterdir():
+        if not ctx_dir.is_dir():
+            continue
+
+        # Skip index.json file itself
+        if ctx_dir.name == "index.json":
+            continue
+
+        # Try to read context.json first
+        context_file = ctx_dir / "context.json"
+        if context_file.exists():
+            try:
+                ctx_data = json.loads(context_file.read_text(encoding='utf-8'))
+                in_flight = ctx_data.get("in_flight", {})
+                archive_index["contexts"][ctx_data["id"]] = {
+                    "id": ctx_data["id"],
+                    "status": ctx_data.get("status", "completed"),
+                    "method": ctx_data.get("method"),
+                    "summary": ctx_data.get("summary", ""),
+                    "created_at": ctx_data.get("created_at"),
+                    "last_active": ctx_data.get("last_active"),
+                    "folder": str(ctx_dir),
+                    "in_flight_mode": in_flight.get("mode", "none")
+                }
+                continue
+            except Exception as e:
+                eprint(f"[cache] Failed to read {context_file}, rebuilding from events: {e}")
+
+        # Fallback: rebuild from events
+        context = rebuild_context_from_events(ctx_dir)
+        if context:
+            archive_index["contexts"][context.id] = context.to_index_entry()
+
+    return archive_index
+
+
 def rebuild_all_caches(project_root: Path = None) -> bool:
     """
     Rebuild all cache files from events.jsonl files.
 
     Useful for recovery after corruption or version migration.
+    Rebuilds both active context caches and archive index.
 
     Args:
         project_root: Project root directory
@@ -198,9 +268,13 @@ def rebuild_all_caches(project_root: Path = None) -> bool:
         eprint("[cache] No contexts directory found, nothing to rebuild")
         return True
 
-    # Rebuild each context's cache
+    # Rebuild each active context's cache (skip archive folder)
     for ctx_dir in contexts_dir.iterdir():
         if not ctx_dir.is_dir():
+            continue
+
+        # Skip archive folder - handled separately
+        if ctx_dir.name == ARCHIVE_DIR:
             continue
 
         events_path = ctx_dir / "events.jsonl"
@@ -221,6 +295,31 @@ def rebuild_all_caches(project_root: Path = None) -> bool:
             eprint(f"[cache] Failed to rebuild context: {ctx_dir.name}")
             success = False
 
+    # Rebuild archived context caches
+    archive_dir = get_archive_dir(project_root)
+    if archive_dir.exists():
+        for ctx_dir in archive_dir.iterdir():
+            if not ctx_dir.is_dir():
+                continue
+
+            events_path = ctx_dir / "events.jsonl"
+            if not events_path.exists():
+                continue
+
+            eprint(f"[cache] Rebuilding archived context: {ctx_dir.name}")
+            context = rebuild_context_from_events(ctx_dir)
+
+            if context:
+                context_file = ctx_dir / "context.json"
+                content = json.dumps(context.to_dict(), indent=2, ensure_ascii=False)
+                ok, error = atomic_write(context_file, content)
+                if not ok:
+                    eprint(f"[cache] Failed to write {context_file}: {error}")
+                    success = False
+            else:
+                eprint(f"[cache] Failed to rebuild archived context: {ctx_dir.name}")
+                success = False
+
     # Rebuild global index
     eprint("[cache] Rebuilding global index")
     index = rebuild_index_from_folders(project_root)
@@ -232,7 +331,20 @@ def rebuild_all_caches(project_root: Path = None) -> bool:
         eprint(f"[cache] Failed to write index: {error}")
         success = False
 
-    eprint(f"[cache] Rebuild complete. {len(index['contexts'])} contexts indexed.")
+    # Rebuild archive index
+    eprint("[cache] Rebuilding archive index")
+    archive_index = rebuild_archive_index(project_root)
+    archive_index_path = get_archive_index_path(project_root)
+
+    if archive_index["contexts"]:  # Only write if there are archived contexts
+        content = json.dumps(archive_index, indent=2, ensure_ascii=False)
+        ok, error = atomic_write(archive_index_path, content)
+        if not ok:
+            eprint(f"[cache] Failed to write archive index: {error}")
+            success = False
+
+    total_contexts = len(index['contexts']) + len(archive_index['contexts'])
+    eprint(f"[cache] Rebuild complete. {len(index['contexts'])} active, {len(archive_index['contexts'])} archived contexts indexed.")
     return success
 
 
@@ -261,6 +373,10 @@ def verify_cache_integrity(project_root: Path = None) -> Dict[str, Any]:
 
     for ctx_dir in contexts_dir.iterdir():
         if not ctx_dir.is_dir():
+            continue
+
+        # Skip archive folder - archived contexts verified separately
+        if ctx_dir.name == ARCHIVE_DIR:
             continue
 
         report["contexts_checked"] += 1
