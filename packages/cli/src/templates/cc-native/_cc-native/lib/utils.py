@@ -712,12 +712,9 @@ def write_combined_artifacts(
     result: CombinedReviewResult,
     payload: Dict[str, Any],
     settings: Optional[Dict[str, Any]] = None,
-    task_folder: Optional[str] = None,
+    context_reviews_dir: Optional[Path] = None,
 ) -> Path:
-    """Write combined review artifacts to task-centric folder structure.
-
-    Output: {task_folder}/reviews/ (if task_folder provided)
-            or _output/cc-native/plans/{YYYY-MM-DD}/{slug}/reviews/ (fallback)
+    """Write combined review artifacts to context reviews folder.
 
     Args:
         base: Project base directory
@@ -725,28 +722,16 @@ def write_combined_artifacts(
         result: Combined review result
         payload: Hook payload
         settings: Display settings
-        task_folder: Optional explicit task folder path from state file
+        context_reviews_dir: Reviews directory from context system (required)
+
+    Raises:
+        ValueError: If context_reviews_dir is not provided
     """
-    if task_folder:
-        # Use provided task folder (ensures review and archive use same location)
-        out_dir = Path(task_folder) / "reviews"
-        eprint(f"[utils] Using task_folder from state: {out_dir}")
-    else:
-        # Fallback: generate folder (backwards compatibility)
-        ts = now_local()
-        date_folder = ts.strftime("%Y-%m-%d")
+    if not context_reviews_dir:
+        raise ValueError("context_reviews_dir is required")
 
-        # Extract task slug from plan title
-        title = extract_plan_title(plan)
-        if title:
-            slug = sanitize_title(title.lower())
-        else:
-            sid = sanitize_filename(str(payload.get("session_id", "unknown")))
-            slug = f"session-{sid}"
-
-        # Build task-centric path: plans/{date}/{slug}/reviews/
-        out_dir = base / "_output" / "cc-native" / "plans" / date_folder / slug / "reviews"
-        eprint(f"[utils] Generated task folder: {out_dir}")
+    out_dir = context_reviews_dir
+    eprint(f"[utils] Using context reviews dir: {out_dir}")
 
     # Check directory creation explicitly
     try:

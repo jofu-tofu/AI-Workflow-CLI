@@ -38,6 +38,11 @@ from typing import Any, Dict, List, Optional
 try:
     _lib = Path(__file__).parent.parent / "lib"
     sys.path.insert(0, str(_lib))
+
+    # Add shared library path
+    _shared_lib = Path(__file__).parent.parent.parent / "_shared" / "lib"
+    sys.path.insert(0, str(_shared_lib))
+
     from utils import (
         DEFAULT_DISPLAY,
         DEFAULT_SANITIZATION,
@@ -56,14 +61,6 @@ try:
         load_config,
         get_display_settings,
     )
-    from state import (
-        load_state,
-        save_state,
-        get_iteration_state,
-        update_iteration_state,
-        should_continue_iterating,
-        DEFAULT_REVIEW_ITERATIONS,
-    )
     from reviewers import (
         run_codex_review,
         run_gemini_review,
@@ -76,6 +73,13 @@ try:
         DEFAULT_AGENT_SELECTION,
         DEFAULT_COMPLEXITY_CATEGORIES,
     )
+    # Import shared context system
+    from context.context_manager import (
+        get_context_by_session_id,
+        get_all_in_flight_contexts,
+        get_all_contexts,
+    )
+    from base.constants import get_context_reviews_dir
 except ImportError as e:
     print(f"[cc-native-plan-review] Failed to import lib: {e}", file=sys.stderr)
     sys.exit(0)  # Non-blocking failure
@@ -112,6 +116,195 @@ DEFAULT_ORCHESTRATOR: Dict[str, Any] = {
 }
 
 DEFAULT_AGENT_MODEL: str = "sonnet"
+
+DEFAULT_REVIEW_ITERATIONS: Dict[str, int] = {
+    "simple": 1,
+    "medium": 1,
+    "high": 2,
+}
+
+
+# ---------------------------
+# Context-based State Management
+# ---------------------------
+
+def get_active_context_for_review(session_id: str, project_root: Path) -> Optional[Any]:
+    """Find active context for plan review.
+
+    Strategy:
+    1. Find context by session_id
+    2. Fallback: Single in-flight context
+    3. Fallback: Single planning context
+    4. Return None if multiple or no contexts found
+
+    Args:
+        session_id: Current session ID
+        project_root: Project root path
+
+    Returns:
+        Context object or None
+    """
+    # Strategy 1: Find by session_id
+    context = get_context_by_session_id(session_id, project_root)
+    if context:
+        eprint(f"[cc-native-plan-review] Found context by session_id: {context.id}")
+        return context
+
+    # Strategy 2: Single in-flight context
+    in_flight = get_all_in_flight_contexts(project_root)
+    if len(in_flight) == 1:
+        eprint(f"[cc-native-plan-review] Found single in-flight context: {in_flight[0].id}")
+        return in_flight[0]
+
+    # Strategy 3: Single planning context
+    planning_contexts = [c for c in in_flight if c.in_flight and c.in_flight.mode == "planning"]
+    if len(planning_contexts) == 1:
+        eprint(f"[cc-native-plan-review] Found single planning context: {planning_contexts[0].id}")
+        return planning_contexts[0]
+
+    # Multiple or no contexts found
+    if len(in_flight) > 1:
+        eprint(f"[cc-native-plan-review] Multiple in-flight contexts ({len(in_flight)}), falling back to legacy")
+    else:
+        eprint("[cc-native-plan-review] No in-flight contexts found, falling back to legacy")
+    return None
+
+
+def load_iteration_state(reviews_dir: Path) -> Optional[Dict[str, Any]]:
+    """Load iteration state from context reviews folder.
+
+    Args:
+        reviews_dir: Path to the reviews directory
+
+    Returns:
+        Iteration state dict or None if not found
+    """
+    iteration_file = reviews_dir / "iteration.json"
+    if not iteration_file.exists():
+        return None
+
+    try:
+        return json.loads(iteration_file.read_text(encoding="utf-8"))
+    except Exception as e:
+        eprint(f"[cc-native-plan-review] Failed to load iteration state: {e}")
+        return None
+
+
+def save_iteration_state(reviews_dir: Path, state: Dict[str, Any]) -> bool:
+    """Save iteration state to context reviews folder.
+
+    Args:
+        reviews_dir: Path to the reviews directory
+        state: Iteration state dict
+
+    Returns:
+        True on success, False on failure
+    """
+    iteration_file = reviews_dir / "iteration.json"
+    try:
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        state["schema_version"] = "1.0.0"
+        iteration_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        return True
+    except Exception as e:
+        eprint(f"[cc-native-plan-review] Failed to save iteration state: {e}")
+        return False
+
+
+def get_iteration_state_from_context(
+    reviews_dir: Path,
+    complexity: str,
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Get or initialize iteration state based on complexity.
+
+    Args:
+        reviews_dir: Path to the reviews directory
+        complexity: Plan complexity level (simple/medium/high)
+        config: Optional config dict with reviewIterations settings
+
+    Returns:
+        Iteration dict with: current, max, complexity, history
+    """
+    existing = load_iteration_state(reviews_dir)
+    if existing:
+        return existing
+
+    # Initialize new iteration state
+    review_iterations = DEFAULT_REVIEW_ITERATIONS.copy()
+    if config:
+        review_iterations.update(config.get("reviewIterations", {}))
+    max_iterations = review_iterations.get(complexity, 1)
+
+    return {
+        "current": 1,
+        "max": max_iterations,
+        "complexity": complexity,
+        "history": [],
+    }
+
+
+def update_iteration_state_in_context(
+    reviews_dir: Path,
+    iteration: Dict[str, Any],
+    plan_hash: str,
+    verdict: str,
+) -> Dict[str, Any]:
+    """Record review result in iteration history.
+
+    Args:
+        reviews_dir: Path to the reviews directory
+        iteration: The iteration state dict
+        plan_hash: Hash of the current plan content
+        verdict: Review verdict (pass/warn/fail)
+
+    Returns:
+        Updated iteration state dict
+    """
+    from datetime import datetime
+
+    iteration["history"].append({
+        "hash": plan_hash,
+        "verdict": verdict,
+        "timestamp": datetime.now().isoformat(),
+    })
+    return iteration
+
+
+def should_continue_iterating_context(
+    iteration: Dict[str, Any],
+    verdict: str,
+    config: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Determine if more review iterations are needed.
+
+    Args:
+        iteration: The iteration state dict
+        verdict: Current review verdict
+        config: Optional config dict with earlyExitOnAllPass setting
+
+    Returns:
+        True if more iterations needed, False otherwise
+    """
+    current = iteration.get("current", 1)
+    max_iter = iteration.get("max", 1)
+
+    # At or past max iterations - no more iterations
+    if current >= max_iter:
+        eprint(f"[cc-native-plan-review] At max iterations ({current}/{max_iter}), no more iterations")
+        return False
+
+    # Check early exit on all pass
+    early_exit = True
+    if config:
+        early_exit = config.get("earlyExitOnAllPass", True)
+    if early_exit and verdict == "pass":
+        eprint(f"[cc-native-plan-review] All reviewers passed and earlyExitOnAllPass=true, exiting early")
+        return False
+
+    # More iterations available and verdict is not pass (or early exit disabled)
+    eprint(f"[cc-native-plan-review] Continuing to next iteration ({current + 1}/{max_iter}), verdict={verdict}")
+    return True
 
 
 # ---------------------------
@@ -277,19 +470,21 @@ def main() -> int:
     eprint(f"[cc-native-plan-review] Found plan at: {plan_path}")
     eprint(f"[cc-native-plan-review] Plan length: {len(plan)} chars")
 
-    # Load state file (keyed by plan path, created by set_plan_state.py)
-    state = load_state(plan_path)
-    task_folder = state.get("task_folder") if state else None
-    if task_folder:
-        eprint(f"[cc-native-plan-review] Using task_folder from state: {task_folder}")
-    else:
-        eprint("[cc-native-plan-review] No task_folder in state, will generate folder path")
+    # Find active context for this review (required)
+    active_context = get_active_context_for_review(session_id, base)
 
-    # Check if we've exhausted review iterations
-    if state and "iteration" in state:
-        iter_state = state["iteration"]
-        current = iter_state.get("current", 1)
-        max_iter = iter_state.get("max", 1)
+    if not active_context:
+        eprint("[cc-native-plan-review] Skipping: no active context found")
+        return 0
+
+    reviews_dir = get_context_reviews_dir(active_context.id, base)
+    eprint(f"[cc-native-plan-review] Using context reviews dir: {reviews_dir}")
+
+    # Check if we've exhausted review iterations from context
+    existing_iteration = load_iteration_state(reviews_dir)
+    if existing_iteration:
+        current = existing_iteration.get("current", 1)
+        max_iter = existing_iteration.get("max", 1)
         if current > max_iter:
             eprint(f"[cc-native-plan-review] Skipping: review iterations exhausted ({current}/{max_iter})")
             return 0
@@ -384,8 +579,8 @@ def main() -> int:
                 detected_complexity = "medium"  # Default for legacy mode
 
         # Initialize iteration state based on complexity (after orchestrator runs)
-        if state:
-            iteration_state = get_iteration_state(state, detected_complexity, agent_settings)
+        if reviews_dir:
+            iteration_state = get_iteration_state_from_context(reviews_dir, detected_complexity, agent_settings)
             eprint(f"[cc-native-plan-review] Iteration state: {iteration_state['current']}/{iteration_state['max']} ({detected_complexity})")
 
         # PHASE 3: Run selected agents
@@ -441,7 +636,10 @@ def main() -> int:
     display_settings = {**plan_settings.get("display", {}), **agent_settings.get("display", {})}
     combined_settings = {"display": display_settings}
 
-    review_file = write_combined_artifacts(base, plan, combined_result, payload, combined_settings, task_folder)
+    review_file = write_combined_artifacts(
+        base, plan, combined_result, payload, combined_settings,
+        context_reviews_dir=reviews_dir
+    )
     eprint(f"[cc-native-plan-review] Saved review: {review_file}")
 
     # Build context message
@@ -476,19 +674,18 @@ def main() -> int:
 
     # Handle iteration logic
     needs_more_iterations = False
-    if iteration_state and state:
+    if iteration_state and reviews_dir:
         # Update iteration state with this review result
-        state = update_iteration_state(state, iteration_state, plan_hash, overall)
+        iteration_state = update_iteration_state_in_context(reviews_dir, iteration_state, plan_hash, overall)
 
         # Check if more iterations needed
-        if should_continue_iterating(iteration_state, overall, agent_settings):
+        if should_continue_iterating_context(iteration_state, overall, agent_settings):
             needs_more_iterations = True
             # Increment iteration counter for next round
             iteration_state["current"] = iteration_state.get("current", 1) + 1
-            state["iteration"] = iteration_state
 
             # Save updated state for next iteration
-            save_state(plan_path, state)
+            save_iteration_state(reviews_dir, iteration_state)
 
             current = iteration_state["current"] - 1  # Display the just-completed iteration
             max_iter = iteration_state["max"]
@@ -504,8 +701,7 @@ def main() -> int:
         else:
             # Final iteration - increment current and save state
             iteration_state["current"] = iteration_state.get("current", 1) + 1
-            state["iteration"] = iteration_state
-            save_state(plan_path, state)
+            save_iteration_state(reviews_dir, iteration_state)
 
     # Standard blocking (only if not already blocked by iteration)
     if should_block and not needs_more_iterations:

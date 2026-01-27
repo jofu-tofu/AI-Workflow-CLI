@@ -14,17 +14,6 @@
     }
   },
   "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python .aiwcli/_shared/hooks/session_start.py",
-            "timeout": 10000
-          }
-        ]
-      }
-    ],
     "UserPromptSubmit": [
       {
         "hooks": [
@@ -92,11 +81,6 @@
       {
         "matcher": "ExitPlanMode",
         "hooks": [
-          {
-            "type": "command",
-            "command": "python .aiwcli/_cc-native/hooks/set_plan_state.py",
-            "timeout": 5000
-          },
           {
             "type": "command",
             "command": "python .aiwcli/_cc-native/hooks/cc-native-plan-review.py",
