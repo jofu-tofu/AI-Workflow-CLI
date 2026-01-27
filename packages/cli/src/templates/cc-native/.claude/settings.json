@@ -5,6 +5,10 @@
   },
   "env": {},
   "enabledPlugins": {},
+  "fileSuggestion": {
+    "type": "command",
+    "command": "python .aiwcli/_shared/hooks/file-suggestion.py"
+  },
   "methods": {
     "cc-native": {
       "ides": [
@@ -26,6 +30,16 @@
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "Task|Read|Bash|WebFetch|Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .aiwcli/_shared/hooks/context_monitor.py",
+            "timeout": 5000
+          }
+        ]
+      },
       {
         "matcher": "Bash|Edit",
         "hooks": [
@@ -56,6 +70,18 @@
           }
         ]
       },
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .aiwcli/_shared/hooks/archive_plan.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
       {
         "matcher": "ExitPlanMode",
         "hooks": [

@@ -1110,7 +1110,8 @@ def create_context_from_prompt(user_prompt: str, project_root: Path = None) -> C
     Auto-create a context from the user's prompt.
 
     Used by the context enforcer hook when no context exists.
-    Creates a context with the prompt as summary (truncated to 100 chars).
+    Passes the full prompt (up to 2000 chars) for semantic summarization
+    to generate a meaningful context ID.
 
     Args:
         user_prompt: The user's prompt text
@@ -1119,13 +1120,14 @@ def create_context_from_prompt(user_prompt: str, project_root: Path = None) -> C
     Returns:
         Newly created Context object
     """
-    # Truncate prompt to first 100 chars for summary
-    summary = user_prompt.strip()[:100]
-    if len(user_prompt.strip()) > 100:
+    # Pass full prompt for semantic summarization (inference.py truncates to 500 chars)
+    # Store up to 2000 chars in summary field for context
+    summary = user_prompt.strip()[:2000]
+    if len(user_prompt.strip()) > 2000:
         summary += "..."
 
     return create_context(
-        context_id=None,  # Auto-generate from summary
+        context_id=None,  # Auto-generate from summary via semantic summarization
         summary=summary,
         method="auto-created",
         tags=["auto-created"],

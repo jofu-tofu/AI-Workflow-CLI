@@ -158,12 +158,10 @@ def generate_semantic_summary(prompt: str, timeout: int = 15) -> Optional[str]:
     Returns:
         10-word summary string or None if failed
     """
-    # Truncate very long prompts
-    truncated = prompt[:500] if len(prompt) > 500 else prompt
-
+    # Pass full prompt - AI can summarize any length into 10 words
     result = inference(
         system_prompt=CONTEXT_ID_SYSTEM_PROMPT,
-        user_prompt=truncated,
+        user_prompt=prompt,
         level="standard",
         timeout=timeout,
     )
