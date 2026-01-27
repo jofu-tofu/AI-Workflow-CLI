@@ -4,7 +4,7 @@
     "reviewers": {
       "codex": {
         "enabled": true,
-        "model": "",
+        "model": "o4-mini",
         "timeout": 120
       },
       "gemini": {

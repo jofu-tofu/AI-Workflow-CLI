@@ -5,6 +5,7 @@ Suggests relevant files to include in context based on the current session:
 - Context file (context.json) for the active context
 - Plans from the active context's plans/ directory
 - Handoffs from the active context's handoffs/ directory
+- Reviews from the active context's reviews/ directory (including cc-native subdirectory)
 
 Hook input (from Claude Code):
 {
@@ -31,6 +32,7 @@ from lib.base.utils import eprint, project_dir
 from lib.base.constants import (
     get_context_plans_dir,
     get_context_handoffs_dir,
+    get_context_reviews_dir,
     get_context_file_path,
 )
 from lib.context.context_manager import (
@@ -48,6 +50,7 @@ def get_context_files(context_id: str, project_root: Path) -> List[str]:
     - Context file (context.json)
     - Plans (most recent first)
     - Handoffs (most recent first)
+    - Reviews (most recent first)
 
     Args:
         context_id: Context identifier
@@ -80,6 +83,15 @@ def get_context_files(context_id: str, project_root: Path) -> List[str]:
         handoff_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         files.extend([str(p) for p in handoff_files])
         eprint(f"[file-suggestion] Found {len(handoff_files)} handoffs in {context_id}")
+
+    # Get reviews directory (includes cc-native subdirectory)
+    reviews_dir = get_context_reviews_dir(context_id, project_root)
+    if reviews_dir.exists():
+        # Find review.md files in reviews/ and subdirectories (e.g., reviews/cc-native/review.md)
+        review_files = list(reviews_dir.glob("**/review.md"))
+        review_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        files.extend([str(p) for p in review_files])
+        eprint(f"[file-suggestion] Found {len(review_files)} reviews in {context_id}")
 
     return files
 

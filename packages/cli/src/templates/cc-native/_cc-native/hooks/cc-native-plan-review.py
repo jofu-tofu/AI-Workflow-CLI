@@ -661,13 +661,6 @@ def main() -> int:
     context_parts.append("\nUse these findings before starting implementation.\n\n")
     context_parts.append(md_content)
 
-    out: Dict[str, Any] = {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "additionalContext": "".join(context_parts),
-        }
-    }
-
     # Check blocking conditions
     block_on_fail_plan = plan_settings.get("blockOnFail", False)
     block_on_fail_agent = agent_settings.get("blockOnFail", True)
@@ -684,33 +677,42 @@ def main() -> int:
             needs_more_iterations = True
             # Increment iteration counter for next round
             iteration_state["current"] = iteration_state.get("current", 1) + 1
-
             # Save updated state for next iteration
             save_iteration_state(reviews_dir, iteration_state)
-
-            current = iteration_state["current"] - 1  # Display the just-completed iteration
-            max_iter = iteration_state["max"]
-            remaining = max_iter - current
-
-            out["decision"] = "block"
-            out["reason"] = (
-                f"CC-Native plan review iteration {current}/{max_iter} verdict = {overall.upper()}.\n\n"
-                f"REVISION REQUIRED: Address the issues identified above.\n"
-                f"Revise the plan in place, then attempt ExitPlanMode again.\n"
-                f"({remaining} revision{'s' if remaining != 1 else ''} remaining)"
-            )
         else:
             # Final iteration - increment current and save state
             iteration_state["current"] = iteration_state.get("current", 1) + 1
             save_iteration_state(reviews_dir, iteration_state)
 
-    # Standard blocking (only if not already blocked by iteration)
-    if should_block and not needs_more_iterations:
-        out["decision"] = "block"
-        out["reason"] = (
+    # Build output with correct Claude Code hook format
+    # See: https://docs.anthropic.com/en/docs/claude-code/hooks
+    out: Dict[str, Any] = {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "additionalContext": "".join(context_parts),
+        }
+    }
+
+    # Handle blocking scenarios - use permissionDecision/permissionDecisionReason inside hookSpecificOutput
+    # Note: md_content is already in additionalContext, so permissionDecisionReason only needs the instruction
+    if needs_more_iterations:
+        current = iteration_state["current"] - 1  # Display the just-completed iteration
+        max_iter = iteration_state["max"]
+        remaining = max_iter - current
+
+        out["hookSpecificOutput"]["permissionDecision"] = "deny"
+        out["hookSpecificOutput"]["permissionDecisionReason"] = (
+            f"CC-Native plan review iteration {current}/{max_iter} verdict = {overall.upper()}. "
+            f"REVISION REQUIRED: Address the issues in additionalContext. "
+            f"Revise the plan in place, then attempt ExitPlanMode again. "
+            f"({remaining} revision{'s' if remaining != 1 else ''} remaining)"
+        )
+    elif should_block:
+        out["hookSpecificOutput"]["permissionDecision"] = "deny"
+        out["hookSpecificOutput"]["permissionDecisionReason"] = (
             "CC-Native plan review verdict = FAIL. Do NOT start implementation yet. "
-            "Revise the plan to address the high-severity issues and missing sections, "
-            "then present an updated plan."
+            "Revise the plan to address the issues in additionalContext, "
+            "then attempt ExitPlanMode again."
         )
 
     mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review", iteration_state)
