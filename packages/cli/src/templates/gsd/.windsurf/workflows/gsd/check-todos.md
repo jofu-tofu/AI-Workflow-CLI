@@ -4,9 +4,9 @@ List all pending todos captured via add-todo, organized by priority and category
 
 ## Workflow Source
 
-This workflow is defined in detail at `_gsd/workflows/check-todos.md`.
+This workflow is defined in detail at `.aiwcli/_gsd/workflows/check-todos.md`.
 
-**CRITICAL:** Load the FULL content from `@_gsd/workflows/check-todos.md`, READ its entire contents, and follow its directions exactly!
+**CRITICAL:** Load the FULL content from `@.aiwcli/_gsd/workflows/check-todos.md`, READ its entire contents, and follow its directions exactly!
 
 ## Usage
 

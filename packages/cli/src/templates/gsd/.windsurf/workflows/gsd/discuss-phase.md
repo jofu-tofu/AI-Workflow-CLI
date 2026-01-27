@@ -4,9 +4,9 @@ Capture pre-planning decisions, clarify ambiguities, and resolve gray areas befo
 
 ## Workflow Source
 
-This workflow is defined in detail at `_gsd/workflows/discuss-phase.md`.
+This workflow is defined in detail at `.aiwcli/_gsd/workflows/discuss-phase.md`.
 
-**CRITICAL:** Load the FULL content from `@_gsd/workflows/discuss-phase.md`, READ its entire contents, and follow its directions exactly!
+**CRITICAL:** Load the FULL content from `@.aiwcli/_gsd/workflows/discuss-phase.md`, READ its entire contents, and follow its directions exactly!
 
 ## Quick Reference
 

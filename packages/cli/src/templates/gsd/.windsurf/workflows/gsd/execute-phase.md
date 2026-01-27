@@ -4,9 +4,9 @@ Execute task plans via wave-based parallel execution, using fresh subagent conte
 
 ## Workflow Source
 
-This workflow is defined in detail at `_gsd/workflows/execute-phase.md`.
+This workflow is defined in detail at `.aiwcli/_gsd/workflows/execute-phase.md`.
 
-**CRITICAL:** Load the FULL content from `@_gsd/workflows/execute-phase.md`, READ its entire contents, and follow its directions exactly!
+**CRITICAL:** Load the FULL content from `@.aiwcli/_gsd/workflows/execute-phase.md`, READ its entire contents, and follow its directions exactly!
 
 ## Quick Reference
 

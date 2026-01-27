@@ -3,7 +3,7 @@ name: 'step-05-domain'
 description: 'Explore domain-specific requirements for complex domains (optional step)'
 
 # Path Definitions
-workflow_path: '{project-root}/_bmad/bmm/workflows/2-plan-workflows/prd'
+workflow_path: '{project-root}/.aiwcli/_bmad/bmm/workflows/2-plan-workflows/prd'
 
 # File References
 thisStepFile: '{workflow_path}/steps/step-05-domain.md'
@@ -15,8 +15,8 @@ outputFile: '{planning_artifacts}/prd.md'
 domainComplexityCSV: '{workflow_path}/domain-complexity.csv'
 
 # Task References
-advancedElicitationTask: '{project-root}/_bmad/core/workflows/advanced-elicitation/workflow.xml'
-partyModeWorkflow: '{project-root}/_bmad/core/workflows/party-mode/workflow.md'
+advancedElicitationTask: '{project-root}/.aiwcli/_bmad/core/workflows/advanced-elicitation/workflow.xml'
+partyModeWorkflow: '{project-root}/.aiwcli/_bmad/core/workflows/party-mode/workflow.md'
 ---
 
 # Step 5: Domain-Specific Exploration
@@ -53,8 +53,8 @@ This step will generate content and present choices:
 
 ## PROTOCOL INTEGRATION:
 
-- When 'A' selected: Execute {project-root}/_bmad/core/workflows/advanced-elicitation/workflow.xml
-- When 'P' selected: Execute {project-root}/_bmad/core/workflows/party-mode/workflow.md
+- When 'A' selected: Execute {project-root}/.aiwcli/_bmad/core/workflows/advanced-elicitation/workflow.xml
+- When 'P' selected: Execute {project-root}/.aiwcli/_bmad/core/workflows/party-mode/workflow.md
 - PROTOCOLS always return to this step's A/P/C menu
 - User accepts/rejects protocol changes before proceeding
 
@@ -72,7 +72,7 @@ Before proceeding with this step, verify:
 - Is `complexity_level` from step-02 equal to "high" and/or does the domain have specific regulatory/compliance needs?
 - Would domain exploration significantly impact the product requirements?
 
-If NO to these questions, skip this step and load `{project-root}/_bmad/bmm/workflows/2-plan-workflows/prd/steps/step-06-innovation.md`.
+If NO to these questions, skip this step and load `{project-root}/.aiwcli/_bmad/bmm/workflows/2-plan-workflows/prd/steps/step-06-innovation.md`.
 
 ## YOUR TASK:
 
@@ -84,7 +84,7 @@ Explore domain-specific requirements for complex domains that need specialized c
 
 Load domain-specific configuration for complex domains:
 
-- Load `{project-root}/_bmad/bmm/workflows/2-plan-workflows/prd/domain-complexity.csv` completely
+- Load `{project-root}/.aiwcli/_bmad/bmm/workflows/2-plan-workflows/prd/domain-complexity.csv` completely
 - Find the row where `domain` matches the detected domain from step-02
 - Extract these columns:
   - `key_concerns` (semicolon-separated list)
@@ -208,7 +208,7 @@ Show the generated domain content and present choices:
 
 #### If 'A' (Advanced Elicitation):
 
-- Execute {project-root}/_bmad/core/workflows/advanced-elicitation/workflow.xml with the current domain content
+- Execute {project-root}/.aiwcli/_bmad/core/workflows/advanced-elicitation/workflow.xml with the current domain content
 - Process the enhanced domain insights that come back
 - Ask user: "Accept these domain requirement improvements? (y/n)"
 - If yes: Update content with improvements, then return to A/P/C menu
@@ -216,7 +216,7 @@ Show the generated domain content and present choices:
 
 #### If 'P' (Party Mode):
 
-- Execute {project-root}/_bmad/core/workflows/party-mode/workflow.md with the current domain requirements
+- Execute {project-root}/.aiwcli/_bmad/core/workflows/party-mode/workflow.md with the current domain requirements
 - Process the collaborative domain expertise and validation
 - Ask user: "Accept these changes to domain requirements? (y/n)"
 - If yes: Update content with improvements, then return to A/P/C menu
@@ -226,7 +226,7 @@ Show the generated domain content and present choices:
 
 - Append the content to `{outputFile}`
 - Update frontmatter: add this step name to the end of the steps completed array
-- Load `{project-root}/_bmad/bmm/workflows/2-plan-workflows/prd/steps/step-06-innovation.md`
+- Load `{project-root}/.aiwcli/_bmad/bmm/workflows/2-plan-workflows/prd/steps/step-06-innovation.md`
 
 ## APPEND TO DOCUMENT:
 
@@ -258,7 +258,7 @@ When user selects 'C', append the content directly to the document using the str
 
 ## SKIP CONDITIONS:
 
-Skip this step and load `{project-root}/_bmad/bmm/workflows/2-plan-workflows/prd/steps/step-06-innovation.md` if:
+Skip this step and load `{project-root}/.aiwcli/_bmad/bmm/workflows/2-plan-workflows/prd/steps/step-06-innovation.md` if:
 
 - `complexity_level` from step-02 is not "high"
 - Domain has no specific regulatory/compliance requirements
@@ -266,6 +266,6 @@ Skip this step and load `{project-root}/_bmad/bmm/workflows/2-plan-workflows/prd
 
 ## NEXT STEP:
 
-After user selects 'C' and content is saved to document, load `{project-root}/_bmad/bmm/workflows/2-plan-workflows/prd/steps/step-06-innovation.md`.
+After user selects 'C' and content is saved to document, load `{project-root}/.aiwcli/_bmad/bmm/workflows/2-plan-workflows/prd/steps/step-06-innovation.md`.
 
 Remember: Do NOT proceed to step-06 until user explicitly selects 'C' from the A/P/C menu and content is saved!

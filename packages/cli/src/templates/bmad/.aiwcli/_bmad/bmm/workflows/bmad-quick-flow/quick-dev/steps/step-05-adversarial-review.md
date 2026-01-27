@@ -2,7 +2,7 @@
 name: 'step-05-adversarial-review'
 description: 'Construct diff and invoke adversarial review task'
 
-workflow_path: '{project-root}/_bmad/bmm/workflows/bmad-quick-flow/quick-dev'
+workflow_path: '{project-root}/.aiwcli/_bmad/bmm/workflows/bmad-quick-flow/quick-dev'
 thisStepFile: '{workflow_path}/steps/step-05-adversarial-review.md'
 nextStepFile: '{workflow_path}/steps/step-06-resolve-findings.md'
 ---
@@ -62,7 +62,7 @@ Merge all changes into `{diff_output}`.
 With `{diff_output}` constructed, invoke the review task. If possible, use information asymmetry: run this step, and only it, in a separate subagent or process with read access to the project, but no context except the `{diff_output}`.
 
 ```xml
-<invoke-task>Review {diff_output} using {project-root}/_bmad/core/tasks/review-adversarial-general.xml</invoke-task>
+<invoke-task>Review {diff_output} using {project-root}/.aiwcli/_bmad/core/tasks/review-adversarial-general.xml</invoke-task>
 ```
 
 **Platform fallback:** If task invocation not available, load the task file and execute its instructions inline, passing `{diff_output}` as the content.

@@ -89,9 +89,9 @@ Step-by-step processes for development tasks:
 Each workflow file contains:
 1. **Frontmatter** - Metadata including description and execution mode
 2. **Instructions** - Steps for Cascade to follow
-3. **References** - Links to detailed workflow files in `_bmad/` directory
+3. **References** - Links to detailed workflow files in `.aiwcli/_bmad/` directory
 
-Workflows load their full instructions from the `_bmad/` directory structure, which contains the complete BMAD methodology and templates.
+Workflows load their full instructions from the `.aiwcli/_bmad/` directory structure, which contains the complete BMAD methodology and templates.
 
 ## Regenerating Workflows
 
@@ -124,10 +124,10 @@ While the content is identical, the format differs:
 - **Claude Code**: Uses `.claude/commands/` directory with custom command system
 - **Windsurf**: Uses `.windsurf/workflows/` directory with Cascade workflow system
 
-Both reference the same `_bmad/` workflow definitions, ensuring consistency across IDEs.
+Both reference the same `.aiwcli/_bmad/` workflow definitions, ensuring consistency across IDEs.
 
 ## More Information
 
-- **BMAD Documentation**: See `_bmad/` directory after installation
+- **BMAD Documentation**: See `.aiwcli/_bmad/` directory after installation
 - **Windsurf Workflows**: https://docs.windsurf.com/windsurf/cascade/workflows
 - **AIW CLI**: https://github.com/jofu-tofu/AI-Workflow-CLI

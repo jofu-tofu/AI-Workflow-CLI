@@ -4,9 +4,9 @@ Display all assumptions made for a phase, their validation status, and impact if
 
 ## Workflow Source
 
-This workflow is defined in detail at `_gsd/workflows/list-phase-assumptions.md`.
+This workflow is defined in detail at `.aiwcli/_gsd/workflows/list-phase-assumptions.md`.
 
-**CRITICAL:** Load the FULL content from `@_gsd/workflows/list-phase-assumptions.md`, READ its entire contents, and follow its directions exactly!
+**CRITICAL:** Load the FULL content from `@.aiwcli/_gsd/workflows/list-phase-assumptions.md`, READ its entire contents, and follow its directions exactly!
 
 ## Usage
 

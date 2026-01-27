@@ -4,9 +4,9 @@ Create atomic task plans for specific phases with XML-formatted execution detail
 
 ## Workflow Source
 
-This workflow is defined in detail at `_gsd/workflows/plan-phase.md`.
+This workflow is defined in detail at `.aiwcli/_gsd/workflows/plan-phase.md`.
 
-**CRITICAL:** Load the FULL content from `@_gsd/workflows/plan-phase.md`, READ its entire contents, and follow its directions exactly!
+**CRITICAL:** Load the FULL content from `@.aiwcli/_gsd/workflows/plan-phase.md`, READ its entire contents, and follow its directions exactly!
 
 ## Quick Reference
 

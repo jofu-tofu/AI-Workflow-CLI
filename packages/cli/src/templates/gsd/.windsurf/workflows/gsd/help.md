@@ -4,9 +4,9 @@ Display command reference and workflow guidance for GSD system.
 
 ## Workflow Source
 
-This workflow is defined in detail at `_gsd/workflows/help.md`.
+This workflow is defined in detail at `.aiwcli/_gsd/workflows/help.md`.
 
-**CRITICAL:** Load the FULL content from `@_gsd/workflows/help.md`, READ its entire contents, and follow its directions exactly!
+**CRITICAL:** Load the FULL content from `@.aiwcli/_gsd/workflows/help.md`, READ its entire contents, and follow its directions exactly!
 
 ## Usage
 

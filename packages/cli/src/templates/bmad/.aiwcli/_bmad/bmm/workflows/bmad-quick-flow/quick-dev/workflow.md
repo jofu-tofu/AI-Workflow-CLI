@@ -25,7 +25,7 @@ This uses **step-file architecture** for focused execution:
 
 ### Configuration Loading
 
-Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
+Load config from `{project-root}/.aiwcli/_bmad/bmm/config.yaml` and resolve:
 
 - `user_name`, `communication_language`, `user_skill_level`
 - `output_folder`, `planning_artifacts`,  `implementation_artifacts`
@@ -34,16 +34,16 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
 
 ### Paths
 
-- `installed_path` = `{project-root}/_bmad/bmm/workflows/bmad-quick-flow/quick-dev`
+- `installed_path` = `{project-root}/.aiwcli/_bmad/bmm/workflows/bmad-quick-flow/quick-dev`
 - `project_context` = `**/project-context.md` (load if exists)
-- `project_levels` = `{project-root}/_bmad/bmm/workflows/workflow-status/project-levels.yaml`
+- `project_levels` = `{project-root}/.aiwcli/_bmad/bmm/workflows/workflow-status/project-levels.yaml`
 
 ### Related Workflows
 
-- `create_tech_spec_workflow` = `{project-root}/_bmad/bmm/workflows/bmad-quick-flow/create-tech-spec/workflow.yaml`
-- `workflow_init` = `{project-root}/_bmad/bmm/workflows/workflow-status/init/workflow.yaml`
-- `party_mode_exec` = `{project-root}/_bmad/core/workflows/party-mode/workflow.md`
-- `advanced_elicitation` = `{project-root}/_bmad/core/workflows/advanced-elicitation/workflow.xml`
+- `create_tech_spec_workflow` = `{project-root}/.aiwcli/_bmad/bmm/workflows/bmad-quick-flow/create-tech-spec/workflow.yaml`
+- `workflow_init` = `{project-root}/.aiwcli/_bmad/bmm/workflows/workflow-status/init/workflow.yaml`
+- `party_mode_exec` = `{project-root}/.aiwcli/_bmad/core/workflows/party-mode/workflow.md`
+- `advanced_elicitation` = `{project-root}/.aiwcli/_bmad/core/workflows/advanced-elicitation/workflow.xml`
 
 ---
 

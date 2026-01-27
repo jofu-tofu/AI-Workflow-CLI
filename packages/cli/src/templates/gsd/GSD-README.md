@@ -19,7 +19,7 @@ aiw init --method gsd --ide claude
 ```
 
 This installs:
-- `_gsd/` - Core workflow files and templates
+- `.aiwcli/_gsd/` - Core workflow files and templates
 - `.claude/commands/gsd/` - Claude IDE slash commands
 - `_output/gsd/.planning/` - Output directory for project documentation
 
@@ -174,7 +174,7 @@ All files stored in `_output/gsd/.planning/`:
 
 ## Templates
 
-Template files in `_gsd/templates/`:
+Template files in `.aiwcli/_gsd/templates/`:
 - PROJECT.md.template
 - REQUIREMENTS.md.template
 - ROADMAP.md.template

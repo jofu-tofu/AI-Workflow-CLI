@@ -16,7 +16,7 @@ Features:
 - Returns feedback to Claude via hook additionalContext
 - Optional blocking on FAIL verdict
 
-Configuration: _gsd/config.json -> unifiedReview
+Configuration: .aiwcli/_gsd/config.json -> unifiedReview
 Agent definitions: .claude/agents/<agent-name>.md
 """
 
@@ -81,8 +81,8 @@ DEFAULT_AGENTS: List[Dict[str, Any]] = [
 # ---------------------------
 
 def load_settings(project_dir: Path) -> Dict[str, Any]:
-    """Load GSD unified review settings from _gsd/config.json"""
-    settings_path = project_dir / "_gsd" / "config.json"
+    """Load GSD unified review settings from .aiwcli/_gsd/config.json"""
+    settings_path = project_dir / ".aiwcli" / "_gsd" / "config.json"
     defaults = {
         "enabled": True,
         "blockOnFail": False,

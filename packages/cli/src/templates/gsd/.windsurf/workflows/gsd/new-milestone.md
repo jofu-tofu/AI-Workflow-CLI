@@ -4,9 +4,9 @@ Start a new version/milestone after completing the current one. Preserves histor
 
 ## Workflow Source
 
-This workflow is defined in detail at `_gsd/workflows/new-milestone.md`.
+This workflow is defined in detail at `.aiwcli/_gsd/workflows/new-milestone.md`.
 
-**CRITICAL:** Load the FULL content from `@_gsd/workflows/new-milestone.md`, READ its entire contents, and follow its directions exactly!
+**CRITICAL:** Load the FULL content from `@.aiwcli/_gsd/workflows/new-milestone.md`, READ its entire contents, and follow its directions exactly!
 
 ## Prerequisites
 

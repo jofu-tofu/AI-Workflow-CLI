@@ -2,7 +2,7 @@
 name: 'step-04-self-check'
 description: 'Self-audit implementation against tasks, tests, AC, and patterns'
 
-workflow_path: '{project-root}/_bmad/bmm/workflows/bmad-quick-flow/quick-dev'
+workflow_path: '{project-root}/.aiwcli/_bmad/bmm/workflows/bmad-quick-flow/quick-dev'
 thisStepFile: '{workflow_path}/steps/step-04-self-check.md'
 nextStepFile: '{workflow_path}/steps/step-05-adversarial-review.md'
 ---

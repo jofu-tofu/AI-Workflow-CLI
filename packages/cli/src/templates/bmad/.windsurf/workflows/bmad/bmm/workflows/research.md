@@ -3,4 +3,4 @@ description: Conduct comprehensive research across multiple domains using curren
 auto_execution_mode: 1
 ---
 
-IT IS CRITICAL THAT YOU FOLLOW THIS COMMAND: LOAD the FULL @_bmad/bmm/workflows/1-analysis/research/workflow.md, READ its entire contents and follow its directions exactly!
+IT IS CRITICAL THAT YOU FOLLOW THIS COMMAND: LOAD the FULL @.aiwcli/_bmad/bmm/workflows/1-analysis/research/workflow.md, READ its entire contents and follow its directions exactly!

@@ -4,9 +4,9 @@ Capture ideas, tasks, and notes without disrupting current work. Quick way to re
 
 ## Workflow Source
 
-This workflow is defined in detail at `_gsd/workflows/add-todo.md`.
+This workflow is defined in detail at `.aiwcli/_gsd/workflows/add-todo.md`.
 
-**CRITICAL:** Load the FULL content from `@_gsd/workflows/add-todo.md`, READ its entire contents, and follow its directions exactly!
+**CRITICAL:** Load the FULL content from `@.aiwcli/_gsd/workflows/add-todo.md`, READ its entire contents, and follow its directions exactly!
 
 ## Usage
 

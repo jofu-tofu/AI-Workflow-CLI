@@ -38,7 +38,7 @@ This uses **micro-file architecture** with **routing-based discovery**:
 
 ### Configuration Loading
 
-Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
+Load config from `{project-root}/.aiwcli/_bmad/bmm/config.yaml` and resolve:
 
 - `project_name`, `output_folder`, , `planning_artifacts`, `user_name`
 - `communication_language`, `document_output_language`, `user_skill_level`
@@ -46,7 +46,7 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
 
 ### Paths
 
-- `installed_path` = `{project-root}/_bmad/bmm/workflows/1-analysis/research`
+- `installed_path` = `{project-root}/.aiwcli/_bmad/bmm/workflows/1-analysis/research`
 - `template_path` = `{installed_path}/research.template.md`
 - `default_output_file` = `{planning_artifacts}/research/{{research_type}}-{{topic}}-research-{{date}}.md` (dynamic based on research type)
 

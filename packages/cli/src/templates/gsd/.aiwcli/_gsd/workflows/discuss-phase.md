@@ -167,7 +167,7 @@ Document assumptions made during discussion.
 
 ### Step 6: Generate CONTEXT.md
 
-Create or update `_output/gsd/.planning/CONTEXT.md` using `_gsd/templates/CONTEXT.md.template`:
+Create or update `_output/gsd/.planning/CONTEXT.md` using `.aiwcli/_gsd/templates/CONTEXT.md.template`:
 
 1. Find or create `_output/gsd/.planning/CONTEXT.md`
 2. Add section for Phase {N}

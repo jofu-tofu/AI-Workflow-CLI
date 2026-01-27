@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python _gsd/hooks/gsd-unified-review.py",
+            "command": "python .aiwcli/_gsd/hooks/gsd-unified-review.py",
             "timeout": 600000
           }
         ]

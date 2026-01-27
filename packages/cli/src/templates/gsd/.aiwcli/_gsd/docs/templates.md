@@ -9,7 +9,7 @@ Reference for all template files used by GSD to generate documentation.
 All templates are stored in:
 
 ```
-_gsd/templates/
+.aiwcli/_gsd/templates/
 ```
 
 ---
@@ -253,13 +253,13 @@ Templates use placeholder syntax for dynamic content:
 
 ### Modifying Templates
 
-1. Locate template in `_gsd/templates/`
+1. Locate template in `.aiwcli/_gsd/templates/`
 2. Edit while preserving placeholder syntax
 3. Test with `/gsd:new-project` or relevant command
 
 ### Adding New Templates
 
-1. Create `FILENAME.md.template` in `_gsd/templates/`
+1. Create `FILENAME.md.template` in `.aiwcli/_gsd/templates/`
 2. Use consistent placeholder syntax
 3. Update workflow to reference new template
 

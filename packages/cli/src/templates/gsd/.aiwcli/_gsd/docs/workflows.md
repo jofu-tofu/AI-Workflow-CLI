@@ -9,7 +9,7 @@ Complete reference for all GSD workflows and commands.
 All canonical workflow files are stored in:
 
 ```
-_gsd/workflows/
+.aiwcli/_gsd/workflows/
 ```
 
 IDE-specific command stubs reference these canonical workflows:
@@ -543,7 +543,7 @@ IDE-specific command stubs reference these canonical workflows:
 ## Workflow File Structure
 
 ```
-_gsd/workflows/
+.aiwcli/_gsd/workflows/
 ├── new-project.md
 ├── discuss-phase.md
 ├── plan-phase.md

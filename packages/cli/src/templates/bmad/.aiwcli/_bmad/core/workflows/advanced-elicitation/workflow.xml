@@ -1,6 +1,6 @@
 <task id="_bmad/core/workflows/advanced-elicitation/workflow.xml" name="Advanced Elicitation" standalone="true"
-  methods="{project-root}/_bmad/core/workflows/advanced-elicitation/methods.csv"
-  agent-party="{project-root}/_bmad/_config/agent-manifest.csv">
+  methods="{project-root}/.aiwcli/_bmad/core/workflows/advanced-elicitation/methods.csv"
+  agent-party="{project-root}/.aiwcli/_bmad/_config/agent-manifest.csv">
   <llm critical="true">
     <i>MANDATORY: Execute ALL steps in the flow section IN EXACT ORDER</i>
     <i>DO NOT skip steps or change the sequence</i>

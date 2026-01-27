@@ -55,20 +55,20 @@ If you have existing GSD 1.x projects, you may need to create these new files:
 **REQUIREMENTS.md:**
 ```bash
 # Create from template
-cp _gsd/templates/REQUIREMENTS.md.template _output/gsd/.planning/REQUIREMENTS.md
+cp .aiwcli/_gsd/templates/REQUIREMENTS.md.template _output/gsd/.planning/REQUIREMENTS.md
 # Edit to add your requirements
 ```
 
 **CONTEXT.md (optional):**
 ```bash
 # Only needed if using discuss-phase
-cp _gsd/templates/CONTEXT.md.template _output/gsd/.planning/CONTEXT.md
+cp .aiwcli/_gsd/templates/CONTEXT.md.template _output/gsd/.planning/CONTEXT.md
 ```
 
 **RESEARCH.md (optional):**
 ```bash
 # Only needed if research was conducted
-cp _gsd/templates/RESEARCH.md.template _output/gsd/.planning/RESEARCH.md
+cp .aiwcli/_gsd/templates/RESEARCH.md.template _output/gsd/.planning/RESEARCH.md
 ```
 
 ### 4. Plan File Format Changes

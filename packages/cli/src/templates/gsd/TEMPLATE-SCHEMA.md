@@ -4,7 +4,7 @@
 
 ```
 packages/cli/src/templates/gsd/
-├── _gsd/                         # Core files (copied to projects)
+├── .aiwcli/_gsd/                 # Core files (copied to projects)
 │   ├── templates/*.template      # Document templates with {{PLACEHOLDERS}}
 │   ├── workflows/*.md            # Workflow definitions
 │   ├── hooks/                    # Hook scripts (IDE-agnostic)
@@ -12,7 +12,7 @@ packages/cli/src/templates/gsd/
 │   ├── config.json               # GSD configuration
 │   └── docs/                     # GSD documentation
 ├── .claude/commands/gsd/         # Claude Code slash commands
-├── .claude/settings.json         # Hook wiring only (points to _gsd/hooks/)
+├── .claude/settings.json         # Hook wiring only (points to .aiwcli/_gsd/hooks/)
 ├── .windsurf/workflows/gsd/      # Windsurf workflows
 ├── .gitignore                    # Ignores _output/gsd/.planning/
 ├── GSD-README.md                 # User documentation
@@ -22,7 +22,7 @@ packages/cli/src/templates/gsd/
 
 ---
 
-## Templates (`_gsd/templates/`)
+## Templates (`.aiwcli/_gsd/templates/`)
 
 Use `.template` extension with `{{VARIABLE_NAME}}` placeholders.
 
@@ -40,7 +40,7 @@ Use `.template` extension with `{{VARIABLE_NAME}}` placeholders.
 
 ---
 
-## Workflows (`_gsd/workflows/`)
+## Workflows (`.aiwcli/_gsd/workflows/`)
 
 ### Core Loop (5)
 | Workflow | Purpose |
@@ -151,13 +151,13 @@ Plans use XML-structured tasks for parallel execution:
 **Claude Code:** Commands at `.claude/commands/gsd/`, invoked as `/gsd:command-name`
 **Windsurf:** Workflows at `.windsurf/workflows/gsd/`
 
-Both contain lightweight stubs that load full workflows from `_gsd/workflows/`.
+Both contain lightweight stubs that load full workflows from `.aiwcli/_gsd/workflows/`.
 
 ---
 
-## Configuration (`_gsd/config.json`)
+## Configuration (`.aiwcli/_gsd/config.json`)
 
-GSD-specific settings are stored in `_gsd/config.json`, keeping them IDE-agnostic:
+GSD-specific settings are stored in `.aiwcli/_gsd/config.json`, keeping them IDE-agnostic:
 
 ```json
 {
@@ -185,9 +185,9 @@ GSD-specific settings are stored in `_gsd/config.json`, keeping them IDE-agnosti
 
 ---
 
-## Hooks (`_gsd/hooks/`)
+## Hooks (`.aiwcli/_gsd/hooks/`)
 
-Hook scripts live in `_gsd/hooks/` for IDE portability. IDE-specific wiring references them:
+Hook scripts live in `.aiwcli/_gsd/hooks/` for IDE portability. IDE-specific wiring references them:
 
 **`.claude/settings.json` (wiring only):**
 ```json
@@ -195,7 +195,7 @@ Hook scripts live in `_gsd/hooks/` for IDE portability. IDE-specific wiring refe
   "hooks": {
     "PostToolUse": [{
       "matcher": "Write",
-      "hooks": [{ "type": "command", "command": "python _gsd/hooks/gsd-plan-review.py" }]
+      "hooks": [{ "type": "command", "command": "python .aiwcli/_gsd/hooks/gsd-plan-review.py" }]
     }]
   }
 }
@@ -210,12 +210,12 @@ Hook scripts live in `_gsd/hooks/` for IDE portability. IDE-specific wiring refe
 ## Extension
 
 **New Workflow:**
-1. Create `_gsd/workflows/{name}.md`
+1. Create `.aiwcli/_gsd/workflows/{name}.md`
 2. Create stubs in `.claude/commands/gsd/` and `.windsurf/workflows/gsd/`
 3. Update GSD-README.md and this schema
 
 **New Template:**
-1. Create `_gsd/templates/{NAME}.md.template`
+1. Create `.aiwcli/_gsd/templates/{NAME}.md.template`
 2. Document placeholders in this schema
 3. Create workflow that uses it
 
@@ -225,6 +225,7 @@ Hook scripts live in `_gsd/hooks/` for IDE portability. IDE-specific wiring refe
 
 | Version | Changes |
 |---------|---------|
+| 2.2.0 | Moved `_gsd/` to `.aiwcli/_gsd/` for consistent template structure |
 | 2.1.0 | Moved hooks and config to `_gsd/` for IDE portability |
 | 2.0.0 | 5-core loop, `_output/gsd/.planning/`, wave execution, 9 utilities, 3 new templates |
 | 1.0.0 | Initial release, `_GSD_OUTPUT/`, 13 workflows, 6 templates |

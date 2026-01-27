@@ -109,7 +109,7 @@ Transform discovery answers into structured requirements.
 4. Link requirements to potential phases
 
 **Generate `_output/gsd/.planning/REQUIREMENTS.md`:**
-- Use `_gsd/templates/REQUIREMENTS.md.template`
+- Use `.aiwcli/_gsd/templates/REQUIREMENTS.md.template`
 - Fill in V1 requirements (MVP scope)
 - Note V2 requirements (future scope)
 - Create traceability placeholders
@@ -119,7 +119,7 @@ Transform discovery answers into structured requirements.
 Create the project vision document.
 
 **Process:**
-1. Use `_gsd/templates/PROJECT.md.template`
+1. Use `.aiwcli/_gsd/templates/PROJECT.md.template`
 2. Replace `{{PROJECT_NAME}}` with project name
 3. Replace `{{DATE}}` with current date
 4. Fill in all sections based on discovery responses
@@ -181,7 +181,7 @@ Break the project into logical phases.
 Create the roadmap document.
 
 **Process:**
-1. Use `_gsd/templates/ROADMAP.md.template`
+1. Use `.aiwcli/_gsd/templates/ROADMAP.md.template`
 2. Replace placeholders with project info
 3. Add all phases with:
    - Status: ⏳ Pending for all initial phases
@@ -195,7 +195,7 @@ Create the roadmap document.
 Create the state tracking document.
 
 **Process:**
-1. Use `_gsd/templates/STATE.md.template`
+1. Use `.aiwcli/_gsd/templates/STATE.md.template`
 2. Set initial state:
    - Phase: 1 (ready to start)
    - Status: Planning complete
@@ -208,12 +208,12 @@ Create the state tracking document.
 Create remaining project files:
 
 **`_output/gsd/.planning/ISSUES.md`:**
-- Use `_gsd/templates/ISSUES.md.template`
+- Use `.aiwcli/_gsd/templates/ISSUES.md.template`
 - Add any V2+ items as future enhancements
 - Add technical debt considerations
 
 **`_output/gsd/.planning/SUMMARY.md`:**
-- Use `_gsd/templates/SUMMARY.md.template`
+- Use `.aiwcli/_gsd/templates/SUMMARY.md.template`
 - Initialize with project creation entry
 
 ### Step 9: User Confirmation

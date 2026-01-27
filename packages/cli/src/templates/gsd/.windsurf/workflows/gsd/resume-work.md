@@ -4,9 +4,9 @@ Restore context from handoff documentation and seamlessly continue suspended wor
 
 ## Workflow Source
 
-This workflow is defined in detail at `_gsd/workflows/resume-work.md`.
+This workflow is defined in detail at `.aiwcli/_gsd/workflows/resume-work.md`.
 
-**CRITICAL:** Load the FULL content from `@_gsd/workflows/resume-work.md`, READ its entire contents, and follow its directions exactly!
+**CRITICAL:** Load the FULL content from `@.aiwcli/_gsd/workflows/resume-work.md`, READ its entire contents, and follow its directions exactly!
 
 ## Quick Reference
 

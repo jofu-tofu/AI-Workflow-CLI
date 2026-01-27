@@ -54,7 +54,7 @@ Generates failing acceptance tests BEFORE implementation following TDD's red-gre
 
 5. **Load Knowledge Base Fragments**
 
-   **Critical:** Consult `{project-root}/_bmad/bmm/testarch/tea-index.csv` to load:
+   **Critical:** Consult `{project-root}/.aiwcli/_bmad/bmm/testarch/tea-index.csv` to load:
 
    **Core Patterns (Always load):**
    - `data-factories.md` - Factory patterns using faker (override patterns, nested factories, API seeding, 498 lines, 5 examples)

@@ -2,7 +2,7 @@
 name: 'step-03-execute'
 description: 'Execute implementation - iterate through tasks, write code, run tests'
 
-workflow_path: '{project-root}/_bmad/bmm/workflows/bmad-quick-flow/quick-dev'
+workflow_path: '{project-root}/.aiwcli/_bmad/bmm/workflows/bmad-quick-flow/quick-dev'
 thisStepFile: '{workflow_path}/steps/step-03-execute.md'
 nextStepFile: '{workflow_path}/steps/step-04-self-check.md'
 ---

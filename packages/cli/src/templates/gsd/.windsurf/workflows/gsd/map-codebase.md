@@ -4,9 +4,9 @@ Analyze existing codebases for brownfield projects to understand current state b
 
 ## Workflow Source
 
-This workflow is defined in detail at `_gsd/workflows/map-codebase.md`.
+This workflow is defined in detail at `.aiwcli/_gsd/workflows/map-codebase.md`.
 
-**CRITICAL:** Load the FULL content from `@_gsd/workflows/map-codebase.md`, READ its entire contents, and follow its directions exactly!
+**CRITICAL:** Load the FULL content from `@.aiwcli/_gsd/workflows/map-codebase.md`, READ its entire contents, and follow its directions exactly!
 
 ## Quick Reference
 

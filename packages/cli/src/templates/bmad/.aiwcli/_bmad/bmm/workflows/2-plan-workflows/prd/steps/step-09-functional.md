@@ -3,7 +3,7 @@ name: 'step-09-functional'
 description: 'Synthesize all discovery into comprehensive functional requirements'
 
 # Path Definitions
-workflow_path: '{project-root}/_bmad/bmm/workflows/2-plan-workflows/prd'
+workflow_path: '{project-root}/.aiwcli/_bmad/bmm/workflows/2-plan-workflows/prd'
 
 # File References
 thisStepFile: '{workflow_path}/steps/step-09-functional.md'
@@ -12,8 +12,8 @@ workflowFile: '{workflow_path}/workflow.md'
 outputFile: '{planning_artifacts}/prd.md'
 
 # Task References
-advancedElicitationTask: '{project-root}/_bmad/core/workflows/advanced-elicitation/workflow.xml'
-partyModeWorkflow: '{project-root}/_bmad/core/workflows/party-mode/workflow.md'
+advancedElicitationTask: '{project-root}/.aiwcli/_bmad/core/workflows/advanced-elicitation/workflow.xml'
+partyModeWorkflow: '{project-root}/.aiwcli/_bmad/core/workflows/party-mode/workflow.md'
 ---
 
 # Step 9: Functional Requirements Synthesis
@@ -50,8 +50,8 @@ This step will generate content and present choices:
 
 ## PROTOCOL INTEGRATION:
 
-- When 'A' selected: Execute {project-root}/_bmad/core/workflows/advanced-elicitation/workflow.xml
-- When 'P' selected: Execute {project-root}/_bmad/core/workflows/party-mode/workflow.md
+- When 'A' selected: Execute {project-root}/.aiwcli/_bmad/core/workflows/advanced-elicitation/workflow.xml
+- When 'P' selected: Execute {project-root}/.aiwcli/_bmad/core/workflows/party-mode/workflow.md
 - PROTOCOLS always return to this step's A/P/C menu
 - User accepts/rejects protocol changes before proceeding
 
@@ -210,7 +210,7 @@ Show the generated functional requirements and present choices:
 
 #### If 'A' (Advanced Elicitation):
 
-- Execute {project-root}/_bmad/core/workflows/advanced-elicitation/workflow.xml with the current FR list
+- Execute {project-root}/.aiwcli/_bmad/core/workflows/advanced-elicitation/workflow.xml with the current FR list
 - Process the enhanced capability coverage that comes back
 - Ask user: "Accept these additions to the functional requirements? (y/n)"
 - If yes: Update content with improvements, then return to A/P/C menu
@@ -218,7 +218,7 @@ Show the generated functional requirements and present choices:
 
 #### If 'P' (Party Mode):
 
-- Execute {project-root}/_bmad/core/workflows/party-mode/workflow.md with the current FR list
+- Execute {project-root}/.aiwcli/_bmad/core/workflows/party-mode/workflow.md with the current FR list
 - Process the collaborative capability validation and additions
 - Ask user: "Accept these changes to the functional requirements? (y/n)"
 - If yes: Update content with improvements, then return to A/P/C menu
@@ -228,7 +228,7 @@ Show the generated functional requirements and present choices:
 
 - Append the final content to `{outputFile}`
 - Update frontmatter: add this step name to the end of the steps completed array
-- Load `{project-root}/_bmad/bmm/workflows/2-plan-workflows/prd/steps/step-10-nonfunctional.md`
+- Load `{project-root}/.aiwcli/_bmad/bmm/workflows/2-plan-workflows/prd/steps/step-10-nonfunctional.md`
 
 ## APPEND TO DOCUMENT:
 
@@ -265,6 +265,6 @@ Emphasize to user: "This FR list is now binding. Any feature not listed here wil
 
 ## NEXT STEP:
 
-After user selects 'C' and content is saved to document, load `{project-root}/_bmad/bmm/workflows/2-plan-workflows/prd/steps/step-10-nonfunctional.md` to define non-functional requirements.
+After user selects 'C' and content is saved to document, load `{project-root}/.aiwcli/_bmad/bmm/workflows/2-plan-workflows/prd/steps/step-10-nonfunctional.md` to define non-functional requirements.
 
 Remember: Do NOT proceed to step-10 until user explicitly selects 'C' from the A/P/C menu and content is saved!

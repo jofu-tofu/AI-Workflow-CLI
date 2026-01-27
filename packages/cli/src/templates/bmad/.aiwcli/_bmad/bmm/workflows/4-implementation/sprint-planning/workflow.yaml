@@ -3,7 +3,7 @@ description: "Generate and manage the sprint status tracking file for Phase 4 im
 author: "BMad"
 
 # Critical variables from config
-config_source: "{project-root}/_bmad/bmm/config.yaml"
+config_source: "{project-root}/.aiwcli/_bmad/bmm/config.yaml"
 user_name: "{config_source}:user_name"
 communication_language: "{config_source}:communication_language"
 date: system-generated
@@ -12,7 +12,7 @@ planning_artifacts: "{config_source}:planning_artifacts"
 output_folder: "{implementation_artifacts}"
 
 # Workflow components
-installed_path: "{project-root}/_bmad/bmm/workflows/4-implementation/sprint-planning"
+installed_path: "{project-root}/.aiwcli/_bmad/bmm/workflows/4-implementation/sprint-planning"
 instructions: "{installed_path}/instructions.md"
 template: "{installed_path}/sprint-status-template.yaml"
 validation: "{installed_path}/checklist.md"

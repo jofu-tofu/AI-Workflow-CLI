@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [],
+    "deny": []
+  },
+  "methods": {
+    "bmad": {
+      "ides": ["claude", "windsurf"]
+    }
+  }
+}
