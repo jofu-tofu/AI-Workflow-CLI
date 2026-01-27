@@ -242,29 +242,38 @@ def create_suggestion() -> Dict[str, Any]:
 
 
 def main() -> int:
+    # === FAST PATH: Cheap checks first, no I/O ===
+
     try:
         payload = json.load(sys.stdin)
     except json.JSONDecodeError:
         return 0  # Fail-safe
 
-    # Only run on PostToolUse
+    # 1. Check hook_type (cheap dict lookup)
     if payload.get("hook_type") != "PostToolUse":
         return 0
 
-    # Load configuration
+    # 2. Check session_id exists (cheap dict lookup)
+    session_id = payload.get("session_id")
+    if not session_id:
+        return 0
+
+    # 3. Check tool_name is relevant (cheap dict lookup)
+    # We only care about Edit and Bash - skip everything else
+    tool_name = payload.get("tool_name", "")
+    if tool_name not in ("Edit", "Bash"):
+        return 0
+
+    # === SLOW PATH: Only reached for Edit/Bash tools ===
+
+    # Load configuration (file I/O)
     project_dir = get_project_dir(payload)
     config = load_config(project_dir)
 
     # Check if feature is disabled
     if not config.get("enabled", True):
-        eprint("[suggest-fresh-perspective] stuckDetection disabled in config")
         return 0
 
-    session_id = payload.get("session_id")
-    if not session_id:
-        return 0
-
-    tool_name = payload.get("tool_name", "")
     tool_input = payload.get("tool_input", {})
     tool_result = payload.get("tool_result", {})
 
@@ -279,7 +288,7 @@ def main() -> int:
     elif isinstance(tool_result, str):
         result_text = tool_result
 
-    # Load state
+    # Load state (file I/O)
     state = load_state(session_id)
 
     # Increment tool call counter
