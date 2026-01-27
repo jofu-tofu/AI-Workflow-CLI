@@ -4,31 +4,26 @@
 
 Verify that `PermissionRequest` event can be used for plan archiving instead of the current `PreToolUse` + state file approach.
 
-## Current Implementation
+## Current Implementation (v1.5.0+)
 
 ```
 PreToolUse: ExitPlanMode
-├── set_plan_state.py     (creates state file with task_folder)
-└── cc-native-plan-review.py (runs agent reviews, saves to task_folder)
+└── cc-native-plan-review.py (runs agent reviews, saves to context reviews folder)
 
-PreToolUse: Edit|Write|Bash
-└── archive_plan.py       (archives plan on first implementation tool)
-
-Stop:
-└── archive_plan.py       (backup archive if session ends)
+PostToolUse: ExitPlanMode
+└── archive_plan.py       (archives plan to context plans folder)
 ```
 
-## Proposed Simplification
+**Note:** As of v1.5.0, `set_plan_state.py` has been removed. Plan review now integrates with the shared context system, storing reviews in `_output/contexts/{context_id}/reviews/`.
+
+## Original Proposed Simplification (Historical)
 
 ```
 PreToolUse: ExitPlanMode
-├── set_plan_state.py     (creates state file with task_folder)
-└── cc-native-plan-review.py (runs reviews, saves to task_folder)
+└── cc-native-plan-review.py (runs reviews, saves to context folder)
 
-PermissionRequest: ExitPlanMode   ← NEW
+PermissionRequest: ExitPlanMode   ← Tested approach
 └── archive_plan.py       (archives immediately after reviews complete)
-
-(REMOVE Edit|Write|Bash and Stop triggers for archive_plan.py)
 ```
 
 ## Verification Steps
@@ -87,9 +82,8 @@ Expected output:
 Check stderr logs during plan mode exit:
 
 ```
-[set_plan_state] Hook started (PreToolUse)
-[set_plan_state] Created state file: ...
-[cc-native-plan-review] Hook started...
+[cc-native-plan-review] Unified hook started (PreToolUse)
+[cc-native-plan-review] Using context reviews dir: ...
 [cc-native-plan-review] Review complete...
 [test_permission_request] Hook started (PermissionRequest)  ← Should appear AFTER reviews
 [test_permission_request] SUCCESS: All required fields present

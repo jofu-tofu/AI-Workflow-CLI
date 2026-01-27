@@ -1,32 +1,47 @@
-# CC-Native v1.4.0 Migration Guide
+# CC-Native v1.5.0 Migration Guide
 
-## Breaking Change: Configuration File Rename
+## Breaking Change: Context-Integrated Plan Review
+
+**Before (v1.4.0):** Reviews stored in `_output/cc-native/plans/{date}/{slug}/reviews/`
+**After (v1.5.0):** Reviews stored in `_output/contexts/{context_id}/reviews/`
+
+### What Changed
+
+1. **Removed `set_plan_state.py`** - No longer needed. Plan review now integrates with the shared context system.
+
+2. **Iteration state** - Now stored in `_output/contexts/{context_id}/reviews/iteration.json` instead of `~/.claude/plans/*.state.json`
+
+3. **Review output** - Written to context reviews folder when a context is active, with legacy fallback for backward compatibility.
+
+### Migration Steps
+
+**Automatic migration** - No action required. The hook will:
+- Use context reviews folder when an active context exists
+- Fall back to legacy path if no context found
+- Existing reviews remain in their original locations
+
+---
+
+## v1.4.0 Migration (Previous)
+
+### Configuration File Rename
 
 **Before (v1.3.0):** `_cc-native/config.json`
 **After (v1.4.0):** `_cc-native/plan-review.config.json`
-
-### Action Required
 
 ```bash
 cd _cc-native
 mv config.json plan-review.config.json
 ```
 
-**Why the change?**
-- Clarifies purpose (plan review configuration)
-- Prevents confusion with other config files
-- Aligns with naming convention (feature-specific configs)
-
 ---
 
-## New Features (Non-Breaking)
+## Features
 
-### State Management (v2.0.0 Schema)
-- Plan-adjacent state files survive session changes
-- Iteration tracking across plan reviews
-- Task metadata persistence
-
-**No action required** - State files created automatically on first use.
+### Context-Integrated Reviews (v1.5.0)
+- Reviews written to `_output/contexts/{context_id}/reviews/`
+- Iteration state persists across sessions in context folder
+- Automatic context discovery via session_id or single in-flight context
 
 ### Atomic Writes
 - Cross-platform atomic file writes (Windows + POSIX)
@@ -35,43 +50,34 @@ mv config.json plan-review.config.json
 
 **No action required** - Enabled by default via `CC_NATIVE_ROBUST_WRITES=true`.
 
-### AIW_DIR Support
-- Development mode for isolated testing
-- State files in `$AIW_DIR/_cc-native/plans/`
-
-**No action required** - Only set `AIW_DIR` if developing/testing CC-Native.
-
 ---
 
 ## Upgrade Checklist
 
-- [ ] Rename `config.json` → `plan-review.config.json` (if customized)
 - [ ] Test plan workflow: exit plan mode → review → archive
-- [ ] Verify output in `_output/cc-native/plans/`
-- [ ] Check state files in `~/.claude/plans/*.state.json`
+- [ ] Verify reviews appear in `_output/contexts/{context_id}/reviews/`
+- [ ] Check iteration tracking persists across plan revisions
 
 ---
 
 ## Rollback
 
-If you need to revert to v1.3.0:
+If you need to revert to v1.4.0:
 
 ```bash
-git checkout v1.3.0 -- _cc-native/
-mv _cc-native/plan-review.config.json _cc-native/config.json
+git checkout v1.4.0 -- _cc-native/
 ```
 
-**Note:** State files (v2.0.0 schema) will be ignored by v1.3.0 but won't cause errors.
+**Note:** Existing reviews in context folders will remain but won't be used.
 
 ---
 
 ## What Stays the Same
 
 - Workflow files (`_cc-native/workflows/*.md`)
-- Hook execution order (set_plan_state → review → archive)
 - Agent definitions (`.claude/agents/cc-native/`)
-- Output structure (`_output/cc-native/plans/`)
 - All slash commands (`/cc-native:*`)
+- Plan archiving behavior (`archive_plan.py`)
 
 ---
 

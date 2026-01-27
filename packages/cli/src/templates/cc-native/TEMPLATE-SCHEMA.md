@@ -248,7 +248,6 @@ Hook scripts live in `_cc-native/hooks/`. IDE-specific wiring in `.claude/settin
     "PreToolUse": [{
       "matcher": "ExitPlanMode",
       "hooks": [
-        { "type": "command", "command": "python _cc-native/hooks/set_plan_state.py", "timeout": 5000 },
         { "type": "command", "command": "python _cc-native/hooks/cc-native-plan-review.py", "timeout": 600000 }
       ]
     }]
@@ -260,7 +259,6 @@ Hook scripts live in `_cc-native/hooks/`. IDE-specific wiring in `.claude/settin
 
 | Hook | Trigger | Purpose |
 |------|---------|---------|
-| `set_plan_state.py` | ExitPlanMode | Sets plan state before review |
 | `cc-native-plan-review.py` | ExitPlanMode | Unified review: CLI + orchestrator + agents |
 | `archive_plan.py` | Edit/Write/Bash | Archives approved plans when implementation starts |
 
