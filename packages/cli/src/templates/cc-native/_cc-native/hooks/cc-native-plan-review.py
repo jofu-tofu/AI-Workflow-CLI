@@ -40,8 +40,8 @@ try:
     sys.path.insert(0, str(_lib))
 
     # Add shared library path
-    _shared_lib = Path(__file__).parent.parent.parent / "_shared" / "lib"
-    sys.path.insert(0, str(_shared_lib))
+    _shared = Path(__file__).parent.parent.parent / "_shared"
+    sys.path.insert(0, str(_shared))
 
     from utils import (
         DEFAULT_DISPLAY,
@@ -74,12 +74,12 @@ try:
         DEFAULT_COMPLEXITY_CATEGORIES,
     )
     # Import shared context system
-    from context.context_manager import (
+    from lib.context.context_manager import (
         get_context_by_session_id,
         get_all_in_flight_contexts,
         get_all_contexts,
     )
-    from base.constants import get_context_reviews_dir
+    from lib.base.constants import get_context_reviews_dir
 except ImportError as e:
     print(f"[cc-native-plan-review] Failed to import lib: {e}", file=sys.stderr)
     sys.exit(0)  # Non-blocking failure
