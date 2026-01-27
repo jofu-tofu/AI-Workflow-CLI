@@ -42,7 +42,11 @@ SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
 from lib.base.utils import eprint, project_dir
-from lib.context.context_manager import get_all_contexts
+from lib.context.context_manager import (
+    get_all_contexts,
+    get_context_by_session_id,
+    update_plan_status,
+)
 
 # Configuration
 LOW_CONTEXT_THRESHOLD = 40  # Warn when below 40% remaining
@@ -211,6 +215,41 @@ Context ID: `{context_id}`"""
 </system-reminder>"""
 
 
+def check_and_transition_mode(hook_input: dict) -> None:
+    """
+    Check if context needs to transition from pending_implementation to implementing.
+
+    This handles the case where a plan was approved and implementation has started,
+    but the context mode wasn't updated. If we're seeing tool usage (Edit, Write, Bash)
+    and the context is in "pending_implementation", we transition to "implementing".
+
+    Args:
+        hook_input: Hook input data from Claude Code
+    """
+    # Only transition on tools that indicate implementation work
+    implementation_tools = {"Edit", "Write", "Bash", "NotebookEdit"}
+    tool_name = hook_input.get("tool_name", "")
+
+    if tool_name not in implementation_tools:
+        return
+
+    project_root = project_dir(hook_input)
+    session_id = hook_input.get("session_id")
+
+    if not session_id:
+        return
+
+    # Get context for this session
+    context = get_context_by_session_id(session_id, project_root)
+    if not context:
+        return
+
+    # Check if we need to transition
+    if context.in_flight and context.in_flight.mode == "pending_implementation":
+        eprint(f"[context_monitor] Transitioning {context.id} from pending_implementation to implementing")
+        update_plan_status(context.id, "implementing", project_root=project_root)
+
+
 def check_context_level(hook_input: dict) -> Optional[str]:
     """
     Check context level and return warning if low.
@@ -221,6 +260,9 @@ def check_context_level(hook_input: dict) -> Optional[str]:
     Returns:
         System reminder string if context is low, None otherwise
     """
+    # First, check if we need to transition mode based on tool usage
+    check_and_transition_mode(hook_input)
+
     transcript_path = hook_input.get("transcript_path")
     if not transcript_path:
         eprint("[context_monitor] No transcript_path in hook input")

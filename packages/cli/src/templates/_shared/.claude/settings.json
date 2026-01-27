@@ -17,7 +17,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Task|Read|Bash|WebFetch",
+        "matcher": "Task|Read|Bash|WebFetch|Edit|Write|NotebookEdit",
         "hooks": [
           {
             "type": "command",

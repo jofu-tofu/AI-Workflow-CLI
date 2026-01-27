@@ -138,8 +138,8 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
     """
     Generate a context ID from a summary string.
 
-    Creates a slug from the first ~50 chars of summary,
-    ensuring uniqueness if existing_ids is provided.
+    Uses AI inference to create a semantic 10-word summary, then slugifies it.
+    Falls back to truncate-and-slugify if inference fails.
 
     Args:
         summary: Context summary text
@@ -151,8 +151,21 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
     if not summary or not summary.strip():
         base_id = "context"
     else:
-        # Take first 50 chars, sanitize to slug
-        base_id = sanitize_title(summary[:50])
+        # Try AI-powered semantic summary first
+        base_id = None
+        try:
+            from .inference import generate_semantic_summary
+            semantic = generate_semantic_summary(summary)
+            if semantic:
+                # Slugify the semantic summary
+                base_id = sanitize_title(semantic, max_len=60)
+                eprint(f"[utils] Semantic context ID: {base_id}")
+        except Exception as e:
+            eprint(f"[utils] Inference failed, using fallback: {e}")
+
+        # Fallback to old method if inference failed
+        if not base_id:
+            base_id = sanitize_title(summary[:50])
 
     if not existing_ids:
         return base_id

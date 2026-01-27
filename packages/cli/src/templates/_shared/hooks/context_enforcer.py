@@ -6,14 +6,21 @@ It enforces that every user interaction happens within a tracked context.
 
 Context selection priority:
 1. Session already in context -> Continue in that context (highest priority - prevents switching)
-2. In-flight work -> Auto-continue (handoff_pending > pending_impl > implementing > planning)
-3. No contexts -> Auto-create from prompt (or require ^0 if prompt has ^ prefix)
-4. One or more contexts -> Require ^N prefix to select
+2. Bare "^" -> Show context picker
+3. Explicit caret commands (^E, ^S, ^0, ^N) -> Process as specified
+4. No caret prefix:
+   - 0 in-flight contexts -> Auto-create new context from prompt
+   - 1 in-flight context -> Auto-select that context
+   - Multiple in-flight contexts -> Block and show picker
+
+In-flight modes: planning, pending_implementation, implementing, handoff_pending
 
 Prefix syntax:
+- ^: Show context picker (bare caret)
 - ^0 <description>: Create new context (description requires 10+ chars)
 - ^1, ^2, etc: Select existing context by number (shorthand for ^S1, ^S2)
 - ^E<N>: End/complete context N (removes from active list)
+- ^E*: End/complete ALL active contexts
 - ^S<N>: Select context N for this session
 - Chaining: ^E1E2S3 means end contexts 1 and 2, then select context 3
 
@@ -44,6 +51,7 @@ sys.path.insert(0, str(SHARED_LIB.parent))
 from lib.context.context_manager import (
     Context,
     get_all_contexts,
+    get_all_in_flight_contexts,
     create_context_from_prompt,
     get_context_by_session_id,
     complete_context,
@@ -80,6 +88,8 @@ def parse_chained_caret(prompt: str, contexts: List["Context"]) -> Tuple[Optiona
 
     Syntax:
     - ^E<N>: End context N
+    - ^E<N>+: End context N and all after (e.g., ^E2+ ends 2, 3, 4, ...)
+    - ^E*: End ALL contexts
     - ^S<N>: Select context N
     - ^0 <desc>: Create new context (special case)
     - ^<N>: Shorthand for ^S<N> (backwards compat)
@@ -141,18 +151,37 @@ def parse_chained_caret(prompt: str, contexts: List["Context"]) -> Tuple[Optiona
         if command_str[pos].upper() == 'E':
             # End command
             pos += 1
-            # Read number
-            num_start = pos
-            while pos < len(command_str) and command_str[pos].isdigit():
+            # Check for wildcard (E*) - end all contexts
+            if pos < len(command_str) and command_str[pos] == '*':
                 pos += 1
-            if num_start == pos:
-                return None, f"Expected number after 'E' at position {num_start + 1}"
-            num = int(command_str[num_start:pos])
-            if num < 1 or num > len(contexts):
                 if len(contexts) == 0:
                     return None, "No contexts to end."
-                return None, f"Context ^E{num} invalid. Choose 1-{len(contexts)}."
-            ends.append(num)
+                # Add all context numbers to ends list
+                for i in range(1, len(contexts) + 1):
+                    if i not in ends:
+                        ends.append(i)
+            else:
+                # Read number
+                num_start = pos
+                while pos < len(command_str) and command_str[pos].isdigit():
+                    pos += 1
+                if num_start == pos:
+                    return None, f"Expected number or '*' after 'E' at position {num_start + 1}"
+                num = int(command_str[num_start:pos])
+                if num < 1 or num > len(contexts):
+                    if len(contexts) == 0:
+                        return None, "No contexts to end."
+                    return None, f"Context ^E{num} invalid. Choose 1-{len(contexts)}."
+
+                # Check for + suffix meaning "this and all after"
+                if pos < len(command_str) and command_str[pos] == '+':
+                    pos += 1
+                    # Add num and all higher numbers (older contexts)
+                    for i in range(num, len(contexts) + 1):
+                        if i not in ends:
+                            ends.append(i)
+                else:
+                    ends.append(num)
 
         elif command_str[pos].upper() == 'S':
             # Select command
@@ -184,8 +213,8 @@ def parse_chained_caret(prompt: str, contexts: List["Context"]) -> Tuple[Optiona
         else:
             return None, (
                 f"Invalid command '{command_str[pos]}' at position {pos + 1}.\n"
-                f"Use E<N> to end, S<N> to select, or just a number to select.\n"
-                f"Example: ^E1S2 (end context 1, select context 2)"
+                f"Use E<N> to end, E<N>+ to end N and after, E* to end all, S<N> to select.\n"
+                f"Example: ^E1S2 (end 1, select 2), ^E2+ (end 2 and older), ^E* (end all)"
             )
 
     # Validate: can't select a context that's being ended
@@ -250,6 +279,8 @@ def format_context_picker_stderr(contexts: List[Context]) -> str:
         "|  Usage:                                                        |",
         "|    ^S<N>                 - Select context (implementing only) |",
         "|    ^E<N>                 - End/complete context               |",
+        "|    ^E<N>+                - End context N and all after        |",
+        "|    ^E*                   - End ALL contexts                   |",
         "|    ^E1E2S3               - End #1 and #2, select #3           |",
         "|    ^0 work description   - Create new context (10+ chars)     |",
         "+----------------------------------------------------------------+",
@@ -339,26 +370,28 @@ def determine_context(
                 format_active_context_reminder(session_context)
             )
 
-    # 2. Check for in-flight work (for new sessions without context assignment)
-    in_flight = get_in_flight_context(project_root)
-    if in_flight:
-        # Use mode-specific formatter for better continuation context
-        mode = in_flight.in_flight.mode if in_flight.in_flight else "none"
-        if mode == "handoff_pending":
-            output = format_handoff_continuation(in_flight)
-        elif mode == "pending_implementation":
-            output = format_pending_plan_continuation(in_flight)
-        elif mode == "implementing":
-            output = format_implementation_continuation(in_flight)
-        else:
-            output = format_active_context_reminder(in_flight)
-        return (in_flight.id, "in_flight", output)
+    # 2. Check for bare "^" - show context picker
+    if user_prompt.strip() == "^":
+        contexts = get_all_contexts(status="active", project_root=project_root)
+        if not contexts:
+            raise BlockRequest(
+                "No contexts exist.\n\n"
+                "Just type your task to start a new context.\n"
+                "Example: implement user authentication system"
+            )
+        raise BlockRequest(format_context_picker_stderr(contexts))
 
-    # 3. Get active contexts
-    contexts = get_all_contexts(status="active", project_root=project_root)
+    # 3. Check for explicit caret commands (^E, ^S, ^0, ^N)
+    if user_prompt.startswith("^"):
+        contexts = get_all_contexts(status="active", project_root=project_root)
+        return _handle_caret_command(user_prompt, contexts, project_root)
 
-    # 4. No contexts -> auto-create from prompt
-    if not contexts:
+    # 4. No caret prefix - check in-flight contexts for auto-selection
+    in_flight_contexts = get_all_in_flight_contexts(project_root)
+
+    if len(in_flight_contexts) == 0:
+        # No in-flight work - auto-create new context from prompt
+
         # Skip auto-creation for certain prompts that don't represent work
         skip_patterns = [
             "/help", "/clear", "/status", "hello", "hi", "hey",
@@ -370,56 +403,13 @@ def determine_context(
         if any(prompt_lower.startswith(p) or prompt_lower == p for p in skip_patterns):
             return (None, "no_context_needed", None)
 
-        # Handle ^ prefix for new context (even when no contexts exist)
-        if user_prompt.startswith("^"):
-            # Parse ^0 syntax
-            match = re.match(r'^\^(\S+)(?:\s+(.*))?$', user_prompt, re.DOTALL)
-            if not match:
-                raise BlockRequest(
-                    "Invalid prefix. Use ^0 <description> to create a new context.\n"
-                    "Example: ^0 implement user authentication system"
-                )
-
-            prefix_value = match.group(1)
-            remaining = match.group(2) or ""
-
-            # Must be ^0 for new context
-            if not prefix_value.isdigit() or int(prefix_value) != 0:
-                raise BlockRequest(
-                    f"No existing contexts to select. Use ^0 <description> to create a new context.\n"
-                    f"Example: ^0 implement user authentication system"
-                )
-
-            description = remaining.strip()
-            if len(description) < MIN_NEW_CONTEXT_CHARS:
-                raise BlockRequest(
-                    f"Please provide a longer description for your new context.\n"
-                    f"Your description '{description}' is only {len(description)} characters.\n"
-                    f"Minimum required: {MIN_NEW_CONTEXT_CHARS} characters.\n"
-                    f"Example: ^0 implement user authentication with JWT tokens"
-                )
-            try:
-                new_context = create_context_from_prompt(description, project_root)
-                # Set to implementing mode so it can be selected
-                update_plan_status(new_context.id, "implementing", project_root=project_root)
-                new_context.in_flight.mode = "implementing"  # Update local copy for display
-                eprint(f"[context_enforcer] Set new context to implementing mode")
-                return (
-                    new_context.id,
-                    "auto_created",
-                    format_context_created(new_context)
-                )
-            except Exception as e:
-                eprint(f"[context_enforcer] Failed to create context: {e}")
-                raise BlockRequest(f"Failed to create context: {e}")
-
         # Auto-create context from prompt
         try:
             new_context = create_context_from_prompt(user_prompt, project_root)
             # Set to implementing mode so it can be selected
             update_plan_status(new_context.id, "implementing", project_root=project_root)
             new_context.in_flight.mode = "implementing"  # Update local copy for display
-            eprint(f"[context_enforcer] Set new context to implementing mode")
+            eprint(f"[context_enforcer] Auto-created new context: {new_context.id}")
             return (
                 new_context.id,
                 "auto_created",
@@ -429,75 +419,161 @@ def determine_context(
             eprint(f"[context_enforcer] Failed to create context: {e}")
             return (None, "creation_failed", None)
 
-    # 5. One or more contexts -> parse caret commands
+    elif len(in_flight_contexts) == 1:
+        # Single in-flight context - auto-select it
+        ctx = in_flight_contexts[0]
+        mode = ctx.in_flight.mode if ctx.in_flight else "none"
+        eprint(f"[context_enforcer] Auto-selected single in-flight context: {ctx.id} (mode={mode})")
+
+        # Use mode-specific formatter for better continuation context
+        if mode == "handoff_pending":
+            output = format_handoff_continuation(ctx)
+        elif mode == "pending_implementation":
+            output = format_pending_plan_continuation(ctx)
+        elif mode == "implementing":
+            output = format_implementation_continuation(ctx)
+        else:
+            output = format_active_context_reminder(ctx)
+
+        return (ctx.id, "auto_selected", output)
+
+    else:
+        # Multiple in-flight contexts - block and show picker
+        eprint(f"[context_enforcer] Multiple in-flight contexts ({len(in_flight_contexts)}), showing picker")
+        raise BlockRequest(
+            f"Multiple contexts have in-flight work ({len(in_flight_contexts)} active).\n"
+            "Select one to continue, or use ^ to see all contexts:\n" +
+            format_context_picker_stderr(in_flight_contexts)
+        )
+
+
+def _handle_caret_command(
+    user_prompt: str,
+    contexts: List[Context],
+    project_root: Path
+) -> Tuple[Optional[str], str, Optional[str]]:
+    """
+    Handle explicit caret commands (^E, ^S, ^0, ^N).
+
+    Args:
+        user_prompt: User's prompt starting with ^
+        contexts: List of active contexts
+        project_root: Project root directory
+
+    Returns:
+        Tuple of (context_id, method, output)
+
+    Raises:
+        BlockRequest: When command is invalid or selection needed
+    """
+    # No contexts case - only ^0 is valid
+    if not contexts:
+        match = re.match(r'^\^(\S+)(?:\s+(.*))?$', user_prompt, re.DOTALL)
+        if not match:
+            raise BlockRequest(
+                "Invalid prefix. Use ^0 <description> to create a new context.\n"
+                "Example: ^0 implement user authentication system"
+            )
+
+        prefix_value = match.group(1)
+        remaining = match.group(2) or ""
+
+        # Must be ^0 for new context
+        if not prefix_value.isdigit() or int(prefix_value) != 0:
+            raise BlockRequest(
+                f"No existing contexts to select. Use ^0 <description> to create a new context.\n"
+                f"Example: ^0 implement user authentication system"
+            )
+
+        description = remaining.strip()
+        if len(description) < MIN_NEW_CONTEXT_CHARS:
+            raise BlockRequest(
+                f"Please provide a longer description for your new context.\n"
+                f"Your description '{description}' is only {len(description)} characters.\n"
+                f"Minimum required: {MIN_NEW_CONTEXT_CHARS} characters.\n"
+                f"Example: ^0 implement user authentication with JWT tokens"
+            )
+        try:
+            new_context = create_context_from_prompt(description, project_root)
+            update_plan_status(new_context.id, "implementing", project_root=project_root)
+            new_context.in_flight.mode = "implementing"
+            eprint(f"[context_enforcer] Created context from ^0: {new_context.id}")
+            return (
+                new_context.id,
+                "caret_new",
+                format_context_created(new_context)
+            )
+        except Exception as e:
+            eprint(f"[context_enforcer] Failed to create context: {e}")
+            raise BlockRequest(f"Failed to create context: {e}")
+
+    # Parse caret commands
     cmd, error = parse_chained_caret(user_prompt, contexts)
 
     if error:
-        # Invalid prefix syntax
         raise BlockRequest(error + "\n" + format_context_picker_stderr(contexts))
 
-    if cmd:
-        # Process chained commands
-        ended_contexts = []
+    if not cmd:
+        # Should not happen - user_prompt starts with ^ but didn't parse
+        raise BlockRequest(format_context_picker_stderr(contexts))
 
-        # End specified contexts
-        for end_num in cmd.ends:
-            ctx_to_end = contexts[end_num - 1]  # 1-indexed
-            complete_context(ctx_to_end.id, project_root)
-            ended_contexts.append(ctx_to_end)
-            eprint(f"[context_enforcer] Ended context: {ctx_to_end.id}")
+    # Process chained commands
+    ended_contexts = []
 
-        # Handle new context creation
-        if cmd.new_context_desc:
-            try:
-                new_context = create_context_from_prompt(cmd.new_context_desc, project_root)
-                # Set to implementing mode so it can be selected
-                update_plan_status(new_context.id, "implementing", project_root=project_root)
-                new_context.in_flight.mode = "implementing"  # Update local copy for display
-                eprint(f"[context_enforcer] Set new context to implementing mode")
-                output = format_command_feedback(ended_contexts, new_context)
-                return (
-                    new_context.id,
-                    "caret_new",
-                    output
-                )
-            except Exception as e:
-                eprint(f"[context_enforcer] Failed to create context: {e}")
-                raise BlockRequest(f"Failed to create context: {e}")
+    # End specified contexts
+    for end_num in cmd.ends:
+        ctx_to_end = contexts[end_num - 1]  # 1-indexed
+        complete_context(ctx_to_end.id, project_root)
+        ended_contexts.append(ctx_to_end)
+        eprint(f"[context_enforcer] Ended context: {ctx_to_end.id}")
 
-        # Handle context selection
-        if cmd.select:
-            selected_ctx = contexts[cmd.select - 1]  # 1-indexed
-            eprint(f"[context_enforcer] Caret-selected context: {selected_ctx.id}")
-            output = format_command_feedback(ended_contexts, selected_ctx)
+    # Handle new context creation
+    if cmd.new_context_desc:
+        try:
+            new_context = create_context_from_prompt(cmd.new_context_desc, project_root)
+            update_plan_status(new_context.id, "implementing", project_root=project_root)
+            new_context.in_flight.mode = "implementing"
+            eprint(f"[context_enforcer] Created context from ^0: {new_context.id}")
+            output = format_command_feedback(ended_contexts, new_context)
             return (
-                selected_ctx.id,
-                "caret_select",
+                new_context.id,
+                "caret_new",
                 output
             )
+        except Exception as e:
+            eprint(f"[context_enforcer] Failed to create context: {e}")
+            raise BlockRequest(f"Failed to create context: {e}")
 
-        # Only ended contexts, no selection - refresh context list and block
-        if ended_contexts:
-            # Refresh contexts list after ending some
-            remaining_contexts = get_all_contexts(status="active", project_root=project_root)
-            feedback = format_command_feedback(ended_contexts, None)
-            if not remaining_contexts:
-                # All contexts ended, need to create new one
-                raise BlockRequest(
-                    feedback + "\n" +
-                    "All contexts have been ended. No context selected.\n\n"
-                    "Use ^0 <description> to create a new context.\n"
-                    "Example: ^0 implement user authentication system"
-                )
-            # Still have contexts, show picker
+    # Handle context selection
+    if cmd.select:
+        selected_ctx = contexts[cmd.select - 1]  # 1-indexed
+        eprint(f"[context_enforcer] Caret-selected context: {selected_ctx.id}")
+        output = format_command_feedback(ended_contexts, selected_ctx)
+        return (
+            selected_ctx.id,
+            "caret_select",
+            output
+        )
+
+    # Only ended contexts, no selection - refresh context list and block
+    if ended_contexts:
+        remaining_contexts = get_all_contexts(status="active", project_root=project_root)
+        feedback = format_command_feedback(ended_contexts, None)
+        if not remaining_contexts:
             raise BlockRequest(
                 feedback + "\n" +
-                "No context selected.\n\n" +
-                "Select a context to continue:\n" +
-                format_context_picker_stderr(remaining_contexts)
+                "All contexts have been ended. No context selected.\n\n"
+                "Just type your task to start a new context.\n"
+                "Example: implement user authentication system"
             )
+        raise BlockRequest(
+            feedback + "\n" +
+            "No context selected.\n\n" +
+            "Select a context to continue:\n" +
+            format_context_picker_stderr(remaining_contexts)
+        )
 
-    # No ^ prefix with multiple contexts -> block and show picker
+    # Parsed but nothing to do - shouldn't happen
     raise BlockRequest(format_context_picker_stderr(contexts))
 
 
