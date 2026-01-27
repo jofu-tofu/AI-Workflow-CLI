@@ -3,8 +3,13 @@ import threading
 import json
 from pathlib import Path
 from typing import Dict, Any, Callable, Optional
-from .atomic_write import atomic_write
-from .constants import ENABLE_ROBUST_PLAN_WRITES
+try:
+    from .atomic_write import atomic_write
+    from .constants import ENABLE_ROBUST_PLAN_WRITES
+except ImportError:
+    # When imported directly via sys.path (not as a package)
+    from atomic_write import atomic_write
+    from constants import ENABLE_ROBUST_PLAN_WRITES
 
 def archive_plan_async(
     out_path: Path,

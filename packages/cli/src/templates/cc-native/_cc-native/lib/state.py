@@ -13,8 +13,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from .constants import validate_plan_path, PLANS_DIR
-from .atomic_write import atomic_write
+try:
+    from .constants import validate_plan_path, PLANS_DIR
+    from .atomic_write import atomic_write
+except ImportError:
+    # When imported directly via sys.path (not as a package)
+    from constants import validate_plan_path, PLANS_DIR
+    from atomic_write import atomic_write
 
 
 # ---------------------------

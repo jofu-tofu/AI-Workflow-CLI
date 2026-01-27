@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 
 import shutil
 
-from ..base.atomic_write import atomic_write
+from ..base.atomic_write import atomic_write, atomic_append
 from ..base.constants import (
     get_context_dir,
     get_contexts_dir,
@@ -326,17 +326,27 @@ def archive_context(context_id: str, project_root: Path = None) -> Optional[Cont
     # Update context folder path
     context.folder = str(archive_dest)
 
-    # Append context_archived event (to the new location)
-    append_event(
-        context_id,
-        EVENT_CONTEXT_ARCHIVED,
-        project_root,
-        archived_from=str(source_dir),
-        archived_to=str(archive_dest)
-    )
+    # Write context_archived event directly to archive location
+    # (Cannot use append_event as it resolves to active location)
+    archive_events_path = archive_dest / "events.jsonl"
+    event = {
+        "event": EVENT_CONTEXT_ARCHIVED,
+        "timestamp": now_iso(),
+        "archived_from": str(source_dir),
+        "archived_to": str(archive_dest)
+    }
+    event_json = json.dumps(event, ensure_ascii=False)
+    success, error = atomic_append(archive_events_path, event_json + "\n")
+    if not success:
+        eprint(f"[context_manager] WARNING: Failed to append archive event: {error}")
 
-    # Update cache in new location
-    _write_context_cache(context, project_root)
+    # Write context cache directly to archive location
+    # (Cannot use _write_context_cache as it resolves to active location)
+    archive_context_file = archive_dest / "context.json"
+    content = json.dumps(context.to_dict(), indent=2, ensure_ascii=False)
+    success, error = atomic_write(archive_context_file, content)
+    if not success:
+        eprint(f"[context_manager] WARNING: Failed to write archive context cache: {error}")
 
     # Remove from main index, add to archive index
     _remove_from_index_cache(context_id, project_root)

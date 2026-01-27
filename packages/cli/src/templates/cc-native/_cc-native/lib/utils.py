@@ -21,8 +21,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .atomic_write import atomic_write
-from .constants import ENABLE_ROBUST_PLAN_WRITES
+try:
+    from .atomic_write import atomic_write
+    from .constants import ENABLE_ROBUST_PLAN_WRITES
+except ImportError:
+    # When imported directly via sys.path (not as a package)
+    from atomic_write import atomic_write
+    from constants import ENABLE_ROBUST_PLAN_WRITES
 
 
 # ---------------------------
