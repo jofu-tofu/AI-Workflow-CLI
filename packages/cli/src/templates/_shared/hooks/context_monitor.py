@@ -2,9 +2,8 @@
 """Context monitor hook for proactive handoff warnings.
 
 This hook runs on PostToolUse for context-heavy tools and monitors
-context window usage by analyzing the transcript. When context drops
-below a threshold, it injects a system reminder instructing Claude
-to wrap up and create a handoff document.
+context window usage. When context drops below a threshold, it injects
+a system reminder instructing Claude to wrap up and create a handoff document.
 
 Unlike UserPromptSubmit hooks, this fires DURING Claude's work,
 allowing proactive intervention without waiting for user input.
@@ -23,12 +22,28 @@ Hook input (from Claude Code):
     "tool_result": {...},
     "transcript_path": "/path/to/transcript.jsonl",
     "session_id": "abc123",
+    "context_window": {
+        "current_usage": {
+            "cache_read_input_tokens": 0,
+            "input_tokens": 12345,
+            "cache_creation_input_tokens": 0,
+            "output_tokens": 6789
+        },
+        "context_window_size": 200000
+    },
     ...
 }
 
 Hook output:
-- Prints system reminder to stdout if context is low
-- Reminder instructs Claude to wrap up and create handoff
+- Outputs JSON with additionalContext if context is low
+- This injects a system reminder into Claude's context
+- Plain stdout from PostToolUse only goes to verbose mode, not Claude
+- Using additionalContext ensures Claude sees and responds to the warning
+
+KNOWN LIMITATION: Context percentage won't match /context exactly.
+Hook JSON excludes system prompt, tools, MCP tokens. We add a baseline
+to compensate (~22.6k tokens typical). See:
+https://github.com/anthropics/claude-code/issues/13783
 """
 import json
 import os
@@ -52,35 +67,64 @@ from lib.context.context_manager import (
 LOW_CONTEXT_THRESHOLD = 40  # Warn when below 40% remaining
 CRITICAL_CONTEXT_THRESHOLD = 25  # Urgent warning below 25%
 
-# Approximate tokens per character (conservative estimate)
+# Context baseline: preloaded tokens not visible to hooks (~22.6k typical)
+# This includes system prompt, tools, MCP tokens that aren't in hook data
+CONTEXT_BASELINE = 22_600
+
+# Approximate tokens per character (fallback when actual counts unavailable)
 CHARS_PER_TOKEN = 4
 
-# Model context windows (tokens)
-MODEL_CONTEXT_WINDOWS = {
-    "claude-opus-4": 200_000,
-    "claude-sonnet-4": 200_000,
-    "claude-3-opus": 200_000,
-    "claude-3-sonnet": 200_000,
-    "claude-3-haiku": 200_000,
-    "default": 200_000,
-}
+# Default context window size (used when not provided in hook input)
+DEFAULT_CONTEXT_WINDOW = 200_000
 
 
-def get_model_context_window(model_name: Optional[str] = None) -> int:
-    """Get context window size for a model."""
-    if not model_name:
-        return MODEL_CONTEXT_WINDOWS["default"]
+def get_context_tokens_from_hook(hook_input: dict) -> Tuple[Optional[int], Optional[int]]:
+    """
+    Extract actual token counts from Claude Code hook input.
 
-    for prefix, window in MODEL_CONTEXT_WINDOWS.items():
-        if prefix in model_name.lower():
-            return window
+    Claude Code provides context_window data with actual token counts:
+    - cache_read_input_tokens: Tokens read from cache
+    - input_tokens: New input tokens
+    - cache_creation_input_tokens: Tokens written to cache
+    - output_tokens: Model output tokens
 
-    return MODEL_CONTEXT_WINDOWS["default"]
+    Args:
+        hook_input: Hook input data from Claude Code
+
+    Returns:
+        Tuple of (tokens_used, max_tokens) or (None, None) if not available
+    """
+    context_window = hook_input.get("context_window")
+    if not context_window:
+        return None, None
+
+    current_usage = context_window.get("current_usage")
+    if not current_usage:
+        return None, None
+
+    # Sum all token types
+    cache_read = current_usage.get("cache_read_input_tokens", 0) or 0
+    input_tokens = current_usage.get("input_tokens", 0) or 0
+    cache_creation = current_usage.get("cache_creation_input_tokens", 0) or 0
+    output_tokens = current_usage.get("output_tokens", 0) or 0
+
+    content_tokens = cache_read + input_tokens + cache_creation + output_tokens
+
+    # Add baseline for system prompt, tools, MCP tokens not in hook data
+    tokens_used = content_tokens + CONTEXT_BASELINE
+
+    # Get max context window from hook input
+    max_tokens = context_window.get("context_window_size") or DEFAULT_CONTEXT_WINDOW
+
+    return tokens_used, max_tokens
 
 
 def estimate_transcript_tokens(transcript_path: str) -> Tuple[int, int]:
     """
-    Estimate token usage from transcript file.
+    Fallback: Estimate token usage from transcript file character count.
+
+    This is less accurate than actual token counts from hook input,
+    but serves as a fallback when context_window data is unavailable.
 
     Args:
         transcript_path: Path to transcript.jsonl
@@ -107,33 +151,46 @@ def estimate_transcript_tokens(transcript_path: str) -> Tuple[int, int]:
                     # Skip malformed lines
                     continue
 
-        estimated_tokens = total_chars // CHARS_PER_TOKEN
+        # Estimate tokens and add baseline for system/tools/MCP
+        estimated_tokens = (total_chars // CHARS_PER_TOKEN) + CONTEXT_BASELINE
         return estimated_tokens, entry_count
 
     except FileNotFoundError:
         eprint(f"[context_monitor] Transcript not found: {transcript_path}")
-        return 0, 0
+        return CONTEXT_BASELINE, 0  # Return baseline as minimum
     except Exception as e:
         eprint(f"[context_monitor] Error reading transcript: {e}")
-        return 0, 0
+        return CONTEXT_BASELINE, 0
 
 
 def calculate_context_remaining(
-    transcript_path: str,
-    model_name: Optional[str] = None
+    hook_input: dict,
+    transcript_path: Optional[str] = None
 ) -> Tuple[int, int, int]:
     """
     Calculate remaining context percentage.
 
+    Uses actual token counts from hook input when available,
+    falls back to transcript character estimation otherwise.
+
     Args:
-        transcript_path: Path to transcript.jsonl
-        model_name: Model name for context window lookup
+        hook_input: Hook input data from Claude Code
+        transcript_path: Path to transcript.jsonl (for fallback)
 
     Returns:
         Tuple of (percent_remaining, tokens_used, max_tokens)
     """
-    max_tokens = get_model_context_window(model_name)
-    tokens_used, _ = estimate_transcript_tokens(transcript_path)
+    # Try to get actual token counts from hook input
+    tokens_used, max_tokens = get_context_tokens_from_hook(hook_input)
+
+    if tokens_used is None or max_tokens is None:
+        # context_window data not available - cannot accurately calculate
+        # Transcript estimation is unreliable (transcript grows faster than actual context)
+        # Log what we received for debugging
+        context_window = hook_input.get("context_window")
+        eprint(f"[context_monitor] context_window data unavailable: {context_window}")
+        # Return None to indicate we can't calculate - don't use broken transcript estimation
+        return None, None, None
 
     remaining = max_tokens - tokens_used
     percent_remaining = max(0, min(100, (remaining / max_tokens) * 100))
@@ -264,17 +321,15 @@ def check_context_level(hook_input: dict) -> Optional[str]:
     check_and_transition_mode(hook_input)
 
     transcript_path = hook_input.get("transcript_path")
-    if not transcript_path:
-        eprint("[context_monitor] No transcript_path in hook input")
+
+    # Calculate context remaining (uses actual tokens when available)
+    result = calculate_context_remaining(hook_input, transcript_path)
+
+    # If context_window data unavailable, we can't accurately monitor
+    if result[0] is None:
         return None
 
-    # Get model name if available (not always present)
-    model_name = hook_input.get("model")
-
-    # Calculate context remaining
-    percent_remaining, tokens_used, max_tokens = calculate_context_remaining(
-        transcript_path, model_name
-    )
+    percent_remaining, tokens_used, max_tokens = result
 
     # Log for debugging
     eprint(f"[context_monitor] Context: {percent_remaining}% remaining "
@@ -323,7 +378,15 @@ def main():
         warning = check_context_level(hook_input)
 
         if warning:
-            print(warning)
+            # Output JSON with additionalContext so Claude sees the warning
+            # Plain stdout from PostToolUse only goes to verbose mode, not Claude's context
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": warning
+                }
+            }
+            print(json.dumps(output))
 
     except Exception as e:
         eprint(f"[context_monitor] ERROR: {e}")
