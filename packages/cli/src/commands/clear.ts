@@ -436,8 +436,8 @@ export default class ClearCommand extends BaseCommand {
     'Clear workflow folders, output folders, IDE method folders (.claude/.windsurf), and update configurations'
   static override examples = [
     '<%= config.bin %> <%= command.id %>',
-    '<%= config.bin %> <%= command.id %> --template bmad',
-    '<%= config.bin %> <%= command.id %> -t planning-with-files',
+    '<%= config.bin %> <%= command.id %> --template cc-native',
+    '<%= config.bin %> <%= command.id %> -t cc-native',
     '<%= config.bin %> <%= command.id %> --dry-run',
     '<%= config.bin %> <%= command.id %> --force',
   ]
@@ -455,7 +455,7 @@ export default class ClearCommand extends BaseCommand {
     }),
     template: Flags.string({
       char: 't',
-      description: 'Clear only a specific template (e.g., bmad, gsd, planning-with-files)',
+      description: 'Clear only a specific template (e.g., cc-native)',
     }),
   }
 

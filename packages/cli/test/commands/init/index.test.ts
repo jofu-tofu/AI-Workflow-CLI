@@ -122,11 +122,11 @@ describe('pai init command', () => {
       expect(desc).to.include('template')
     })
 
-    it('should show example with bmad template', async () => {
+    it('should show example with cc-native template', async () => {
       const Init = (await import('../../../src/commands/init/index.js')).default
       const examples = Init.examples.join(' ')
 
-      expect(examples).to.include('bmad')
+      expect(examples).to.include('cc-native')
     })
 
     it('should show example with multiple IDEs', async () => {

@@ -14,12 +14,12 @@ import {EXIT_CODES} from '../types/exit-codes.js'
 export default class CleanCommand extends BaseCommand {
   static override description = 'Clean output folder(s) for a specific method or all methods'
   static override examples = [
-    '<%= config.bin %> <%= command.id %> --method bmad',
-    '<%= config.bin %> <%= command.id %> -m gsd',
+    '<%= config.bin %> <%= command.id %> --method cc-native',
+    '<%= config.bin %> <%= command.id %> -m cc-native',
     '<%= config.bin %> <%= command.id %> --all',
     '<%= config.bin %> <%= command.id %> -a --dry-run',
-    '<%= config.bin %> <%= command.id %> --method planning-with-files --dry-run',
-    '<%= config.bin %> <%= command.id %> -m bmad --force',
+    '<%= config.bin %> <%= command.id %> --method cc-native --dry-run',
+    '<%= config.bin %> <%= command.id %> -m cc-native --force',
   ]
   static override flags = {
     ...BaseCommand.baseFlags,
@@ -41,7 +41,7 @@ export default class CleanCommand extends BaseCommand {
     }),
     method: Flags.string({
       char: 'm',
-      description: 'Method name whose output folder to clean (e.g., bmad, gsd)',
+      description: 'Method name whose output folder to clean (e.g., cc-native)',
       exclusive: ['all'],
     }),
   }

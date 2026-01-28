@@ -1,7 +1,7 @@
 {
   "name": "aiwcli",
   "description": "AI Workflow CLI - Command-line interface for AI-powered workflows",
-  "version": "0.0.0",
+  "version": "0.9.0",
   "author": "jofu-tofu",
   "bin": {
     "aiw": "./bin/run.js"
@@ -81,7 +81,8 @@
     "url": "git+https://github.com/jofu-tofu/AI-Workflow-CLI.git"
   },
   "scripts": {
-    "build": "shx rm -rf dist && tsc -b && shx cp -r src/templates dist/",
+    "build": "shx rm -rf dist && tsc -b && npm run build:templates",
+    "build:templates": "shx mkdir -p dist/templates && shx cp -r src/templates/_shared dist/templates/ && shx cp -r src/templates/cc-native dist/templates/ && shx cp src/templates/CLAUDE.md dist/templates/",
     "build:watch": "tsc -b --watch",
     "check": "npm run lint && npm run build",
     "clean": "shx rm -rf dist",

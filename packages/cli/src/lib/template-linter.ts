@@ -41,7 +41,7 @@ function escapeRegex(str: string): string {
  */
 export function getRulesForMethod(method: string): LintRule[] {
   // Known methods to check against
-  const allMethods = ['gsd', 'bmad', 'planning-with-files'];
+  const allMethods = ['cc-native'];
   const otherMethods = allMethods.filter((m) => m !== method);
 
   // Create regex pattern that matches other methods but not the current one
@@ -201,7 +201,7 @@ export function lintTemplateMethod(
  */
 export function lintAllTemplates(templatesDir: string): Map<string, LintViolation[]> {
   const results = new Map<string, LintViolation[]>();
-  const methods = ['gsd', 'bmad', 'planning-with-files'];
+  const methods = ['cc-native'];
 
   for (const method of methods) {
     const methodDir = path.join(templatesDir, method);

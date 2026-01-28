@@ -10,45 +10,28 @@ Command-line interface for launching and managing Claude Code with AI Workflow (
 
 ## Installation
 
-### Install Globally (Recommended)
+### Install from npm (Recommended)
 
 ```bash
-# Navigate to the aiwcli directory
-cd ~/.aiw/aiwcli  # or C:\Users\YOUR_USERNAME\.aiw\aiwcli on Windows
+# Install globally from npm
+npm install -g aiwcli
 
-# Install dependencies
-npm install
-
-# Build the CLI
-npm run build
-
-# Install globally
-npm install -g .
-```
-
-**Verify installation:**
-
-```bash
+# Verify installation
 aiw --version
 aiw --help
 ```
 
-### Run Without Global Install
+### What's Included
 
-If you prefer not to install globally, you can run commands directly from the aiwcli directory:
+aiwcli v0.9.0 includes:
 
-```bash
-cd ~/.aiw/aiwcli
-./bin/run.js <command>   # Unix/Mac
-.\bin\run.cmd <command>  # Windows
-```
+- **CLI Commands**: `launch`, `init`, `branch`, `clean`, `clear`
+- **Templates**:
+  - **cc-native** - Event-sourced context management with plan review, 25+ specialized agents
+  - **_shared** - Common utilities (context manager, event logging, task sync)
+- **IDE Support**: Claude Code, Windsurf, Codex
 
-**Example:**
-
-```bash
-./bin/run.js launch      # Unix/Mac
-.\bin\run.cmd launch     # Windows
-```
+After installation, run `aiw init --method cc-native` to set up the template in your project.
 
 ## Commands
 
@@ -67,9 +50,10 @@ aiw launch --quiet  # Suppress informational output
 Initialize AIW tools and integrations with specified template method.
 
 ```bash
-aiw init --interactive          # Run interactive setup wizard
-aiw init --method bmad          # Initialize BMAD template
-aiw init --method gsd           # Initialize GSD template
+aiw init --interactive             # Run interactive setup wizard
+aiw init --method cc-native        # Initialize CC-Native template
+aiw init --method cc-native --ide windsurf        # Install for Windsurf
+aiw init --method cc-native --ide claude --ide windsurf  # Install for both IDEs
 ```
 
 ### `aiw branch <branchName>`
@@ -1026,7 +1010,7 @@ AIW CLI uses [Oclif](https://oclif.io) which provides automatic command registra
 
 - **File path = Command name**: `src/commands/launch.ts` → `aiw launch`
 - **Subdirectories = Topics**: `src/commands/init/index.ts` → `aiw init`
-- **Class names**: PascalCase version of command name (`Launch`, `InitBmad`)
+- **Class names**: PascalCase version of command name (`Launch`, `Init`)
 
 ### Adding a New Top-Level Command
 
@@ -1119,8 +1103,8 @@ static override flags = {
 
 | Element | Convention | Example |
 |---------|------------|---------|
-| Command files | kebab-case | `launch.ts`, `init/bmad.ts` |
-| Command classes | PascalCase | `Launch`, `InitBmad` |
+| Command files | kebab-case | `launch.ts`, `init/index.ts` |
+| Command classes | PascalCase | `Launch`, `Init` |
 | Flags | camelCase | `debug`, `aiwDir`, `quiet` |
 | Constants | UPPER_SNAKE_CASE | `EXIT_CODES.SUCCESS` |
 

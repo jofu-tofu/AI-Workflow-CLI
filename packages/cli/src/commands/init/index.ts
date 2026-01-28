@@ -6,7 +6,7 @@ import {checkbox, confirm, input, select} from '@inquirer/prompts'
 import {Flags} from '@oclif/core'
 
 import BaseCommand from '../../lib/base-command.js'
-import {detectUsername, generateBmadConfigs} from '../../lib/bmad-installer.js'
+import {detectUsername} from '../../lib/user-utils.js'
 import {updateGitignore} from '../../lib/gitignore-manager.js'
 import {mergeClaudeSettings} from '../../lib/hooks-merger.js'
 import {IdePathResolver} from '../../lib/ide-path-resolver.js'
@@ -65,9 +65,9 @@ export default class Init extends BaseCommand {
   static override description = 'Initialize AIW tools and integrations with specified template method'
   static override examples = [
     '<%= config.bin %> <%= command.id %> --interactive',
-    '<%= config.bin %> <%= command.id %> --method bmad',
-    '<%= config.bin %> <%= command.id %> --method bmad --ide windsurf',
-    '<%= config.bin %> <%= command.id %> --method bmad --ide claude --ide windsurf',
+    '<%= config.bin %> <%= command.id %> --method cc-native',
+    '<%= config.bin %> <%= command.id %> --method cc-native --ide windsurf',
+    '<%= config.bin %> <%= command.id %> --method cc-native --ide claude --ide windsurf',
   ]
   static override flags = {
     ...BaseCommand.baseFlags,
@@ -147,7 +147,7 @@ export default class Init extends BaseCommand {
         this.logSuccess('✓ Minimal installation completed successfully')
         this.log('')
         this.logInfo('Next steps:')
-        this.logInfo('  aiw init --method <template>    Install a full template method (bmad, gsd, etc.)')
+        this.logInfo('  aiw init --method <template>    Install a full template method (cc-native)')
         this.logInfo('  aiw init --interactive          Run interactive setup wizard')
         return
       }
@@ -218,20 +218,9 @@ export default class Init extends BaseCommand {
         true, // skipExisting = true for regeneration support
       )
 
-      // BMAD-specific post-install: generate custom config files
-      if (method === 'bmad') {
-        await generateBmadConfigs(targetDir, username, projectName)
-        this.logSuccess('✓ Configuration files generated')
-      }
-
       // Collect all folders that need gitignore entries
       // The .aiwcli/ container holds all template infrastructure and runtime data
       const foldersForGitignore: string[] = ['.aiwcli']
-
-      // BMAD-specific: add external output directories to gitignore
-      if (method === 'bmad') {
-        foldersForGitignore.push('_bmad-output', 'bmad-output', '**/bmad-output')
-      }
 
       // Report installation results
       if (result.installedFolders.length > 0) {
@@ -332,8 +321,7 @@ export default class Init extends BaseCommand {
    */
   private getTemplateDescription(template: string): string {
     const descriptions: Record<string, string> = {
-      bmad: 'BMAD Method - AI-driven development workflow with agents',
-      gsd: 'GSD Method - Get Stuff Done project management',
+      'cc-native': 'CC-Native - Event-sourced context management with plan review',
     }
 
     return descriptions[template] || 'Custom template'

@@ -27,13 +27,13 @@ describe('Init Command Structure - Integration Tests', () => {
       expect(output).to.include('EXAMPLES')
     })
 
-    it('validates examples show --method bmad usage', () => {
+    it('validates examples show --method cc-native usage', () => {
       const output = execSync(`${bin} init --help`, {
         encoding: 'utf8',
         stdio: 'pipe',
       })
 
-      expect(output).to.include('--method bmad')
+      expect(output).to.include('--method cc-native')
     })
 
     it('validates examples show multiple IDE usage', () => {
