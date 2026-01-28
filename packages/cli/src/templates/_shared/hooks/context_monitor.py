@@ -191,11 +191,17 @@ Context ID: `{context_id}`"""
 
 def check_and_transition_mode(hook_input: dict) -> None:
     """
-    Check if context needs to transition from pending_implementation to implementing.
+    Check if context needs to transition to implementing mode.
 
-    This handles the case where a plan was approved and implementation has started,
-    but the context mode wasn't updated. If we're seeing tool usage (Edit, Write, Bash)
-    and the context is in "pending_implementation", we transition to "implementing".
+    This handles two cases:
+    1. Plan was approved (pending_implementation) and implementation tools are used
+    2. Plan was in planning mode but permission_mode is no longer "plan"
+       (e.g., after /clear which clears permissions and pastes the plan)
+
+    If we're seeing tool usage (Edit, Write, Bash) and either:
+    - Context is in "pending_implementation", OR
+    - Context is in "planning" and permission_mode is not "plan"
+    We transition to "implementing".
 
     Args:
         hook_input: Hook input data from Claude Code
@@ -218,9 +224,20 @@ def check_and_transition_mode(hook_input: dict) -> None:
     if not context:
         return
 
-    # Check if we need to transition
-    if context.in_flight and context.in_flight.mode == "pending_implementation":
+    if not context.in_flight:
+        return
+
+    current_mode = context.in_flight.mode
+    permission_mode = hook_input.get("permission_mode", "default")
+
+    # Transition from pending_implementation to implementing
+    if current_mode == "pending_implementation":
         eprint(f"[context_monitor] Transitioning {context.id} from pending_implementation to implementing")
+        update_plan_status(context.id, "implementing", project_root=project_root)
+
+    # Transition from planning to implementing if permission_mode is not "plan"
+    elif current_mode == "planning" and permission_mode != "plan":
+        eprint(f"[context_monitor] Transitioning {context.id} from planning to implementing (permission_mode={permission_mode})")
         update_plan_status(context.id, "implementing", project_root=project_root)
 
 
@@ -261,9 +278,6 @@ def check_context_level(hook_input: dict) -> Optional[str]:
     eprint(f"[context_monitor] Context: {percent_remaining}% remaining "
            f"(~{tokens_used//1000}k/{max_tokens//1000}k tokens)")
 
-    # Check mode transition (file I/O)
-    check_and_transition_mode(hook_input)
-
     # Get current context for handoff info (file I/O)
     project_root = project_dir(hook_input)
     context_id = get_current_context_id(project_root)
@@ -283,7 +297,7 @@ def main():
     """
     Main entry point for PostToolUse hook.
 
-    Reads hook input from stdin, estimates context usage,
+    Reads hook input from stdin, checks for mode transitions,
     and prints system reminder if context is low.
     """
     try:
@@ -297,6 +311,10 @@ def main():
             hook_input = json.loads(input_data)
         except json.JSONDecodeError:
             return
+
+        # Always check for mode transitions on implementation tools
+        # This handles the case where /clear pastes the plan with non-plan permission mode
+        check_and_transition_mode(hook_input)
 
         # Check context level
         warning = check_context_level(hook_input)

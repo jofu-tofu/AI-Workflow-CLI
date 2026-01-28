@@ -52,7 +52,7 @@ If no active context is found, inform the user and stop - handoffs require an ac
 
 ### Step 3: Generate Document
 
-Use this template:
+Use this template. The `<!-- SECTION: name -->` markers are required for the save script to parse sections into sharded files.
 
 ```markdown
 ---
@@ -66,34 +66,40 @@ plan_document: {path to plan if provided, or "none"}
 
 # Session Handoff — {Date}
 
+<!-- SECTION: summary -->
 ## Summary
 {2-3 sentences: what's different now vs. session start}
 
+<!-- SECTION: completed -->
 ## Work Completed
 {Grouped by category if multiple areas. Specific file:function references.}
 
+<!-- SECTION: dead-ends -->
 ## Dead Ends — Do Not Retry
-{Approaches that were tried and failed. Critical for avoiding wasted effort in future sessions.}
 
-### {Problem/Goal attempted}
-| Approach Tried | Why It Failed | Time Spent |
-|----------------|---------------|------------|
-| {What was attempted} | {Specific reason: error, incompatibility, performance, etc.} | {Rough estimate} |
+These approaches were attempted and failed. Do not retry without addressing the root cause.
 
-**What to try instead**: {If known, suggest alternative direction}
+| Approach | Why It Failed | Time Spent | Alternative |
+|----------|---------------|------------|-------------|
+| {What was attempted} | {Specific reason} | {Rough estimate} | {What to try instead} |
 
+<!-- SECTION: decisions -->
 ## Key Decisions
 {Technical choices with rationale. Format: **Decision**: Rationale. Trade-off: X.}
 
+<!-- SECTION: pending -->
 ## Pending Issues
 - [ ] {Issue} — {severity: HIGH/MED/LOW} {optional workaround note}
 
+<!-- SECTION: next-steps -->
 ## Next Steps
 1. {Actionable item with file:line reference if applicable}
 
+<!-- SECTION: files -->
 ## Files Modified
 {Significant changes only. Skip formatting-only edits.}
 
+<!-- SECTION: context -->
 ## Context for Future Sessions
 {Non-obvious context: env quirks, stakeholder requirements}
 
@@ -150,11 +156,13 @@ EOF
 ```
 
 This script:
-1. Saves the handoff to `_output/contexts/{context_id}/handoffs/HANDOFF-{HHMM}.md`
-2. Sets `in_flight.mode = "handoff_pending"`
-3. Records the event in the context's event log
+1. Creates a folder at `_output/contexts/{context_id}/handoffs/{YYYY-MM-DD-HHMM}/`
+2. Parses sections and writes sharded files (index.md, completed-work.md, dead-ends.md, etc.)
+3. Copies the current plan (if any) to plan.md
+4. Sets `in_flight.mode = "handoff_pending"`
+5. Records the event in the context's event log
 
-The next session will automatically detect the handoff and offer to resume.
+The next session will automatically detect the handoff folder and suggest only the `index.md` file.
 
 ## Dead Ends Section Guidelines
 
@@ -185,10 +193,14 @@ This section is critical for preventing context rot across sessions. Be specific
 After creating file, output:
 
 ```
-✓ Created _output/contexts/{context_id}/handoffs/HANDOFF-{HHMM}.md
+✓ Created handoff folder: _output/contexts/{context_id}/handoffs/{YYYY-MM-DD-HHMM}/
+  - index.md (entry point with navigation)
+  - completed-work.md, dead-ends.md, decisions.md, pending.md, context.md
+  - plan.md (copy of current plan, if any)
 
 To continue next session:
-  "Load _output/contexts/{context_id}/handoffs/HANDOFF-{HHMM}.md and continue from next steps"
+  The index.md will be automatically suggested when you start a new session.
+  Read dead-ends.md first to avoid repeating failed approaches.
 
 ⚠️  {N} dead ends documented — avoid re-attempting these approaches
 ```
@@ -203,10 +215,13 @@ If plan was updated:
 
 ## Success Criteria
 
-- [ ] Handoff document created in context's `handoffs/` subfolder
-- [ ] Dead ends section captures all failed approaches with specific details
+- [ ] Handoff folder created at `handoffs/{YYYY-MM-DD-HHMM}/`
+- [ ] index.md contains summary and navigation table
+- [ ] All section files created (completed-work.md, dead-ends.md, etc.)
+- [ ] Dead ends use structured table format for quick scanning
+- [ ] plan.md copied from context if plan exists
 - [ ] Next steps are actionable with file references
-- [ ] Git status reflects current state
+- [ ] Git status included in index.md
 - [ ] If plan provided: checkboxes updated to reflect completion status
 - [ ] If plan provided: Session Progress Log appended
 - [ ] Context state updated to indicate handoff pending

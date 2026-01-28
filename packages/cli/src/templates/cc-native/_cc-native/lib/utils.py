@@ -711,6 +711,96 @@ def build_combined_json(result: CombinedReviewResult) -> Dict[str, Any]:
     return output
 
 
+def generate_review_index(
+    result: CombinedReviewResult,
+    iteration: Optional[int] = None,
+    settings: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Generate index.md for a review folder.
+
+    Args:
+        result: Combined review result
+        iteration: Iteration number (1-based)
+        settings: Display settings
+
+    Returns:
+        Markdown content for index.md
+    """
+    from datetime import datetime
+    now = datetime.now()
+
+    lines = [
+        "---",
+        "type: review",
+        f"plan_hash: {result.plan_hash}",
+        f"overall_verdict: {result.overall_verdict}",
+        f"created_at: {result.timestamp}",
+    ]
+    if iteration:
+        lines.append(f"iteration: {iteration}")
+    lines.extend([
+        "---",
+        "",
+        f"# Plan Review - {now.strftime('%Y-%m-%d %H:%M')}",
+        "",
+        f"**Overall Verdict:** `{result.overall_verdict.upper()}`",
+    ])
+
+    if iteration:
+        lines.append(f"**Iteration:** {iteration}")
+
+    lines.extend([
+        f"**Plan Hash:** `{result.plan_hash}`",
+        "",
+    ])
+
+    # Summary from orchestrator
+    if result.orchestration:
+        lines.extend([
+            "## Analysis",
+            f"- **Complexity:** `{result.orchestration.complexity}`",
+            f"- **Category:** `{result.orchestration.category}`",
+            f"- **Reasoning:** {result.orchestration.reasoning}",
+            "",
+        ])
+
+    # Navigation table
+    lines.extend([
+        "## Review Files",
+        "",
+        "| File | Description |",
+        "|------|-------------|",
+        "| [combined.md](./combined.md) | Full review details |",
+        "| [combined.json](./combined.json) | Structured review data |",
+    ])
+
+    # CLI reviewers
+    for name in result.cli_reviewers.keys():
+        lines.append(f"| [{name}.json](./{name}.json) | {name.title()} reviewer output |")
+
+    # Agent reviewers
+    for name in result.agents.keys():
+        safe_name = sanitize_filename(name)
+        lines.append(f"| [{safe_name}.json](./{safe_name}.json) | {name} agent output |")
+
+    lines.extend([
+        "",
+        "## Verdicts Summary",
+        "",
+        "| Reviewer | Verdict |",
+        "|----------|---------|",
+    ])
+
+    for name, r in result.cli_reviewers.items():
+        lines.append(f"| {name.title()} | `{r.verdict}` |")
+    for name, r in result.agents.items():
+        lines.append(f"| {name} | `{r.verdict}` |")
+
+    lines.append("")
+
+    return '\n'.join(lines)
+
+
 def write_combined_artifacts(
     base: Path,
     plan: str,
@@ -718,6 +808,8 @@ def write_combined_artifacts(
     payload: Dict[str, Any],
     settings: Optional[Dict[str, Any]] = None,
     context_reviews_dir: Optional[Path] = None,
+    review_folder: Optional[Path] = None,
+    iteration: Optional[int] = None,
 ) -> Path:
     """Write combined review artifacts to context reviews folder.
 
@@ -727,16 +819,19 @@ def write_combined_artifacts(
         result: Combined review result
         payload: Hook payload
         settings: Display settings
-        context_reviews_dir: Reviews directory from context system (required)
+        context_reviews_dir: Reviews directory from context system (deprecated, use review_folder)
+        review_folder: Specific folder to write to (takes precedence)
+        iteration: Iteration number for index generation
 
     Raises:
-        ValueError: If context_reviews_dir is not provided
+        ValueError: If neither context_reviews_dir nor review_folder is provided
     """
-    if not context_reviews_dir:
-        raise ValueError("context_reviews_dir is required")
+    # Support both old and new API
+    out_dir = review_folder or context_reviews_dir
+    if not out_dir:
+        raise ValueError("Either context_reviews_dir or review_folder is required")
 
-    out_dir = context_reviews_dir
-    eprint(f"[utils] Using context reviews dir: {out_dir}")
+    eprint(f"[utils] Using review folder: {out_dir}")
 
     # Check directory creation explicitly
     try:
@@ -745,8 +840,9 @@ def write_combined_artifacts(
         eprint(f"[utils] FATAL: Cannot create directory {out_dir}: {e}")
         raise
 
-    # JSON write with atomic operation
-    json_path = out_dir / "review.json"
+    # JSON write with atomic operation - use combined.json for folder-based
+    json_filename = "combined.json" if review_folder else "review.json"
+    json_path = out_dir / json_filename
     json_data = build_combined_json(result)
     try:
         if ENABLE_ROBUST_PLAN_WRITES:
@@ -759,8 +855,9 @@ def write_combined_artifacts(
         eprint(f"[utils] FATAL: Failed to write {json_path.name}: {e}")
         raise
 
-    # Markdown write with atomic operation
-    md_path = out_dir / "review.md"
+    # Markdown write with atomic operation - use combined.md for folder-based
+    md_filename = "combined.md" if review_folder else "review.md"
+    md_path = out_dir / md_filename
     md_content = format_combined_markdown(result, settings)
     try:
         if ENABLE_ROBUST_PLAN_WRITES:
@@ -802,6 +899,22 @@ def write_combined_artifacts(
             except Exception as e:
                 eprint(f"[utils] WARNING: Failed to write {reviewer_path.name}: {e}")
                 # Continue - individual reviewer failures not critical
+
+    # Generate index.md for folder-based reviews
+    if review_folder:
+        index_content = generate_review_index(result, iteration, settings)
+        index_path = out_dir / "index.md"
+        try:
+            if ENABLE_ROBUST_PLAN_WRITES:
+                success, error = atomic_write(index_path, index_content)
+                if not success:
+                    eprint(f"[utils] WARNING: Failed to write index.md: {error}")
+            else:
+                index_path.write_text(index_content, encoding="utf-8")
+        except Exception as e:
+            eprint(f"[utils] WARNING: Failed to write index.md: {e}")
+
+        return index_path
 
     return md_path
 

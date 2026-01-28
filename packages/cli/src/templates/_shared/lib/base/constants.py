@@ -297,3 +297,48 @@ def get_archive_index_path(project_root: Path = None) -> Path:
         Path to _output/contexts/archive/index.json
     """
     return get_archive_dir(project_root) / INDEX_FILENAME
+
+
+def get_handoff_folder_path(context_id: str, project_root: Path = None) -> Path:
+    """Get path for a new handoff folder with datetime naming.
+
+    Returns: _output/contexts/{context_id}/handoffs/{YYYY-MM-DD-HHMM}/
+    Handles collisions by appending -N suffix if folder exists.
+
+    Args:
+        context_id: Context identifier
+        project_root: Project root directory (default: cwd)
+
+    Returns:
+        Path to new handoff folder (not yet created)
+    """
+    from datetime import datetime
+    handoffs_dir = get_context_handoffs_dir(context_id, project_root)
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    folder = handoffs_dir / timestamp
+
+    counter = 1
+    while folder.exists():
+        folder = handoffs_dir / f"{timestamp}-{counter}"
+        counter += 1
+
+    return folder
+
+
+def get_review_folder_path(context_id: str, iteration: int, project_root: Path = None) -> Path:
+    """Get path for a new review folder with datetime and iteration naming.
+
+    Returns: _output/contexts/{context_id}/reviews/cc-native/{YYYY-MM-DD-HHMM-iteration-N}/
+
+    Args:
+        context_id: Context identifier
+        iteration: Iteration number (1-based)
+        project_root: Project root directory (default: cwd)
+
+    Returns:
+        Path to new review folder (not yet created)
+    """
+    from datetime import datetime
+    reviews_dir = get_context_reviews_dir(context_id, project_root) / "cc-native"
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    return reviews_dir / f"{timestamp}-iteration-{iteration}"

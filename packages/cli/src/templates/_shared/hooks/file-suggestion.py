@@ -49,8 +49,8 @@ def get_context_files(context_id: str, project_root: Path) -> List[str]:
     Collects:
     - Context file (context.json)
     - Plans (most recent first)
-    - Handoffs (most recent first)
-    - Reviews (most recent first)
+    - Handoffs: index.md from subdirectories (folder-based) OR flat .md files (legacy)
+    - Reviews: index.md from subdirectories (folder-based) OR flat review.md (legacy)
 
     Args:
         context_id: Context identifier
@@ -76,22 +76,52 @@ def get_context_files(context_id: str, project_root: Path) -> List[str]:
         files.extend([str(p) for p in plan_files])
         eprint(f"[file-suggestion] Found {len(plan_files)} plans in {context_id}")
 
-    # Get handoffs directory
+    # Get handoffs - prefer folder-based (index.md in subdirectories), fall back to legacy
     handoffs_dir = get_context_handoffs_dir(context_id, project_root)
     if handoffs_dir.exists():
-        handoff_files = list(handoffs_dir.glob("*.md"))
-        handoff_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-        files.extend([str(p) for p in handoff_files])
-        eprint(f"[file-suggestion] Found {len(handoff_files)} handoffs in {context_id}")
+        # Find handoff folders (named like YYYY-MM-DD-HHMM or YYYY-MM-DD-HHMM-N)
+        handoff_folders = sorted(
+            [d for d in handoffs_dir.iterdir() if d.is_dir()],
+            key=lambda d: d.name,
+            reverse=True  # Most recent first (alphabetically sorts by date)
+        )
 
-    # Get reviews directory (includes cc-native subdirectory)
-    reviews_dir = get_context_reviews_dir(context_id, project_root)
+        if handoff_folders:
+            # Use folder-based: get index.md from most recent folder only
+            index_file = handoff_folders[0] / "index.md"
+            if index_file.exists():
+                files.append(str(index_file))
+                eprint(f"[file-suggestion] Found handoff folder: {handoff_folders[0].name}")
+        else:
+            # Legacy support: flat .md files directly in handoffs/
+            legacy_handoffs = [f for f in handoffs_dir.glob("*.md") if f.is_file()]
+            legacy_handoffs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            if legacy_handoffs:
+                files.append(str(legacy_handoffs[0]))  # Only most recent legacy
+                eprint(f"[file-suggestion] Found {len(legacy_handoffs)} legacy handoffs in {context_id}")
+
+    # Get reviews - prefer folder-based (index.md in subdirectories), fall back to legacy
+    reviews_dir = get_context_reviews_dir(context_id, project_root) / "cc-native"
     if reviews_dir.exists():
-        # Find review.md files in reviews/ and subdirectories (e.g., reviews/cc-native/review.md)
-        review_files = list(reviews_dir.glob("**/review.md"))
-        review_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-        files.extend([str(p) for p in review_files])
-        eprint(f"[file-suggestion] Found {len(review_files)} reviews in {context_id}")
+        # Find review folders (named like YYYY-MM-DD-HHMM-iteration-N)
+        review_folders = sorted(
+            [d for d in reviews_dir.iterdir() if d.is_dir()],
+            key=lambda d: d.name,
+            reverse=True  # Most recent first
+        )
+
+        if review_folders:
+            # Use folder-based: get index.md from most recent folder only
+            index_file = review_folders[0] / "index.md"
+            if index_file.exists():
+                files.append(str(index_file))
+                eprint(f"[file-suggestion] Found review folder: {review_folders[0].name}")
+        else:
+            # Legacy support: flat review.md directly in cc-native/
+            legacy_review = reviews_dir / "review.md"
+            if legacy_review.exists():
+                files.append(str(legacy_review))
+                eprint(f"[file-suggestion] Found legacy review.md in {context_id}")
 
     return files
 

@@ -296,6 +296,34 @@ function shouldExclude(name: string): boolean {
 }
 
 /**
+ * Merge source directory into destination, skipping existing files.
+ * Unlike copyDir, this preserves existing files in destination.
+ *
+ * @param src - Source directory path
+ * @param dest - Destination directory path
+ */
+async function mergeDirectory(src: string, dest: string): Promise<void> {
+  await fs.mkdir(dest, {recursive: true})
+  const entries = await fs.readdir(src, {withFileTypes: true})
+
+  for (const entry of entries) {
+    if (shouldExclude(entry.name)) continue
+
+    const srcPath = join(src, entry.name)
+    const destPath = join(dest, entry.name)
+
+    if (entry.isDirectory()) {
+      await mergeDirectory(srcPath, destPath)
+    } else {
+      // Skip if file already exists
+      if (!(await pathExists(destPath))) {
+        await fs.copyFile(srcPath, destPath)
+      }
+    }
+  }
+}
+
+/**
  * Copy directory recursively with proper error handling.
  * Excludes test files, cache directories, and output folders.
  *
@@ -442,6 +470,20 @@ export async function installTemplate(
       await copyDir(rootSharedSrc, rootSharedDest, true) // excludeIdeFolders = true
       installedFolders.push('_shared')
     }
+
+    // Merge shared IDE folders (commands, workflows) into project IDE folders
+    // This handles _shared/.claude/, _shared/.windsurf/, etc.
+    const sharedIdeInstalls = ides.map(async (ide) => {
+      const sharedIdeFolder = join(rootSharedSrc, `.${ide}`)
+      if (await pathExists(sharedIdeFolder)) {
+        const destIdeFolder = resolver.getIdeDir(ide)
+        await fs.mkdir(destIdeFolder, {recursive: true})
+
+        // Recursively copy, but skip files that already exist
+        await mergeDirectory(sharedIdeFolder, destIdeFolder)
+      }
+    })
+    await Promise.all(sharedIdeInstalls)
   }
 
   // Install matching IDE folders

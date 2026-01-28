@@ -79,7 +79,7 @@ try:
         get_all_in_flight_contexts,
         get_all_contexts,
     )
-    from lib.base.constants import get_context_reviews_dir
+    from lib.base.constants import get_context_reviews_dir, get_review_folder_path
 except ImportError as e:
     print(f"[cc-native-plan-review] Failed to import lib: {e}", file=sys.stderr)
     sys.exit(0)  # Non-blocking failure
@@ -659,9 +659,20 @@ def main() -> int:
     display_settings = {**plan_settings.get("display", {}), **agent_settings.get("display", {})}
     combined_settings = {"display": display_settings}
 
+    # Get current iteration number for folder naming
+    current_iteration = 1
+    if iteration_state:
+        current_iteration = iteration_state.get("current", 1)
+
+    # Create review folder with datetime and iteration in name
+    review_folder = get_review_folder_path(active_context.id, current_iteration, base)
+    review_folder.mkdir(parents=True, exist_ok=True)
+    eprint(f"[cc-native-plan-review] Created review folder: {review_folder}")
+
     review_file = write_combined_artifacts(
         base, plan, combined_result, payload, combined_settings,
-        context_reviews_dir=reviews_dir
+        review_folder=review_folder,
+        iteration=current_iteration,
     )
     eprint(f"[cc-native-plan-review] Saved review: {review_file}")
 

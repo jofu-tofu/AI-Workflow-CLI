@@ -126,28 +126,49 @@ def inference(
         )
 
 
+# Stop words to filter from context IDs
+STOP_WORDS = {
+    'the', 'to', 'with', 'for', 'in', 'a', 'an', 'of', 'on', 'is', 'it',
+    'and', 'or', 'that', 'this', 'be', 'as', 'at', 'by', 'from', 'i',
+    'you', 'we', 'my', 'your', 'our', 'me', 'us', 'can', 'will', 'would',
+    'could', 'should', 'have', 'has', 'had', 'do', 'does', 'did', 'am',
+    'are', 'was', 'were', 'been', 'being', 'if', 'then', 'so', 'just',
+    'also', 'only', 'some', 'any', 'all', 'each', 'every', 'both', 'few',
+    'more', 'most', 'other', 'into', 'over', 'such', 'no', 'not', 'but',
+    'what', 'which', 'who', 'whom', 'how', 'when', 'where', 'why', 'here',
+    'there', 'these', 'those', 'its', 'their', 'his', 'her', 'about',
+}
+
+
+def filter_stop_words(text: str) -> str:
+    """Remove stop words from text, keeping only content keywords."""
+    words = text.lower().split()
+    filtered = [w for w in words if w not in STOP_WORDS and len(w) > 1]
+    return ' '.join(filtered)
+
+
 # System prompt for generating context ID summaries
-CONTEXT_ID_SYSTEM_PROMPT = """Generate a 10-word summary of what the user wants to do. Start with a gerund (verb ending in -ing).
+CONTEXT_ID_SYSTEM_PROMPT = """Extract 5-10 keywords from what the user wants to do.
 
 Rules:
-- Exactly 10 words
-- Start with gerund: Creating, Fixing, Adding, Updating, Implementing, etc.
-- Be specific about the task
-- No punctuation
-- No quotes
+- Output 5-10 keywords only
+- Keywords: nouns, verbs, adjectives, technical terms, proper names
+- NO function words: the, to, with, for, in, a, an, of, on, is, it, and, or, that, this, be, as, at, by, from
+- Most important/specific words preferred
+- No punctuation, no quotes
 
 Examples:
-- "I want to add user authentication" -> "Adding user authentication with JWT tokens to the web app"
-- "Fix the bug in the login flow" -> "Fixing critical bug in user login flow validation logic"
-- "Can you help me refactor this code" -> "Refactoring legacy code for better maintainability and cleaner architecture"
-- "Update the README with new instructions" -> "Updating README with new setup instructions and configuration examples"
+- "I want to add user authentication" -> "add user authentication login security JWT tokens webapp"
+- "Fix the bug in the login flow" -> "fix bug login flow validation error session auth"
+- "Can you help me refactor this code" -> "refactor code cleanup architecture maintainability legacy modules"
+- "Update the README with new instructions" -> "update README documentation instructions setup configuration"
 
-Output ONLY the 10-word summary, nothing else."""
+Output ONLY the keywords separated by spaces, nothing else."""
 
 
 def generate_semantic_summary(prompt: str, timeout: int = 15) -> Optional[str]:
     """
-    Generate a semantic 10-word summary of a user prompt.
+    Generate a keyword summary of a user prompt.
 
     Uses Sonnet for quality inference. Returns None if inference fails.
 
@@ -156,9 +177,8 @@ def generate_semantic_summary(prompt: str, timeout: int = 15) -> Optional[str]:
         timeout: Timeout in seconds (default 15)
 
     Returns:
-        10-word summary string or None if failed
+        Keyword summary string (5-10 words) or None if failed
     """
-    # Pass full prompt - AI can summarize any length into 10 words
     result = inference(
         system_prompt=CONTEXT_ID_SYSTEM_PROMPT,
         user_prompt=prompt,
@@ -176,14 +196,12 @@ def generate_semantic_summary(prompt: str, timeout: int = 15) -> Optional[str]:
     # Remove trailing punctuation
     summary = summary.rstrip('.!?')
 
-    # Validate it starts with a gerund (capital letter + letters + "ing")
-    import re
-    if not re.match(r'^[A-Z][a-z]*ing\b', summary):
-        return None
+    # Filter out any stop words that slipped through
+    summary = filter_stop_words(summary)
 
-    # Validate roughly 10 words (allow 8-12 for flexibility)
+    # Validate 3-10 words (allow flexibility for short prompts)
     words = summary.split()
-    if len(words) < 8 or len(words) > 12:
+    if len(words) < 3 or len(words) > 10:
         return None
 
     return summary
