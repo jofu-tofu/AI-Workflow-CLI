@@ -126,44 +126,49 @@ def inference(
         )
 
 
-# Stop words to filter from context IDs
-STOP_WORDS = {
-    'the', 'to', 'with', 'for', 'in', 'a', 'an', 'of', 'on', 'is', 'it',
-    'and', 'or', 'that', 'this', 'be', 'as', 'at', 'by', 'from', 'i',
-    'you', 'we', 'my', 'your', 'our', 'me', 'us', 'can', 'will', 'would',
-    'could', 'should', 'have', 'has', 'had', 'do', 'does', 'did', 'am',
-    'are', 'was', 'were', 'been', 'being', 'if', 'then', 'so', 'just',
-    'also', 'only', 'some', 'any', 'all', 'each', 'every', 'both', 'few',
-    'more', 'most', 'other', 'into', 'over', 'such', 'no', 'not', 'but',
-    'what', 'which', 'who', 'whom', 'how', 'when', 'where', 'why', 'here',
-    'there', 'these', 'those', 'its', 'their', 'his', 'her', 'about',
-}
+# Minimum word length for context IDs (filters out short words like "I", "a", "to", "is")
+MIN_WORD_LENGTH = 3
+
+# Maximum number of words in context ID
+MAX_WORDS = 10
 
 
-def filter_stop_words(text: str) -> str:
-    """Remove stop words from text, keeping only content keywords."""
+def filter_short_words(text: str) -> str:
+    """Filter words by minimum length, keeping only words with 3+ characters.
+
+    This replaces the stopword list approach - a 3-char minimum naturally
+    filters out most function words (the, to, a, an, of, on, is, it, etc.)
+    """
+    # Handle contractions by replacing apostrophes before splitting
+    text = text.replace("'", " ").replace("'", " ")
     words = text.lower().split()
-    filtered = [w for w in words if w not in STOP_WORDS and len(w) > 1]
+    # Filter to words with 3+ characters and limit to MAX_WORDS
+    filtered = [w for w in words if len(w) >= MIN_WORD_LENGTH][:MAX_WORDS]
     return ' '.join(filtered)
 
 
-# System prompt for generating context ID summaries
-CONTEXT_ID_SYSTEM_PROMPT = """Extract 5-10 keywords from what the user wants to do.
+# System prompt for generating context ID summaries (recognition-focused, not summarization)
+CONTEXT_ID_SYSTEM_PROMPT = """Generate a memorable context ID that helps instantly recall what was being worked on.
+
+This is for RECOGNITION - the user will see this ID in a list and needs to immediately remember "oh yeah, THAT session."
 
 Rules:
-- Output 5-10 keywords only
-- Keywords: nouns, verbs, adjectives, technical terms, proper names
-- NO function words: the, to, with, for, in, a, an, of, on, is, it, and, or, that, this, be, as, at, by, from
-- Most important/specific words preferred
+- Output 3-6 words that capture the DISTINCTIVE essence
+- Lead with the ACTION (verb) being taken
+- Include the SPECIFIC target (file name, feature name, component name)
+- Prefer proper nouns and specific names over generic categories
+- NO function words: the, to, with, for, in, a, an, of, on, is, it, and, or
+- NO generic padding: code, project, app, webapp, system, implementation
 - No punctuation, no quotes
 
 Examples:
-- "I want to add user authentication" -> "add user authentication login security JWT tokens webapp"
-- "Fix the bug in the login flow" -> "fix bug login flow validation error session auth"
-- "Can you help me refactor this code" -> "refactor code cleanup architecture maintainability legacy modules"
-- "Update the README with new instructions" -> "update README documentation instructions setup configuration"
+- "I want to add user authentication using JWT" -> "adding jwt auth user-service"
+- "Fix the bug in the login flow where users get redirected to a 404" -> "fixing login 404 redirect bug"
+- "Can you help me refactor the PaymentProcessor class" -> "refactoring paymentprocessor class"
+- "Update the README with new installation instructions" -> "readme installation instructions"
+- "Search for where the context ID extraction prompt is" -> "search context extraction prompt"
 
-Output ONLY the keywords separated by spaces, nothing else."""
+Output ONLY the words separated by spaces, nothing else."""
 
 
 def generate_semantic_summary(prompt: str, timeout: int = 15) -> Optional[str]:
@@ -196,8 +201,8 @@ def generate_semantic_summary(prompt: str, timeout: int = 15) -> Optional[str]:
     # Remove trailing punctuation
     summary = summary.rstrip('.!?')
 
-    # Filter out any stop words that slipped through
-    summary = filter_stop_words(summary)
+    # Filter to words with 3+ characters (removes short function words)
+    summary = filter_short_words(summary)
 
     # Validate 3-10 words (allow flexibility for short prompts)
     words = summary.split()
