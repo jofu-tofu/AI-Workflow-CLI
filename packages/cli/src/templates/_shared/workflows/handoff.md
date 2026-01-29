@@ -159,10 +159,9 @@ This script:
 1. Creates a folder at `_output/contexts/{context_id}/handoffs/{YYYY-MM-DD-HHMM}/`
 2. Parses sections and writes sharded files (index.md, completed-work.md, dead-ends.md, etc.)
 3. Copies the current plan (if any) to plan.md
-4. Sets `in_flight.mode = "handoff_pending"`
-5. Records the event in the context's event log
+4. Records the event in the context's event log (informational only)
 
-The next session will automatically detect the handoff folder and suggest only the `index.md` file.
+Use the handoff folder for context in the next session.
 
 ## Dead Ends Section Guidelines
 

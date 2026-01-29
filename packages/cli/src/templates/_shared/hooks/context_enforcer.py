@@ -13,7 +13,7 @@ Context selection priority:
    - 1 in-flight context -> Auto-select that context
    - Multiple in-flight contexts -> Block and show picker
 
-In-flight modes: planning, pending_implementation, implementing, handoff_pending
+In-flight modes: planning, pending_implementation, implementing
 
 Prefix syntax:
 - ^: Show context picker (bare caret)
@@ -37,6 +37,7 @@ Hook output:
 - Exit 2 + stderr: Block request, show context picker to user
 """
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -48,6 +49,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
+from lib.base.subprocess_utils import is_internal_call
 from lib.context.context_manager import (
     Context,
     get_all_contexts,
@@ -61,7 +63,6 @@ from lib.context.discovery import (
     get_in_flight_context,
     format_active_context_reminder,
     format_context_created,
-    format_handoff_continuation,
     format_pending_plan_continuation,
     format_implementation_continuation,
     _format_relative_time,
@@ -358,6 +359,11 @@ def determine_context(
     Raises:
         BlockRequest: When request should be blocked to show picker to user
     """
+    # 0. Skip context creation for internal subprocess calls (orchestrator, agents)
+    if is_internal_call():
+        eprint("[context_enforcer] Skipping: internal subprocess call")
+        return (None, "skip_internal", None)
+
     # 1. Check if session already belongs to a context (HIGHEST PRIORITY)
     # This prevents context switching on subsequent prompts - one context per session
     if session_id:
@@ -426,9 +432,7 @@ def determine_context(
         eprint(f"[context_enforcer] Auto-selected single in-flight context: {ctx.id} (mode={mode})")
 
         # Use mode-specific formatter for better continuation context
-        if mode == "handoff_pending":
-            output = format_handoff_continuation(ctx)
-        elif mode == "pending_implementation":
+        if mode == "pending_implementation":
             output = format_pending_plan_continuation(ctx)
         elif mode == "implementing":
             output = format_implementation_continuation(ctx)

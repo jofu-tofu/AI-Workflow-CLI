@@ -115,13 +115,11 @@ def rebuild_context_from_events(context_dir: Path, project_root: Path = None) ->
             context.in_flight.started_at = None
 
         elif event_type == "handoff_created":
-            context.in_flight.mode = "handoff_pending"
+            # Handoff events are informational only - no mode change
             context.in_flight.handoff_path = event.get("path")
 
         elif event_type == "handoff_cleared":
-            # Restore to "implementing" if artifact exists, otherwise "none"
-            restored_mode = event.get("restored_mode", "none")
-            context.in_flight.mode = restored_mode
+            # Legacy event - just clear handoff_path, no mode change
             context.in_flight.handoff_path = None
 
     return context

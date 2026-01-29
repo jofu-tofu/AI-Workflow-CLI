@@ -33,7 +33,6 @@ from lib.base.utils import eprint, project_dir
 from lib.context.context_manager import (
     update_context_session_id,
     update_plan_status,
-    clear_handoff_status,
     get_context,
     get_context_by_session_id,
 )
@@ -47,7 +46,6 @@ def _update_in_flight_status(context_id: str, hook_input: dict, project_root: Pa
     """
     Update context in-flight status based on permission mode.
 
-    - If handoff_pending: clear it (handoff has been consumed by this session)
     - If permission_mode == "plan": set to "planning"
     - If permission_mode in ["acceptEdits", "bypassPermissions"]: set to "implementing"
     """
@@ -58,14 +56,6 @@ def _update_in_flight_status(context_id: str, hook_input: dict, project_root: Pa
     current_mode = context.in_flight.mode
     permission_mode = hook_input.get("permission_mode", "default")
     eprint(f"[user_prompt_submit] Current mode: {current_mode}, permission_mode: {permission_mode}")
-
-    # Clear handoff_pending if set (session resumption clears the handoff)
-    if current_mode == "handoff_pending":
-        clear_handoff_status(context_id, project_root)
-        eprint(f"[user_prompt_submit] Cleared handoff_pending status")
-        # Refresh context after clearing
-        context = get_context(context_id, project_root)
-        current_mode = context.in_flight.mode if context and context.in_flight else "none"
 
     # Set status based on permission mode
     if permission_mode == "plan":

@@ -12,9 +12,6 @@ from .context_manager import (
     update_plan_status,
     get_context_with_pending_plan,
     get_context_with_in_flight_work,
-    update_handoff_status,
-    clear_handoff_status,
-    get_context_with_handoff_pending,
 )
 from .event_log import (
     Task,
@@ -37,7 +34,6 @@ from .discovery import (
     get_in_flight_context,
     format_context_list,
     format_pending_plan_continuation,
-    format_handoff_continuation,
     format_implementation_continuation,
     format_context_picker_prompt,
     format_ready_for_new_work,
@@ -77,9 +73,6 @@ __all__ = [
     "update_plan_status",
     "get_context_with_pending_plan",
     "get_context_with_in_flight_work",
-    "update_handoff_status",
-    "clear_handoff_status",
-    "get_context_with_handoff_pending",
     # Event Log
     "append_event",
     "read_events",
@@ -97,7 +90,6 @@ __all__ = [
     "get_in_flight_context",
     "format_context_list",
     "format_pending_plan_continuation",
-    "format_handoff_continuation",
     "format_implementation_continuation",
     "format_context_picker_prompt",
     "format_ready_for_new_work",

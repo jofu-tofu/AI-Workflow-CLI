@@ -18,6 +18,11 @@ sys.path.insert(0, str(_lib_dir))
 from utils import OrchestratorResult, eprint, parse_json_maybe
 from reviewers.base import AgentConfig, OrchestratorConfig
 
+# Import shared subprocess utilities
+_shared_lib = Path(__file__).resolve().parent.parent.parent / "_shared" / "lib" / "base"
+sys.path.insert(0, str(_shared_lib))
+from subprocess_utils import get_internal_subprocess_env
+
 
 # ---------------------------
 # Constants
@@ -199,6 +204,9 @@ PLAN:
 
     eprint(f"[orchestrator] Running with model: {config.model}, timeout: {config.timeout}s")
 
+    # Get environment for internal subprocess (bypasses hooks)
+    env = get_internal_subprocess_env()
+
     try:
         p = subprocess.run(
             cmd_args,
@@ -208,6 +216,7 @@ PLAN:
             timeout=config.timeout,
             encoding="utf-8",
             errors="replace",
+            env=env,
         )
     except subprocess.TimeoutExpired:
         eprint(f"[orchestrator] TIMEOUT after {config.timeout}s, falling back to medium complexity")

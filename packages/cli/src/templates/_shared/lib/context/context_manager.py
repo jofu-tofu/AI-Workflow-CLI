@@ -933,122 +933,6 @@ def get_context_with_in_flight_work(project_root: Path = None) -> Optional[Conte
     return None
 
 
-def update_handoff_status(
-    context_id: str,
-    handoff_path: str,
-    project_root: Path = None
-) -> Optional[Context]:
-    """
-    Update context to indicate a handoff is pending.
-
-    Called by handoff document generator after creating handoff document.
-    Sets in_flight.mode = "handoff_pending" and in_flight.handoff_path.
-
-    Args:
-        context_id: Context identifier
-        handoff_path: Path to the handoff document
-        project_root: Project root directory
-
-    Returns:
-        Updated Context or None if not found
-    """
-    context = get_context(context_id, project_root)
-    if not context:
-        return None
-
-    now = now_iso()
-
-    # Update in_flight state
-    context.in_flight.mode = "handoff_pending"
-    context.in_flight.handoff_path = handoff_path
-    context.in_flight.started_at = now
-    context.last_active = now
-
-    # Append event (source of truth) - MUST happen before cache updates
-    append_event(
-        context_id,
-        EVENT_HANDOFF_CREATED,
-        project_root,
-        path=handoff_path
-    )
-
-    # Update caches
-    _write_context_cache(context, project_root)
-    _update_index_cache(context, project_root)
-
-    eprint(f"[context_manager] Set handoff pending for: {context_id}")
-    return context
-
-
-def clear_handoff_status(context_id: str, project_root: Path = None) -> Optional[Context]:
-    """
-    Clear handoff pending status after resumption.
-
-    Called by SessionStart after successfully resuming from handoff.
-
-    Args:
-        context_id: Context identifier
-        project_root: Project root directory
-
-    Returns:
-        Updated Context or None if not found
-    """
-    context = get_context(context_id, project_root)
-    if not context:
-        return None
-
-    if context.in_flight.mode != "handoff_pending":
-        return context  # Nothing to clear
-
-    now = now_iso()
-
-    # Clear handoff state but preserve any artifact path (plan being implemented)
-    # If artifact_path exists, restore to "implementing" mode; otherwise "none"
-    if context.in_flight.artifact_path:
-        context.in_flight.mode = "implementing"
-    else:
-        context.in_flight.mode = "none"
-    context.in_flight.handoff_path = None
-    # Don't clear started_at if we're still implementing
-    if not context.in_flight.artifact_path:
-        context.in_flight.started_at = None
-    context.last_active = now
-
-    # Append event (source of truth) - MUST happen before cache updates
-    append_event(
-        context_id,
-        EVENT_HANDOFF_CLEARED,
-        project_root,
-        restored_mode=context.in_flight.mode
-    )
-
-    # Update caches
-    _write_context_cache(context, project_root)
-    _update_index_cache(context, project_root)
-
-    eprint(f"[context_manager] Cleared handoff status for: {context_id}")
-    return context
-
-
-def get_context_with_handoff_pending(project_root: Path = None) -> Optional[Context]:
-    """
-    Find context with handoff pending (highest priority for SessionStart).
-
-    Args:
-        project_root: Project root directory
-
-    Returns:
-        Context with handoff pending, or None if not found
-    """
-    contexts = get_all_contexts(status="active", project_root=project_root)
-
-    for context in contexts:
-        if context.in_flight and context.in_flight.mode == "handoff_pending":
-            return context
-
-    return None
-
-
 def get_all_in_flight_contexts(project_root: Path = None) -> List[Context]:
     """
     Return all contexts with truly in-flight work requiring attention.
@@ -1056,7 +940,6 @@ def get_all_in_flight_contexts(project_root: Path = None) -> List[Context]:
     In-flight modes (require continuation/action):
     - planning: Active planning session
     - pending_implementation: Plan created, awaiting implementation
-    - handoff_pending: Handoff document created, awaiting pickup
 
     NOT in-flight (normal working state):
     - implementing: Active work, but doesn't block new context creation
@@ -1073,7 +956,7 @@ def get_all_in_flight_contexts(project_root: Path = None) -> List[Context]:
     Returns:
         List of contexts with in-flight work requiring attention
     """
-    IN_FLIGHT_MODES = {"planning", "pending_implementation", "handoff_pending"}
+    IN_FLIGHT_MODES = {"planning", "pending_implementation"}
     contexts = get_all_contexts(status="active", project_root=project_root)
     return [c for c in contexts if c.in_flight and c.in_flight.mode in IN_FLIGHT_MODES]
 

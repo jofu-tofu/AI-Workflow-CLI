@@ -83,7 +83,7 @@ def generate_handoff_document(
     Returns:
         HandoffDocument with file_path set, or None on failure
     """
-    from ..context.context_manager import get_context, update_handoff_status
+    from ..context.context_manager import get_context
 
     context = get_context(context_id, project_root)
     if not context:
@@ -141,7 +141,7 @@ def generate_handoff_document(
         eprint(f"[handoff] ERROR: Failed to write handoff document: {error}")
         return None
 
-    # Record event
+    # Record event (informational only - no mode change)
     append_event(
         context_id,
         EVENT_HANDOFF_CREATED,
@@ -150,9 +150,6 @@ def generate_handoff_document(
         reason=reason,
         session_id=session_id
     )
-
-    # Update context in_flight state
-    update_handoff_status(context_id, str(file_path), project_root)
 
     eprint(f"[handoff] Created handoff document: {file_path}")
     return doc

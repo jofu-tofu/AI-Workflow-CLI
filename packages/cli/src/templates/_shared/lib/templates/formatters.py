@@ -11,7 +11,6 @@ MODE_DISPLAY_MAP = {
     "planning": "[Planning]",
     "pending_implementation": "[Plan Ready]",
     "implementing": "[Implementing]",
-    "handoff_pending": "[Handoff Pending]",
     "none": "",
 }
 

@@ -42,13 +42,12 @@ def discover_contexts_for_session(
 
 def get_in_flight_context(project_root: Path = None) -> Optional[Context]:
     """
-    Get context with any in-flight work (plan, handoff, etc.).
+    Get context with any in-flight work (plan, etc.).
 
     Priority order:
-    1. handoff_pending - highest priority (user was interrupted)
-    2. pending_implementation - plan ready for implementation
-    3. implementing - implementation in progress
-    4. planning - actively planning
+    1. pending_implementation - plan ready for implementation
+    2. implementing - implementation in progress
+    3. planning - actively planning
 
     Args:
         project_root: Project root directory
@@ -60,15 +59,14 @@ def get_in_flight_context(project_root: Path = None) -> Optional[Context]:
 
     # Sort by in-flight priority
     priority_order = {
-        "handoff_pending": 0,
-        "pending_implementation": 1,
-        "implementing": 2,
-        "planning": 3,
+        "pending_implementation": 0,
+        "implementing": 1,
+        "planning": 2,
         "none": 99,
     }
 
     # Only auto-continue for high-priority modes (not "implementing", "planning" or "none")
-    actionable_modes = {"handoff_pending", "pending_implementation"}
+    actionable_modes = {"pending_implementation"}
 
     in_flight_contexts = [
         c for c in contexts
@@ -172,46 +170,6 @@ def format_pending_plan_continuation(context: Context) -> str:
         "3. Begin implementing the approved plan",
         "",
         "The context has been loaded. You may begin implementation.",
-    ])
-
-    return "\n".join(lines)
-
-
-def format_handoff_continuation(context: Context) -> str:
-    """
-    Format output for handoff continuation scenario.
-
-    This is shown when SessionStart detects a context with
-    in_flight.mode = "handoff_pending".
-
-    Args:
-        context: Context with handoff pending
-
-    Returns:
-        Formatted instructions for Claude
-    """
-    lines = [
-        format_continuation_header("resuming", context.id),
-        "",
-        f"**Summary:** {context.summary}",
-        "",
-    ]
-
-    # Add handoff document link
-    if context.in_flight and context.in_flight.handoff_path:
-        lines.append(f"**Handoff document:**")
-        lines.append(f"`{context.in_flight.handoff_path}`")
-        lines.append("")
-
-    lines.extend([
-        "---",
-        "",
-        "**Instructions:**",
-        "1. Read the handoff document above",
-        "2. Use TaskCreate to restore pending tasks",
-        "3. Continue where the previous session left off",
-        "",
-        "The context has been loaded. You may continue.",
     ])
 
     return "\n".join(lines)

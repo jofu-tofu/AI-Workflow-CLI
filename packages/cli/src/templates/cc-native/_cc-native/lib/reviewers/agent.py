@@ -18,6 +18,11 @@ sys.path.insert(0, str(_lib_dir))
 from utils import ReviewerResult, eprint, parse_json_maybe, coerce_to_review
 from .base import AgentConfig, AGENT_REVIEW_PROMPT_PREFIX
 
+# Import shared subprocess utilities
+_shared_lib = Path(__file__).resolve().parent.parent.parent.parent / "_shared" / "lib" / "base"
+sys.path.insert(0, str(_shared_lib))
+from subprocess_utils import get_internal_subprocess_env
+
 
 def _parse_claude_output(raw: str) -> Optional[Dict[str, Any]]:
     """Parse Claude CLI JSON output, handling various formats.
@@ -125,6 +130,9 @@ PLAN:
 
     eprint(f"[{agent.name}] Running with model: {agent.model}, timeout: {timeout}s, max-turns: {max_turns}")
 
+    # Get environment for internal subprocess (bypasses hooks)
+    env = get_internal_subprocess_env()
+
     try:
         p = subprocess.run(
             cmd_args,
@@ -134,6 +142,7 @@ PLAN:
             timeout=timeout,
             encoding="utf-8",
             errors="replace",
+            env=env,
         )
     except subprocess.TimeoutExpired:
         eprint(f"[{agent.name}] TIMEOUT after {timeout}s")

@@ -16,8 +16,7 @@ This script:
    - index.md (main entry point with navigation)
    - completed-work.md, dead-ends.md, decisions.md, pending.md, context.md
    - plan.md (copy of original plan if it exists)
-4. Sets in_flight.mode = "handoff_pending"
-5. Records the event in events.jsonl
+4. Records the event in events.jsonl (informational only)
 """
 import json
 import re
@@ -32,7 +31,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(SHARED_ROOT))
 
-from lib.context.context_manager import update_handoff_status, get_context
+from lib.context.context_manager import get_context
 from lib.base.utils import eprint
 from lib.base.atomic_write import atomic_write
 from lib.base.constants import get_handoff_folder_path
@@ -331,13 +330,6 @@ def main():
         if not file_path.exists():
             write_section_file(handoff_folder, filename, titles[filename], "")
 
-    # Update context status
-    try:
-        update_handoff_status(context_id, str(index_path), project_root)
-    except Exception as e:
-        eprint(f"[save_handoff] Warning: Status update failed: {e}")
-        # Don't exit - files were saved successfully
-
     # Output success message (ASCII-safe for Windows)
     print(f"[OK] Created handoff folder: {handoff_folder}")
     print(f"  - index.md (entry point with navigation)")
@@ -345,9 +337,8 @@ def main():
     files_created = [f.name for f in handoff_folder.iterdir() if f.is_file() and f.name != 'index.md']
     print(f"  - {', '.join(sorted(files_created))}")
 
-    print(f"[OK] Set status to handoff_pending for context: {context_id}")
     print()
-    print("The next session will automatically suggest index.md for context loading.")
+    print("Handoff document saved. Use this folder for context in the next session.")
 
 
 if __name__ == "__main__":

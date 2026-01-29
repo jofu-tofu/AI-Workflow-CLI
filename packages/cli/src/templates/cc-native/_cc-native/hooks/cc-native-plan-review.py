@@ -28,6 +28,7 @@ Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}/reviews/
 """
 
 import json
+import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -42,6 +43,9 @@ try:
     # Add shared library path
     _shared = Path(__file__).parent.parent.parent / "_shared"
     sys.path.insert(0, str(_shared))
+
+    # Import subprocess utilities
+    from lib.base.subprocess_utils import is_internal_call
 
     from utils import (
         DEFAULT_DISPLAY,
@@ -133,9 +137,10 @@ def get_active_context_for_review(session_id: str, project_root: Path) -> Option
 
     Strategy:
     1. Find context by session_id
-    2. Fallback: Single in-flight context
-    3. Fallback: Single planning context
-    4. Return None if multiple or no contexts found
+    2. Fallback: Single context in 'planning' mode
+    3. Return None if multiple planning contexts or no planning contexts found
+
+    Only triggers for contexts in 'planning' mode, not 'handoff_pending' or other modes.
 
     Args:
         session_id: Current session ID
@@ -150,23 +155,21 @@ def get_active_context_for_review(session_id: str, project_root: Path) -> Option
         eprint(f"[cc-native-plan-review] Found context by session_id: {context.id}")
         return context
 
-    # Strategy 2: Single in-flight context
+    # Strategy 2: Single planning context (only planning mode)
     in_flight = get_all_in_flight_contexts(project_root)
-    if len(in_flight) == 1:
-        eprint(f"[cc-native-plan-review] Found single in-flight context: {in_flight[0].id}")
-        return in_flight[0]
-
-    # Strategy 3: Single planning context
     planning_contexts = [c for c in in_flight if c.in_flight and c.in_flight.mode == "planning"]
     if len(planning_contexts) == 1:
         eprint(f"[cc-native-plan-review] Found single planning context: {planning_contexts[0].id}")
         return planning_contexts[0]
 
-    # Multiple or no contexts found
-    if len(in_flight) > 1:
-        eprint(f"[cc-native-plan-review] Multiple in-flight contexts ({len(in_flight)}), falling back to legacy")
+    # Multiple or no planning contexts found
+    if len(planning_contexts) > 1:
+        eprint(f"[cc-native-plan-review] Multiple planning contexts ({len(planning_contexts)}), cannot determine which to use")
+    elif len(in_flight) > 0:
+        modes = [c.in_flight.mode if c.in_flight else "none" for c in in_flight]
+        eprint(f"[cc-native-plan-review] Found {len(in_flight)} in-flight context(s) with modes {modes}, but none in 'planning' mode")
     else:
-        eprint("[cc-native-plan-review] No in-flight contexts found, falling back to legacy")
+        eprint("[cc-native-plan-review] No in-flight contexts found")
     return None
 
 
@@ -422,6 +425,11 @@ def load_agent_library(proj_dir: Path, settings: Optional[Dict[str, Any]] = None
 
 def main() -> int:
     eprint("[cc-native-plan-review] Unified hook started (PreToolUse)")
+
+    # Skip if internal subprocess call (orchestrator, agents)
+    if is_internal_call():
+        eprint("[cc-native-plan-review] Skipping: internal subprocess call")
+        return 0
 
     try:
         payload = json.load(sys.stdin)
