@@ -157,15 +157,17 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
             from .inference import generate_semantic_summary
             semantic = generate_semantic_summary(summary)
             if semantic:
-                # Slugify the semantic summary
-                base_id = sanitize_title(semantic, max_len=60)
+                # Slugify the semantic summary (word limit already applied in inference)
+                base_id = sanitize_title(semantic, max_len=100)
                 eprint(f"[utils] Semantic context ID: {base_id}")
         except Exception as e:
             eprint(f"[utils] Inference failed, using fallback: {e}")
 
         # Fallback to old method if inference failed
         if not base_id:
-            base_id = sanitize_title(summary[:50])
+            # Fallback: take first 10 words with 3+ chars, then slugify
+            words = [w for w in summary.split() if len(w) >= 3][:10]
+            base_id = sanitize_title(' '.join(words), max_len=100)
 
     if not existing_ids:
         return base_id
