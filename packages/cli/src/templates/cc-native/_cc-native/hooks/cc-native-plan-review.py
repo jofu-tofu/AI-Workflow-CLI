@@ -590,11 +590,8 @@ def main() -> int:
                 # Use orchestrator result from phase 1
                 detected_complexity = orch_result.complexity
 
-                if orch_result.complexity == "simple" and not orch_result.selected_agents:
-                    eprint("[cc-native-plan-review] Orchestrator determined: simple complexity, no agent review needed")
-                else:
-                    selected_names = set(orch_result.selected_agents)
-                    selected_agents = [a for a in enabled_agents if a.name in selected_names]
+                selected_names = set(orch_result.selected_agents)
+                selected_agents = [a for a in enabled_agents if a.name in selected_names]
 
                     if not selected_agents and selected_names:
                         eprint(f"[cc-native-plan-review] Warning: orchestrator selected unknown agents: {selected_names}")
@@ -723,6 +720,11 @@ def main() -> int:
         else:
             # Final iteration - increment current and save state
             iteration_state["current"] = iteration_state.get("current", 1) + 1
+            # Also increment max by 1 to allow another review cycle if the user rejects
+            # the plan and requests changes. Without this, once iterations are exhausted,
+            # the hook would skip review entirely (line ~498) even if the user sent the
+            # planner back to revise. This ensures rejected plans can always be re-reviewed.
+            iteration_state["max"] = iteration_state.get("max", 1) + 1
             save_iteration_state(reviews_dir, iteration_state)
 
     # Build output with correct Claude Code hook format
