@@ -24,7 +24,7 @@
     "enabled": true,
     "timeout": 120,
     "blockOnFail": true,
-    "maxTurns": 3,
+    "maxTurns": 2,
     "orchestrator": {
       "enabled": true,
       "model": "haiku",
@@ -32,6 +32,12 @@
       "maxTurns": 6
     },
     "legacyMode": false,
+    "mandatoryAgents": ["handoff-readiness", "clarity-auditor", "skeptic"],
+    "fallbackByComplexity": {
+      "simple": 0,
+      "medium": 5,
+      "high": 9
+    },
     "reviewIterations": {
       "simple": 1,
       "medium": 1,

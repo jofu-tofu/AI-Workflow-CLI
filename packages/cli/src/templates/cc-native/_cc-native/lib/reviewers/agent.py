@@ -16,6 +16,7 @@ _lib_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_lib_dir))
 
 from utils import ReviewerResult, eprint, parse_json_maybe, coerce_to_review
+from debug import debug_log, debug_raw
 from .base import AgentConfig, AGENT_REVIEW_PROMPT_PREFIX
 
 # Import shared subprocess utilities
@@ -81,6 +82,8 @@ def run_agent_review(
     schema: Dict[str, Any],
     timeout: int,
     max_turns: int = 3,
+    context_path: Optional[Path] = None,
+    session_name: str = "unknown",
 ) -> ReviewerResult:
     """Run a single Claude Code agent to review the plan.
 
@@ -90,6 +93,8 @@ def run_agent_review(
         schema: JSON schema for the review output
         timeout: Timeout in seconds
         max_turns: Maximum agent turns
+        context_path: Optional path to context folder for debug logging
+        session_name: Session name for debug logging
 
     Returns:
         ReviewerResult with the review output
@@ -119,9 +124,10 @@ PLAN:
     schema_json = json.dumps(schema, ensure_ascii=False)
     cmd_args = [
         claude_path,
+        "-p",  # Enable print mode to read prompt from stdin
         "--agent", agent.name,
         "--model", agent.model,
-        "--permission-mode", "bypassPermissions",
+        "--permission-mode", "plan",
         "--output-format", "json",
         "--max-turns", str(max_turns),
         "--json-schema", schema_json,
@@ -159,10 +165,37 @@ PLAN:
     raw = (p.stdout or "").strip()
     err = (p.stderr or "").strip()
 
+    # Debug logging - capture full raw output for diagnosis
+    if context_path:
+        debug_raw(context_path, session_name, f"agent:{agent.name}", "stdout", raw)
+        if err:
+            debug_raw(context_path, session_name, f"agent:{agent.name}", "stderr", err)
+        debug_log(context_path, session_name, f"agent:{agent.name}", "subprocess_info", {
+            "exit_code": p.returncode,
+            "stdout_len": len(raw),
+            "stderr_len": len(err),
+            "model": agent.model,
+            "timeout": timeout,
+            "max_turns": max_turns,
+        })
+
     if raw:
         eprint(f"[{agent.name}] stdout preview: {raw[:500]}")
 
     obj = _parse_claude_output(raw)
+
+    # Debug logging - capture parsed result details
+    if context_path:
+        debug_log(context_path, session_name, f"agent:{agent.name}", "parsed_result", {
+            "parsed_keys": list(obj.keys()) if obj else None,
+            "verdict": obj.get("verdict") if obj else None,
+            "has_summary": bool(obj.get("summary")) if obj else False,
+            "summary_preview": (obj.get("summary", "")[:200] + "...") if obj and obj.get("summary") and len(obj.get("summary", "")) > 200 else (obj.get("summary") if obj else None),
+            "issues_count": len(obj.get("issues", [])) if obj else 0,
+            "missing_sections_count": len(obj.get("missing_sections", [])) if obj else 0,
+            "questions_count": len(obj.get("questions", [])) if obj else 0,
+        })
+
     if obj:
         eprint(f"[{agent.name}] Parsed JSON successfully, verdict: {obj.get('verdict', 'N/A')}")
     else:
