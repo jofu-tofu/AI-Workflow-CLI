@@ -1,22 +1,17 @@
 """Task synchronization utilities for Claude native task integration.
 
-Provides bi-directional sync between:
+Provides persistence for Claude Code native tasks:
 - Claude Code native TaskCreate/TaskUpdate/TaskList tools (ephemeral)
 - Persistent events.jsonl storage (source of truth)
 
-SESSION START (Hydrate):
-1. Read events.jsonl -> compute pending tasks
-2. Output instructions for Claude to recreate tasks via TaskCreate
-3. Claude's native TaskList now populated with persistent state
-
 DURING SESSION (Persist):
 1. Claude uses native TaskCreate/TaskUpdate
-2. CLAUDE.md instructs: after TaskUpdate, call append_event()
-3. Both systems stay in sync
+2. PostToolUse hooks capture events to events.jsonl
+3. Task state preserved for future reference
 
 SESSION END:
-- events.jsonl already has everything
-- Next session will hydrate from it
+- events.jsonl has complete task history
+- Can be queried for context summaries
 """
 from pathlib import Path
 from typing import List, Optional
@@ -33,78 +28,6 @@ from .event_log import (
     EVENT_SESSION_STARTED,
 )
 from ..base.utils import eprint
-
-
-def _escape_string(s: str) -> str:
-    """
-    Escape a string for safe embedding in quoted YAML-like format.
-
-    Handles backslashes, newlines, tabs, and quotes.
-
-    Args:
-        s: Input string
-
-    Returns:
-        Escaped string safe for embedding in double quotes
-    """
-    if not s:
-        return ""
-    # Order matters: escape backslashes first, then other special chars
-    s = s.replace('\\', '\\\\')
-    s = s.replace('\n', '\\n')
-    s = s.replace('\r', '\\r')
-    s = s.replace('\t', '\\t')
-    s = s.replace('"', '\\"')
-    return s
-
-
-def generate_hydration_instructions(
-    context_id: str,
-    project_root: Path = None
-) -> str:
-    """
-    Generate instructions for Claude to recreate tasks from persistent storage.
-
-    Called by SessionStart hook when resuming a context.
-
-    Args:
-        context_id: Context identifier
-        project_root: Project root directory
-
-    Returns:
-        Formatted instructions for Claude to restore tasks
-    """
-    pending_tasks = get_pending_tasks(context_id, project_root)
-
-    if not pending_tasks:
-        return "No pending tasks to restore."
-
-    lines = [
-        "## Restoring Tasks from Previous Session",
-        "",
-        "Please recreate these tasks using TaskCreate:",
-        "",
-    ]
-
-    for task in pending_tasks:
-        lines.append(f"### Task: {task.subject}")
-        lines.append("")
-        lines.append("```")
-        lines.append("TaskCreate:")
-        # Escape special characters for YAML-like format
-        subject_escaped = _escape_string(task.subject)
-        lines.append(f'  subject: "{subject_escaped}"')
-        if task.description:
-            desc_escaped = _escape_string(task.description)
-            lines.append(f'  description: "{desc_escaped}"')
-        if task.active_form:
-            active_form_escaped = _escape_string(task.active_form)
-            lines.append(f'  activeForm: "{active_form_escaped}"')
-        lines.append(f'  metadata: {{"persistent_id": "{task.id}", "context": "{context_id}", "skip_persistence": true}}')
-        lines.append("```")
-        lines.append("")
-
-    return "\n".join(lines)
 
 
 def generate_task_summary(context_id: str, project_root: Path = None) -> str:

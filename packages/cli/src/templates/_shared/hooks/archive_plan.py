@@ -27,47 +27,31 @@ Usage in .claude/settings.json:
 }
 """
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Optional
 
 # Add parent directories to path for imports
-script_dir = Path(__file__).resolve().parent
-lib_dir = script_dir.parent / "lib"
-sys.path.insert(0, str(lib_dir.parent))
+SCRIPT_DIR = Path(__file__).resolve().parent
+SHARED_LIB = SCRIPT_DIR.parent / "lib"
+sys.path.insert(0, str(SHARED_LIB.parent))
 
+from lib.base.hook_utils import load_hook_input
 from lib.context.plan_archive import archive_plan_to_context
 from lib.context.context_manager import get_all_contexts
+from lib.context.context_extractor import extract_context_id_for_session
 from lib.base.utils import eprint, project_dir
+from lib.base.constants import get_context_dir
 
-
-def get_context_for_session(session_id: str, project_root: Path) -> Optional[str]:
-    """
-    Find context that matches this session_id.
-
-    Args:
-        session_id: Session ID to match
-        project_root: Project root directory
-
-    Returns:
-        Context ID or None if not found
-    """
-    contexts = get_all_contexts(status="active", project_root=project_root)
-
-    # Primary strategy: Find context with matching session_id
-    for ctx in contexts:
-        if ctx.in_flight and ctx.in_flight.session_ids and session_id in ctx.in_flight.session_ids:
-            eprint(f"[archive_plan] Found context by session: {ctx.id}")
-            return ctx.id
-
-    # Fallback: If only one context is planning, assume it's the one
-    planning_contexts = [c for c in contexts if c.in_flight and c.in_flight.mode == "planning"]
-    if len(planning_contexts) == 1:
-        eprint(f"[archive_plan] Fallback: Single planning context: {planning_contexts[0].id}")
-        return planning_contexts[0].id
-
-    eprint(f"[archive_plan] Could not find context for session {session_id}")
-    return None
+# Import debug cleanup function from cc-native lib
+_cc_native_lib = SCRIPT_DIR.parent / "_cc-native" / "lib"
+sys.path.insert(0, str(_cc_native_lib))
+try:
+    from debug import cleanup_debug_folder
+except ImportError:
+    def cleanup_debug_folder(context_path):
+        pass  # Fallback if debug module not available
 
 
 def extract_plan_path_from_result(tool_result: str) -> Optional[str]:
@@ -76,7 +60,6 @@ def extract_plan_path_from_result(tool_result: str) -> Optional[str]:
 
     Looks for pattern: "Your plan has been saved to: <path>"
     """
-    import re
     match = re.search(r'Your plan has been saved to:\s*(.+\.md)', tool_result)
     if match:
         return match.group(1).strip()
@@ -90,10 +73,9 @@ def on_plan_archive():
     Called from PostToolUse on ExitPlanMode - extracts plan path from result
     and archives to the active context.
     """
-    # Read hook input from stdin
-    try:
-        hook_input = json.load(sys.stdin)
-    except json.JSONDecodeError:
+    # Read hook input using shared utility
+    hook_input = load_hook_input()
+    if not hook_input:
         eprint("[archive_plan] No valid JSON input")
         return
 
@@ -220,9 +202,9 @@ def on_plan_archive():
         print(f"Plan archival skipped: file not found ({plan_path})")
         return
 
-    # Find context by session ID
+    # Find context by session ID using shared extractor
     session_id = hook_input.get("session_id", "unknown")
-    context_id = get_context_for_session(session_id, project_root)
+    context_id = extract_context_id_for_session(session_id, project_root, "archive_plan")
 
     if not context_id:
         eprint("[archive_plan] Could not determine context for session")
@@ -246,6 +228,14 @@ def on_plan_archive():
     )
 
     if archived_path:
+        # Clean up debug logs before completing archive
+        try:
+            context_path = get_context_dir(context_id, project_root)
+            cleanup_debug_folder(context_path)
+            print(f"[archive_plan] Cleaned up debug logs for context: {context_id}")
+        except Exception as e:
+            print(f"[archive_plan] Warning: could not clean debug folder: {e}")
+
         print(f"")
         print(f"[archive_plan] SUCCESS!")
         print(f"[archive_plan] Plan archived to context: {context_id}")

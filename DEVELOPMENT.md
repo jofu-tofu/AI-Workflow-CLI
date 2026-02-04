@@ -72,7 +72,7 @@ This section explains the template system architecture. Understanding this preve
 .aiwcli/
 ├── _shared/                    # Cross-method infrastructure
 │   ├── hooks/                  # Shared hook scripts
-│   │   ├── user_prompt_submit.py    # Context binding, task hydration
+│   │   ├── user_prompt_submit.py    # Context binding
 │   │   ├── context_monitor.py       # Context usage monitoring
 │   │   ├── context_enforcer.py      # Context enforcement
 │   │   ├── archive_plan.py          # Plan archival on ExitPlanMode
@@ -134,7 +134,7 @@ Hooks are Python scripts triggered by Claude Code lifecycle events. Configuratio
 | `PostToolUse` | After tool completes | `context_monitor.py` (context tracking), `archive_plan.py` |
 
 **Shared Hooks** (`.aiwcli/_shared/hooks/`):
-- `user_prompt_submit.py` - Context enforcement, session binding, task hydration
+- `user_prompt_submit.py` - Context enforcement, session binding
 - `context_monitor.py` - Context usage monitoring (40% warning, 25% urgent)
 - `context_enforcer.py` - Determines active context, blocks if needed
 - `archive_plan.py` - Archives approved plans on ExitPlanMode

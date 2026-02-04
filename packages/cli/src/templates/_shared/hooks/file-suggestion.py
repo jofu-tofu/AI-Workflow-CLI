@@ -28,6 +28,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
+from lib.base.hook_utils import load_hook_input
 from lib.base.utils import eprint, project_dir
 from lib.base.constants import (
     get_context_plans_dir,
@@ -167,17 +168,10 @@ def main():
     and outputs file suggestions as JSON array.
     """
     try:
-        # Read hook input from stdin
-        input_data = sys.stdin.read().strip()
+        # Read hook input using shared utility
+        hook_input = load_hook_input()
 
-        if not input_data:
-            print("[]")
-            return
-
-        try:
-            hook_input = json.loads(input_data)
-        except json.JSONDecodeError:
-            eprint("[file-suggestion] Failed to parse input JSON")
+        if not hook_input:
             print("[]")
             return
 

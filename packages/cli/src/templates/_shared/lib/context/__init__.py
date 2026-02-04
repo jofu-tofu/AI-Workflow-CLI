@@ -37,9 +37,9 @@ from .discovery import (
     format_implementation_continuation,
     format_context_picker_prompt,
     format_ready_for_new_work,
+    format_relative_time,
 )
 from .task_sync import (
-    generate_hydration_instructions,
     generate_task_summary,
     record_session_start,
     record_task_created,
@@ -54,6 +54,10 @@ from .plan_archive import (
     create_context_from_plan,
     mark_plan_implementation_started,
     mark_plan_completed,
+)
+from .context_extractor import (
+    extract_context_id,
+    extract_context_id_for_session,
 )
 
 __all__ = [
@@ -93,8 +97,8 @@ __all__ = [
     "format_implementation_continuation",
     "format_context_picker_prompt",
     "format_ready_for_new_work",
+    "format_relative_time",
     # Task Sync
-    "generate_hydration_instructions",
     "generate_task_summary",
     "record_session_start",
     "record_task_created",
@@ -108,4 +112,7 @@ __all__ = [
     "create_context_from_plan",
     "mark_plan_implementation_started",
     "mark_plan_completed",
+    # Context Extractor
+    "extract_context_id",
+    "extract_context_id_for_session",
 ]

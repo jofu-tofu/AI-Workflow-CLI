@@ -55,6 +55,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
+from lib.base.hook_utils import load_hook_input
 from lib.base.utils import eprint, project_dir
 from lib.context.context_manager import (
     get_all_contexts,
@@ -301,15 +302,10 @@ def main():
     and prints system reminder if context is low.
     """
     try:
-        # Read hook input from stdin
-        input_data = sys.stdin.read().strip()
+        # Read hook input using shared utility
+        hook_input = load_hook_input()
 
-        if not input_data:
-            return
-
-        try:
-            hook_input = json.loads(input_data)
-        except json.JSONDecodeError:
+        if not hook_input:
             return
 
         # Always check for mode transitions on implementation tools

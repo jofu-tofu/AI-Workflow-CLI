@@ -19,7 +19,6 @@ Hook input (from Claude Code):
 Hook output:
 - Prints system reminders to stdout for context enforcement
 """
-import json
 import sys
 from pathlib import Path
 from typing import List
@@ -29,6 +28,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
+from lib.base.hook_utils import load_hook_input
 from lib.base.utils import eprint, project_dir
 from lib.context.context_manager import (
     update_context_session_id,
@@ -39,6 +39,45 @@ from lib.context.context_manager import (
 
 # Import the enforcement module
 from hooks.context_enforcer import determine_context, BlockRequest
+
+
+def format_claudemd_reminder() -> str:
+    """Generate reminder to update directory-specific CLAUDE.md files."""
+    return """
+## CLAUDE.md Decision Capture
+
+When implementing changes, consider whether this work involves decisions with non-obvious rationale. If so, update or create a CLAUDE.md in the relevant directory.
+
+**When to update CLAUDE.md:**
+- Architectural choices (why this pattern over alternatives)
+- Non-obvious constraints (why something MUST be done a certain way)
+- Learned patterns (discovered issues that future work should avoid)
+- Integration decisions (why components connect this way)
+- Workarounds (temporary solutions with context on the underlying issue)
+
+**What to capture (use this format):**
+
+```markdown
+## [Topic]
+
+**Decision:** [What was decided]
+**Rationale:** [Why this approach was chosen]
+**Constraint:** [What breaks if this changes]
+```
+
+**Directory-specific:** Place CLAUDE.md in the directory closest to the affected code. If no CLAUDE.md exists, create one with a descriptive header.
+
+**Example new CLAUDE.md:**
+
+```markdown
+# Component Name
+
+Development decisions and patterns for this component.
+
+## [First Decision Topic]
+...
+```
+"""
 
 
 def _update_in_flight_status(context_id: str, hook_input: dict, project_root: Path) -> None:
@@ -77,15 +116,10 @@ def main():
     Uses session_id to detect first prompt vs subsequent prompts.
     """
     try:
-        # Read hook input from stdin
-        input_data = sys.stdin.read().strip()
+        # Read hook input using shared utility
+        hook_input = load_hook_input()
 
-        if not input_data:
-            return
-
-        try:
-            hook_input = json.loads(input_data)
-        except json.JSONDecodeError:
+        if not hook_input:
             return
 
         # Get user prompt and project root
@@ -94,6 +128,7 @@ def main():
         session_id = hook_input.get("session_id", "unknown")
 
         outputs: List[str] = []
+        active_context_id = None  # Track context for CLAUDE.md reminder
 
         # First-prompt detection: check if session_id is already bound to a context
         existing_context = get_context_by_session_id(session_id, project_root)
@@ -104,11 +139,14 @@ def main():
             eprint(f"[user_prompt_submit] Session {session_id[:8]}... already bound to {existing_context.id}")
             # Still update in-flight status based on permission mode
             _update_in_flight_status(existing_context.id, hook_input, project_root)
+            active_context_id = existing_context.id
         elif user_prompt:
             # FIRST prompt - need context detection
             try:
-                context_id, method, context_output = determine_context(user_prompt, project_root, session_id)
+                context_id, method, context_output, remaining_prompt = determine_context(user_prompt, project_root, session_id)
                 eprint(f"[user_prompt_submit] Context: {method} -> {context_id}")
+                if remaining_prompt:
+                    eprint(f"[user_prompt_submit] Actual request: {remaining_prompt[:50]}...")
 
                 if context_id:
                     # Bind session to context
@@ -117,6 +155,7 @@ def main():
 
                     # Update in-flight status based on permission mode
                     _update_in_flight_status(context_id, hook_input, project_root)
+                    active_context_id = context_id
 
                 if context_output:
                     outputs.append(context_output)
@@ -126,6 +165,13 @@ def main():
                 # This shows the context picker to the user
                 print(e.message, file=sys.stderr)
                 sys.exit(2)
+
+        # Inject CLAUDE.md reminder when in implementing mode
+        if active_context_id:
+            context = get_context(active_context_id, project_root)
+            if context and context.in_flight and context.in_flight.mode == "implementing":
+                outputs.append(f"<system-reminder>{format_claudemd_reminder()}</system-reminder>")
+                eprint(f"[user_prompt_submit] Injected CLAUDE.md reminder (mode=implementing)")
 
         # Print output
         if outputs:

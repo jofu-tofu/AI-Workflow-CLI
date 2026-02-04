@@ -193,6 +193,7 @@ PLAN:
 
     cmd_args = [
         claude_path,
+        "-p",  # Enable print mode to read prompt from stdin
         "--agent", "plan-orchestrator",
         "--model", config.model,
         "--permission-mode", "bypassPermissions",

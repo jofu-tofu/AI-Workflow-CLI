@@ -18,6 +18,17 @@
     }
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .aiwcli/_shared/hooks/session_start.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [
@@ -94,6 +105,16 @@
       }
     ],
     "PreToolUse": [
+      {
+        "matcher": "TaskCreate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .aiwcli/_shared/hooks/task_create_atomicity.py",
+            "timeout": 15000
+          }
+        ]
+      },
       {
         "matcher": "Write",
         "hooks": [

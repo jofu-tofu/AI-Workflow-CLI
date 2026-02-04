@@ -165,8 +165,9 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
 
         # Fallback to old method if inference failed
         if not base_id:
-            # Fallback: take first 10 words with 3+ chars, then slugify
-            words = [w for w in summary.split() if len(w) >= 3][:10]
+            # Fallback: use stop word filter, limit to 12 words
+            from .stop_words import STOP_WORDS
+            words = [w for w in summary.lower().split() if w not in STOP_WORDS and len(w) > 1][:12]
             base_id = sanitize_title(' '.join(words), max_len=100)
 
     if not existing_ids:

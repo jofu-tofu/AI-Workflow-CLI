@@ -105,7 +105,7 @@ def format_context_list(contexts: List[Context]) -> str:
 
     for i, ctx in enumerate(contexts, 1):
         # Format last active time
-        time_str = _format_relative_time(ctx.last_active)
+        time_str = format_relative_time(ctx.last_active)
 
         # Build status indicator
         status_indicator = ""
@@ -314,7 +314,7 @@ def format_context_selection_required(contexts: List[Context]) -> str:
     ]
 
     for i, ctx in enumerate(contexts, 1):
-        time_str = _format_relative_time(ctx.last_active)
+        time_str = format_relative_time(ctx.last_active)
 
         # Add status indicator for in-flight work
         status = ""
@@ -345,7 +345,7 @@ def format_active_context_reminder(context: Context) -> str:
     Returns:
         Formatted system reminder
     """
-    time_str = _format_relative_time(context.last_active)
+    time_str = format_relative_time(context.last_active)
 
     # Build mode display
     mode_display = "Active"
@@ -392,7 +392,7 @@ def format_context_created(context: Context) -> str:
     return "\n".join(lines)
 
 
-def _format_relative_time(iso_timestamp: Optional[str]) -> str:
+def format_relative_time(iso_timestamp: Optional[str]) -> str:
     """
     Format ISO timestamp as relative time string.
 

@@ -29,6 +29,7 @@ Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}/reviews/
 
 import json
 import os
+import random
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -83,7 +84,8 @@ try:
         get_all_in_flight_contexts,
         get_all_contexts,
     )
-    from lib.base.constants import get_context_reviews_dir, get_review_folder_path
+    from lib.base.constants import get_context_reviews_dir, get_review_folder_path, get_context_dir
+    from debug import debug_log, debug_raw
 except ImportError as e:
     print(f"[cc-native-plan-review] Failed to import lib: {e}", file=sys.stderr)
     sys.exit(0)  # Non-blocking failure
@@ -489,6 +491,10 @@ def main() -> int:
     reviews_dir = get_context_reviews_dir(active_context.id, base) / "cc-native"
     eprint(f"[cc-native-plan-review] Using context reviews dir: {reviews_dir}")
 
+    # Get context path for debug logging
+    context_path = get_context_dir(active_context.id, base)
+    eprint(f"[cc-native-plan-review] Context path for debug: {context_path}")
+
     # Check if we've exhausted review iterations from context
     existing_iteration = load_iteration_state(reviews_dir)
     if existing_iteration:
@@ -587,19 +593,42 @@ def main() -> int:
 
         selected_agents: List[AgentConfig] = []
 
+        # Load mandatory and fallback config
+        mandatory_names = set(agent_settings.get("mandatoryAgents", [
+            "handoff-readiness", "clarity-auditor", "skeptic"
+        ]))
+        fallback_by_complexity = agent_settings.get("fallbackByComplexity", {
+            "simple": 0, "medium": 5, "high": 9
+        })
+
         if enabled_agents:
+            # Split into mandatory and non-mandatory pools
+            mandatory_agents = [a for a in enabled_agents if a.name in mandatory_names]
+            non_mandatory = [a for a in enabled_agents if a.name not in mandatory_names]
+
+            eprint(f"[cc-native-plan-review] Mandatory agents: {[a.name for a in mandatory_agents]}")
+            eprint(f"[cc-native-plan-review] Non-mandatory pool: {len(non_mandatory)} agents")
+
             if orch_result and not legacy_mode:
-                # Use orchestrator result from phase 1
                 detected_complexity = orch_result.complexity
 
-                selected_names = set(orch_result.selected_agents)
-                selected_agents = [a for a in enabled_agents if a.name in selected_names]
+                # Get orchestrator's additional selections (excluding mandatory since they always run)
+                orch_selected_names = set(orch_result.selected_agents) - mandatory_names
+                orch_selected = [a for a in non_mandatory if a.name in orch_selected_names]
 
-                if not selected_agents and selected_names:
-                    eprint(f"[cc-native-plan-review] Warning: orchestrator selected unknown agents: {selected_names}")
-                    selected_agents = [a for a in enabled_agents if orch_result.category in a.categories]
+                eprint(f"[cc-native-plan-review] Orchestrator selected (non-mandatory): {[a.name for a in orch_selected]}")
 
-                eprint(f"[cc-native-plan-review] Orchestrator selected: {[a.name for a in selected_agents]}")
+                # Random fallback if orchestrator selected zero additional agents
+                if not orch_selected and non_mandatory:
+                    fallback_count = fallback_by_complexity.get(detected_complexity, 5)
+                    fallback_count = min(fallback_count, len(non_mandatory))
+                    if fallback_count > 0:
+                        orch_selected = random.sample(non_mandatory, fallback_count)
+                        eprint(f"[cc-native-plan-review] Random fallback ({detected_complexity}): {[a.name for a in orch_selected]}")
+
+                # Combine: mandatory + orchestrator/fallback selection
+                selected_agents = mandatory_agents + orch_selected
+                eprint(f"[cc-native-plan-review] Final selection: {len(selected_agents)} agents ({len(mandatory_agents)} mandatory + {len(orch_selected)} additional)")
             else:
                 eprint("[cc-native-plan-review] Running in legacy mode (all enabled agents)")
                 selected_agents = enabled_agents
@@ -618,9 +647,17 @@ def main() -> int:
             num_workers = len(selected_agents) if max_parallel <= 0 else min(max_parallel, len(selected_agents))
             eprint(f"[cc-native-plan-review] Launching {len(selected_agents)} agents in parallel (workers={num_workers})")
 
+            # Debug log the agent review start
+            debug_log(context_path, session_id, "hook", "agent_review_start", {
+                "agents": [a.name for a in selected_agents],
+                "timeout": timeout,
+                "max_turns": max_turns,
+                "complexity": detected_complexity,
+            })
+
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 futures = {
-                    executor.submit(run_agent_review, plan, agent, REVIEW_SCHEMA, timeout, max_turns): agent
+                    executor.submit(run_agent_review, plan, agent, REVIEW_SCHEMA, timeout, max_turns, context_path, session_id): agent
                     for agent in selected_agents
                 }
                 for future in as_completed(futures):
@@ -761,7 +798,8 @@ def main() -> int:
         )
 
     mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review", iteration_state)
-    print(json.dumps(out, ensure_ascii=False))
+    # Use ensure_ascii=True to avoid Windows cp1252 encoding errors
+    print(json.dumps(out, ensure_ascii=True))
     return 0
 
 

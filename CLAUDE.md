@@ -50,3 +50,14 @@ The Claude Code hook API evolves frequently. Incorrect field names or structures
 **Example verification queries:**
 - "What is the correct output format for PreToolUse hooks that block tool execution?"
 - "What fields are available in PostToolUse hook input?"
+
+## After Modifying Hooks
+
+**Always validate Python syntax after editing hooks:**
+
+```bash
+python -m py_compile .aiwcli/_cc-native/hooks/cc-native-plan-review.py
+python -m py_compile .aiwcli/_shared/hooks/*.py
+```
+
+Hooks fail silently on syntax errors. Running py_compile catches these before they reach production.

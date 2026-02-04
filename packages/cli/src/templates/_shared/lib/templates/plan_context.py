@@ -72,47 +72,33 @@ This context allows reviewers to assess whether your plan addresses the user's n
 def get_questions_offer_template() -> str:
     """Get the clarifying questions offer template.
 
+    Uses persona-based questioning to surface hidden constraints.
+
     Returns:
         Formatted markdown prompt for offering clarifying questions
     """
-    return """
+    from .persona_questions import format_questions_for_prompt
+
+    persona_questions = format_questions_for_prompt()
+
+    return f"""
 ## First Plan Write - Optional Clarifying Questions
 
 Your initial plan has been saved. Before finalizing, ask the user if they'd like to answer clarifying questions to refine it.
 
-**Use AskUserQuestion now with this question:**
+**Use AskUserQuestion now:**
 
 Header: "Questions?"
-Question: "I've drafted an initial plan. Would you like to answer a few clarifying questions so I can refine it?"
+Question: "I've drafted an initial plan. Would you like to answer a few clarifying questions from different perspectives so I can refine it?"
 Options:
-- "Yes, ask me questions" (description: "I'll interview you about technical details, constraints, and preferences, then update the plan")
+- "Yes, ask me questions" (description: "I'll ask targeted questions to surface hidden constraints, then update the plan")
 - "No, proceed as-is" (description: "Skip questions and proceed with the current plan")
 
-### If user chooses YES - Interview them about:
+### If user chooses YES:
 
-1. **Technical Implementation**
-   - Preferred approaches or patterns?
-   - Technologies/libraries to use or avoid?
-   - Performance or scalability requirements?
+{persona_questions}
 
-2. **Constraints & Requirements**
-   - Hard constraints that must be respected?
-   - Deadlines or scope limitations?
-   - Dependencies on other systems?
-
-3. **Edge Cases & Concerns**
-   - Known edge cases to handle?
-   - Security or privacy considerations?
-   - Error handling preferences?
-
-4. **Tradeoffs**
-   - Speed vs. quality preferences?
-   - Simplicity vs. flexibility?
-   - What's acceptable to defer to later?
-
-Ask focused, **non-obvious** questions using AskUserQuestion (max 12). Questions should surface hidden constraints, unstated assumptions, or preferences that aren't evident from the original request - things that would meaningfully change the plan.
-
-After gathering answers, **update the plan file** with the refined content before calling ExitPlanMode.
+After gathering answers, **update the plan file** with refined content before calling ExitPlanMode.
 
 ### If user chooses NO:
 Proceed directly to ExitPlanMode with the current plan.

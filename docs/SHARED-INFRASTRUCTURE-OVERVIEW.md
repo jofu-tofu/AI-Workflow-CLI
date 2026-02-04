@@ -282,51 +282,14 @@ Claude Code has native `TaskCreate`, `TaskUpdate`, `TaskList` tools, but they ar
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Hydration Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  TASK HYDRATION ON SESSION START                                           │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  1. User starts session                                                     │
-│     └─→ SessionStart hook: "You have active context 'auth-system'"          │
-│                                                                             │
-│  2. User: "Continue auth-system"                                            │
-│     └─→ generate_hydration_instructions("auth-system")                      │
-│                                                                             │
-│  3. Hook outputs:                                                           │
-│     "Please recreate these tasks using TaskCreate:                          │
-│                                                                             │
-│      Task: Add JWT middleware                                               │
-│      TaskCreate:                                                            │
-│        subject: 'Add JWT middleware'                                        │
-│        description: 'Create bearer token validation...'                     │
-│        metadata: {'persistent_id': 'aiw-1', 'context': 'auth-system'}       │
-│                                                                             │
-│      Task: Implement refresh tokens                                         │
-│      TaskCreate:                                                            │
-│        subject: 'Implement refresh tokens'                                  │
-│        description: '...'                                                   │
-│        metadata: {'persistent_id': 'aiw-2', 'context': 'auth-system'}"      │
-│                                                                             │
-│  4. Claude executes TaskCreate calls                                        │
-│     └─→ Claude's TaskList now has pending tasks from previous session       │
-│                                                                             │
-│  5. Append session_started event with tasks_hydrated list                   │
-│     └─→ {"event":"session_started","tasks_hydrated":["aiw-1","aiw-2"]}     │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
 ### Why This Matters
 
-| Without Integration | With Bi-Directional Sync |
-|---------------------|--------------------------|
-| Tasks disappear on session end | Tasks persist across sessions |
-| User manually recreates work | Automatic task restoration |
+| Without Integration | With Task Persistence |
+|---------------------|----------------------|
+| Tasks disappear on session end | Task history persisted to events.jsonl |
+| No record of work done | Complete task history available |
 | No connection to Claude's tools | Leverages native Claude functionality |
-| Context feels disconnected | Seamless continuation |
+| Context feels disconnected | Task events captured automatically |
 
 ## NEW FEATURE: Rich Task Events
 
@@ -842,20 +805,22 @@ if are_all_tasks_completed("auth-system"):
     print("All tasks done. Wrap up?")
 ```
 
-### Task Sync (NEW)
+### Task Sync
 
 ```python
 from _shared.lib.context.task_sync import (
-    generate_hydration_instructions,
-    generate_persist_reminder
+    generate_task_summary,
+    record_task_created,
+    record_task_completed,
 )
 
-# Called by SessionStart when user selects a context
-instructions = generate_hydration_instructions("auth-system")
-# Returns formatted output for Claude to recreate tasks
+# Generate summary of all tasks in a context
+summary = generate_task_summary("auth-system")
+# Returns formatted task summary
 
-# Returns CLAUDE.md content reminding Claude to persist task changes
-reminder = generate_persist_reminder()
+# Record task events (usually called by capture hooks)
+record_task_created(context_id, task_id, subject, description)
+record_task_completed(context_id, task_id, evidence, work_summary)
 ```
 
 ### Discovery (SessionStart)
