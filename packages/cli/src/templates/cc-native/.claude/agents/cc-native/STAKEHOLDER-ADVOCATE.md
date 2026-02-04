@@ -3,7 +3,7 @@ name: stakeholder-advocate
 description: Ensures plans actually serve user and business needs, not just technical elegance. Evaluates who benefits, who bears costs, and whether the plan aligns with stakeholder priorities.
 model: sonnet
 focus: user value and business alignment
-enabled: true
+enabled: false
 categories:
   - code
   - design

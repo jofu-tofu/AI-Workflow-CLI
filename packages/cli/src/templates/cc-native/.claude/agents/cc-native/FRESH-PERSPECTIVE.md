@@ -3,7 +3,7 @@ name: fresh-perspective
 description: Provides unbiased problem-solving perspective without code context. Analyzes from first principles to combat code-anchored thinking.
 model: sonnet
 focus: first-principles problem analysis
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

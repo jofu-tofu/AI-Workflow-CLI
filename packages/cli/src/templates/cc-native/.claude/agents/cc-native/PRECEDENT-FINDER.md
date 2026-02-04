@@ -3,7 +3,7 @@ name: precedent-finder
 description: Pattern-matches to historical precedents and their results. History predicts plan outcomes. This agent asks "when has this been tried before, and what happened?"
 model: sonnet
 focus: historical patterns and precedent analysis
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

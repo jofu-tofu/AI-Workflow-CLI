@@ -3,7 +3,7 @@ name: skeptic
 description: Adversarial reviewer specializing in problem-solution alignment and assumption validation. Questions whether the plan solves the right problem, challenges hidden assumptions, and identifies over-engineering. Uses Socratic questioning to surface fundamental flaws.
 model: sonnet
 focus: problem-solution alignment and assumption validation
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

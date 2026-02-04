@@ -3,7 +3,7 @@ name: accessibility-tester
 description: Expert accessibility tester specializing in WCAG compliance, inclusive design, and universal access. Masters screen reader compatibility, keyboard navigation, and assistive technology integration with focus on creating barrier-free digital experiences.
 model: sonnet
 focus: accessibility compliance and UX concerns
-enabled: true
+enabled: false
 categories:
   - code
   - design

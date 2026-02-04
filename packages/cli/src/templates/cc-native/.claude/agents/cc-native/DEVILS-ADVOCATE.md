@@ -3,7 +3,7 @@ name: devils-advocate
 description: Takes the contrarian position and pushes logic to uncomfortable extremes. If a plan can't survive its antithesis, it's not robust. This agent asks "what if the exact opposite is true?"
 model: sonnet
 focus: contrarian analysis and reductio ad absurdum
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

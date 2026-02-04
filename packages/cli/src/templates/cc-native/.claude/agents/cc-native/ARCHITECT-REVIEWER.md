@@ -3,7 +3,7 @@ name: architect-reviewer
 description: Expert architecture reviewer specializing in system design validation, architectural patterns, and technical decision assessment. Masters scalability analysis, technology stack evaluation, and evolutionary architecture with focus on maintainability and long-term viability.
 model: sonnet
 focus: architectural concerns and scalability
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

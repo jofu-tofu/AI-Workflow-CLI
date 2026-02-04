@@ -3,7 +3,7 @@ name: performance-engineer
 description: Expert performance engineer specializing in system optimization, bottleneck identification, and scalability engineering. Masters performance testing, profiling, and tuning across applications, databases, and infrastructure with focus on achieving optimal response times and resource efficiency.
 model: sonnet
 focus: performance bottlenecks and optimization
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

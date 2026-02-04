@@ -3,7 +3,7 @@ name: plan-orchestrator
 description: Intelligent plan analyzer that determines complexity and routes to appropriate reviewers. Uses fast inference to minimize latency while maximizing review accuracy through targeted agent selection.
 model: haiku
 focus: plan complexity analysis and agent routing
-enabled: true
+enabled: false
 categories:
   - orchestration
 tools: Read, Glob, Grep

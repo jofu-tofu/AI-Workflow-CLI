@@ -3,7 +3,7 @@ name: handoff-readiness
 description: Tests whether plans contain sufficient context for execution by a fresh context window with zero prior knowledge. Simulates receiving the plan cold and identifies every point where clarification would be needed—because that question can never be answered. Detects undefined references, missing big-picture goals, implicit assumptions, and context-dependent gaps.
 model: sonnet
 focus: fresh context execution readiness
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

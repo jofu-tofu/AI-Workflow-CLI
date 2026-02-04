@@ -3,7 +3,7 @@ name: completeness-checker
 description: Identifies missing steps, overlooked edge cases, error handling gaps, and incomplete thinking in plans. Ensures plans are thorough enough to execute without discovering critical gaps mid-implementation.
 model: sonnet
 focus: missing steps and edge cases
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

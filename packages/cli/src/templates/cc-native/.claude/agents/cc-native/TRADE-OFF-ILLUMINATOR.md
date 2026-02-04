@@ -3,7 +3,7 @@ name: trade-off-illuminator
 description: Forces explicit acknowledgment of what's being sacrificed. Every decision has a price. Plans hide their costs. This agent drags hidden trade-offs into the light and asks "what are you giving up?"
 model: sonnet
 focus: hidden costs and sacrificed alternatives
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

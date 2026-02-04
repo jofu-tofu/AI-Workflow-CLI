@@ -3,7 +3,7 @@ name: risk-assessor
 description: Identifies potential failure modes, external dependencies, reversibility concerns, and mitigation strategies. Focuses on what could go wrong and how to prepare for it.
 model: sonnet
 focus: failure modes and mitigation strategies
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

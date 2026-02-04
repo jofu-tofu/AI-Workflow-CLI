@@ -3,7 +3,7 @@ name: second-order-analyst
 description: Traces consequences 2-3 steps beyond immediate effects. Plans that look safe in isolation often trigger cascading failures. This agent maps the domino chain and asks "what breaks downstream?"
 model: sonnet
 focus: cascading effects and downstream consequences
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

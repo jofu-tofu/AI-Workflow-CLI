@@ -3,7 +3,7 @@ name: penetration-tester
 description: Expert penetration tester specializing in ethical hacking, vulnerability assessment, and security testing. Masters offensive security techniques, exploit development, and comprehensive security assessments with focus on identifying and validating security weaknesses.
 model: sonnet
 focus: security vulnerabilities and attack vectors
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

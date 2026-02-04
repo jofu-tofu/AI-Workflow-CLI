@@ -522,7 +522,9 @@ def main() -> int:
     gemini_enabled = plan_review_enabled and reviewers_config.get("gemini", {}).get("enabled", False)
 
     agent_library = load_agent_library(base, agent_settings) if agent_review_enabled else []
-    enabled_agents = [a for a in agent_library if a.enabled]
+    # Load all agents regardless of enabled status - enabled:false only prevents
+    # Claude Code auto-suggestion, not plan-review usage
+    enabled_agents = agent_library
     timeout = agent_settings.get("timeout", 120)
     legacy_mode = agent_settings.get("legacyMode", False)
 
@@ -593,11 +595,11 @@ def main() -> int:
                 selected_names = set(orch_result.selected_agents)
                 selected_agents = [a for a in enabled_agents if a.name in selected_names]
 
-                    if not selected_agents and selected_names:
-                        eprint(f"[cc-native-plan-review] Warning: orchestrator selected unknown agents: {selected_names}")
-                        selected_agents = [a for a in enabled_agents if orch_result.category in a.categories]
+                if not selected_agents and selected_names:
+                    eprint(f"[cc-native-plan-review] Warning: orchestrator selected unknown agents: {selected_names}")
+                    selected_agents = [a for a in enabled_agents if orch_result.category in a.categories]
 
-                    eprint(f"[cc-native-plan-review] Orchestrator selected: {[a.name for a in selected_agents]}")
+                eprint(f"[cc-native-plan-review] Orchestrator selected: {[a.name for a in selected_agents]}")
             else:
                 eprint("[cc-native-plan-review] Running in legacy mode (all enabled agents)")
                 selected_agents = enabled_agents
@@ -764,4 +766,17 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as e:
+        import traceback
+        print(f"[cc-native-plan-review] FATAL ERROR: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        # Output error to Claude via hook format so it's visible
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "additionalContext": f"**CC-Native Plan Review Hook Error**\n\nThe hook encountered an error:\n```\n{traceback.format_exc()}\n```\n\nPlease report this issue.",
+            }
+        }))
+        raise SystemExit(1)

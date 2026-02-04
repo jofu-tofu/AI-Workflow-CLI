@@ -3,7 +3,7 @@ name: feasibility-analyst
 description: Evaluates whether plans are achievable given available resources, time, expertise, and technical constraints. Identifies gaps between what's planned and what's realistically possible.
 model: sonnet
 focus: resource constraints and technical viability
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

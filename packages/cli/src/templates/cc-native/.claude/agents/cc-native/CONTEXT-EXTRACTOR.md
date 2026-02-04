@@ -3,7 +3,7 @@ name: context-extractor
 description: Extracts abstracted problem context from conversation for fresh perspective analysis. Strips implementation details, preserves problem essence.
 model: haiku
 focus: context abstraction
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

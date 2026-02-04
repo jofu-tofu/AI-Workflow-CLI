@@ -3,7 +3,7 @@ name: reversibility-analyst
 description: Identifies one-way doors, lock-in, and path dependencies that foreclose future options. Some decisions close doors permanently. This agent asks "can you undo this if you're wrong?"
 model: sonnet
 focus: one-way doors and irreversible decisions
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure

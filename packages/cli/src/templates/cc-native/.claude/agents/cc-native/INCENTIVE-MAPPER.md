@@ -3,7 +3,7 @@ name: incentive-mapper
 description: Examines who wins, who loses, and whether incentives align with desired outcomes. Plans fail when people's motivations don't match goals. This agent asks "who benefits from this being true?"
 model: sonnet
 focus: incentive alignment and motivation structures
-enabled: true
+enabled: false
 categories:
   - code
   - infrastructure
