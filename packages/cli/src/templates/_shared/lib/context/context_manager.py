@@ -938,10 +938,10 @@ def get_all_in_flight_contexts(project_root: Path = None) -> List[Context]:
     Return all contexts with truly in-flight work requiring attention.
 
     In-flight modes (require continuation/action):
-    - planning: Active planning session
     - pending_implementation: Plan created, awaiting implementation
 
     NOT in-flight (normal working state):
+    - planning: Active planning session (doesn't auto-select context)
     - implementing: Active work, but doesn't block new context creation
     - none: No active work
 
@@ -956,7 +956,7 @@ def get_all_in_flight_contexts(project_root: Path = None) -> List[Context]:
     Returns:
         List of contexts with in-flight work requiring attention
     """
-    IN_FLIGHT_MODES = {"planning", "pending_implementation"}
+    IN_FLIGHT_MODES = {"pending_implementation"}
     contexts = get_all_contexts(status="active", project_root=project_root)
     return [c for c in contexts if c.in_flight and c.in_flight.mode in IN_FLIGHT_MODES]
 

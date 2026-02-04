@@ -36,7 +36,6 @@ from lib.context.context_manager import (
     get_context,
     get_context_by_session_id,
 )
-from lib.context.task_sync import generate_hydration_instructions
 
 # Import the enforcement module
 from hooks.context_enforcer import determine_context, BlockRequest
@@ -62,11 +61,12 @@ def _update_in_flight_status(context_id: str, hook_input: dict, project_root: Pa
         if current_mode != "planning":
             update_plan_status(context_id, "planning", project_root=project_root)
             eprint(f"[user_prompt_submit] Set status to 'planning'")
-    elif permission_mode in ["acceptEdits", "bypassPermissions"]:
-        # Only transition to implementing if we have pending work
+    elif permission_mode != "plan":
+        # Any non-plan permission mode transitions pending/planning to implementing
+        # This includes "default" (after /clear) and "acceptEdits"/"bypassPermissions"
         if current_mode in ["pending_implementation", "planning"]:
             update_plan_status(context_id, "implementing", project_root=project_root)
-            eprint(f"[user_prompt_submit] Set status to 'implementing'")
+            eprint(f"[user_prompt_submit] Set status to 'implementing' (permission_mode={permission_mode})")
 
 
 def main():
@@ -100,12 +100,12 @@ def main():
 
         if existing_context:
             # NOT first prompt - session already bound to context
-            # Skip expensive context detection and task hydration
+            # Skip expensive context detection
             eprint(f"[user_prompt_submit] Session {session_id[:8]}... already bound to {existing_context.id}")
             # Still update in-flight status based on permission mode
             _update_in_flight_status(existing_context.id, hook_input, project_root)
         elif user_prompt:
-            # FIRST prompt - need context detection and potentially task hydration
+            # FIRST prompt - need context detection
             try:
                 context_id, method, context_output = determine_context(user_prompt, project_root, session_id)
                 eprint(f"[user_prompt_submit] Context: {method} -> {context_id}")
@@ -117,12 +117,6 @@ def main():
 
                     # Update in-flight status based on permission mode
                     _update_in_flight_status(context_id, hook_input, project_root)
-
-                    # Task hydration - restore pending tasks from events.jsonl
-                    hydration_instructions = generate_hydration_instructions(context_id, project_root)
-                    if hydration_instructions and "No pending tasks" not in hydration_instructions:
-                        outputs.append(hydration_instructions)
-                        eprint(f"[user_prompt_submit] Generated task hydration instructions")
 
                 if context_output:
                     outputs.append(context_output)
