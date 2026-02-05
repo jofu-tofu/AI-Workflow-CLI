@@ -2,6 +2,7 @@ import {promises as fs} from 'node:fs'
 import {dirname, join} from 'node:path'
 
 import {IdePathResolver} from './ide-path-resolver.js'
+import {pathExists} from './paths.js'
 import {mergeTemplateContent} from './template-merger.js'
 
 /**
@@ -174,18 +175,6 @@ export interface InstallationResult {
 }
 
 /**
- * Check if a path exists
- */
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await fs.access(path)
-    return true
-  } catch {
-    return false
-  }
-}
-
-/**
  * Check template installation status for a method.
  * Returns which items exist and which are missing.
  *
@@ -273,7 +262,7 @@ export async function checkTemplateStatus(
  * Patterns to exclude when copying template directories.
  * These are development/test artifacts that shouldn't be packaged.
  */
-const EXCLUDED_PATTERNS = [
+export const EXCLUDED_PATTERNS = [
   '_output',
   '__pycache__',
   '.pytest_cache',
@@ -285,7 +274,7 @@ const EXCLUDED_PATTERNS = [
 /**
  * Check if a filename should be excluded from copying
  */
-function shouldExclude(name: string): boolean {
+export function shouldExclude(name: string): boolean {
   return EXCLUDED_PATTERNS.some((pattern) => {
     if (typeof pattern === 'string') {
       return name === pattern

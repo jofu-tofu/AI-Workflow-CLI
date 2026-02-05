@@ -21,6 +21,17 @@ except ImportError:
     from constants import validate_plan_path, PLANS_DIR
     from atomic_write import atomic_write
 
+# Import canonical eprint from shared lib
+try:
+    from ...lib.base.utils import eprint
+except ImportError:
+    # Fallback for direct execution
+    import sys as _sys
+    from pathlib import Path as _Path
+    _shared_lib = _Path(__file__).resolve().parent.parent.parent / "_shared" / "lib"
+    _sys.path.insert(0, str(_shared_lib))
+    from base.utils import eprint
+
 
 # ---------------------------
 # Constants
@@ -33,15 +44,6 @@ DEFAULT_REVIEW_ITERATIONS: Dict[str, int] = {
     "medium": 1,
     "high": 2,
 }
-
-
-# ---------------------------
-# Utilities
-# ---------------------------
-
-def eprint(*args: Any) -> None:
-    """Print to stderr."""
-    print(*args, file=sys.stderr)
 
 
 # ---------------------------

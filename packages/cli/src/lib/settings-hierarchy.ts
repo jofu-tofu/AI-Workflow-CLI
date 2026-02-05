@@ -4,6 +4,7 @@ import {join} from 'node:path'
 
 import type {ClaudeSettings, SettingsLocation} from './claude-settings-types.js'
 import {IdePathResolver} from './ide-path-resolver.js'
+import {pathExists} from './paths.js'
 
 /**
  * Discover Claude settings files in the hierarchy
@@ -24,7 +25,7 @@ export async function discoverSettingsFiles(projectDir: string): Promise<Setting
   locations.push({
     type: 'user',
     path: userSettingsPath,
-    exists: await fileExists(userSettingsPath),
+    exists: await pathExists(userSettingsPath),
   })
 
   // Project settings (shared)
@@ -32,7 +33,7 @@ export async function discoverSettingsFiles(projectDir: string): Promise<Setting
   locations.push({
     type: 'project',
     path: projectSettingsPath,
-    exists: await fileExists(projectSettingsPath),
+    exists: await pathExists(projectSettingsPath),
   })
 
   // Local project settings (gitignored)
@@ -40,22 +41,10 @@ export async function discoverSettingsFiles(projectDir: string): Promise<Setting
   locations.push({
     type: 'local',
     path: localSettingsPath,
-    exists: await fileExists(localSettingsPath),
+    exists: await pathExists(localSettingsPath),
   })
 
   return locations
-}
-
-/**
- * Check if file exists
- */
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await fs.access(path)
-    return true
-  } catch {
-    return false
-  }
 }
 
 /**
@@ -90,7 +79,7 @@ export async function writeClaudeSettings(path: string, settings: ClaudeSettings
   await fs.mkdir(dir, {recursive: true})
 
   // Backup existing file if it exists
-  if (await fileExists(path)) {
+  if (await pathExists(path)) {
     const backupPath = `${path}.backup`
     await fs.copyFile(path, backupPath)
   }

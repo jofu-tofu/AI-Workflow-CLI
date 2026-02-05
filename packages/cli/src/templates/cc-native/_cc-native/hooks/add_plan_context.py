@@ -29,6 +29,7 @@ from utils import (
     eprint,
     was_questions_offered,
     mark_questions_offered,
+    project_dir,
 )
 from templates.plan_context import (
     get_evaluation_context_reminder,
@@ -41,12 +42,6 @@ def is_plan_file_write(payload: Dict[str, Any]) -> bool:
     tool_input = payload.get("tool_input", {})
     file_path = str(tool_input.get("file_path", ""))
     return ".claude/plans/" in file_path.replace("\\", "/") and file_path.endswith(".md")
-
-
-def project_dir(payload: Dict[str, Any]) -> Path:
-    """Get project directory from payload or environment."""
-    p = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd()
-    return Path(p)
 
 
 def load_plan_context_config(proj_dir: Path) -> Dict[str, Any]:

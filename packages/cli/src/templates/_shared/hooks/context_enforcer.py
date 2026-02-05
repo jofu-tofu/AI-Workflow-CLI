@@ -49,7 +49,6 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import load_hook_input
 from lib.base.subprocess_utils import is_internal_call
 from lib.context.context_manager import (
     Context,
@@ -300,18 +299,13 @@ def format_context_picker_stderr(contexts: List[Context]) -> str:
     return "\n".join(lines)
 
 
-def format_command_feedback(
-    ended_contexts: List[Context],
-    selected_context: Optional[Context],
-    remaining_prompt: Optional[str] = None
-) -> str:
+def format_command_feedback(ended_contexts: List[Context], selected_context: Optional[Context]) -> str:
     """
     Format feedback about what context operations were performed.
 
     Args:
         ended_contexts: Contexts that were ended/completed
         selected_context: Context that was selected (if any)
-        remaining_prompt: User's actual request after caret command (if any)
 
     Returns:
         Formatted feedback message
@@ -344,14 +338,6 @@ def format_command_feedback(
         lines.append(f'All work belongs to context "{selected_context.id}".')
         lines.append("Tasks created with TaskCreate will be persisted to this context.")
 
-    # Add user's actual request if provided after caret command
-    if remaining_prompt and remaining_prompt.strip():
-        lines.append("")
-        lines.append("---")
-        lines.append("")
-        lines.append("**User's actual request:**")
-        lines.append(f"> {remaining_prompt}")
-
     return "\n".join(lines)
 
 
@@ -359,7 +345,7 @@ def determine_context(
     user_prompt: str,
     project_root: Path = None,
     session_id: str = None
-) -> Tuple[Optional[str], str, Optional[str], Optional[str]]:
+) -> Tuple[Optional[str], str, Optional[str]]:
     """
     Determine which context this prompt belongs to.
 
@@ -369,7 +355,6 @@ def determine_context(
         - method: How context was determined (session_match, in_flight, caret_select,
                   auto_created, single_context, blocked)
         - output: System reminder to inject, or None
-        - remaining_prompt: Actual user request after caret command, or None
 
     Raises:
         BlockRequest: When request should be blocked to show picker to user
@@ -377,7 +362,7 @@ def determine_context(
     # 0. Skip context creation for internal subprocess calls (orchestrator, agents)
     if is_internal_call():
         eprint("[context_enforcer] Skipping: internal subprocess call")
-        return (None, "skip_internal", None, None)
+        return (None, "skip_internal", None)
 
     # 1. Check if session already belongs to a context (HIGHEST PRIORITY)
     # This prevents context switching on subsequent prompts - one context per session
@@ -388,20 +373,11 @@ def determine_context(
             return (
                 session_context.id,
                 "session_match",
-                format_active_context_reminder(session_context),
-                None
+                format_active_context_reminder(session_context)
             )
 
     # 2. Check for bare "^" - show context picker
     if user_prompt.strip() == "^":
-        # Pre-transition: Move any pending_implementation contexts to implementing
-        # This ensures they appear selectable when user opens the picker
-        in_flight = get_all_in_flight_contexts(project_root)
-        for ctx in in_flight:
-            if ctx.in_flight and ctx.in_flight.mode == "pending_implementation":
-                update_plan_status(ctx.id, "implementing", project_root=project_root)
-                eprint(f"[context_enforcer] Pre-transitioned {ctx.id} to implementing (bare caret)")
-
         contexts = get_all_contexts(status="active", project_root=project_root)
         if not contexts:
             raise BlockRequest(
@@ -431,7 +407,7 @@ def determine_context(
 
         # Don't auto-create for greetings or help commands
         if any(prompt_lower.startswith(p) or prompt_lower == p for p in skip_patterns):
-            return (None, "no_context_needed", None, None)
+            return (None, "no_context_needed", None)
 
         # Auto-create context from prompt
         try:
@@ -443,27 +419,17 @@ def determine_context(
             return (
                 new_context.id,
                 "auto_created",
-                format_context_created(new_context),
-                None
+                format_context_created(new_context)
             )
         except Exception as e:
             eprint(f"[context_enforcer] Failed to create context: {e}")
-            return (None, "creation_failed", None, None)
+            return (None, "creation_failed", None)
 
     elif len(in_flight_contexts) == 1:
         # Single in-flight context - auto-select it
         ctx = in_flight_contexts[0]
         mode = ctx.in_flight.mode if ctx.in_flight else "none"
         eprint(f"[context_enforcer] Auto-selected single in-flight context: {ctx.id} (mode={mode})")
-
-        # Auto-transition pending_implementation to implementing
-        # This ensures state updates immediately when context is selected,
-        # rather than waiting for _update_in_flight_status() which has conditions
-        if mode == "pending_implementation":
-            update_plan_status(ctx.id, "implementing", project_root=project_root)
-            ctx.in_flight.mode = "implementing"  # Update local copy for display
-            mode = "implementing"  # Update local var for formatter selection
-            eprint(f"[context_enforcer] Transitioned {ctx.id} to implementing")
 
         # Use mode-specific formatter for better continuation context
         if mode == "pending_implementation":
@@ -473,7 +439,7 @@ def determine_context(
         else:
             output = format_active_context_reminder(ctx)
 
-        return (ctx.id, "auto_selected", output, None)
+        return (ctx.id, "auto_selected", output)
 
     else:
         # Multiple in-flight contexts - block and show picker
@@ -489,7 +455,7 @@ def _handle_caret_command(
     user_prompt: str,
     contexts: List[Context],
     project_root: Path
-) -> Tuple[Optional[str], str, Optional[str], Optional[str]]:
+) -> Tuple[Optional[str], str, Optional[str]]:
     """
     Handle explicit caret commands (^E, ^S, ^0, ^N).
 
@@ -499,7 +465,7 @@ def _handle_caret_command(
         project_root: Project root directory
 
     Returns:
-        Tuple of (context_id, method, output, remaining_prompt)
+        Tuple of (context_id, method, output)
 
     Raises:
         BlockRequest: When command is invalid or selection needed
@@ -539,8 +505,7 @@ def _handle_caret_command(
             return (
                 new_context.id,
                 "caret_new",
-                format_context_created(new_context),
-                None
+                format_context_created(new_context)
             )
         except Exception as e:
             eprint(f"[context_enforcer] Failed to create context: {e}")
@@ -577,8 +542,7 @@ def _handle_caret_command(
             return (
                 new_context.id,
                 "caret_new",
-                output,
-                None
+                output
             )
         except Exception as e:
             eprint(f"[context_enforcer] Failed to create context: {e}")
@@ -588,24 +552,11 @@ def _handle_caret_command(
     if cmd.select:
         selected_ctx = contexts[cmd.select - 1]  # 1-indexed
         eprint(f"[context_enforcer] Caret-selected context: {selected_ctx.id}")
-
-        # Auto-transition pending_implementation to implementing
-        mode = selected_ctx.in_flight.mode if selected_ctx.in_flight else "none"
-        if mode == "pending_implementation":
-            update_plan_status(selected_ctx.id, "implementing", project_root=project_root)
-            selected_ctx.in_flight.mode = "implementing"
-            eprint(f"[context_enforcer] Transitioned {selected_ctx.id} to implementing")
-
-        output = format_command_feedback(
-            ended_contexts,
-            selected_ctx,
-            cmd.remaining_prompt if cmd.remaining_prompt else None
-        )
+        output = format_command_feedback(ended_contexts, selected_ctx)
         return (
             selected_ctx.id,
             "caret_select",
-            output,
-            cmd.remaining_prompt if cmd.remaining_prompt else None
+            output
         )
 
     # Only ended contexts, no selection - refresh context list and block
@@ -637,10 +588,11 @@ def main():
     In production, use user_prompt_submit.py as the unified entry point.
     """
     try:
-        hook_input = load_hook_input()
-        if not hook_input:
+        input_data = sys.stdin.read().strip()
+        if not input_data:
             return
 
+        hook_input = json.loads(input_data)
         user_prompt = hook_input.get("prompt", "")
         if not user_prompt:
             return
@@ -648,10 +600,8 @@ def main():
         project_root = project_dir(hook_input)
 
         try:
-            context_id, method, output, remaining_prompt = determine_context(user_prompt, project_root)
+            context_id, method, output = determine_context(user_prompt, project_root)
             eprint(f"[context_enforcer] Method: {method}, Context: {context_id}")
-            if remaining_prompt:
-                eprint(f"[context_enforcer] Remaining prompt: {remaining_prompt[:50]}...")
 
             if output:
                 print(output)

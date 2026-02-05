@@ -1,6 +1,8 @@
 import {promises as fs} from 'node:fs'
 import {join} from 'node:path'
 
+import {pathExists} from './paths.js'
+
 /**
  * Content folder types that should be recursively merged rather than skipped.
  * These are the canonical folder names used in templates for organizing content.
@@ -17,18 +19,6 @@ export interface MergeResult {
   createdDirs: string[]
   /** Files that were skipped (already exist) */
   skippedFiles: string[]
-}
-
-/**
- * Check if a path exists
- */
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await fs.access(path)
-    return true
-  } catch {
-    return false
-  }
 }
 
 /**

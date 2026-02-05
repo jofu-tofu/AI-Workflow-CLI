@@ -10,8 +10,9 @@ import {detectUsername} from '../../lib/user-utils.js'
 import {updateGitignore} from '../../lib/gitignore-manager.js'
 import {mergeClaudeSettings} from '../../lib/hooks-merger.js'
 import {IdePathResolver} from '../../lib/ide-path-resolver.js'
+import {pathExists} from '../../lib/paths.js'
 import {getTargetSettingsFile, readClaudeSettings, writeClaudeSettings} from '../../lib/settings-hierarchy.js'
-import {checkTemplateStatus, installTemplate} from '../../lib/template-installer.js'
+import {checkTemplateStatus, installTemplate, shouldExclude} from '../../lib/template-installer.js'
 import {getAvailableTemplates, getTemplatePath} from '../../lib/template-resolver.js'
 import {getTargetHooksFile, readWindsurfHooks, writeWindsurfHooks} from '../../lib/windsurf-hooks-hierarchy.js'
 import {mergeWindsurfHooks} from '../../lib/windsurf-hooks-merger.js'
@@ -114,7 +115,7 @@ export default class Init extends BaseCommand {
         await fs.mkdir(containerDir, {recursive: true})
 
         const sharedDestPath = resolver.getSharedFolder()
-        const sharedExists = await this.pathExists(sharedDestPath)
+        const sharedExists = await pathExists(sharedDestPath)
 
         if (!sharedExists) {
           const currentFilePath = fileURLToPath(import.meta.url)
@@ -122,7 +123,7 @@ export default class Init extends BaseCommand {
           const templatesRoot = join(dirname(dirname(currentDir)), 'templates')
           const sharedSrcPath = join(templatesRoot, '_shared')
 
-          if (!(await this.pathExists(sharedSrcPath))) {
+          if (!(await pathExists(sharedSrcPath))) {
             this.error(`Shared folder not found at ${sharedSrcPath}. This indicates a corrupted installation.`, {
               exit: EXIT_CODES.ENVIRONMENT_ERROR,
             })
@@ -286,7 +287,7 @@ export default class Init extends BaseCommand {
     const operations = entries
       .filter((entry) => {
         // Standard exclusions (test files, cache, etc.)
-        if (this.shouldExcludeFile(entry.name)) {
+        if (shouldExclude(entry.name)) {
           return false
         }
 
@@ -416,18 +417,6 @@ export default class Init extends BaseCommand {
       const err = error as Error
       this.warn(`Failed to merge Windsurf template hooks: ${err.message}`)
       // Don't fail the entire installation if hook merging fails
-    }
-  }
-
-  /**
-   * Check if a path exists
-   */
-  private async pathExists(path: string): Promise<boolean> {
-    try {
-      await fs.access(path)
-      return true
-    } catch {
-      return false
     }
   }
 
@@ -608,28 +597,6 @@ export default class Init extends BaseCommand {
       projectName,
       confirmed,
     }
-  }
-
-  /**
-   * Check if a file should be excluded from copying
-   */
-  private shouldExcludeFile(name: string): boolean {
-    const excludedPatterns = [
-      '_output',
-      '__pycache__',
-      '.pytest_cache',
-      'conftest.py',
-      /^test_.*\.py$/,
-      /.*\.pyc$/,
-    ]
-
-    return excludedPatterns.some((pattern) => {
-      if (typeof pattern === 'string') {
-        return name === pattern
-      }
-
-      return pattern.test(name)
-    })
   }
 
   /**

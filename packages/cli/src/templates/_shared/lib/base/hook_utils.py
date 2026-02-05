@@ -19,30 +19,6 @@ from .utils import eprint
 F = TypeVar('F', bound=Callable[..., Any])
 
 
-def setup_hook_paths() -> Path:
-    """
-    Setup import paths for hooks.
-
-    Call this at module level in hook scripts to ensure
-    the shared lib directory is in sys.path.
-
-    Returns:
-        Path to the lib directory
-
-    Example:
-        SCRIPT_DIR = Path(__file__).resolve().parent
-        SHARED_LIB = SCRIPT_DIR.parent / "lib"
-        sys.path.insert(0, str(SHARED_LIB.parent))
-    """
-    # This function exists mainly for documentation
-    # Actual path setup must happen at module level before imports
-    hook_dir = Path(__file__).resolve().parent.parent.parent / "hooks"
-    lib_dir = hook_dir.parent / "lib"
-    if str(lib_dir.parent) not in sys.path:
-        sys.path.insert(0, str(lib_dir.parent))
-    return lib_dir
-
-
 def load_hook_input() -> Optional[Dict[str, Any]]:
     """
     Load and parse JSON from stdin.

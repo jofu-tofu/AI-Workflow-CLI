@@ -111,8 +111,9 @@ def run_agent_review(
 
     eprint(f"[{agent.name}] Found Claude CLI at: {claude_path}")
 
-    # User prompt contains just the task and plan
-    prompt = f"""Review the plan below and provide your assessment using StructuredOutput.
+    # User prompt - direct instruction to call StructuredOutput immediately
+    prompt = f"""IMMEDIATELY call StructuredOutput with your review of the plan below.
+Do NOT output any text before calling StructuredOutput.
 
 PLAN:
 <<<
@@ -133,9 +134,10 @@ PLAN:
         "--setting-sources", "",  # Disable user/project settings to avoid PAI context interference
     ]
 
-    # Add system prompt if available (the markdown body with full persona)
+    # Add system prompt: prefix with single-turn instructions, then agent's persona
     if agent.system_prompt:
-        cmd_args.extend(["--system-prompt", agent.system_prompt])
+        full_prompt = AGENT_REVIEW_PROMPT_PREFIX + "\n\n---\n\n" + agent.system_prompt
+        cmd_args.extend(["--system-prompt", full_prompt])
 
     eprint(f"[{agent.name}] Running with model: {agent.model}, timeout: {timeout}s")
 

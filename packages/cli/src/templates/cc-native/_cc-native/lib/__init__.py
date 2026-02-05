@@ -11,8 +11,6 @@ from .utils import (
     eprint,
     sanitize_filename,
     sanitize_title,
-    extract_plan_title,
-    extract_task_from_context,
     find_plan_file,
     ReviewerResult,
     OrchestratorResult,
@@ -36,8 +34,6 @@ __all__ = [
     "eprint",
     "sanitize_filename",
     "sanitize_title",
-    "extract_plan_title",
-    "extract_task_from_context",
     "find_plan_file",
     # Dataclasses
     "ReviewerResult",

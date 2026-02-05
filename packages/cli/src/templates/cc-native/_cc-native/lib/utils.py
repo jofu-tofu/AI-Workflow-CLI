@@ -29,6 +29,29 @@ except ImportError:
     from atomic_write import atomic_write
     from constants import ENABLE_ROBUST_PLAN_WRITES
 
+# Import canonical utilities from shared lib (with Windows bug fixes)
+try:
+    from ...lib.base.utils import (
+        eprint,
+        now_local,
+        project_dir,
+        sanitize_filename,
+        sanitize_title,
+    )
+except ImportError:
+    # Fallback for direct execution
+    import sys
+    from pathlib import Path
+    _shared_lib = Path(__file__).resolve().parent.parent.parent / "_shared" / "lib"
+    sys.path.insert(0, str(_shared_lib))
+    from base.utils import (
+        eprint,
+        now_local,
+        project_dir,
+        sanitize_filename,
+        sanitize_title,
+    )
+
 
 # ---------------------------
 # Constants
@@ -85,68 +108,6 @@ class ReviewerResult:
     data: Dict[str, Any]
     raw: str
     err: str
-
-
-# ---------------------------
-# Core utilities
-# ---------------------------
-
-def eprint(*args: Any) -> None:
-    """Print to stderr."""
-    print(*args, file=sys.stderr)
-
-
-def now_local() -> datetime:
-    """Get current local datetime."""
-    return datetime.now()
-
-
-def project_dir(payload: Dict[str, Any]) -> Path:
-    """Get project directory from payload or environment."""
-    p = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd()
-    return Path(p)
-
-
-def sanitize_filename(s: str, max_len: int = 32) -> str:
-    """Sanitize string for use in filename."""
-    s = re.sub(r"[^A-Za-z0-9._-]+", "_", s)
-    return s.strip("._-")[:max_len] or "unknown"
-
-
-def sanitize_title(s: str, max_len: int = 50) -> str:
-    """Sanitize title for use in filename (with space-to-dash conversion)."""
-    s = s.replace(' ', '-')
-    s = re.sub(r"[^A-Za-z0-9._-]+", "_", s)
-    s = re.sub(r"[-_]+", "-", s)
-    return s.strip("._-")[:max_len] or "unknown"
-
-
-def extract_plan_title(plan: str) -> Optional[str]:
-    """Extract title from '# Plan: <title>' line in plan content."""
-    for line in plan.split('\n'):
-        line = line.strip()
-        if line.startswith('# Plan:'):
-            title = line[7:].strip()
-            return title if title else None
-    return None
-
-
-def extract_task_from_context(plan: str) -> Optional[str]:
-    """Extract Task from Evaluation Context section as fallback title."""
-    # Look for **Task**: ... or **Task Summary**: ... patterns
-    patterns = [
-        r'\*\*Task\*\*:\s*(.+?)(?:\n|$)',
-        r'\*\*Task Summary\*\*:\s*(.+?)(?:\n|$)',
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, plan)
-        if match:
-            task = match.group(1).strip()
-            # Truncate to reasonable title length
-            if len(task) > 50:
-                task = task[:47] + "..."
-            return task
-    return None
 
 
 # ---------------------------
@@ -396,50 +357,6 @@ def get_state_path_from_plan(plan_path: str) -> Path:
     """
     plan_file = Path(plan_path)
     return plan_file.with_suffix('.state.json')
-
-
-def load_state(plan_path: str) -> Optional[Dict[str, Any]]:
-    """Load state file for this plan if it exists."""
-    state_file = get_state_path_from_plan(plan_path)
-
-    if not state_file.exists():
-        return None
-
-    try:
-        return json.loads(state_file.read_text(encoding="utf-8"))
-    except Exception as e:
-        eprint(f"[utils] Failed to read state file: {e}")
-        return None
-
-
-def save_state(plan_path: str, state: Dict[str, Any]) -> bool:
-    """Save state file for this plan.
-
-    Returns True on success, False on failure.
-    """
-    state_file = get_state_path_from_plan(plan_path)
-    try:
-        state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
-        return True
-    except Exception as e:
-        eprint(f"[utils] Failed to save state file: {e}")
-        return False
-
-
-def delete_state(plan_path: str) -> bool:
-    """Delete state file after successful archive.
-
-    Returns True if deleted or didn't exist, False on error.
-    """
-    state_file = get_state_path_from_plan(plan_path)
-    try:
-        if state_file.exists():
-            state_file.unlink()
-            eprint(f"[utils] Deleted state file: {state_file}")
-        return True
-    except Exception as e:
-        eprint(f"[utils] Warning: failed to delete state file: {e}")
-        return False
 
 
 def format_review_markdown(

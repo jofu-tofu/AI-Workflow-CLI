@@ -12,22 +12,13 @@ export {
 } from './config.js'
 
 // Debug logging
-export {debug, debugConfig, debugSpawn, debugVersion, isDebugEnabled, setDebugEnabled} from './debug.js'
-
-// Environment variable compatibility
-export {
-  getAiwConfig,
-  getAiwDir as getAiwDirFromEnv,
-  isUsingLegacyEnvVars,
-  loadEnvWithCompatibility,
-} from './env-compat.js'
+export {debug, debugSpawn, debugVersion, isDebugEnabled, setDebugEnabled} from './debug.js'
 
 // Custom error classes and utilities
 export {
   AiwError,
   ConfigNotFoundError,
   EnvironmentError,
-  formatErrorMessage,
   InvalidUsageError,
   ProcessSpawnError,
 } from './errors.js'
@@ -53,16 +44,10 @@ export {
 
 // Cross-platform path utilities
 export {
-  expandPath,
   findWorkspaceRoot,
-  getHomePath,
-  getWorkspacePath,
   isWorkspace,
-  normalizePath,
   pathExists,
   resolvePath,
-  toUnixPath,
-  toWindowsPath,
 } from './paths.js'
 
 // Process spawning utilities

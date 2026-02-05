@@ -1,19 +1,8 @@
 import {promises as fs} from 'node:fs'
 import {join} from 'node:path'
 
+import {pathExists} from './paths.js'
 import type {WindsurfHooks} from './windsurf-hooks-types.js'
-
-/**
- * Check if file exists
- */
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await fs.access(path)
-    return true
-  } catch {
-    return false
-  }
-}
 
 /**
  * Read Windsurf hooks from file
@@ -47,7 +36,7 @@ export async function writeWindsurfHooks(path: string, hooks: WindsurfHooks): Pr
   await fs.mkdir(dir, {recursive: true})
 
   // Backup existing file if it exists
-  if (await fileExists(path)) {
+  if (await pathExists(path)) {
     const backupPath = `${path}.backup`
     await fs.copyFile(path, backupPath)
   }

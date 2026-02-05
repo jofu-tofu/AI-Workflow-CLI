@@ -50,10 +50,6 @@ from .task_sync import (
 )
 from .plan_archive import (
     archive_plan_to_context,
-    get_active_context_for_plan,
-    create_context_from_plan,
-    mark_plan_implementation_started,
-    mark_plan_completed,
 )
 from .context_extractor import (
     extract_context_id,
@@ -108,10 +104,6 @@ __all__ = [
     "generate_next_task_id",
     # Plan Archive
     "archive_plan_to_context",
-    "get_active_context_for_plan",
-    "create_context_from_plan",
-    "mark_plan_implementation_started",
-    "mark_plan_completed",
     # Context Extractor
     "extract_context_id",
     "extract_context_id_for_session",
