@@ -138,22 +138,27 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
     """
     Generate a context ID from a summary string.
 
-    Filters stop words from the summary and slugifies the result.
+    Prepends a YYMMDD-HHMM local-time timestamp for visual
+    distinguishability, then filters stop words and slugifies.
 
     Args:
         summary: Context summary text
         existing_ids: Optional set of existing context IDs to avoid
 
     Returns:
-        Unique context ID string
+        Unique context ID string (e.g. '260205-1700-add-user-auth')
     """
+    # Timestamp prefix using local time, to the minute
+    timestamp = datetime.now().strftime("%y%m%d-%H%M")
+
     if not summary or not summary.strip():
-        base_id = "context"
+        base_id = f"{timestamp}-context"
     else:
         # Use stop word filter, limit to 12 words
         from .stop_words import STOP_WORDS
         words = [w for w in summary.lower().split() if w not in STOP_WORDS and len(w) > 1][:12]
-        base_id = sanitize_title(' '.join(words), max_len=100)
+        slug = sanitize_title(' '.join(words), max_len=50)
+        base_id = f"{timestamp}-{slug}"
 
     if not existing_ids:
         return base_id

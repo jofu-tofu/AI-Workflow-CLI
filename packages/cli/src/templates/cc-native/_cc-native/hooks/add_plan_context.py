@@ -67,7 +67,6 @@ def inject_evaluation_context() -> int:
     """Inject evaluation context reminder without blocking."""
     out = {
         "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
             "additionalContext": CONTEXT_REMINDER
         }
     }
@@ -80,7 +79,6 @@ def offer_questions_nonblocking() -> int:
     context = CONTEXT_REMINDER + "\n\n---\n\n" + QUESTIONS_OFFER_CONTEXT
     out = {
         "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
             "additionalContext": context
         }
     }

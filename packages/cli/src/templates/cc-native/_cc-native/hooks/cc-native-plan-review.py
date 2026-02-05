@@ -88,6 +88,11 @@ try:
     from debug import debug_log, debug_raw
 except ImportError as e:
     print(f"[cc-native-plan-review] Failed to import lib: {e}", file=sys.stderr)
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "additionalContext": f"[Plan Review Error] Failed to import required module: {e}. The plan review hook could not load its dependencies.",
+        }
+    }, ensure_ascii=True))
     sys.exit(0)  # Non-blocking failure
 
 # Add scripts directory to path for aggregate_agents import
@@ -101,6 +106,21 @@ except ImportError:
     def aggregate_agents(agents_dir: Path) -> List[Dict[str, Any]]:
         eprint("[cc-native-plan-review] Warning: aggregate_agents not found")
         return []
+
+
+def skip_with_info(reason: str) -> int:
+    """Exit hook with informational additionalContext instead of silently.
+
+    This ensures Claude always sees WHY the plan review was skipped,
+    making failures diagnosable instead of invisible.
+    """
+    eprint(f"[cc-native-plan-review] Skipping: {reason}")
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "additionalContext": f"[Plan Review Skipped] {reason}",
+        }
+    }, ensure_ascii=True))
+    return 0
 
 
 # ---------------------------
@@ -157,8 +177,8 @@ def get_active_context_for_review(session_id: str, project_root: Path) -> Option
         return context
 
     # Strategy 2: Single planning context (only planning mode)
-    in_flight = get_all_in_flight_contexts(project_root)
-    planning_contexts = [c for c in in_flight if c.in_flight and c.in_flight.mode == "planning"]
+    all_active = get_all_contexts(status="active", project_root=project_root)
+    planning_contexts = [c for c in all_active if c.in_flight and c.in_flight.mode == "planning"]
     if len(planning_contexts) == 1:
         eprint(f"[cc-native-plan-review] Found single planning context: {planning_contexts[0].id}")
         return planning_contexts[0]
@@ -166,11 +186,11 @@ def get_active_context_for_review(session_id: str, project_root: Path) -> Option
     # Multiple or no planning contexts found
     if len(planning_contexts) > 1:
         eprint(f"[cc-native-plan-review] Multiple planning contexts ({len(planning_contexts)}), cannot determine which to use")
-    elif len(in_flight) > 0:
-        modes = [c.in_flight.mode if c.in_flight else "none" for c in in_flight]
-        eprint(f"[cc-native-plan-review] Found {len(in_flight)} in-flight context(s) with modes {modes}, but none in 'planning' mode")
+    elif len(all_active) > 0:
+        modes = [c.in_flight.mode if c.in_flight else "none" for c in all_active]
+        eprint(f"[cc-native-plan-review] Found {len(all_active)} active context(s) with modes {modes}, but none in 'planning' mode")
     else:
-        eprint("[cc-native-plan-review] No in-flight contexts found")
+        eprint("[cc-native-plan-review] No active contexts found")
     return None
 
 
@@ -438,8 +458,7 @@ def main() -> int:
     try:
         payload = json.load(sys.stdin)
     except json.JSONDecodeError as e:
-        eprint(f"[cc-native-plan-review] Invalid JSON input: {e}")
-        return 0
+        return skip_with_info(f"Invalid JSON input from Claude Code: {e}")
 
     tool_name = payload.get("tool_name")
     eprint(f"[cc-native-plan-review] tool_name: {tool_name}")
@@ -466,18 +485,15 @@ def main() -> int:
     # Find and read plan FIRST (state file is keyed by plan path)
     plan_path = find_plan_file()
     if not plan_path:
-        eprint("[cc-native-plan-review] Skipping: no plan file found in ~/.claude/plans/")
-        return 0
+        return skip_with_info("No plan file found in ~/.claude/plans/. The plan may not have been written yet.")
 
     try:
         plan = Path(plan_path).read_text(encoding="utf-8").strip()
     except Exception as e:
-        eprint(f"[cc-native-plan-review] Failed to read plan file: {e}")
-        return 0
+        return skip_with_info(f"Failed to read plan file: {e}")
 
     if not plan:
-        eprint("[cc-native-plan-review] Skipping: plan file is empty")
-        return 0
+        return skip_with_info("Plan file exists but is empty.")
 
     eprint(f"[cc-native-plan-review] Found plan at: {plan_path}")
     eprint(f"[cc-native-plan-review] Plan length: {len(plan)} chars")
@@ -486,8 +502,7 @@ def main() -> int:
     active_context = get_active_context_for_review(session_id, base)
 
     if not active_context:
-        eprint("[cc-native-plan-review] Skipping: no active context found")
-        return 0
+        return skip_with_info("No active planning context found for this session. The context system may not have a context in 'planning' mode.")
 
     # Get base reviews dir from shared lib, then add cc-native namespace
     reviews_dir = get_context_reviews_dir(active_context.id, base) / "cc-native"
@@ -503,15 +518,13 @@ def main() -> int:
         current = existing_iteration.get("current", 1)
         max_iter = existing_iteration.get("max", 1)
         if current > max_iter:
-            eprint(f"[cc-native-plan-review] Skipping: review iterations exhausted ({current}/{max_iter})")
-            return 0
+            return skip_with_info(f"Review iterations exhausted ({current}/{max_iter}). The plan has been reviewed the maximum number of times for its complexity level.")
 
     # Plan-hash deduplication
     plan_hash = compute_plan_hash(plan)
     eprint(f"[cc-native-plan-review] Plan hash: {plan_hash}")
     if is_plan_already_reviewed(session_id, plan_hash):
-        eprint("[cc-native-plan-review] Skipping: plan already reviewed (hash match)")
-        return 0
+        return skip_with_info("Plan content unchanged since last review (same hash). Modify the plan to trigger a new review.")
 
     # Initialize combined result
     cli_results: Dict[str, ReviewerResult] = {}
@@ -684,8 +697,7 @@ def main() -> int:
     eprint("[cc-native-plan-review] === PHASE 4: Generate Output ===")
 
     if not cli_results and not agent_results:
-        eprint("[cc-native-plan-review] No review results, exiting")
-        return 0
+        return skip_with_info("All reviewers failed to produce results. Check stderr logs for details.")
 
     overall = worst_verdict(all_verdicts) if all_verdicts else "pass"
 
@@ -769,7 +781,6 @@ def main() -> int:
     # See: https://docs.anthropic.com/en/docs/claude-code/hooks
     out: Dict[str, Any] = {
         "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
             "additionalContext": "".join(context_parts),
         }
     }
@@ -812,7 +823,6 @@ if __name__ == "__main__":
         # Output error to Claude via hook format so it's visible
         print(json.dumps({
             "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
                 "additionalContext": f"**CC-Native Plan Review Hook Error**\n\nThe hook encountered an error:\n```\n{traceback.format_exc()}\n```\n\nPlease report this issue.",
             }
         }))

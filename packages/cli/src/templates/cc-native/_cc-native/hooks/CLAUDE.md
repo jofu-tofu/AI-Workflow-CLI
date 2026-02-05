@@ -70,7 +70,6 @@ import json
 
 out = {
     "hookSpecificOutput": {
-        "hookEventName": "PreToolUse",
         "additionalContext": "Information for Claude to see...",
     }
 }

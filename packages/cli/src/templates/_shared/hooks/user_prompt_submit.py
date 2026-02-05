@@ -46,36 +46,24 @@ def format_claudemd_reminder() -> str:
     return """
 ## CLAUDE.md Decision Capture
 
-When implementing changes, consider whether this work involves decisions with non-obvious rationale. If so, update or create a CLAUDE.md in the relevant directory.
+**Placement rule:** CLAUDE.md files cascade — subdirectories inherit from parents. Default to updating the nearest existing CLAUDE.md. Only create a new one at a semantic boundary where responsibility genuinely shifts (package roots with their own manifest, technology boundaries, domain boundaries, integration points).
 
-**When to update CLAUDE.md:**
-- Architectural choices (why this pattern over alternatives)
-- Non-obvious constraints (why something MUST be done a certain way)
-- Learned patterns (discovered issues that future work should avoid)
-- Integration decisions (why components connect this way)
-- Workarounds (temporary solutions with context on the underlying issue)
+**Before creating a new CLAUDE.md, ask:** "Do the rules here actually differ from the parent?" If not, update the parent instead.
 
-**What to capture (use this format):**
+**Keep files lean (progressive disclosure):** Each CLAUDE.md should contain only decisions relevant at that directory level. Verbose files become noise that degrades future task quality — every entry competes for attention in the context window. Capture only non-obvious rationale, not descriptions of what the code does.
+
+**What to capture** (only when decisions have non-obvious rationale):
+- Architectural choices and their alternatives
+- Non-obvious constraints (what breaks if this changes)
+- Workarounds with context on the underlying issue
+- Learned patterns that prevent future mistakes
+
+**Format:**
 
 ```markdown
 ## [Topic]
-
 **Decision:** [What was decided]
-**Rationale:** [Why this approach was chosen]
-**Constraint:** [What breaks if this changes]
-```
-
-**Directory-specific:** Place CLAUDE.md in the directory closest to the affected code. If no CLAUDE.md exists, create one with a descriptive header.
-
-**Example new CLAUDE.md:**
-
-```markdown
-# Component Name
-
-Development decisions and patterns for this component.
-
-## [First Decision Topic]
-...
+**Rationale:** [Why — the non-obvious part]
 ```
 """
 
@@ -143,10 +131,8 @@ def main():
         elif user_prompt:
             # FIRST prompt - need context detection
             try:
-                context_id, method, context_output, remaining_prompt = determine_context(user_prompt, project_root, session_id)
+                context_id, method, context_output = determine_context(user_prompt, project_root, session_id)
                 eprint(f"[user_prompt_submit] Context: {method} -> {context_id}")
-                if remaining_prompt:
-                    eprint(f"[user_prompt_submit] Actual request: {remaining_prompt[:50]}...")
 
                 if context_id:
                     # Bind session to context
