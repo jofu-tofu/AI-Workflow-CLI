@@ -129,7 +129,7 @@ def run_orchestrator(
     Args:
         plan: The plan content to analyze
         agent_library: List of available agents
-        config: Orchestrator configuration (model, timeout, max_turns)
+        config: Orchestrator configuration (model, timeout)
         settings: Agent review settings (agentSelection, complexityCategories)
 
     Returns:
@@ -154,9 +154,11 @@ def run_orchestrator(
 
     eprint(f"[orchestrator] Found Claude CLI at: {claude_path}")
 
-    # Build agent list for prompt
+    # Build agent list for prompt with rich descriptions
     agent_list = "\n".join([
-        f"- {a.name}: {a.focus} (categories: {', '.join(a.categories)})"
+        f"- {a.name} [{', '.join(a.categories)}]\n"
+        f"  Focus: {a.focus}\n"
+        f"  Expertise: {a.description}"
         for a in agent_library if a.enabled
     ])
     category_list = "/".join(categories)
@@ -164,43 +166,48 @@ def run_orchestrator(
     medium_range = f"{selection.get('medium', {}).get('min', 1)}-{selection.get('medium', {}).get('max', 2)}"
     high_range = f"{selection.get('high', {}).get('min', 2)}-{selection.get('high', {}).get('max', 4)}"
 
-    prompt = f"""IMPORTANT: Analyze this plan and output your decision immediately using StructuredOutput. Do NOT ask questions.
+    # System prompt with orchestrator instructions
+    system_prompt = """You are a plan orchestrator for code review. Your job is to analyze plans and select appropriate reviewer agents.
 
-You are a plan orchestrator. Analyze the plan below and determine:
-1. Complexity level (simple/medium/high)
-2. Category ({category_list})
-3. Which agents (if any) should review this plan
+You MUST call StructuredOutput immediately with your analysis. Do NOT ask questions or use any other tools.
+
+When selecting agents:
+- Match agent expertise to plan requirements
+- Consider what each agent specializes in
+- Only select agents whose categories match the plan category
+- Fewer agents for simple plans, more for complex plans"""
+
+    # User prompt with plan and agent list
+    prompt = f"""Analyze this plan and select appropriate reviewer agents.
 
 Available agents:
 {agent_list}
 
-Rules:
-- simple complexity = {simple_range} agents (CLI review sufficient)
+Selection rules:
+- simple complexity = {simple_range} agents
 - medium complexity = {medium_range} agents
 - high complexity = {high_range} agents
-- Only select agents whose categories match the plan category
+- Only select agents whose categories match the plan category ({category_list})
 - Non-technical plans (life, business) typically need 0 code-focused agents
-
-Analyze and call StructuredOutput with your decision now.
 
 PLAN:
 <<<
 {plan}
 >>>
-"""
+
+Call StructuredOutput now with: complexity, category, selectedAgents, reasoning"""
 
     schema_json = json.dumps(ORCHESTRATOR_SCHEMA, ensure_ascii=False)
 
     cmd_args = [
         claude_path,
         "-p",  # Enable print mode to read prompt from stdin
-        "--agent", "plan-orchestrator",
         "--model", config.model,
-        "--permission-mode", "bypassPermissions",
         "--output-format", "json",
-        "--max-turns", str(config.max_turns),
         "--json-schema", schema_json,
-        "--settings", "{}",
+        "--max-turns", "3",  # Single-turn with buffer for tool call + result
+        "--setting-sources", "",  # Disable PAI context interference
+        "--system-prompt", system_prompt,
     ]
 
     eprint(f"[orchestrator] Running with model: {config.model}, timeout: {config.timeout}s")
@@ -245,6 +252,17 @@ PLAN:
         eprint(f"[orchestrator] stderr: {p.stderr[:300]}")
 
     obj = _parse_claude_output(raw)
+
+    # Debug logging to diagnose empty selectedAgents issue
+    eprint(f"[orchestrator:debug] Raw output length: {len(raw)} chars")
+    if raw:
+        eprint(f"[orchestrator:debug] Raw output (first 500 chars): {raw[:500]}")
+    eprint(f"[orchestrator:debug] Parsed obj: {obj}")
+    if obj:
+        eprint(f"[orchestrator:debug] obj keys: {list(obj.keys())}")
+        eprint(f"[orchestrator:debug] selectedAgents value: {obj.get('selectedAgents', 'MISSING')}")
+        eprint(f"[orchestrator:debug] reasoning value: {obj.get('reasoning', 'MISSING')}")
+
     if not obj:
         eprint("[orchestrator] Failed to parse output, falling back to medium complexity")
         return OrchestratorResult(

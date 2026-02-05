@@ -6,7 +6,6 @@ focus: code quality and security
 enabled: false
 categories:
   - code
-tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
 ## Role

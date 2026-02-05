@@ -6,7 +6,6 @@ focus: plan complexity analysis and agent routing
 enabled: false
 categories:
   - orchestration
-tools: Read, Glob, Grep
 ---
 
 You are a plan orchestration agent. Your job is to analyze implementation plans and determine:

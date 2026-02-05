@@ -39,7 +39,7 @@ class AgentConfig:
     enabled: bool = True
     categories: List[str] = field(default_factory=lambda: ["code"])
     description: str = ""
-    tools: str = ""
+    system_prompt: str = ""  # Markdown body content for --system-prompt
 
 
 @dataclass
@@ -48,7 +48,6 @@ class OrchestratorConfig:
     enabled: bool = True
     model: str = "haiku"
     timeout: int = 30
-    max_turns: int = 3
 
 
 # ---------------------------

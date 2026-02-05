@@ -103,7 +103,7 @@ def _update_in_flight_status(context_id: str, hook_input: dict, project_root: Pa
     elif permission_mode != "plan":
         # Any non-plan permission mode transitions pending/planning to implementing
         # This includes "default" (after /clear) and "acceptEdits"/"bypassPermissions"
-        if current_mode in ["pending_implementation", "planning"]:
+        if current_mode in ["pending_implementation", "planning", "none"]:
             update_plan_status(context_id, "implementing", project_root=project_root)
             eprint(f"[user_prompt_submit] Set status to 'implementing' (permission_mode={permission_mode})")
 

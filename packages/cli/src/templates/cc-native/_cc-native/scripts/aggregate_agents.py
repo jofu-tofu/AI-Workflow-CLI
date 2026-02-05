@@ -93,16 +93,31 @@ def extract_frontmatter(content: str) -> dict[str, Any] | None:
         return None
 
 
+def extract_body(content: str) -> str:
+    """Extract markdown body (after frontmatter) from content.
+
+    Args:
+        content: Raw markdown file content
+
+    Returns:
+        Markdown body content (everything after the closing ---)
+    """
+    match = re.match(r'^---\s*\n.*?\n---\s*\n(.*)$', content, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return content.strip()
+
+
 def aggregate_agents(agents_dir: Path | None = None) -> list[dict[str, Any]]:
     """Read all agent files and return aggregated metadata.
-    
+
     Scans the agents directory for .md files, extracts frontmatter from each,
     and returns a list of agent configurations.
-    
+
     Args:
         agents_dir: Path to agents directory. If None, uses default
-                   .claude/agents relative to project root.
-                   
+                   _cc-native/agents/ relative to this script.
+
     Returns:
         List of agent configuration dicts with fields:
         - name: Agent identifier (lowercase)
@@ -111,14 +126,14 @@ def aggregate_agents(agents_dir: Path | None = None) -> list[dict[str, Any]]:
         - focus: Brief focus for orchestrator
         - enabled: Whether agent is available
         - categories: Work categories for filtering
-        - tools: Available tools
+        - system_prompt: Full markdown body (persona content)
     """
     if agents_dir is None:
-        # Default to .claude/agents/cc-native relative to this script's location
+        # Default to _cc-native/agents/ relative to this script's location
         # Script is at: _cc-native/scripts/aggregate_agents.py
-        # Agents are at: .claude/agents/cc-native/
+        # Agents are at: _cc-native/agents/
         script_dir = Path(__file__).parent
-        agents_dir = script_dir.parent.parent / ".claude" / "agents" / "cc-native"
+        agents_dir = script_dir.parent / "agents"
 
     agents = []
 
@@ -135,6 +150,8 @@ def aggregate_agents(agents_dir: Path | None = None) -> list[dict[str, Any]]:
                     frontmatter["categories"] = ["code"]
                 elif isinstance(frontmatter["categories"], str):
                     frontmatter["categories"] = [frontmatter["categories"]]
+                # Extract markdown body as system_prompt
+                frontmatter["system_prompt"] = extract_body(content)
                 agents.append(frontmatter)
         except Exception:
             # Skip files that can't be read or parsed

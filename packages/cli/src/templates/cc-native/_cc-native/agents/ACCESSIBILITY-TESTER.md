@@ -7,7 +7,6 @@ enabled: false
 categories:
   - code
   - design
-tools: Read, Grep, Glob, Bash
 ---
 
 ## Role

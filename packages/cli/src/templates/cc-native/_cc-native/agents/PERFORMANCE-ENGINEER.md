@@ -7,7 +7,6 @@ enabled: false
 categories:
   - code
   - infrastructure
-tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
 ## Role

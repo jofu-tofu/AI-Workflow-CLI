@@ -22,14 +22,12 @@
   },
   "agentReview": {
     "enabled": true,
-    "timeout": 120,
+    "timeout": 180,
     "blockOnFail": true,
-    "maxTurns": 2,
     "orchestrator": {
       "enabled": true,
       "model": "haiku",
-      "timeout": 30,
-      "maxTurns": 6
+      "timeout": 30
     },
     "legacyMode": false,
     "mandatoryAgents": ["handoff-readiness", "clarity-auditor", "skeptic"],

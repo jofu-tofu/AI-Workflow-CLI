@@ -118,7 +118,6 @@ DEFAULT_ORCHESTRATOR: Dict[str, Any] = {
     "enabled": True,
     "model": "haiku",
     "timeout": 30,
-    "maxTurns": 3,
 }
 
 DEFAULT_AGENT_MODEL: str = "sonnet"
@@ -331,10 +330,9 @@ def load_settings(proj_dir: Path) -> Dict[str, Any]:
         "agentReview": {
             "enabled": True,
             "orchestrator": DEFAULT_ORCHESTRATOR.copy(),
-            "timeout": 120,
+            "timeout": 180,
             "blockOnFail": True,
             "legacyMode": False,
-            "maxTurns": 3,
             "display": DEFAULT_DISPLAY.copy(),
             "agentSelection": DEFAULT_AGENT_SELECTION.copy(),
             "agentDefaults": {"model": DEFAULT_AGENT_MODEL},
@@ -383,9 +381,13 @@ def load_settings(proj_dir: Path) -> Dict[str, Any]:
 
 
 def load_agent_library(proj_dir: Path, settings: Optional[Dict[str, Any]] = None) -> List[AgentConfig]:
-    """Load agent library by auto-detecting from frontmatter."""
-    agents_dir = proj_dir / ".claude" / "agents" / "cc-native"
-    agents_data = aggregate_agents(agents_dir)
+    """Load agent library by auto-detecting from frontmatter.
+
+    Agents are loaded from _cc-native/agents/ directory. The markdown body
+    of each agent file becomes the system_prompt for --system-prompt invocation.
+    """
+    # aggregate_agents now defaults to _cc-native/agents/ relative to the script
+    agents_data = aggregate_agents()
 
     default_model = DEFAULT_AGENT_MODEL
     if settings:
@@ -415,7 +417,7 @@ def load_agent_library(proj_dir: Path, settings: Optional[Dict[str, Any]] = None
             enabled=a.get("enabled", True),
             categories=a.get("categories", ["code"]),
             description=a.get("description", ""),
-            tools=a.get("tools", ""),
+            system_prompt=a.get("system_prompt", ""),
         ))
 
     return agents
@@ -539,7 +541,6 @@ def main() -> int:
         enabled=orch_settings.get("enabled", True) and agent_review_enabled,
         model=orch_settings.get("model", "haiku"),
         timeout=orch_settings.get("timeout", 30),
-        max_turns=orch_settings.get("maxTurns", 3),
     )
 
     eprint(f"[cc-native-plan-review] Codex enabled: {codex_enabled}, Gemini enabled: {gemini_enabled}")
@@ -642,7 +643,6 @@ def main() -> int:
         # PHASE 3: Run selected agents in parallel
         if selected_agents:
             eprint("[cc-native-plan-review] === PHASE 3: Agent Reviews ===")
-            max_turns = agent_settings.get("maxTurns", 3)
             max_parallel = agent_settings.get("maxParallelAgents", 0)  # 0 = unlimited
             num_workers = len(selected_agents) if max_parallel <= 0 else min(max_parallel, len(selected_agents))
             eprint(f"[cc-native-plan-review] Launching {len(selected_agents)} agents in parallel (workers={num_workers})")
@@ -651,13 +651,12 @@ def main() -> int:
             debug_log(context_path, session_id, "hook", "agent_review_start", {
                 "agents": [a.name for a in selected_agents],
                 "timeout": timeout,
-                "max_turns": max_turns,
                 "complexity": detected_complexity,
             })
 
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 futures = {
-                    executor.submit(run_agent_review, plan, agent, REVIEW_SCHEMA, timeout, max_turns, context_path, session_id): agent
+                    executor.submit(run_agent_review, plan, agent, REVIEW_SCHEMA, timeout, context_path, session_id): agent
                     for agent in selected_agents
                 }
                 for future in as_completed(futures):

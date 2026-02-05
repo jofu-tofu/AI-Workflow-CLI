@@ -81,7 +81,6 @@ def run_agent_review(
     agent: AgentConfig,
     schema: Dict[str, Any],
     timeout: int,
-    max_turns: int = 3,
     context_path: Optional[Path] = None,
     session_name: str = "unknown",
 ) -> ReviewerResult:
@@ -92,7 +91,6 @@ def run_agent_review(
         agent: Agent configuration (name, model, etc.)
         schema: JSON schema for the review output
         timeout: Timeout in seconds
-        max_turns: Maximum agent turns
         context_path: Optional path to context folder for debug logging
         session_name: Session name for debug logging
 
@@ -113,7 +111,8 @@ def run_agent_review(
 
     eprint(f"[{agent.name}] Found Claude CLI at: {claude_path}")
 
-    prompt = f"""{AGENT_REVIEW_PROMPT_PREFIX}
+    # User prompt contains just the task and plan
+    prompt = f"""Review the plan below and provide your assessment using StructuredOutput.
 
 PLAN:
 <<<
@@ -122,19 +121,23 @@ PLAN:
 """
 
     schema_json = json.dumps(schema, ensure_ascii=False)
+
+    # Build command args - use --system-prompt with the markdown body as persona
     cmd_args = [
         claude_path,
         "-p",  # Enable print mode to read prompt from stdin
-        "--agent", agent.name,
         "--model", agent.model,
-        "--permission-mode", "plan",
         "--output-format", "json",
-        "--max-turns", str(max_turns),
         "--json-schema", schema_json,
-        "--settings", "{}",
+        "--max-turns", "3",  # Allow buffer for tool call + result (usually completes in 2)
+        "--setting-sources", "",  # Disable user/project settings to avoid PAI context interference
     ]
 
-    eprint(f"[{agent.name}] Running with model: {agent.model}, timeout: {timeout}s, max-turns: {max_turns}")
+    # Add system prompt if available (the markdown body with full persona)
+    if agent.system_prompt:
+        cmd_args.extend(["--system-prompt", agent.system_prompt])
+
+    eprint(f"[{agent.name}] Running with model: {agent.model}, timeout: {timeout}s")
 
     # Get environment for internal subprocess (bypasses hooks)
     env = get_internal_subprocess_env()
@@ -176,7 +179,6 @@ PLAN:
             "stderr_len": len(err),
             "model": agent.model,
             "timeout": timeout,
-            "max_turns": max_turns,
         })
 
     if raw:
