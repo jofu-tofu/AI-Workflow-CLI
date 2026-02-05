@@ -13,59 +13,42 @@ def get_evaluation_context_reminder() -> str:
         Formatted markdown reminder about adding evaluation context
     """
     return """
-## IMPORTANT: This Plan Will Be Executed in a Fresh Context
+## CRITICAL: Write This Plan for a Different Agent
 
-Your plan will be:
-1. **Reviewed** by agents who have NO access to this conversation
-2. **Executed** by a Claude agent starting with a completely fresh context
+The agent executing this plan has ZERO context from this conversation — no chat history, no memory of files you explored or research you did.
 
-The implementing agent won't have access to your research, file explorations, or any conversation history. Your plan must be **self-contained** and provide everything needed to execute it successfully.
+**Write as if YOU are that agent. What would you need?**
 
-### Required Plan Elements
+### Required Structure
 
-1. **A title line** at the very top: `# Plan: <descriptive title>`
+```
+# Plan: <descriptive title>
 
-2. **Context Section** near the top with:
-   - **Background**: The bigger picture - why this change is needed and what problem it solves
-   - **Task**: What is being built/changed (specific and actionable)
-   - **Goal**: The underlying problem the user wants solved
-   - **Constraints**: Technical requirements, preferences, or limitations mentioned
+## Background
+Why this change is needed (2-3 sentences)
 
-3. **Relevant Files** section listing:
-   - Files that will be modified (with brief description of what changes)
-   - Files to reference for patterns/context (with why they're relevant)
-   - Any configuration files that matter
+## Task
+What exactly to build/change
 
-4. **Implementation Details** that are explicit enough for someone unfamiliar with your research:
-   - Don't assume the implementer knows what you discovered
-   - Include specific function names, patterns, or approaches to use
-   - Reference line numbers or code snippets if helpful
-
-### Example
-
-```markdown
-# Plan: Add OAuth2 Authentication
-
-## Context
-**Background**: The app currently only supports username/password auth. Users have requested social login to reduce friction during signup.
-**Task**: Implement OAuth2 flow for user authentication
-**Goal**: Enable secure third-party authentication via Google and GitHub
-**Constraints**: Must integrate with existing session management; no new dependencies preferred
-
-## Relevant Files
+## Files
 **Modify:**
-- `src/auth/middleware.ts` - Add OAuth callback handlers
-- `src/routes/auth.ts` - Add OAuth routes
+- `exact/path/to/file.py` - What changes (reference line numbers or patterns)
 
-**Reference for patterns:**
-- `src/auth/password.ts` - Shows existing auth flow pattern
-- `src/config/index.ts` - Where to add OAuth credentials
+**Reference:**
+- `exact/path/to/reference.py` - Why relevant (e.g., "pattern to follow at lines 12-30")
 
-## Implementation Steps
-[Detailed steps here...]
+## Steps
+1. [Specific steps with function names, patterns, or code snippets]
+2. [Enough detail for someone who never saw this conversation]
+
+## Constraints
+- Technical requirements, preferences, or limitations
 ```
 
-This context allows reviewers to assess whether your plan addresses the user's needs, AND enables the implementing agent to execute it without needing to re-discover your research.
+### Self-Check
+- [ ] Could I execute this if I forgot our entire conversation?
+- [ ] Are file paths exact (not "the auth file")?
+- [ ] Are implementation details specific (not "use the approach we discussed")?
 """.strip()
 
 
