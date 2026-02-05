@@ -187,4 +187,27 @@ STOP_WORDS = {
     # FRAGMENT WORDS (artifacts from contractions/tokenization)
     # ========================================================================
     're', 'pl', 'aiw', 've', 'll', 'doesn', 't', 's',
+
+    # ========================================================================
+    # CORPUS-DERIVED SHORT NOISE (2026-02 analysis of 131 docs)
+    # ========================================================================
+    # Contractions with punctuation stripped (I'm -> im, etc.)
+    'im', 'ive', 'id', 'ill', 'youre', 'youve', 'youll',
+    'hes', 'shes', 'weve', 'theyre', 'theyve', 'dont', 'doesnt',
+    'didnt', 'wont', 'wouldnt', 'cant', 'couldnt', 'shouldnt', 'isnt',
+    'arent', 'wasnt', 'werent', 'hasnt', 'havent', 'hadnt', 'lets',
+    'thats', 'whats', 'heres', 'theres', 'whos',
+
+    # Filler/noise from corpus (>10% frequency, non-action)
+    'etc', 'up', 'as', 'cc',
+
+    # Number words (common in plans but don't identify task)
+    'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+
+    # Single letters (artifacts from lists, paths, variables)
+    'b', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
+    'q', 'r', 'u', 'v', 'w', 'x', 'y', 'z',
+
+    # Short adverbs/fillers from review
+    'too', 'yes', 'ok', 'okay',
 }
