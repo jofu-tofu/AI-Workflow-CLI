@@ -155,4 +155,36 @@ STOP_WORDS = {
     'part', 'parts', 'point', 'points',
     'time', 'times', 'next', 'last', 'end',
     'set', 'list', 'group', 'item', 'items',
+
+    # ========================================================================
+    # PROGRAMMING KEYWORDS (code tokens that leak from pasted code)
+    # ========================================================================
+    'self', 'def', 'return', 'import', 'true', 'false', 'none', 'str',
+    'const', 'async', 'class', 'assert', 'except', 'dict', 'len', 'args',
+    'sys', 'eprint', 'elif', 'lambda', 'yield', 'pass',
+
+    # ========================================================================
+    # GENERIC ADJECTIVES (non-specific modifiers)
+    # ========================================================================
+    'high', 'low', 'important', 'critical', 'optional', 'manual',
+    'real', 'empty', 'stable', 'active', 'proper', 'correct',
+    'basic', 'main', 'primary', 'secondary', 'general', 'overall',
+
+    # ========================================================================
+    # GENERIC TECHNICAL NOUNS (common but non-specific)
+    # ========================================================================
+    'information', 'format', 'status', 'method', 'purpose', 'result',
+    'source', 'value', 'option', 'options', 'feature', 'features', 'issue',
+    'process', 'version', 'mode', 'state',
+
+    # ========================================================================
+    # DOCUMENT/CODE STRUCTURE (generic structural terms)
+    # ========================================================================
+    'section', 'lines', 'line', 'folder', 'directory', 'index',
+    'level', 'block', 'chunk', 'region', 'header', 'footer',
+
+    # ========================================================================
+    # FRAGMENT WORDS (artifacts from contractions/tokenization)
+    # ========================================================================
+    're', 'pl', 'aiw', 've', 'll', 'doesn', 't', 's',
 }

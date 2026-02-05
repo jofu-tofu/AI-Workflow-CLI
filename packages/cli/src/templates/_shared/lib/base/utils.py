@@ -138,8 +138,7 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
     """
     Generate a context ID from a summary string.
 
-    Uses AI inference to create a semantic 10-word summary, then slugifies it.
-    Falls back to truncate-and-slugify if inference fails.
+    Filters stop words from the summary and slugifies the result.
 
     Args:
         summary: Context summary text
@@ -151,24 +150,10 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
     if not summary or not summary.strip():
         base_id = "context"
     else:
-        # Try AI-powered semantic summary first
-        base_id = None
-        try:
-            from .inference import generate_semantic_summary
-            semantic = generate_semantic_summary(summary)
-            if semantic:
-                # Slugify the semantic summary (word limit already applied in inference)
-                base_id = sanitize_title(semantic, max_len=100)
-                eprint(f"[utils] Semantic context ID: {base_id}")
-        except Exception as e:
-            eprint(f"[utils] Inference failed, using fallback: {e}")
-
-        # Fallback to old method if inference failed
-        if not base_id:
-            # Fallback: use stop word filter, limit to 12 words
-            from .stop_words import STOP_WORDS
-            words = [w for w in summary.lower().split() if w not in STOP_WORDS and len(w) > 1][:12]
-            base_id = sanitize_title(' '.join(words), max_len=100)
+        # Use stop word filter, limit to 12 words
+        from .stop_words import STOP_WORDS
+        words = [w for w in summary.lower().split() if w not in STOP_WORDS and len(w) > 1][:12]
+        base_id = sanitize_title(' '.join(words), max_len=100)
 
     if not existing_ids:
         return base_id
