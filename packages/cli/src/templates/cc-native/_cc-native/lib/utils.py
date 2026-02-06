@@ -549,7 +549,7 @@ def _append_review_details(
     max_questions: int
 ) -> None:
     """Append issue details to markdown lines."""
-    issues = data.get("issues", [])
+    issues = [i for i in data.get("issues", []) if i.get("severity") != "low"]
     if issues:
         lines.append("\n**Issues:**")
         for it in issues[:max_issues]:
@@ -594,7 +594,7 @@ def build_combined_json(result: CombinedReviewResult) -> Dict[str, Any]:
                 "verdict": r.verdict,
                 "summary": r.data.get("summary") if r.data else None,
                 "summarySource": r.data.get("summary_source") if r.data else None,
-                "issues": r.data.get("issues", []) if r.data else [],
+                "issues": [i for i in r.data.get("issues", []) if i.get("severity") != "low"] if r.data else [],
                 "ok": r.ok,
                 "error": r.err if r.err else None,
             }
@@ -618,7 +618,7 @@ def build_combined_json(result: CombinedReviewResult) -> Dict[str, Any]:
                 "verdict": r.verdict,
                 "summary": r.data.get("summary") if r.data else None,
                 "summarySource": r.data.get("summary_source") if r.data else None,
-                "issues": r.data.get("issues", []) if r.data else [],
+                "issues": [i for i in r.data.get("issues", []) if i.get("severity") != "low"] if r.data else [],
                 "missing_sections": r.data.get("missing_sections", []) if r.data else [],
                 "questions": r.data.get("questions", []) if r.data else [],
                 "ok": r.ok,

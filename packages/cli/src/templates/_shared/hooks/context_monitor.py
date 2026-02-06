@@ -62,8 +62,15 @@ from lib.context.context_manager import (
     get_context_by_session_id,
     update_plan_status,
 )
+from lib.context.auto_state import save_auto_state
+from lib.context.event_log import EVENT_AUTO_STATE_SAVED, append_event
+
+# Module-level flag: only save auto-state once per process lifetime
+# Since hooks are separate processes per invocation, we use a file marker instead
+_PROGRESSIVE_SAVE_MARKER = ".progressive-save-done"
 
 # Configuration
+SAVE_STATE_THRESHOLD = 60  # Silently save auto-state at 60% remaining
 LOW_CONTEXT_THRESHOLD = 40  # Warn when below 40% remaining
 CRITICAL_CONTEXT_THRESHOLD = 25  # Urgent warning below 25%
 
@@ -242,6 +249,71 @@ def check_and_transition_mode(hook_input: dict) -> None:
         update_plan_status(context.id, "implementing", project_root=project_root)
 
 
+def _try_progressive_save(hook_input: dict, percent_remaining: int) -> None:
+    """
+    Silently save auto-state at SAVE_STATE_THRESHOLD (60%).
+
+    Uses a marker file in the context folder to ensure this fires only
+    once per session. The marker is the session_id written to a file.
+
+    Args:
+        hook_input: Hook input data from Claude Code
+        percent_remaining: Current context percentage remaining
+    """
+    try:
+        session_id = hook_input.get("session_id", "")
+        if not session_id:
+            return
+
+        project_root = project_dir(hook_input)
+        context = get_context_by_session_id(session_id, project_root)
+        if not context:
+            return
+
+        from lib.base.constants import get_context_dir
+        marker_path = get_context_dir(context.id, project_root) / _PROGRESSIVE_SAVE_MARKER
+        # Check if already saved for this session
+        if marker_path.exists():
+            try:
+                saved_session = marker_path.read_text(encoding="utf-8").strip()
+                if saved_session == session_id:
+                    return  # Already saved this session
+            except OSError:
+                pass
+
+        eprint(f"[context_monitor] Progressive save at {percent_remaining}% remaining")
+
+        in_flight_mode = context.in_flight.mode if context.in_flight else "none"
+        plan_path = context.in_flight.artifact_path if context.in_flight else None
+        handoff_path = context.in_flight.handoff_path if context.in_flight else None
+        transcript_path = hook_input.get("transcript_path")
+
+        saved = save_auto_state(
+            context_id=context.id,
+            session_id=session_id,
+            save_reason="progressive",
+            project_root=project_root,
+            in_flight_mode=in_flight_mode,
+            plan_path=plan_path,
+            handoff_path=handoff_path,
+            transcript_path=transcript_path,
+        )
+
+        if saved:
+            append_event(
+                context.id, EVENT_AUTO_STATE_SAVED, project_root,
+                session_id=session_id, save_reason="progressive",
+            )
+            # Write marker so we don't save again this session
+            try:
+                marker_path.write_text(session_id, encoding="utf-8")
+            except OSError:
+                pass
+
+    except Exception as e:
+        eprint(f"[context_monitor] Progressive save error (non-fatal): {e}")
+
+
 def check_context_level(hook_input: dict) -> Optional[str]:
     """
     Check context level and return warning if low.
@@ -270,7 +342,13 @@ def check_context_level(hook_input: dict) -> Optional[str]:
     percent_remaining = max(0, min(100, int((remaining / max_tokens) * 100)))
 
     # 4. Most common case: context is fine, exit early
+    if percent_remaining > SAVE_STATE_THRESHOLD:
+        return None
+
+    # === PROGRESSIVE SAVE: At 60% remaining, silently save auto-state ===
     if percent_remaining > LOW_CONTEXT_THRESHOLD:
+        # Only save once per session (check marker file)
+        _try_progressive_save(hook_input, percent_remaining)
         return None
 
     # === SLOW PATH: Only reached when context is low (rare) ===
@@ -320,7 +398,6 @@ def main():
             # Plain stdout from PostToolUse only goes to verbose mode, not Claude's context
             output = {
                 "hookSpecificOutput": {
-                    "hookEventName": "PostToolUse",
                     "additionalContext": warning
                 }
             }

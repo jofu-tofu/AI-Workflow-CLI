@@ -373,7 +373,7 @@ def determine_context(
             return (
                 session_context.id,
                 "session_match",
-                format_active_context_reminder(session_context)
+                format_active_context_reminder(session_context, project_root)
             )
 
     # 2. Check for bare "^" - show context picker
@@ -433,11 +433,11 @@ def determine_context(
 
         # Use mode-specific formatter for better continuation context
         if mode == "pending_implementation":
-            output = format_pending_plan_continuation(ctx)
+            output = format_pending_plan_continuation(ctx, project_root)
         elif mode == "implementing":
-            output = format_implementation_continuation(ctx)
+            output = format_implementation_continuation(ctx, project_root)
         else:
-            output = format_active_context_reminder(ctx)
+            output = format_active_context_reminder(ctx, project_root, include_restore=True)
 
         return (ctx.id, "auto_selected", output)
 

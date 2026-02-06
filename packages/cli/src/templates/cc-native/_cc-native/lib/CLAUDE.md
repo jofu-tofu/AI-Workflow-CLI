@@ -11,11 +11,21 @@
 | `utils.py` | Core utilities: eprint, sanitize, JSON parsing, artifact writing |
 | `state.py` | Plan state file management and iteration tracking |
 | `orchestrator.py` | Plan complexity analysis and agent selection |
-| `reviewers.py` | CLI and agent-based plan review implementations |
+| `reviewers/` | Plan review implementations (package — see below) |
 | `atomic_write.py` | Atomic file writes for crash safety |
-| `constants.py` | Shared constants and configuration |
-| `async_archive.py` | Async plan archival operations |
+| `constants.py` | Shared constants and feature flags (e.g., `ENABLE_ROBUST_PLAN_WRITES`) |
+| `debug.py` | Permanent debug logging to context folder (`CCNATIVE_DEBUG_DISABLE=1` to disable) |
 | `__init__.py` | Package exports |
+
+### reviewers/ Package
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Re-exports: `ReviewerResult`, `run_codex_review`, `run_gemini_review`, `run_agent_review` |
+| `base.py` | `ReviewerResult`, `REVIEW_SCHEMA`, `AgentConfig`, `OrchestratorConfig` |
+| `agent.py` | Claude Code agent-based reviewer (uses `--system-prompt`) |
+| `codex.py` | Codex CLI reviewer |
+| `gemini.py` | Google Gemini API reviewer |
 
 ---
 
@@ -33,6 +43,14 @@ Hooks (cc-native-plan-review.py, etc.)
     │
     ├── lib/orchestrator.py (agent selection)
     │       └── lib/utils.py (ReviewerResult, etc.)
+    │
+    ├── lib/reviewers/ (plan review package)
+    │       ├── base.py (ReviewerResult, AgentConfig, schemas)
+    │       ├── agent.py → base.py
+    │       ├── codex.py → base.py
+    │       └── gemini.py → base.py
+    │
+    ├── lib/debug.py (context-folder debug logging)
     │
     └── _shared/lib/ (shared across all methods)
             ├── lib/base/subprocess_utils.py
@@ -130,14 +148,16 @@ if not success:
 path.write_text(content, encoding="utf-8")
 ```
 
-Atomic writes use a temp file + rename pattern. Check `constants.ENABLE_ROBUST_PLAN_WRITES` for the feature flag.
+Atomic writes use a temp file + rename pattern. The `constants.ENABLE_ROBUST_PLAN_WRITES` feature flag (env: `CC_NATIVE_ROBUST_WRITES`, default: `true`) controls whether atomic writes are used for plan state files.
 
 ---
 
 ## Adding New Reviewers
 
-1. **Create reviewer function** in `reviewers.py`:
+1. **Create reviewer file** in `reviewers/` package (e.g., `reviewers/myreviewer.py`):
    ```python
+   from .base import ReviewerResult, REVIEW_SCHEMA
+
    def run_myreviewer_review(
        plan: str,
        schema: Dict[str, Any],
@@ -154,7 +174,10 @@ Atomic writes use a temp file + rename pattern. Check `constants.ENABLE_ROBUST_P
        )
    ```
 
-2. **Export in `__init__.py`** (if needed for external use)
+2. **Export in `reviewers/__init__.py`**:
+   ```python
+   from .myreviewer import run_myreviewer_review
+   ```
 
 3. **Add config** in `plan-review.config.json`:
    ```json

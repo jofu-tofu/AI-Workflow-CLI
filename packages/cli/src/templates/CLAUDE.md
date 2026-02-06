@@ -17,24 +17,53 @@ Include `_output/{method}/` in template `.gitignore`.
 
 ## Directory Structure
 
+Each template installs into `.aiwcli/` (method files) and `.{ide}/` (IDE integration). The `_shared/` template provides cross-method infrastructure used by all methods.
+
 ```
-packages/cli/src/templates/{method}/
-├── _{method}/              # Method-specific shared files
-│   ├── templates/*.md.template
-│   └── workflows/*.md      # Canonical workflow definitions
-├── .{ide}/{ide-folder}/{method}/*.md  # IDE command stubs
-├── .gitignore              # Output ignore rules
-├── {METHOD}-README.md      # User documentation
-├── TEMPLATE-SCHEMA.md      # Schema reference
-└── MIGRATION.md            # Breaking changes
+packages/cli/src/templates/
+├── _shared/                          # Cross-method infrastructure (installed by all methods)
+│   ├── hooks/                        # Shared hook scripts (context, tasks, sessions)
+│   └── lib/                          # Shared Python libraries
+│       ├── base/                     #   Core: atomic_write, constants, inference, utils
+│       ├── context/                  #   Context management, event sourcing, discovery
+│       ├── handoff/                  #   Session handoff document generation
+│       └── templates/                #   Output formatters, plan context templates
+│
+├── cc-native/                        # CC-Native method template
+│   ├── _cc-native/                   #   Method-specific hooks, lib, agents, workflows, scripts
+│   ├── _shared/                      #   Copy of shared infrastructure (installed together)
+│   ├── .claude/                      #   Claude Code: settings.json, commands/, agents/
+│   ├── .windsurf/                    #   Windsurf: workflows/
+│   └── .gitignore
+│
+├── gsd/                              # GSD method template
+│   ├── .aiwcli/_gsd/                 #   Templates, workflows, hooks, config, docs
+│   ├── .claude/                      #   Claude Code: settings.json, commands/, agents/
+│   ├── .windsurf/                    #   Windsurf: workflows/
+│   ├── GSD-README.md
+│   ├── TEMPLATE-SCHEMA.md
+│   └── MIGRATION.md
+│
+├── bmad/                             # BMAD method template
+│   ├── .aiwcli/_bmad/               #   Agents, workflows, teams, testarch, config
+│   ├── .claude/                      #   Claude Code: settings.json, commands/
+│   └── ...
+│
+├── planning-with-files/              # Planning-with-Files method template
+│   ├── .claude/                      #   Claude Code: settings.json, skills/
+│   ├── .windsurf/                    #   Windsurf: workflows/, scripts/
+│   └── ...
+│
+└── CLAUDE.md                         # This file
 ```
 
 ### Tier Details
 
 | Tier | Location | Purpose |
 |------|----------|---------|
-| General | `_{method}/` | IDE-agnostic templates and canonical workflows |
-| IDE | `.{ide}/{folder}/{method}/` | Lightweight stubs that load canonical workflows |
+| Shared | `_shared/` | Cross-method hooks and libraries (context management, task sync, sessions) |
+| Method | `_{method}/` or `.aiwcli/_{method}/` | Method-specific templates, workflows, hooks, config |
+| IDE | `.{ide}/` | IDE-specific command stubs, settings, workflow definitions |
 | Config | `.{ide}/settings.json` | Hooks, model prefs, method settings (merged on install) |
 
 ---
@@ -57,7 +86,7 @@ When multiple templates install, settings.json files merge:
 
 ## Hooks
 
-**Location:** `.claude/hooks/{method}-{hook-name}.{ext}`
+**Location:** Hooks live in `.aiwcli/_shared/hooks/` (cross-method) and `.aiwcli/_{method}/hooks/` (method-specific). They are configured in `.{ide}/settings.json`, not placed in IDE directories.
 
 **Configuration:**
 ```json
@@ -65,14 +94,14 @@ When multiple templates install, settings.json files merge:
   "hooks": {
     "PostToolUse": [{
       "matcher": "Write",
-      "hooks": [{ "type": "command", "command": "python .claude/hooks/gsd-plan-review.py", "timeout": 300000 }]
+      "hooks": [{ "type": "command", "command": "python .aiwcli/_cc-native/hooks/cc-native-plan-review.py", "timeout": 300000 }]
     }]
   }
 }
 ```
 
 **Requirements:**
-- Prefix with method name (e.g., `gsd-plan-review.py`)
+- Prefix method-specific hooks with method name (e.g., `cc-native-plan-review.py`)
 - Use relative paths from project root
 - Write outputs to `_output/{method}/`
 - Specify timeouts
@@ -119,8 +148,8 @@ Load and execute `_{method}/workflows/{name}.md`.
 | Reference Type | Pattern |
 |----------------|---------|
 | Templates | `_{method}/templates/FILE.md.template` |
-| Workflows (Claude) | `/gsd:other-workflow` |
-| Workflows (Windsurf) | `other-workflow` from GSD workflows |
+| Workflows (Claude) | `/gsd:workflow-name` (maps to `.claude/commands/gsd/workflow-name.md`) |
+| Workflows (Windsurf) | `workflow-name` from method workflows |
 | Outputs | `_output/{method}/{subdir}/FILE.md` |
 
 ---
@@ -143,8 +172,8 @@ Load and execute `_{method}/workflows/{name}.md`.
 
 **New Template:**
 - [ ] Create `_{method}/` with `templates/` and `workflows/`
-- [ ] Create `.claude/commands/{method}/` stubs
-- [ ] Create `.windsurf/workflows/{method}/` stubs
+- [ ] Create `.claude/commands/{method}/` stubs (Claude Code)
+- [ ] Create `.windsurf/workflows/{method}/` stubs (Windsurf)
 - [ ] Add `.gitignore` with `_output/{method}/`
 - [ ] Create `{METHOD}-README.md`, `TEMPLATE-SCHEMA.md`, `MIGRATION.md`
 - [ ] Configure method-namespaced settings in `.claude/settings.json`
@@ -165,6 +194,7 @@ Load and execute `_{method}/workflows/{name}.md`.
 - Keep canonical workflows in `_{method}/workflows/`
 - Use relative paths from project root
 - Document changes in TEMPLATE-SCHEMA.md
+- Place hooks in `.aiwcli/` directories, wire them in `.{ide}/settings.json`
 
 **Avoid:**
 - Outputs in project root
@@ -172,3 +202,4 @@ Load and execute `_{method}/workflows/{name}.md`.
 - Hooks without method prefix
 - Full workflows in IDE command files
 - Hardcoded paths without method namespace
+- Putting hook scripts directly in IDE directories (`.claude/hooks/`)

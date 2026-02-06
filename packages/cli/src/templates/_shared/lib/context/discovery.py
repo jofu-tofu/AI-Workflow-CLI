@@ -19,8 +19,108 @@ from .context_manager import (
     get_context_with_in_flight_work,
 )
 from .event_log import get_current_state, get_pending_tasks, Task
-from ..base.utils import parse_iso_timestamp
+from .auto_state import load_auto_state
+from .task_sync import generate_task_summary
+from ..base.utils import eprint, parse_iso_timestamp
+from ..base.constants import get_context_dir
 from ..templates.formatters import get_status_icon, format_continuation_header, get_mode_display
+
+
+def find_plan_path(context: Context, project_root: Path = None) -> Optional[str]:
+    """
+    Find the most relevant plan path for a context.
+
+    Priority:
+    1. Active plan (in_flight.artifact_path) if file exists
+    2. Most recent archived plan by mtime
+    3. None if no plans found
+
+    Args:
+        context: Context to find plan for
+        project_root: Project root directory
+
+    Returns:
+        Plan file path string or None
+    """
+    # 1. Active plan (in_flight.artifact_path)
+    if context.in_flight and context.in_flight.artifact_path:
+        plan_path = Path(context.in_flight.artifact_path)
+        if plan_path.exists():
+            return str(plan_path)
+
+    # 2. Archived plans (most recent by mtime)
+    plans_dir = get_context_dir(context.id, project_root) / "plans"
+    if plans_dir.exists():
+        plans = sorted(plans_dir.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if plans:
+            return str(plans[0])
+
+    # 3. No plan found
+    return None
+
+
+def _build_restore_sections(
+    context: Context,
+    project_root: Path = None
+) -> str:
+    """
+    Build restoration context sections from auto-state and task history.
+
+    Used by formatters to inject richer context when resuming work.
+    Returns empty string if no restoration data is available (fresh context).
+
+    Args:
+        context: Context being restored
+        project_root: Project root directory
+
+    Returns:
+        Formatted markdown sections (may be empty)
+    """
+    sections = []
+
+    # Load auto-state for git info and session end metadata
+    auto_state = load_auto_state(context.id, project_root)
+
+    # Add session end info if available
+    if auto_state:
+        saved_at = auto_state.get("saved_at", "")
+        save_reason = auto_state.get("save_reason", "")
+        if saved_at:
+            time_str = format_relative_time(saved_at)
+            reason_display = save_reason.replace("_", " ") if save_reason else "unknown"
+            sections.append(f"**Last session ended:** {time_str} ({reason_display})")
+
+    # Task summary (session-aware)
+    task_summary = generate_task_summary(context.id, project_root)
+    if task_summary and task_summary != "No tasks in this context.":
+        sections.append("")
+        sections.append(task_summary)
+
+    # Plan path
+    plan_path = find_plan_path(context, project_root)
+    if plan_path:
+        sections.append("")
+        sections.append("### Plan")
+        sections.append(f"Read the plan at: `{plan_path}`")
+
+    # Git state from auto-state
+    if auto_state:
+        git_state = auto_state.get("git_state", {})
+        if git_state:
+            branch = git_state.get("branch", "unknown")
+            uncommitted = git_state.get("uncommitted_files", [])
+            last_commit = git_state.get("last_commit_short", "")
+
+            sections.append("")
+            sections.append("### Git State")
+            uncommitted_str = ", ".join(uncommitted[:5]) if uncommitted else "none"
+            if len(uncommitted) > 5:
+                uncommitted_str += f" (+{len(uncommitted) - 5} more)"
+            sections.append(f"Branch: {branch} | Uncommitted: {uncommitted_str}")
+            if last_commit:
+                sections.append(f"Last commit: {last_commit}")
+
+    return "\n".join(sections)
 
 
 def discover_contexts_for_session(
@@ -125,7 +225,7 @@ def format_context_list(contexts: List[Context]) -> str:
     return "\n".join(lines)
 
 
-def format_pending_plan_continuation(context: Context) -> str:
+def format_pending_plan_continuation(context: Context, project_root: Path = None) -> str:
     """
     Format output for plan handoff scenario.
 
@@ -135,47 +235,36 @@ def format_pending_plan_continuation(context: Context) -> str:
 
     Args:
         context: Context with pending plan implementation
+        project_root: Project root directory
 
     Returns:
         Formatted instructions for Claude
     """
     lines = [
-        format_continuation_header("context", context.id),
+        f"## Resuming Context: {context.id}",
         "",
         f"**Summary:** {context.summary}",
-        "",
+        f"**Mode:** Pending Implementation",
     ]
 
-    # Add plan info
-    if context.in_flight and context.in_flight.artifact_path:
-        lines.append(f"**Plan pending implementation:**")
-        lines.append(f"`{context.in_flight.artifact_path}`")
-        lines.append("")
-
-    # Add pending tasks if any
-    tasks = get_pending_tasks(context.id)
-    if tasks:
-        lines.append("**Previous tasks:**")
-        for task in tasks:
-            status_icon = get_status_icon(task.status)
-            lines.append(f"  {status_icon} {task.subject}")
-        lines.append("")
+    # Add restore sections (auto-state, tasks, git)
+    restore = _build_restore_sections(context, project_root)
+    if restore:
+        lines.append(restore)
 
     lines.extend([
+        "",
         "---",
         "",
         "**Instructions:**",
-        "1. Read the plan file above",
-        "2. Use TaskCreate to restore any pending tasks from the plan",
-        "3. Begin implementing the approved plan",
-        "",
-        "The context has been loaded. You may begin implementation.",
+        "1. Review the plan and previous work above",
+        "2. Continue from where the previous session left off",
     ])
 
     return "\n".join(lines)
 
 
-def format_implementation_continuation(context: Context) -> str:
+def format_implementation_continuation(context: Context, project_root: Path = None) -> str:
     """
     Format output for ongoing implementation scenario.
 
@@ -184,41 +273,30 @@ def format_implementation_continuation(context: Context) -> str:
 
     Args:
         context: Context with implementation in progress
+        project_root: Project root directory
 
     Returns:
         Formatted instructions for Claude
     """
     lines = [
-        format_continuation_header("implementing", context.id),
+        f"## Resuming Context: {context.id}",
         "",
         f"**Summary:** {context.summary}",
-        "",
+        f"**Mode:** Implementing",
     ]
 
-    # Add plan info
-    if context.in_flight and context.in_flight.artifact_path:
-        lines.append(f"**Plan being implemented:**")
-        lines.append(f"`{context.in_flight.artifact_path}`")
-        lines.append("")
-
-    # Add pending tasks
-    tasks = get_pending_tasks(context.id)
-    if tasks:
-        lines.append("**Pending tasks:**")
-        for task in tasks:
-            status_icon = get_status_icon(task.status)
-            lines.append(f"  {status_icon} {task.subject}")
-        lines.append("")
+    # Add restore sections (auto-state, tasks, git)
+    restore = _build_restore_sections(context, project_root)
+    if restore:
+        lines.append(restore)
 
     lines.extend([
+        "",
         "---",
         "",
         "**Instructions:**",
-        "1. Review the plan and pending tasks above",
-        "2. Use TaskCreate to restore pending tasks",
-        "3. Continue implementing",
-        "",
-        "The context has been loaded. You may continue.",
+        "1. Review the plan and previous work above",
+        "2. Continue from where the previous session left off",
     ])
 
     return "\n".join(lines)
@@ -333,14 +411,23 @@ def format_context_selection_required(contexts: List[Context]) -> str:
     return "\n".join(lines)
 
 
-def format_active_context_reminder(context: Context) -> str:
+def format_active_context_reminder(
+    context: Context,
+    project_root: Path = None,
+    include_restore: bool = False
+) -> str:
     """
     Format system reminder for active context.
 
-    Used by context enforcer hook to inject context awareness.
+    Called in two situations:
+    1. session_match (every prompt): include_restore=False → lightweight
+    2. auto_selected first bind: include_restore=True → rich restore context
 
     Args:
         context: Active context
+        project_root: Project root directory
+        include_restore: If True, include auto-state/tasks/git restore sections.
+                        Only set True on first bind to avoid per-prompt overhead.
 
     Returns:
         Formatted system reminder
@@ -356,16 +443,39 @@ def format_active_context_reminder(context: Context) -> str:
             # Remove brackets from "[Planning]" to get "Planning"
             mode_display = mode_str.strip("[]")
 
-    lines = [
-        f"## Active Context: {context.id}",
-        "",
-        f"**Summary:** {context.summary}",
-        f"**Mode:** {mode_display}",
-        f"**Last Active:** {time_str}",
-        "",
-        f'All work belongs to context "{context.id}".',
-        "Tasks created with TaskCreate will be persisted to this context.",
-    ]
+    if include_restore:
+        # Rich restore: first bind to existing context in new session
+        lines = [
+            f"## Resuming Context: {context.id}",
+            "",
+            f"**Summary:** {context.summary}",
+            f"**Mode:** {mode_display}",
+        ]
+
+        restore = _build_restore_sections(context, project_root)
+        if restore:
+            lines.append(restore)
+
+        lines.extend([
+            "",
+            "---",
+            "",
+            "**Instructions:**",
+            "1. Review the previous work above",
+            "2. Continue from where the previous session left off",
+        ])
+    else:
+        # Lightweight: subsequent prompts in same session
+        lines = [
+            f"## Active Context: {context.id}",
+            "",
+            f"**Summary:** {context.summary}",
+            f"**Mode:** {mode_display}",
+            f"**Last Active:** {time_str}",
+            "",
+            f'All work belongs to context "{context.id}".',
+            "Tasks created with TaskCreate will be persisted to this context.",
+        ]
 
     return "\n".join(lines)
 

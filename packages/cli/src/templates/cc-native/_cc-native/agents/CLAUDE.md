@@ -21,7 +21,7 @@ Each agent file has:
 - **Frontmatter (YAML):** name, model, focus, categories, enabled
 - **Body (Markdown):** Full persona content → becomes `system_prompt` for `--system-prompt` flag
 
-The `aggregate_agents.py` script extracts both parts. The body becomes `AgentConfig.system_prompt`.
+The `aggregate_agents.py` script (`_cc-native/scripts/aggregate_agents.py`) extracts both parts. The body becomes `AgentConfig.system_prompt`.
 
 ## --setting-sources "" Requirement
 

@@ -1,20 +1,8 @@
 # Instructions for Claude
 
-## When Doing Development or Testing Work
+## Before Development or Testing
 
-**Before ANY development or testing tasks, read DEVELOPMENT.md first.**
-
-DEVELOPMENT.md contains critical environment setup instructions that prevent:
-- Test failures from incorrect paths
-- Files created in wrong locations
-- Development work polluting production environment
-
-## Execution Pattern
-
-1. Read DEVELOPMENT.md (if not already read this session)
-2. Follow setup instructions in DEVELOPMENT.md
-3. Verify environment is configured correctly
-4. Proceed with development or testing tasks
+**Read DEVELOPMENT.md first.** It contains environment setup that prevents path errors, test failures, and cross-environment pollution.
 
 ## Template Synchronization
 
@@ -38,26 +26,4 @@ Changes to the working directory (`.aiwcli/`) should also be applied to the temp
 
 ## Hook Development
 
-**Verify hook API format before writing or modifying hooks.**
-
-The Claude Code hook API evolves frequently. Incorrect field names or structures fail silently—the hook runs but produces no effect.
-
-**Required workflow:**
-1. Use the `claude-code-guide` agent to verify current hook format
-2. Confirm field names for your specific hook type (PreToolUse, PostToolUse, etc.)
-3. Write or modify the hook code
-
-**Example verification queries:**
-- "What is the correct output format for PreToolUse hooks that block tool execution?"
-- "What fields are available in PostToolUse hook input?"
-
-## After Modifying Hooks
-
-**Always validate Python syntax after editing hooks:**
-
-```bash
-python -m py_compile .aiwcli/_cc-native/hooks/cc-native-plan-review.py
-python -m py_compile .aiwcli/_shared/hooks/*.py
-```
-
-Hooks fail silently on syntax errors. Running py_compile catches these before they reach production.
+See `.aiwcli/_cc-native/hooks/CLAUDE.md` for hook development patterns, API format, debugging, and the py_compile verification workflow.

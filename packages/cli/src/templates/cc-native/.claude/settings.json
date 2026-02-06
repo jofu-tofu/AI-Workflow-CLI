@@ -14,7 +14,7 @@
       "ides": [
         "claude"
       ],
-      "installedAt": "{{INSTALLED_AT}}"
+      "installedAt": "2026-01-29T01:59:02.558Z"
     }
   },
   "hooks": {
@@ -24,6 +24,28 @@
           {
             "type": "command",
             "command": "python .aiwcli/_shared/hooks/session_start.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .aiwcli/_shared/hooks/session_end.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .aiwcli/_shared/hooks/pre_compact.py",
             "timeout": 5000
           }
         ]

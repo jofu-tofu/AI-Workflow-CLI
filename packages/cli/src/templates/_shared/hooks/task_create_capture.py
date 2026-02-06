@@ -115,6 +115,7 @@ def main() -> int:
         subject=subject,
         description=description,
         active_form=active_form,
+        session_id=session_id or "",
         project_root=project_root
     )
 

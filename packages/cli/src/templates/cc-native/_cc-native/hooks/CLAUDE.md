@@ -32,6 +32,7 @@ sys.path.insert(0, str(_shared))
 
 from utils import eprint, ReviewerResult
 from lib.base.subprocess_utils import is_internal_call
+from debug import log_debug  # Context-folder debug logging
 ```
 
 ```python
@@ -194,7 +195,14 @@ These are reminders based on past issues. Not enforcement rules.
 Always validate Python syntax after editing hooks:
 
 ```bash
+# Validate working copy
+python -m py_compile .aiwcli/_cc-native/hooks/cc-native-plan-review.py
+
+# Validate template copy (after sync)
 python -m py_compile packages/cli/src/templates/cc-native/_cc-native/hooks/cc-native-plan-review.py
+
+# Validate all shared hooks (loop required — py_compile doesn't accept globs)
+for f in .aiwcli/_shared/hooks/*.py; do python -m py_compile "$f"; done
 ```
 
 Hooks fail silently on syntax errors - this catches them before they reach production.

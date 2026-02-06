@@ -34,64 +34,47 @@ from lib.base.inference import inference
 # - Direct imperative instructions
 # - Explicit JSON output format
 
-ASSESSMENT_SYSTEM_PROMPT = """You assess task descriptions for atomicity and forkability.
+ASSESSMENT_SYSTEM_PROMPT = """Assess whether a task description is self-contained enough for a subagent with zero conversation history to execute it.
 
-## Definitions
+## What Makes a Good Task
 
-**Atomic Task:** Contains ALL context needed for independent execution without reading prior conversation.
-
-**Forkable Task:** Can be delegated to a subagent with ZERO conversation history and still be completed successfully.
-
-## Signs of Non-Atomic Tasks
-
-Look for these indicators:
-- Contextual references: "the file above", "as discussed", "the mentioned function", "this bug"
-- Vague descriptions assuming prior knowledge: "fix the bug", "update it", "finish the work"
-- Missing specifics: which file? what function? what expected behavior? what error?
-- Pronouns without antecedents: "it", "they", "the issue" without explicit definition
-
-## Signs of Atomic Tasks
-
-Well-specified tasks include:
+A well-specified task includes:
 - Explicit file paths: "Edit src/utils/parser.py"
-- Specific function names: "Modify the validate_input() function"
-- Clear expected behavior: "Should return 404 when user not found"
-- Complete error context: "TypeError on line 45 when input is None"
+- Specific function/component names: "Modify validate_input()"
+- Clear expected behavior: "Return 404 when user not found"
+- Concrete error context: "TypeError on line 45 when input is None"
+
+## What Makes a Poor Task
+
+Watch for context-dependent references:
+- Dangling references: "the file above", "as discussed", "this bug"
+- Vague actions: "fix the bug", "update it", "finish the work"
+- Pronouns without antecedents: "it", "they", "the issue"
+- Missing specifics: which file? what function? what behavior?
 
 ## Examples
 
-**Example 1: Non-Atomic Task**
-Subject: "Fix the bug"
+**Atomic** — Subject: "Fix null pointer in user lookup"
+Description: "In src/services/user.py, get_user_by_id() raises TypeError when user_id is None. Add null check at line 23 to return None instead of calling database.query()."
+Why: file path, function, error, fix location, expected behavior.
+
+**Not atomic** — Subject: "Fix the bug"
 Description: "The issue we discussed earlier needs to be resolved"
-Assessment: NOT atomic (no file, no function, no error details, references "discussed earlier")
+Why: no file, no function, no error details, references conversation history.
 
-**Example 2: Atomic Task**
-Subject: "Fix null pointer in user lookup"
-Description: "In src/services/user.py, the get_user_by_id() function raises TypeError when user_id is None. Add null check at line 23 that returns None early instead of calling database.query()."
-Assessment: Atomic (file path, function name, specific error, exact fix location, expected behavior)
+**Partially atomic** — Subject: "Add validation to form"
+Description: "Add email validation to the signup form. Return error if invalid."
+Why: missing which file, what validation rules, where to display error.
 
-**Example 3: Partially Atomic Task**
-Subject: "Add validation to form"
-Description: "Add email validation to the signup form. Return error message if invalid."
-Assessment: NOT fully atomic (missing: which file contains the form? what validation rules? where to display error?)
+## Output
 
-## Output Format
+Respond with JSON only:
+{"atomic": true/false, "forkable": true/false, "issues": ["issue 1", "issue 2"], "recommendation": "actionable suggestion or 'Well-specified'"}"""
 
-Respond with valid JSON only:
-{
-  "atomic": true/false,
-  "forkable": true/false,
-  "issues": ["specific issue 1", "specific issue 2"],
-  "recommendation": "brief actionable suggestion if issues exist, or 'Task is well-specified' if good"
-}"""
-
-ASSESSMENT_USER_TEMPLATE = """Assess this task for atomicity and forkability:
-
-**Subject:** {subject}
-
+ASSESSMENT_USER_TEMPLATE = """**Subject:** {subject}
 **Description:** {description}
 
-Evaluate whether a subagent with zero prior context could execute this task successfully."""
+Could a subagent with zero conversation history execute this task?"""
 
 
 @safe_hook_main("task_create_atomicity")
@@ -167,33 +150,22 @@ def main() -> int:
 
     # Build context message based on assessment
     if atomic and forkable:
-        # Task is good - minimal positive feedback
-        context_msg = "Task Assessment: Well-specified and forkable."
+        context_msg = "Task assessment: well-specified and ready for delegation."
     else:
-        # Task has issues - inject detailed warning
-        status_parts = []
-        if not atomic:
-            status_parts.append("NOT ATOMIC")
-        if not forkable:
-            status_parts.append("NOT FORKABLE")
+        # Constructive guidance — what to add, not what's wrong
+        issues_text = "\n".join(f"- {issue}" for issue in issues) if issues else ""
 
-        issues_text = "\n".join(f"- {issue}" for issue in issues) if issues else "- See recommendation below"
+        context_msg = f"""**Enrich this task for subagent delegation**
 
-        context_msg = f"""**TASK ATOMICITY WARNING** ({', '.join(status_parts)})
+A subagent receiving this task will have no conversation history. To make it actionable:
 
-This task may lack sufficient context for independent execution by a subagent.
-
-**Issues detected:**
 {issues_text}
 
-**Recommendation:** {recommendation}
-
-Consider adding specific file paths, function names, expected behaviors, or error details before creating this task."""
+**Suggested enrichment:** {recommendation}"""
 
     # Output hook response with additionalContext
     out = {
         "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
             "additionalContext": context_msg
         }
     }

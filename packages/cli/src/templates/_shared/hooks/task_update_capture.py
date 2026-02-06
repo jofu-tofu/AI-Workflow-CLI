@@ -53,6 +53,7 @@ from lib.context.task_sync import (
     record_task_started,
     record_task_completed,
     record_task_blocked,
+    record_task_deleted,
 )
 
 
@@ -147,6 +148,7 @@ def main() -> int:
         success = record_task_started(
             context_id=context_id,
             task_id=persistent_task_id,
+            session_id=session_id or "",
             project_root=project_root
         )
         if success:
@@ -173,10 +175,22 @@ def main() -> int:
             work_summary=work_summary,
             files_changed=files_changed if isinstance(files_changed, list) else [],
             commit_ref=commit_ref,
+            session_id=session_id or "",
             project_root=project_root
         )
         if success:
             events_recorded.append("task_completed")
+
+    # Status: deleted
+    elif status == "deleted":
+        success = record_task_deleted(
+            context_id=context_id,
+            task_id=persistent_task_id,
+            session_id=session_id or "",
+            project_root=project_root
+        )
+        if success:
+            events_recorded.append("task_deleted")
 
     # Blocked by tasks
     if add_blocked_by and isinstance(add_blocked_by, list) and len(add_blocked_by) > 0:
@@ -185,6 +199,7 @@ def main() -> int:
             context_id=context_id,
             task_id=persistent_task_id,
             reason=blocked_reason,
+            session_id=session_id or "",
             project_root=project_root
         )
         if success:

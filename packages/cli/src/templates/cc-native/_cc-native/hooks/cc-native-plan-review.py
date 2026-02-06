@@ -144,7 +144,7 @@ DEFAULT_AGENT_MODEL: str = "sonnet"
 
 DEFAULT_REVIEW_ITERATIONS: Dict[str, int] = {
     "simple": 1,
-    "medium": 1,
+    "medium": 2,
     "high": 2,
 }
 
@@ -319,9 +319,9 @@ def should_continue_iterating_context(
         return False
 
     # Check early exit on all pass
-    early_exit = True
+    early_exit = False
     if config:
-        early_exit = config.get("earlyExitOnAllPass", True)
+        early_exit = config.get("earlyExitOnAllPass", False)
     if early_exit and verdict == "pass":
         eprint(f"[cc-native-plan-review] All reviewers passed and earlyExitOnAllPass=true, exiting early")
         return False
@@ -395,7 +395,7 @@ def load_settings(proj_dir: Path) -> Dict[str, Any]:
 
     # Merge reviewIterations settings
     merged_agent["reviewIterations"] = {**DEFAULT_REVIEW_ITERATIONS, **agent_review.get("reviewIterations", {})}
-    merged_agent["earlyExitOnAllPass"] = agent_review.get("earlyExitOnAllPass", True)
+    merged_agent["earlyExitOnAllPass"] = agent_review.get("earlyExitOnAllPass", False)
 
     return {"planReview": merged_plan, "agentReview": merged_agent}
 
@@ -512,18 +512,16 @@ def main() -> int:
     context_path = get_context_dir(active_context.id, base)
     eprint(f"[cc-native-plan-review] Context path for debug: {context_path}")
 
-    # Check if we've exhausted review iterations from context
-    existing_iteration = load_iteration_state(reviews_dir)
-    if existing_iteration:
-        current = existing_iteration.get("current", 1)
-        max_iter = existing_iteration.get("max", 1)
-        if current > max_iter:
-            return skip_with_info(f"Review iterations exhausted ({current}/{max_iter}). The plan has been reviewed the maximum number of times for its complexity level.")
-
     # Plan-hash deduplication
     plan_hash = compute_plan_hash(plan)
     eprint(f"[cc-native-plan-review] Plan hash: {plan_hash}")
     if is_plan_already_reviewed(session_id, plan_hash):
+        # Still increment iteration even when skipping review
+        existing_iteration = load_iteration_state(reviews_dir)
+        if existing_iteration:
+            existing_iteration["current"] = existing_iteration.get("current", 1) + 1
+            save_iteration_state(reviews_dir, existing_iteration)
+            eprint(f"[cc-native-plan-review] Incremented iteration to {existing_iteration['current']} (review skipped, same hash)")
         return skip_with_info("Plan content unchanged since last review (same hash). Modify the plan to trigger a new review.")
 
     # Initialize combined result
@@ -556,9 +554,15 @@ def main() -> int:
         timeout=orch_settings.get("timeout", 30),
     )
 
+    # Compute mandatory agent names early so orchestrator can exclude them
+    mandatory_names = set(agent_settings.get("mandatoryAgents", [
+        "handoff-readiness", "clarity-auditor", "skeptic"
+    ]))
+
     eprint(f"[cc-native-plan-review] Codex enabled: {codex_enabled}, Gemini enabled: {gemini_enabled}")
     eprint(f"[cc-native-plan-review] Agent library: {[a.name for a in agent_library]}")
     eprint(f"[cc-native-plan-review] Enabled agents: {[a.name for a in enabled_agents]}")
+    eprint(f"[cc-native-plan-review] Mandatory agents: {sorted(mandatory_names)}")
     eprint(f"[cc-native-plan-review] Orchestrator enabled: {orchestrator_config.enabled}")
 
     # Run CLI reviewers + orchestrator in parallel
@@ -568,7 +572,7 @@ def main() -> int:
     if gemini_enabled:
         phase1_tasks.append(("gemini", lambda: run_gemini_review(plan, REVIEW_SCHEMA, plan_settings)))
     if orchestrator_config.enabled and enabled_agents and not legacy_mode:
-        phase1_tasks.append(("orchestrator", lambda: run_orchestrator(plan, enabled_agents, orchestrator_config, agent_settings)))
+        phase1_tasks.append(("orchestrator", lambda: run_orchestrator(plan, enabled_agents, orchestrator_config, agent_settings, mandatory_names=mandatory_names)))
 
     eprint(f"[cc-native-plan-review] === PHASE 1: Running {len(phase1_tasks)} tasks in parallel ===")
 
@@ -607,10 +611,7 @@ def main() -> int:
 
         selected_agents: List[AgentConfig] = []
 
-        # Load mandatory and fallback config
-        mandatory_names = set(agent_settings.get("mandatoryAgents", [
-            "handoff-readiness", "clarity-auditor", "skeptic"
-        ]))
+        # Load fallback config (mandatory_names already computed above)
         fallback_by_complexity = agent_settings.get("fallbackByComplexity", {
             "simple": 0, "medium": 5, "high": 9
         })
@@ -632,13 +633,20 @@ def main() -> int:
 
                 eprint(f"[cc-native-plan-review] Orchestrator selected (non-mandatory): {[a.name for a in orch_selected]}")
 
-                # Random fallback if orchestrator selected zero additional agents
-                if not orch_selected and non_mandatory:
-                    fallback_count = fallback_by_complexity.get(detected_complexity, 5)
-                    fallback_count = min(fallback_count, len(non_mandatory))
-                    if fallback_count > 0:
-                        orch_selected = random.sample(non_mandatory, fallback_count)
-                        eprint(f"[cc-native-plan-review] Random fallback ({detected_complexity}): {[a.name for a in orch_selected]}")
+                # Diagnostic: warn if orchestrator returned names not in our agent pool
+                unmatched = orch_selected_names - {a.name for a in non_mandatory}
+                if unmatched:
+                    eprint(f"[cc-native-plan-review] WARNING: Orchestrator selected unknown agents: {unmatched}")
+
+                # Enforce minimum agent count — top up with random agents if orchestrator selected too few
+                min_additional = fallback_by_complexity.get(detected_complexity, 5)
+                if len(orch_selected) < min_additional and non_mandatory:
+                    remaining = [a for a in non_mandatory if a not in orch_selected]
+                    top_up_count = min(min_additional - len(orch_selected), len(remaining))
+                    if top_up_count > 0:
+                        top_up = random.sample(remaining, top_up_count)
+                        orch_selected.extend(top_up)
+                        eprint(f"[cc-native-plan-review] Topped up {top_up_count} agents to meet {detected_complexity} minimum: {[a.name for a in top_up]}")
 
                 # Combine: mandatory + orchestrator/fallback selection
                 selected_agents = mandatory_agents + orch_selected

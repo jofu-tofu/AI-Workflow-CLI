@@ -41,6 +41,9 @@ EVENT_PLAN_IMPLEMENTATION_STARTED = "plan_implementation_started"
 EVENT_PLAN_COMPLETED = "plan_completed"
 EVENT_HANDOFF_CREATED = "handoff_created"
 EVENT_HANDOFF_CLEARED = "handoff_cleared"
+EVENT_SESSION_ENDED = "session_ended"
+EVENT_AUTO_STATE_SAVED = "auto_state_saved"
+EVENT_TASK_DELETED = "task_deleted"
 
 
 @dataclass
@@ -247,6 +250,11 @@ def get_current_state(context_id: str, project_root: Path = None) -> ContextStat
             if task_id and task_id in tasks_map:
                 tasks_map[task_id].status = "blocked"
                 tasks_map[task_id].blocked_reason = event.get("reason", "")
+
+        elif event_type == EVENT_TASK_DELETED:
+            task_id = event.get("task_id")
+            if task_id and task_id in tasks_map:
+                del tasks_map[task_id]
 
         elif event_type == EVENT_NOTE_ADDED:
             note = event.get("content", "")

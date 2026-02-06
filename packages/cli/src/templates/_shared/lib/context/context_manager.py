@@ -593,7 +593,7 @@ def get_all_contexts(
 
             contexts.append(context)
 
-    # Sort by last_active (most recent first)
+    # Sort by last_active (most recent first) — newest at top
     contexts.sort(key=lambda c: c.last_active or "", reverse=True)
 
     return contexts
@@ -653,7 +653,7 @@ def complete_context(context_id: str, project_root: Path = None) -> Optional[Con
     Mark a context as completed and archive it.
 
     User-driven completion - AI should not auto-complete.
-    After marking completed, automatically archives to _output/contexts/archive/.
+    After marking completed, automatically archives to _output/contexts/_archive/.
 
     Args:
         context_id: Context identifier
@@ -941,14 +941,17 @@ def get_all_in_flight_contexts(project_root: Path = None) -> List[Context]:
     - pending_implementation: Plan created, awaiting implementation
 
     NOT in-flight (normal working state):
+    - implementing: Active implementation work (normal state)
     - planning: Active planning session (doesn't auto-select context)
-    - implementing: Active work, but doesn't block new context creation
     - none: No active work
 
     Used by context enforcer to determine auto-selection behavior:
     - 0 in-flight: auto-create new context
     - 1 in-flight: auto-select that context
     - Multiple: show picker
+
+    Also used by SessionStart to bind new sessions to existing contexts
+    after /clear, preventing duplicate context creation.
 
     Args:
         project_root: Project root directory

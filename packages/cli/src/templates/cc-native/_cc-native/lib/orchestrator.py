@@ -59,6 +59,44 @@ ORCHESTRATOR_SCHEMA: Dict[str, Any] = {
 }
 
 
+def build_orchestrator_schema(
+    valid_agent_names: List[str],
+    categories: List[str],
+) -> Dict[str, Any]:
+    """Build orchestrator JSON schema with enum-constrained agent names.
+
+    When valid_agent_names is non-empty, selectedAgents items are constrained
+    to only those names via JSON schema enum. This prevents the LLM from
+    hallucinating or misspelling agent names.
+
+    Args:
+        valid_agent_names: List of valid agent names for enum constraint.
+        categories: List of valid complexity categories.
+
+    Returns:
+        JSON schema dict for orchestrator structured output.
+    """
+    items_schema: Dict[str, Any] = {"type": "string"}
+    if valid_agent_names:
+        items_schema["enum"] = valid_agent_names
+
+    return {
+        "type": "object",
+        "properties": {
+            "complexity": {"type": "string", "enum": ["simple", "medium", "high"]},
+            "category": {"type": "string", "enum": categories},
+            "selectedAgents": {
+                "type": "array",
+                "items": items_schema,
+            },
+            "reasoning": {"type": "string"},
+            "skipReason": {"type": "string"},
+        },
+        "required": ["complexity", "category", "selectedAgents", "reasoning"],
+        "additionalProperties": False,
+    }
+
+
 # ---------------------------
 # Output Parsing
 # ---------------------------
@@ -123,6 +161,7 @@ def run_orchestrator(
     agent_library: List[AgentConfig],
     config: OrchestratorConfig,
     settings: Dict[str, Any],
+    mandatory_names: Optional[set] = None,
 ) -> OrchestratorResult:
     """Run the orchestrator agent to analyze plan complexity and select reviewers.
 
@@ -131,15 +170,26 @@ def run_orchestrator(
         agent_library: List of available agents
         config: Orchestrator configuration (model, timeout)
         settings: Agent review settings (agentSelection, complexityCategories)
+        mandatory_names: Set of agent names that always run (excluded from selection)
 
     Returns:
         OrchestratorResult with complexity, category, and selected agents
     """
     eprint("[orchestrator] Starting plan analysis...")
 
+    if mandatory_names is None:
+        mandatory_names = set()
+
     selection = settings.get("agentSelection", DEFAULT_AGENT_SELECTION)
     categories = settings.get("complexityCategories", DEFAULT_COMPLEXITY_CATEGORIES)
     fallback_count = selection.get("fallbackCount", 2)
+
+    # Filter out mandatory agents — they always run, no need for orchestrator to select them
+    non_mandatory = [a for a in agent_library if a.enabled and a.name not in mandatory_names]
+    valid_names = [a.name for a in non_mandatory]
+
+    eprint(f"[orchestrator] Mandatory agents (always run): {sorted(mandatory_names)}")
+    eprint(f"[orchestrator] Non-mandatory agents for selection: {valid_names}")
 
     claude_path = shutil.which("claude")
     if claude_path is None:
@@ -147,24 +197,27 @@ def run_orchestrator(
         return OrchestratorResult(
             complexity="medium",
             category="code",
-            selected_agents=[a.name for a in agent_library if a.enabled][:fallback_count],
+            selected_agents=[a.name for a in non_mandatory][:fallback_count],
             reasoning="Orchestrator skipped - Claude CLI not found",
             error="claude CLI not found on PATH",
         )
 
     eprint(f"[orchestrator] Found Claude CLI at: {claude_path}")
 
-    # Build agent list for prompt with rich descriptions
+    # Build agent list from non-mandatory agents only
     agent_list = "\n".join([
         f"- {a.name} [{', '.join(a.categories)}]\n"
         f"  Focus: {a.focus}\n"
         f"  Expertise: {a.description}"
-        for a in agent_library if a.enabled
+        for a in non_mandatory
     ])
     category_list = "/".join(categories)
-    simple_range = f"{selection.get('simple', {}).get('min', 0)}-{selection.get('simple', {}).get('max', 0)}"
-    medium_range = f"{selection.get('medium', {}).get('min', 1)}-{selection.get('medium', {}).get('max', 2)}"
-    high_range = f"{selection.get('high', {}).get('min', 2)}-{selection.get('high', {}).get('max', 4)}"
+
+    # Compute additional agent counts (total minus mandatory count)
+    mandatory_count = len([a for a in agent_library if a.name in mandatory_names])
+    simple_additional = max(0, selection.get("simple", {}).get("max", 3) - mandatory_count)
+    medium_additional = max(0, selection.get("medium", {}).get("max", 8) - mandatory_count)
+    high_additional = max(0, selection.get("high", {}).get("max", 12) - mandatory_count)
 
     # System prompt with orchestrator instructions
     system_prompt = """You are a plan orchestrator for code review. Your job is to analyze plans and select appropriate reviewer agents.
@@ -180,15 +233,16 @@ When selecting agents:
     # User prompt with plan and agent list
     prompt = f"""Analyze this plan and select appropriate reviewer agents.
 
-Available agents:
+Available agents (select ONLY from this list):
 {agent_list}
 
-Selection rules:
-- simple complexity = {simple_range} agents
-- medium complexity = {medium_range} agents
-- high complexity = {high_range} agents
+Selection rules (number of ADDITIONAL agents to select from the list above):
+- simple complexity = {simple_additional} agents
+- medium complexity = {medium_additional} agents
+- high complexity = {high_additional} agents
 - Only select agents whose categories match the plan category ({category_list})
 - Non-technical plans (life, business) typically need 0 code-focused agents
+- Note: mandatory agents run separately and are NOT listed above
 
 PLAN:
 <<<
@@ -197,7 +251,9 @@ PLAN:
 
 Call StructuredOutput now with: complexity, category, selectedAgents, reasoning"""
 
-    schema_json = json.dumps(ORCHESTRATOR_SCHEMA, ensure_ascii=False)
+    # Use dynamic schema with enum constraint when we have valid agent names
+    schema = build_orchestrator_schema(valid_names, categories) if valid_names else ORCHESTRATOR_SCHEMA
+    schema_json = json.dumps(schema, ensure_ascii=False)
 
     cmd_args = [
         claude_path,
@@ -231,7 +287,7 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning"
         return OrchestratorResult(
             complexity="medium",
             category="code",
-            selected_agents=[a.name for a in agent_library if a.enabled][:fallback_count],
+            selected_agents=[a.name for a in non_mandatory][:fallback_count],
             reasoning="Orchestrator timed out - defaulting to medium complexity",
             error=f"Orchestrator timed out after {config.timeout}s",
         )
@@ -240,7 +296,7 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning"
         return OrchestratorResult(
             complexity="medium",
             category="code",
-            selected_agents=[a.name for a in agent_library if a.enabled][:fallback_count],
+            selected_agents=[a.name for a in non_mandatory][:fallback_count],
             reasoning=f"Orchestrator failed: {ex}",
             error=str(ex),
         )
@@ -268,7 +324,7 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning"
         return OrchestratorResult(
             complexity="medium",
             category="code",
-            selected_agents=[a.name for a in agent_library if a.enabled][:fallback_count],
+            selected_agents=[a.name for a in non_mandatory][:fallback_count],
             reasoning="Orchestrator output could not be parsed",
             error="Failed to parse orchestrator output",
         )

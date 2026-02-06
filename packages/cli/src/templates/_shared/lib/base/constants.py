@@ -15,7 +15,7 @@ from pathlib import Path
 # Directory names (relative to project root)
 OUTPUT_DIR = "_output"
 CONTEXTS_DIR = "contexts"
-ARCHIVE_DIR = "archive"
+ARCHIVE_DIR = "_archive"
 INDEX_FILENAME = "index.json"
 
 # Context ID validation
@@ -255,6 +255,20 @@ def get_events_file_path(context_id: str, project_root: Path = None) -> Path:
     return get_context_dir(context_id, project_root) / "events.jsonl"
 
 
+def get_auto_state_path(context_id: str, project_root: Path = None) -> Path:
+    """
+    Get the auto-state.json file path for a specific context.
+
+    Args:
+        context_id: Context identifier
+        project_root: Project root directory (default: cwd)
+
+    Returns:
+        Path to _output/contexts/{context_id}/auto-state.json
+    """
+    return get_context_dir(context_id, project_root) / "auto-state.json"
+
+
 def get_archive_dir(project_root: Path = None) -> Path:
     """
     Get the archive directory path.
@@ -263,7 +277,7 @@ def get_archive_dir(project_root: Path = None) -> Path:
         project_root: Project root directory (default: cwd)
 
     Returns:
-        Path to _output/contexts/archive/
+        Path to _output/contexts/_archive/
     """
     return get_contexts_dir(project_root) / ARCHIVE_DIR
 
@@ -277,7 +291,7 @@ def get_archive_context_dir(context_id: str, project_root: Path = None) -> Path:
         project_root: Project root directory (default: cwd)
 
     Returns:
-        Path to _output/contexts/archive/{context_id}/
+        Path to _output/contexts/_archive/{context_id}/
 
     Raises:
         ValueError: If context_id is invalid
@@ -294,7 +308,7 @@ def get_archive_index_path(project_root: Path = None) -> Path:
         project_root: Project root directory (default: cwd)
 
     Returns:
-        Path to _output/contexts/archive/index.json
+        Path to _output/contexts/_archive/index.json
     """
     return get_archive_dir(project_root) / INDEX_FILENAME
 
