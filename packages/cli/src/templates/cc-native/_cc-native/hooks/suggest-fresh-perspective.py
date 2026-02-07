@@ -37,7 +37,8 @@ sys.path.insert(0, str(_lib_dir))
 sys.path.insert(0, str(_shared_lib))
 
 from base.hook_utils import emit_context
-from utils import eprint, sanitize_filename
+from base.logger import log_debug, log_info, log_warn, log_error
+from utils import sanitize_filename
 
 
 # ---------------------------
@@ -81,7 +82,7 @@ def load_config(project_dir: Path) -> Dict[str, Any]:
         section = full_config.get("stuckDetection", {})
         return {**DEFAULT_CONFIG, **section}
     except Exception as e:
-        eprint(f"[suggest-fresh-perspective] Failed to load config: {e}")
+        log_warn("suggest-fresh-perspective", f"Failed to load config: {e}")
         return DEFAULT_CONFIG.copy()
 
 
@@ -147,7 +148,7 @@ def save_state(session_id: str, state: Dict[str, Any]) -> None:
     try:
         state_path.write_text(json.dumps(state), encoding="utf-8")
     except Exception as e:
-        eprint(f"[suggest-fresh-perspective] Warning: failed to save state: {e}")
+        log_warn("suggest-fresh-perspective", f"Failed to save state: {e}")
 
 
 # ---------------------------
@@ -313,11 +314,11 @@ def main() -> int:
 
     if is_stuck:
         if error_detected:
-            eprint("[suggest-fresh-perspective] Detected repeated error pattern")
+            log_info("suggest-fresh-perspective", "Detected repeated error pattern")
         if file_edit_detected:
-            eprint("[suggest-fresh-perspective] Detected repeated file edits")
+            log_info("suggest-fresh-perspective", "Detected repeated file edits")
         if test_failure_detected:
-            eprint("[suggest-fresh-perspective] Detected repeated test failures")
+            log_info("suggest-fresh-perspective", "Detected repeated test failures")
 
     # Only suggest if stuck AND past cooldown
     if is_stuck and should_suggest(state, cooldown):
@@ -328,20 +329,12 @@ def main() -> int:
 
         # Only suggest up to maxSuggestions times per session
         if state["suggestion_count"] <= max_suggestions:
-            eprint(f"[suggest-fresh-perspective] Suggesting fresh perspective (suggestion #{state['suggestion_count']})")
+            log_info("suggest-fresh-perspective", f"Suggesting fresh perspective (suggestion #{state['suggestion_count']})")
             create_suggestion()
 
     return 0
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except SystemExit:
-        raise
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        from base.hook_utils import log_hook_error
-        log_hook_error("suggest-fresh-perspective", e, "PostToolUse", traceback_str=tb)
-        raise SystemExit(0)
+    from base.hook_utils import run_hook
+    run_hook(main, "suggest_fresh_perspective")

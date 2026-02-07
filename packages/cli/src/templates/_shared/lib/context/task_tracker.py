@@ -13,7 +13,8 @@ from typing import Dict, List, Optional
 
 from ..base.atomic_write import atomic_write
 from ..base.constants import get_context_dir
-from ..base.utils import eprint, now_iso
+from ..base.logger import log_warn
+from ..base.utils import now_iso
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +32,7 @@ def _load_state(context_id: str, project_root: Path = None) -> Optional[dict]:
     try:
         return json.loads(sp.read_text(encoding="utf-8"))
     except Exception as e:
-        eprint(f"[task_tracker] WARNING: Failed to read state.json: {e}")
+        log_warn("task_tracker", f"Failed to read state.json: {e}")
         return None
 
 
@@ -40,7 +41,7 @@ def _save_state(context_id: str, state_data: dict, project_root: Path = None) ->
     content = json.dumps(state_data, indent=2, ensure_ascii=False)
     success, error = atomic_write(sp, content)
     if not success:
-        eprint(f"[task_tracker] WARNING: Failed to write state.json: {error}")
+        log_warn("task_tracker", f"Failed to write state.json: {error}")
     return success
 
 
@@ -131,7 +132,7 @@ def update_task(
             state["last_active"] = now_iso()
             return _save_state(context_id, state, project_root)
 
-    eprint(f"[task_tracker] Task '{task_id}' not found in context '{context_id}'")
+    log_warn("task_tracker", f"Task '{task_id}' not found in context '{context_id}'")
     return False
 
 
@@ -146,7 +147,7 @@ def delete_task(context_id: str, task_id: str, project_root: Path = None) -> boo
     state["tasks"] = [t for t in tasks if t.get("id") != task_id]
 
     if len(state["tasks"]) == original_len:
-        eprint(f"[task_tracker] Task '{task_id}' not found in context '{context_id}'")
+        log_warn("task_tracker", f"Task '{task_id}' not found in context '{context_id}'")
         return False
 
     state["last_active"] = now_iso()

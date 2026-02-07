@@ -20,6 +20,7 @@ from .context_store import (
     archive_context,
     bind_session,
     update_mode,
+    maybe_activate,
     load_state,
     save_state,
 )
@@ -69,6 +70,7 @@ __all__ = [
     "archive_context",
     "bind_session",
     "update_mode",
+    "maybe_activate",
     "load_state",
     "save_state",
     # Context selector

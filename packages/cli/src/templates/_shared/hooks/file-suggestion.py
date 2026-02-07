@@ -28,8 +28,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import load_hook_input
-from lib.base.utils import eprint, project_dir
+from lib.base.hook_utils import load_hook_input, log_debug, log_info, log_error
+from lib.base.utils import project_dir
 from lib.base.constants import (
     get_context_plans_dir,
     get_context_handoffs_dir,
@@ -66,7 +66,7 @@ def get_context_files(context_id: str, project_root: Path) -> List[str]:
     context_file = get_context_file_path(context_id, project_root)
     if context_file.exists():
         files.append(str(context_file))
-        eprint(f"[file-suggestion] Found context file for {context_id}")
+        log_debug("file-suggestion", f"Found context file for {context_id}")
 
     # Get plans directory
     plans_dir = get_context_plans_dir(context_id, project_root)
@@ -75,7 +75,7 @@ def get_context_files(context_id: str, project_root: Path) -> List[str]:
         # Sort by modification time, most recent first
         plan_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         files.extend([str(p) for p in plan_files])
-        eprint(f"[file-suggestion] Found {len(plan_files)} plans in {context_id}")
+        log_debug("file-suggestion", f"Found {len(plan_files)} plans in {context_id}")
 
     # Get handoffs - prefer folder-based (index.md in subdirectories), fall back to legacy
     handoffs_dir = get_context_handoffs_dir(context_id, project_root)
@@ -92,14 +92,14 @@ def get_context_files(context_id: str, project_root: Path) -> List[str]:
             index_file = handoff_folders[0] / "index.md"
             if index_file.exists():
                 files.append(str(index_file))
-                eprint(f"[file-suggestion] Found handoff folder: {handoff_folders[0].name}")
+                log_debug("file-suggestion", f"Found handoff folder: {handoff_folders[0].name}")
         else:
             # Legacy support: flat .md files directly in handoffs/
             legacy_handoffs = [f for f in handoffs_dir.glob("*.md") if f.is_file()]
             legacy_handoffs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
             if legacy_handoffs:
                 files.append(str(legacy_handoffs[0]))  # Only most recent legacy
-                eprint(f"[file-suggestion] Found {len(legacy_handoffs)} legacy handoffs in {context_id}")
+                log_debug("file-suggestion", f"Found {len(legacy_handoffs)} legacy handoffs in {context_id}")
 
     # Get reviews - prefer folder-based (index.md in subdirectories), fall back to legacy
     reviews_dir = get_context_reviews_dir(context_id, project_root) / "cc-native"
@@ -116,13 +116,13 @@ def get_context_files(context_id: str, project_root: Path) -> List[str]:
             index_file = review_folders[0] / "index.md"
             if index_file.exists():
                 files.append(str(index_file))
-                eprint(f"[file-suggestion] Found review folder: {review_folders[0].name}")
+                log_debug("file-suggestion", f"Found review folder: {review_folders[0].name}")
         else:
             # Legacy support: flat review.md directly in cc-native/
             legacy_review = reviews_dir / "review.md"
             if legacy_review.exists():
                 files.append(str(legacy_review))
-                eprint(f"[file-suggestion] Found legacy review.md in {context_id}")
+                log_debug("file-suggestion", f"Found legacy review.md in {context_id}")
 
     return files
 
@@ -147,17 +147,17 @@ def get_active_context_id(session_id: str, project_root: Path) -> Optional[str]:
     if session_id and session_id != "unknown":
         context = get_context_by_session_id(session_id, project_root)
         if context:
-            eprint(f"[file-suggestion] Found context by session: {context.id}")
+            log_debug("file-suggestion", f"Found context by session: {context.id}")
             return context.id
 
     # Fall back to single active (non-idle) context
     active = [c for c in get_all_contexts(status="active", project_root=project_root)
               if c.mode != "idle"]
     if len(active) == 1:
-        eprint(f"[file-suggestion] Using single active context: {active[0].id}")
+        log_debug("file-suggestion", f"Using single active context: {active[0].id}")
         return active[0].id
 
-    eprint(f"[file-suggestion] No unique context found (active: {len(active)})")
+    log_debug("file-suggestion", f"No unique context found (active: {len(active)})")
     return None
 
 
@@ -180,7 +180,7 @@ def main():
         project_root = project_dir(hook_input)
         session_id = hook_input.get("session_id", "unknown")
 
-        eprint(f"[file-suggestion] Session: {session_id[:8]}..., Project: {project_root}")
+        log_debug("file-suggestion", f"Session: {session_id[:8]}..., Project: {project_root}")
 
         # Determine active context
         context_id = get_active_context_id(session_id, project_root)
@@ -195,21 +195,21 @@ def main():
         # Limit suggestions to prevent overwhelming the context
         MAX_SUGGESTIONS = 10
         if len(suggestions) > MAX_SUGGESTIONS:
-            eprint(f"[file-suggestion] Limiting suggestions to {MAX_SUGGESTIONS} (was {len(suggestions)})")
+            log_debug("file-suggestion", f"Limiting suggestions to {MAX_SUGGESTIONS} (was {len(suggestions)})")
             suggestions = suggestions[:MAX_SUGGESTIONS]
 
         # Output suggestions as JSON array
-        eprint(f"[file-suggestion] Suggesting {len(suggestions)} files")
+        log_info("file-suggestion", f"Suggesting {len(suggestions)} files")
         print(json.dumps(suggestions))
 
     except Exception as e:
-        from lib.base.hook_utils import log_hook_error
-        log_hook_error("file-suggestion", e, "SessionStart")
-        eprint(f"[file-suggestion] ERROR: {e}")
         import traceback
-        eprint(traceback.format_exc())
+        tb = traceback.format_exc()
+        from lib.base.hook_utils import log_hook_error
+        log_hook_error("file-suggestion", e, "SessionStart", traceback_str=tb)
         print("[]")
 
 
 if __name__ == "__main__":
-    main()
+    from lib.base.hook_utils import run_hook
+    run_hook(main, "file_suggestion")

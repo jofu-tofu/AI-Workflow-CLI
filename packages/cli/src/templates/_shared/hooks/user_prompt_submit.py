@@ -28,13 +28,13 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import load_hook_input
-from lib.base.utils import eprint, project_dir
+from lib.base.hook_utils import load_hook_input, log_debug, log_info, log_warn, log_error
+from lib.base.utils import project_dir
 from lib.context.context_store import (
     get_context,
     get_context_by_session_id,
     bind_session,
-    update_mode,
+    maybe_activate,
     save_state,
 )
 from lib.context.context_selector import determine_context, BlockRequest
@@ -75,22 +75,9 @@ def _update_in_flight_status(context_id: str, hook_input: dict, project_root: Pa
     - permission_mode != "plan" and mode == "idle": set to "active"
     - permission_mode != "plan" and mode == "has_plan": set to "active" (plan was accepted)
     """
-    state = get_context(context_id, project_root)
-    if not state:
-        return
-
-    current_mode = state.mode
     permission_mode = hook_input.get("permission_mode", "default")
-    eprint(f"[user_prompt_submit] Current mode: {current_mode}, permission_mode: {permission_mode}")
-
-    # planning is runtime-only — don't persist it
-    if permission_mode == "plan":
-        return
-
-    # Transition idle or has_plan to active when not in plan mode
-    if current_mode in ["idle", "has_plan"]:
-        update_mode(context_id, "active", project_root=project_root)
-        eprint(f"[user_prompt_submit] Set mode to 'active' (was '{current_mode}', permission_mode={permission_mode})")
+    log_debug("user_prompt_submit", f"context_id={context_id}, permission_mode={permission_mode}")
+    maybe_activate(context_id, permission_mode, project_root=project_root, caller="user_prompt_submit")
 
 
 def main():
@@ -117,19 +104,19 @@ def main():
 
         if existing_context:
             # NOT first prompt - session already bound to context
-            eprint(f"[user_prompt_submit] Session {session_id[:8]}... already bound to {existing_context.id}")
+            log_debug("user_prompt_submit", f"Session {session_id[:8]}... already bound to {existing_context.id}")
             _update_in_flight_status(existing_context.id, hook_input, project_root)
             active_context_id = existing_context.id
         elif user_prompt:
             # FIRST prompt - need context detection
             try:
                 context_id, method, context_output = determine_context(user_prompt, session_id, project_root)
-                eprint(f"[user_prompt_submit] Context: {method} -> {context_id}")
+                log_info("user_prompt_submit", f"Context: {method} -> {context_id}")
 
                 if context_id:
                     # Bind session to context
                     bind_session(context_id, session_id, project_root)
-                    eprint(f"[user_prompt_submit] Bound session {session_id[:8]}... to context '{context_id}'")
+                    log_info("user_prompt_submit", f"Bound session {session_id[:8]}... to context '{context_id}'")
 
                     # Update mode based on permission mode
                     _update_in_flight_status(context_id, hook_input, project_root)
@@ -141,15 +128,15 @@ def main():
                         if ctx and ctx.handoff_path:
                             ctx.handoff_path = None
                             save_state(ctx, project_root)
-                            eprint(f"[user_prompt_submit] Cleared handoff_path for {context_id}")
+                            log_debug("user_prompt_submit", f"Cleared handoff_path for {context_id}")
                     except Exception as e:
-                        eprint(f"[user_prompt_submit] Warning: Failed to clear handoff_path: {e}")
+                        log_warn("user_prompt_submit", f"Failed to clear handoff_path: {e}")
 
                 if context_output:
                     outputs.append(context_output)
 
             except BlockRequest as e:
-                print(e.message, file=sys.stderr)
+                log_error("user_prompt_submit", e.message)
                 sys.exit(2)
 
         # Inject CLAUDE.md reminder when in active mode
@@ -157,18 +144,18 @@ def main():
             context = get_context(active_context_id, project_root)
             if context and context.mode == "active":
                 outputs.append(f"<system-reminder>{format_claudemd_reminder()}</system-reminder>")
-                eprint(f"[user_prompt_submit] Injected CLAUDE.md reminder (mode=active)")
+                log_debug("user_prompt_submit", "Injected CLAUDE.md reminder (mode=active)")
 
         if outputs:
             print("\n\n".join(outputs))
 
     except Exception as e:
-        from lib.base.hook_utils import log_hook_error
-        log_hook_error("user_prompt_submit", e, "UserPromptSubmit")
-        eprint(f"[user_prompt_submit] ERROR: {e}")
         import traceback
-        eprint(traceback.format_exc())
+        tb = traceback.format_exc()
+        from lib.base.hook_utils import log_hook_error
+        log_hook_error("user_prompt_submit", e, "UserPromptSubmit", traceback_str=tb)
 
 
 if __name__ == "__main__":
-    main()
+    from lib.base.hook_utils import run_hook
+    run_hook(main, "user_prompt_submit")

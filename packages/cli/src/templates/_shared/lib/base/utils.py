@@ -14,6 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from .logger import log_debug, log_info, log_warn, log_error
+
 
 def eprint(*args: Any) -> None:
     """Print to stderr."""
@@ -53,12 +55,12 @@ def project_dir(payload: Optional[Dict[str, Any]] = None) -> Path:
         # Validate that CLAUDE_PROJECT_DIR is an absolute path
         path = Path(p)
         if not path.is_absolute():
-            eprint(f"[utils] WARNING: CLAUDE_PROJECT_DIR is not absolute, using cwd instead")
+            log_warn("utils", "CLAUDE_PROJECT_DIR is not absolute, using cwd instead")
             p = None
         else:
             # Check for suspicious patterns
             if '..' in str(path):
-                eprint(f"[utils] WARNING: CLAUDE_PROJECT_DIR contains '..' pattern, using cwd instead")
+                log_warn("utils", "CLAUDE_PROJECT_DIR contains '..' pattern, using cwd instead")
                 p = None
 
     if not p and payload:
@@ -168,9 +170,9 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
                     if len(filtered_words) >= 3:
                         slug = sanitize_title(' '.join(filtered_words), max_len=100)
                     else:
-                        eprint(f"[utils] AI slug too generic after stop-word filter ({len(filtered_words)} words remain), using fallback")
+                        log_debug("utils", f"AI slug too generic after stop-word filter ({len(filtered_words)} words remain), using fallback")
             except Exception as e:
-                eprint(f"[utils] AI context ID slug failed, using fallback: {e}")
+                log_warn("utils", f"AI context ID slug failed, using fallback: {e}")
 
             # Tier 2: Stop-word filtering
             if not slug:
@@ -179,7 +181,7 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
                     words = [w for w in summary.lower().split() if w not in STOP_WORDS and len(w) > 1][:12]
                     slug = sanitize_title(' '.join(words), max_len=50)
                 except Exception as e:
-                    eprint(f"[utils] Stop-word fallback failed: {e}")
+                    log_warn("utils", f"Stop-word fallback failed: {e}")
 
             # Tier 3: Simple word-length filter (no imports needed)
             if not slug or slug == "unknown":
@@ -188,7 +190,7 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
 
             base_id = f"{timestamp}-{slug}"
     except Exception as e:
-        eprint(f"[utils] Context ID generation failed entirely, using timestamp: {e}")
+        log_error("utils", f"Context ID generation failed entirely, using timestamp: {e}")
         base_id = f"{timestamp}-context"
 
     if not existing_ids:

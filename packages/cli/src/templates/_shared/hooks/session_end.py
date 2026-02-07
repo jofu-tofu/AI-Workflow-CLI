@@ -18,6 +18,7 @@ Hook output:
 - Silent (no stdout output needed for SessionEnd)
 - Logs to stderr for debugging
 """
+import hashlib
 import subprocess
 import sys
 from pathlib import Path
@@ -27,9 +28,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import load_hook_input
-from lib.base.utils import eprint, now_iso, project_dir
+from lib.base.hook_utils import load_hook_input, log_debug, log_info, log_warn, log_error
+from lib.base.utils import now_iso, project_dir
 from lib.context.context_store import get_context_by_session_id, save_state
+from lib.context.plan_manager import find_latest_plan, normalize_plan_content, generate_plan_id, extract_plan_anchors
 
 
 def _get_git_state(project_root: Path) -> dict:
@@ -58,7 +60,7 @@ def _get_git_state(project_root: Path) -> dict:
         if result.returncode == 0:
             git_state["last_commit_short"] = result.stdout.strip()
     except Exception as e:
-        eprint(f"[session_end] Git state capture error (non-fatal): {e}")
+        log_warn("session_end", f"Git state capture error (non-fatal): {e}")
 
     return git_state
 
@@ -76,18 +78,18 @@ def main():
         project_root = project_dir(hook_input)
 
         if not session_id:
-            eprint("[session_end] No session_id, skipping")
+            log_debug("session_end", "No session_id, skipping")
             return
 
-        eprint(f"[session_end] Session ending: {session_id[:8]}... reason={source}")
+        log_info("session_end", f"Session ending: {session_id[:8]}... reason={source}")
 
         # Find context bound to this session
         state = get_context_by_session_id(session_id, project_root)
         if not state:
-            eprint("[session_end] No context bound to this session, skipping")
+            log_debug("session_end", "No context bound to this session, skipping")
             return
 
-        eprint(f"[session_end] Found context: {state.id}")
+        log_info("session_end", f"Found context: {state.id}")
 
         # Capture git state
         git_state = _get_git_state(project_root)
@@ -102,18 +104,42 @@ def main():
         }
         state.last_active = now_iso()
 
+        # Fallback: assign plan fields if PostToolUse:ExitPlanMode didn't fire.
+        # When ExitPlanMode triggers /clear, the session terminates before PostToolUse
+        # hooks can run, so plan_accepted.py never fires. Detect this by checking
+        # for an archived plan that hasn't been assigned yet.
+        if not state.plan_hash:
+            latest_plan_path = find_latest_plan(state.id, project_root)
+            if latest_plan_path:
+                try:
+                    content = Path(latest_plan_path).read_text(encoding="utf-8")
+                    normalized = normalize_plan_content(content)
+                    state.plan_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
+                    state.plan_path = latest_plan_path
+                    state.plan_signature = content[:200]
+                    state.plan_id = generate_plan_id()
+                    state.plan_anchors = extract_plan_anchors(content)
+                    log_info("session_end", f"Fallback: assigned archived plan for {state.id} (hash: {state.plan_hash})")
+                except Exception as e:
+                    log_warn("session_end", f"Fallback plan assignment failed: {e}")
+
+        # If a plan is assigned and mode is active, stage it for next session
+        if state.plan_hash and state.mode == "active":
+            state.mode = "has_plan"
+            log_info("session_end", f"Staged plan for next session: {state.id} -> has_plan")
+
         if save_state(state, project_root):
-            eprint(f"[session_end] Saved last_session for {state.id}")
+            log_info("session_end", f"Saved last_session for {state.id}")
         else:
-            eprint(f"[session_end] Failed to save state for {state.id}")
+            log_error("session_end", f"Failed to save state for {state.id}")
 
     except Exception as e:
-        from lib.base.hook_utils import log_hook_error
-        log_hook_error("session_end", e, "SessionEnd")
-        eprint(f"[session_end] ERROR: {e}")
         import traceback
-        eprint(traceback.format_exc())
+        tb = traceback.format_exc()
+        from lib.base.hook_utils import log_hook_error
+        log_hook_error("session_end", e, "SessionEnd", traceback_str=tb)
 
 
 if __name__ == "__main__":
-    main()
+    from lib.base.hook_utils import run_hook
+    run_hook(main, "session_end")

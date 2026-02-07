@@ -48,6 +48,7 @@ try:
     # Import subprocess and hook utilities
     from lib.base.subprocess_utils import is_internal_call
     from lib.base.hook_utils import emit_context, emit_context_and_block
+    from lib.base.logger import log_debug, log_info, log_warn, log_error
 
     from utils import (
         DEFAULT_DISPLAY,
@@ -55,8 +56,8 @@ try:
         REVIEW_SCHEMA,
         ReviewerResult,
         CombinedReviewResult,
-        eprint,
         project_dir,
+        eprint,
         find_plan_file,
         compute_plan_hash,
         compute_review_decision,
@@ -66,6 +67,8 @@ try:
         worst_verdict,
         format_combined_markdown,
         write_combined_artifacts,
+        build_inline_review_summary,
+        extract_top_issues_text,
         load_config,
         get_display_settings,
     )
@@ -89,7 +92,11 @@ try:
     from lib.base.constants import get_context_reviews_dir, get_review_folder_path, get_context_dir
     from debug import debug_log, debug_raw
 except ImportError as e:
-    print(f"[cc-native-plan-review] Failed to import lib: {e}", file=sys.stderr)
+    try:
+        from lib.base.logger import log_error as _early_log_error
+        _early_log_error("cc-native-plan-review", f"Failed to import lib: {e}")
+    except Exception:
+        print(f"[cc-native-plan-review] Failed to import lib: {e}", file=sys.stderr)
     print(json.dumps({
         "hookSpecificOutput": {
             "additionalContext": f"[Plan Review Error] Failed to import required module: {e}. The plan review hook could not load its dependencies.",
@@ -106,7 +113,7 @@ try:
     from aggregate_agents import aggregate_agents
 except ImportError:
     def aggregate_agents(agents_dir: Path) -> List[Dict[str, Any]]:
-        eprint("[cc-native-plan-review] Warning: aggregate_agents not found")
+        log_warn("cc-native-plan-review", "aggregate_agents not found")
         return []
 
 
@@ -116,7 +123,7 @@ def skip_with_info(reason: str) -> int:
     This ensures Claude always sees WHY the plan review was skipped,
     making failures diagnosable instead of invisible.
     """
-    eprint(f"[cc-native-plan-review] Skipping: {reason}")
+    log_info("cc-native-plan-review", f"Skipping: {reason}")
     emit_context(f"[Plan Review Skipped] {reason}", ensure_ascii=True)
     return 0
 
@@ -171,7 +178,7 @@ def get_active_context_for_review(session_id: str, project_root: Path) -> Option
     # Strategy 1: Find by session_id
     context = get_context_by_session_id(session_id, project_root)
     if context:
-        eprint(f"[cc-native-plan-review] Found context by session_id: {context.id}")
+        log_info("cc-native-plan-review", f"Found context by session_id: {context.id}")
         return context
 
     # Strategy 2: Single planning context (only planning mode)
@@ -180,17 +187,17 @@ def get_active_context_for_review(session_id: str, project_root: Path) -> Option
     # Since this hook fires during ExitPlanMode, any active non-idle context is a candidate.
     planning_contexts = [c for c in all_active if c.mode in ("active", "has_plan")]
     if len(planning_contexts) == 1:
-        eprint(f"[cc-native-plan-review] Found single planning context: {planning_contexts[0].id}")
+        log_info("cc-native-plan-review", f"Found single planning context: {planning_contexts[0].id}")
         return planning_contexts[0]
 
     # Multiple or no planning contexts found
     if len(planning_contexts) > 1:
-        eprint(f"[cc-native-plan-review] Multiple planning contexts ({len(planning_contexts)}), cannot determine which to use")
+        log_warn("cc-native-plan-review", f"Multiple planning contexts ({len(planning_contexts)}), cannot determine which to use")
     elif len(all_active) > 0:
         modes = [c.mode for c in all_active]
-        eprint(f"[cc-native-plan-review] Found {len(all_active)} active context(s) with modes {modes}, but none in 'planning' mode")
+        log_info("cc-native-plan-review", f"Found {len(all_active)} active context(s) with modes {modes}, but none in 'planning' mode")
     else:
-        eprint("[cc-native-plan-review] No active contexts found")
+        log_info("cc-native-plan-review", "No active contexts found")
     return None
 
 
@@ -210,7 +217,7 @@ def load_iteration_state(reviews_dir: Path) -> Optional[Dict[str, Any]]:
     try:
         return json.loads(iteration_file.read_text(encoding="utf-8"))
     except Exception as e:
-        eprint(f"[cc-native-plan-review] Failed to load iteration state: {e}")
+        log_error("cc-native-plan-review", f"Failed to load iteration state: {e}")
         return None
 
 
@@ -231,7 +238,7 @@ def save_iteration_state(reviews_dir: Path, state: Dict[str, Any]) -> bool:
         iteration_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
         return True
     except Exception as e:
-        eprint(f"[cc-native-plan-review] Failed to save iteration state: {e}")
+        log_error("cc-native-plan-review", f"Failed to save iteration state: {e}")
         return False
 
 
@@ -315,7 +322,7 @@ def should_continue_iterating_context(
 
     # At or past max iterations - no more iterations
     if current >= max_iter:
-        eprint(f"[cc-native-plan-review] At max iterations ({current}/{max_iter}), no more iterations")
+        log_info("cc-native-plan-review", f"At max iterations ({current}/{max_iter}), no more iterations")
         return False
 
     # Check early exit on all pass
@@ -323,11 +330,11 @@ def should_continue_iterating_context(
     if config:
         early_exit = config.get("earlyExitOnAllPass", False)
     if early_exit and review_score == 0.0:
-        eprint(f"[cc-native-plan-review] All reviewers passed (score=0.0) and earlyExitOnAllPass=true, exiting early")
+        log_info("cc-native-plan-review", "All reviewers passed (score=0.0) and earlyExitOnAllPass=true, exiting early")
         return False
 
     # More iterations available and score is not zero (or early exit disabled)
-    eprint(f"[cc-native-plan-review] Continuing to next iteration ({current + 1}/{max_iter}), score={review_score:.2f}")
+    log_info("cc-native-plan-review", f"Continuing to next iteration ({current + 1}/{max_iter}), score={review_score:.2f}")
     return True
 
 
@@ -413,7 +420,7 @@ def load_agent_library(proj_dir: Path, settings: Optional[Dict[str, Any]] = None
         default_model = settings.get("agentDefaults", {}).get("model", DEFAULT_AGENT_MODEL)
 
     if not agents_data:
-        eprint("[cc-native-plan-review] No agents found in frontmatter, using defaults")
+        log_info("cc-native-plan-review", "No agents found in frontmatter, using defaults")
         return [
             AgentConfig(
                 name=a["name"],
@@ -447,11 +454,11 @@ def load_agent_library(proj_dir: Path, settings: Optional[Dict[str, Any]] = None
 # ---------------------------
 
 def main() -> int:
-    eprint("[cc-native-plan-review] Unified hook started (PreToolUse)")
+    log_info("cc-native-plan-review", "Unified hook started (PreToolUse)")
 
     # Skip if internal subprocess call (orchestrator, agents)
     if is_internal_call():
-        eprint("[cc-native-plan-review] Skipping: internal subprocess call")
+        log_debug("cc-native-plan-review", "Skipping: internal subprocess call")
         return 0
 
     try:
@@ -460,11 +467,11 @@ def main() -> int:
         return skip_with_info(f"Invalid JSON input from Claude Code: {e}")
 
     tool_name = payload.get("tool_name")
-    eprint(f"[cc-native-plan-review] tool_name: {tool_name}")
+    log_debug("cc-native-plan-review", f"tool_name: {tool_name}")
 
     # Only process ExitPlanMode
     if tool_name != "ExitPlanMode":
-        eprint("[cc-native-plan-review] Skipping: not ExitPlanMode")
+        log_debug("cc-native-plan-review", "Skipping: not ExitPlanMode")
         return 0
 
     session_id = str(payload.get("session_id", "unknown"))
@@ -478,7 +485,7 @@ def main() -> int:
     agent_review_enabled = agent_settings.get("enabled", True)
 
     if not plan_review_enabled and not agent_review_enabled:
-        eprint("[cc-native-plan-review] Skipping: both plan and agent review disabled")
+        log_info("cc-native-plan-review", "Skipping: both plan and agent review disabled")
         return 0
 
     # Find and read plan FIRST (state file is keyed by plan path)
@@ -494,8 +501,8 @@ def main() -> int:
     if not plan:
         return skip_with_info("Plan file exists but is empty.")
 
-    eprint(f"[cc-native-plan-review] Found plan at: {plan_path}")
-    eprint(f"[cc-native-plan-review] Plan length: {len(plan)} chars")
+    log_info("cc-native-plan-review", f"Found plan at: {plan_path}")
+    log_debug("cc-native-plan-review", f"Plan length: {len(plan)} chars")
 
     # Find active context for this review (required)
     active_context = get_active_context_for_review(session_id, base)
@@ -505,15 +512,15 @@ def main() -> int:
 
     # Get base reviews dir from shared lib, then add cc-native namespace
     reviews_dir = get_context_reviews_dir(active_context.id, base) / "cc-native"
-    eprint(f"[cc-native-plan-review] Using context reviews dir: {reviews_dir}")
+    log_debug("cc-native-plan-review", f"Using context reviews dir: {reviews_dir}")
 
     # Get context path for debug logging
     context_path = get_context_dir(active_context.id, base)
-    eprint(f"[cc-native-plan-review] Context path for debug: {context_path}")
+    log_debug("cc-native-plan-review", f"Context path for debug: {context_path}")
 
     # Plan-hash deduplication (decision-aware)
     plan_hash = compute_plan_hash(plan)
-    eprint(f"[cc-native-plan-review] Plan hash: {plan_hash}")
+    log_debug("cc-native-plan-review", f"Plan hash: {plan_hash}")
     if is_plan_already_reviewed(session_id, plan_hash):
         if was_plan_previously_denied(session_id, plan_hash):
             # Plan was denied and hasn't changed — block, don't re-review
@@ -562,11 +569,11 @@ def main() -> int:
         "handoff-readiness", "clarity-auditor", "skeptic"
     ]))
 
-    eprint(f"[cc-native-plan-review] Codex enabled: {codex_enabled}, Gemini enabled: {gemini_enabled}")
-    eprint(f"[cc-native-plan-review] Agent library: {[a.name for a in agent_library]}")
-    eprint(f"[cc-native-plan-review] Enabled agents: {[a.name for a in enabled_agents]}")
-    eprint(f"[cc-native-plan-review] Mandatory agents: {sorted(mandatory_names)}")
-    eprint(f"[cc-native-plan-review] Orchestrator enabled: {orchestrator_config.enabled}")
+    log_debug("cc-native-plan-review", f"Codex enabled: {codex_enabled}, Gemini enabled: {gemini_enabled}")
+    log_debug("cc-native-plan-review", f"Agent library: {[a.name for a in agent_library]}")
+    log_debug("cc-native-plan-review", f"Enabled agents: {[a.name for a in enabled_agents]}")
+    log_debug("cc-native-plan-review", f"Mandatory agents: {sorted(mandatory_names)}")
+    log_debug("cc-native-plan-review", f"Orchestrator enabled: {orchestrator_config.enabled}")
 
     # Run CLI reviewers + orchestrator in parallel
     phase1_tasks = []
@@ -577,7 +584,7 @@ def main() -> int:
     if orchestrator_config.enabled and enabled_agents and not legacy_mode:
         phase1_tasks.append(("orchestrator", lambda: run_orchestrator(plan, enabled_agents, orchestrator_config, agent_settings, mandatory_names=mandatory_names)))
 
-    eprint(f"[cc-native-plan-review] === PHASE 1: Running {len(phase1_tasks)} tasks in parallel ===")
+    log_info("cc-native-plan-review", f"=== PHASE 1: Running {len(phase1_tasks)} tasks in parallel ===")
 
     phase1_results: Dict[str, Any] = {}
     if phase1_tasks:
@@ -587,9 +594,9 @@ def main() -> int:
                 name = futures[future]
                 try:
                     phase1_results[name] = future.result()
-                    eprint(f"[cc-native-plan-review] {name} completed")
+                    log_info("cc-native-plan-review", f"{name} completed")
                 except Exception as ex:
-                    eprint(f"[cc-native-plan-review] {name} failed: {ex}")
+                    log_error("cc-native-plan-review", f"{name} failed: {ex}")
                     phase1_results[name] = None
 
     # Collect CLI results
@@ -610,7 +617,7 @@ def main() -> int:
     # PHASE 2: Agent Selection (from orchestrator result)
     # ============================================
     if agent_review_enabled:
-        eprint("[cc-native-plan-review] === PHASE 2: Agent Selection ===")
+        log_info("cc-native-plan-review", "=== PHASE 2: Agent Selection ===")
 
         selected_agents: List[AgentConfig] = []
 
@@ -624,8 +631,8 @@ def main() -> int:
             mandatory_agents = [a for a in enabled_agents if a.name in mandatory_names]
             non_mandatory = [a for a in enabled_agents if a.name not in mandatory_names]
 
-            eprint(f"[cc-native-plan-review] Mandatory agents: {[a.name for a in mandatory_agents]}")
-            eprint(f"[cc-native-plan-review] Non-mandatory pool: {len(non_mandatory)} agents")
+            log_debug("cc-native-plan-review", f"Mandatory agents: {[a.name for a in mandatory_agents]}")
+            log_debug("cc-native-plan-review", f"Non-mandatory pool: {len(non_mandatory)} agents")
 
             if orch_result and not legacy_mode:
                 detected_complexity = orch_result.complexity
@@ -634,12 +641,12 @@ def main() -> int:
                 orch_selected_names = set(orch_result.selected_agents) - mandatory_names
                 orch_selected = [a for a in non_mandatory if a.name in orch_selected_names]
 
-                eprint(f"[cc-native-plan-review] Orchestrator selected (non-mandatory): {[a.name for a in orch_selected]}")
+                log_debug("cc-native-plan-review", f"Orchestrator selected (non-mandatory): {[a.name for a in orch_selected]}")
 
                 # Diagnostic: warn if orchestrator returned names not in our agent pool
                 unmatched = orch_selected_names - {a.name for a in non_mandatory}
                 if unmatched:
-                    eprint(f"[cc-native-plan-review] WARNING: Orchestrator selected unknown agents: {unmatched}")
+                    log_warn("cc-native-plan-review", f"Orchestrator selected unknown agents: {unmatched}")
 
                 # Enforce minimum agent count — top up with random agents if orchestrator selected too few
                 min_additional = fallback_by_complexity.get(detected_complexity, 5)
@@ -649,27 +656,27 @@ def main() -> int:
                     if top_up_count > 0:
                         top_up = random.sample(remaining, top_up_count)
                         orch_selected.extend(top_up)
-                        eprint(f"[cc-native-plan-review] Topped up {top_up_count} agents to meet {detected_complexity} minimum: {[a.name for a in top_up]}")
+                        log_debug("cc-native-plan-review", f"Topped up {top_up_count} agents to meet {detected_complexity} minimum: {[a.name for a in top_up]}")
 
                 # Combine: mandatory + orchestrator/fallback selection
                 selected_agents = mandatory_agents + orch_selected
-                eprint(f"[cc-native-plan-review] Final selection: {len(selected_agents)} agents ({len(mandatory_agents)} mandatory + {len(orch_selected)} additional)")
+                log_info("cc-native-plan-review", f"Final selection: {len(selected_agents)} agents ({len(mandatory_agents)} mandatory + {len(orch_selected)} additional)")
             else:
-                eprint("[cc-native-plan-review] Running in legacy mode (all enabled agents)")
+                log_info("cc-native-plan-review", "Running in legacy mode (all enabled agents)")
                 selected_agents = enabled_agents
                 detected_complexity = "medium"  # Default for legacy mode
 
         # Initialize iteration state based on complexity (after orchestrator runs)
         if reviews_dir:
             iteration_state = get_iteration_state_from_context(reviews_dir, detected_complexity, agent_settings)
-            eprint(f"[cc-native-plan-review] Iteration state: {iteration_state['current']}/{iteration_state['max']} ({detected_complexity})")
+            log_debug("cc-native-plan-review", f"Iteration state: {iteration_state['current']}/{iteration_state['max']} ({detected_complexity})")
 
         # PHASE 3: Run selected agents in parallel
         if selected_agents:
-            eprint("[cc-native-plan-review] === PHASE 3: Agent Reviews ===")
+            log_info("cc-native-plan-review", "=== PHASE 3: Agent Reviews ===")
             max_parallel = agent_settings.get("maxParallelAgents", 0)  # 0 = unlimited
             num_workers = len(selected_agents) if max_parallel <= 0 else min(max_parallel, len(selected_agents))
-            eprint(f"[cc-native-plan-review] Launching {len(selected_agents)} agents in parallel (workers={num_workers})")
+            log_info("cc-native-plan-review", f"Launching {len(selected_agents)} agents in parallel (workers={num_workers})")
 
             # Debug log the agent review start
             debug_log(context_path, session_id, "hook", "agent_review_start", {
@@ -690,9 +697,9 @@ def main() -> int:
                         agent_results[agent.name] = result
                         if result.verdict and result.verdict not in ("skip", "error"):
                             all_verdicts.append(result.verdict)
-                        eprint(f"[cc-native-plan-review] {agent.name} completed with verdict: {result.verdict}")
+                        log_info("cc-native-plan-review", f"{agent.name} completed with verdict: {result.verdict}")
                     except Exception as ex:
-                        eprint(f"[cc-native-plan-review] {agent.name} failed with exception: {ex}")
+                        log_error("cc-native-plan-review", f"{agent.name} failed with exception: {ex}")
                         agent_results[agent.name] = ReviewerResult(
                             name=agent.name,
                             ok=False,
@@ -705,7 +712,7 @@ def main() -> int:
     # ============================================
     # PHASE 4: Generate Combined Output
     # ============================================
-    eprint("[cc-native-plan-review] === PHASE 4: Generate Output ===")
+    log_info("cc-native-plan-review", "=== PHASE 4: Generate Output ===")
 
     if not cli_results and not agent_results:
         return skip_with_info("All reviewers failed to produce results. Check stderr logs for details.")
@@ -733,16 +740,18 @@ def main() -> int:
     # Create review folder with datetime and iteration in name
     review_folder = get_review_folder_path(active_context.id, current_iteration, base)
     review_folder.mkdir(parents=True, exist_ok=True)
-    eprint(f"[cc-native-plan-review] Created review folder: {review_folder}")
+    log_info("cc-native-plan-review", f"Created review folder: {review_folder}")
 
     review_file = write_combined_artifacts(
         base, plan, combined_result, payload, combined_settings,
         review_folder=review_folder,
         iteration=current_iteration,
     )
-    eprint(f"[cc-native-plan-review] Saved review: {review_file}")
+    log_info("cc-native-plan-review", f"Saved review: {review_file}")
 
-    # Build compact context message (file reference only, no inline markdown)
+    # Build inline review summary for additionalContext
+    inline_summary = build_inline_review_summary(combined_result)
+
     context_parts = [
         "**CC-Native Plan Review Complete**\n\n",
         f"Review saved to: `{review_file}`\n\n",
@@ -753,14 +762,33 @@ def main() -> int:
         context_parts.append(f"**CLI Reviewers:** {', '.join(cli_verdicts)}\n")
 
     if orch_result:
-        context_parts.append(f"**Orchestration:** Complexity=`{orch_result.complexity}`, Category=`{orch_result.category}`, Agents selected: {len(agent_results)}\n")
+        context_parts.append(f"**Orchestration:** Complexity=`{orch_result.complexity}`, Agents: {len(agent_results)}\n")
 
-    context_parts.append(f"\nRead the full review at `{review_file}` and address all findings before implementation.\n")
+    if inline_summary:
+        context_parts.append(f"\n**Key Findings (high severity):**\n{inline_summary}\n")
 
-    # Two-stage review decision
+    context_parts.append(f"\nFull review: `{review_file}`\n")
+
+    # Review decision — only fail triggers a block
     warn_threshold = agent_settings.get("warnThreshold", 0.5)
     should_deny, deny_reason, review_score = compute_review_decision(all_verdicts, warn_threshold)
-    eprint(f"[cc-native-plan-review] Review decision: deny={should_deny}, reason={deny_reason}, score={review_score:.2f}")
+
+    # Count high-severity issues for logging
+    high_count = sum(
+        1 for r in list(combined_result.cli_reviewers.values()) + list(combined_result.agents.values())
+        if r.data
+        for issue in r.data.get("issues", [])
+        if issue.get("severity") == "high"
+    )
+
+    # Structured log entries for review influence tracking
+    log_info("cc-native-plan-review", f"REVIEW_DECISION: verdict={combined_result.overall_verdict}, deny={should_deny}, score={review_score:.2f}, high_issues={high_count}")
+
+    # Terminal progress indicator
+    verdict_emoji = "✅" if not should_deny else "❌"
+    eprint(f"[plan-review] {verdict_emoji} {combined_result.overall_verdict.upper()} (score={review_score:.2f})")
+    if should_deny:
+        eprint(f"[plan-review] Blocking ExitPlanMode — {high_count} high-severity issue(s) found")
 
     # Handle iteration logic
     needs_more_iterations = False
@@ -780,13 +808,15 @@ def main() -> int:
             iteration_state["current"] = iteration_state.get("current", 1) + 1
             # Also increment max by 1 to allow another review cycle if the user rejects
             # the plan and requests changes. Without this, once iterations are exhausted,
-            # the hook would skip review entirely (line ~498) even if the user sent the
+            # the hook would skip review entirely even if the user sent the
             # planner back to revise. This ensures rejected plans can always be re-reviewed.
             iteration_state["max"] = iteration_state.get("max", 1) + 1
             save_iteration_state(reviews_dir, iteration_state)
 
     # Emit output with correct Claude Code hook format
     context_text = "".join(context_parts)
+
+    log_debug("cc-native-plan-review", f"REVIEW_CONTEXT_INJECTED: chars={len(context_text)}, inline_chars={len(inline_summary)}")
 
     _REVIEWER_CAVEAT = (
         "Reviewers have limited context compared to your full session — "
@@ -803,23 +833,25 @@ def main() -> int:
         current = iteration_state["current"] - 1  # Display the just-completed iteration
         max_iter = iteration_state["max"]
         remaining = max_iter - current
+        top_issues_text = extract_top_issues_text(combined_result, max_count=3, severity="high")
         emit_context_and_block(
             context_text,
-            f"Plan review iteration {current}/{max_iter} ({deny_reason}, score={review_score:.2f}). "
-            f"Read the full review at `{review_file}` and address the findings. "
+            f"Plan review iteration {current}/{max_iter} FAILED ({deny_reason}, score={review_score:.2f}). "
+            f"Critical issues: {top_issues_text}. "
             f"{_REVIEWER_CAVEAT} "
-            f"Revise the plan in place, then attempt ExitPlanMode again. "
+            f"Revise the plan, then call ExitPlanMode again. "
             f"({remaining} revision{'s' if remaining != 1 else ''} remaining) "
             f"{_RESUBMIT_INSTRUCTION}",
         )
     elif should_deny:
         mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review", iteration_state, decision="deny")
+        top_issues_text = extract_top_issues_text(combined_result, max_count=3, severity="high")
         emit_context_and_block(
             context_text,
-            f"Plan review ({deny_reason}, score={review_score:.2f}). "
-            f"Read the full review at `{review_file}` and address the findings. "
+            f"Plan review FAILED ({deny_reason}, score={review_score:.2f}). "
+            f"Critical issues: {top_issues_text}. "
             f"{_REVIEWER_CAVEAT} "
-            f"Revise the plan in place, then attempt ExitPlanMode again. "
+            f"Revise the plan, then call ExitPlanMode again. "
             f"{_RESUBMIT_INSTRUCTION}",
         )
     else:
@@ -830,19 +862,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except SystemExit:
-        raise
-    except Exception as e:
-        from base.hook_utils import log_hook_error
-        log_hook_error("cc-native-plan-review", e, "PreToolUse")
-        import traceback
-        print(f"[cc-native-plan-review] FATAL ERROR: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        # Output error to Claude via hook format so it's visible
-        emit_context(
-            f"**CC-Native Plan Review Hook Error**\n\nThe hook encountered an error:\n```\n{traceback.format_exc()}\n```\n\nPlease report this issue.",
-            ensure_ascii=True,
-        )
-        raise SystemExit(1)
+    from base.hook_utils import run_hook
+    run_hook(main, "cc_native_plan_review")

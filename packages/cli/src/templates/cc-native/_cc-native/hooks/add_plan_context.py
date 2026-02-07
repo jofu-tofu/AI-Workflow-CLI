@@ -27,12 +27,12 @@ sys.path.insert(0, str(_cc_native_lib_dir))
 sys.path.insert(0, str(_shared_lib_dir))
 
 from utils import (
-    eprint,
     mark_questions_asked,
     was_questions_asked,
     project_dir,
 )
 from base.hook_utils import emit_context, emit_context_and_block
+from base.logger import log_debug, log_info, log_warn, log_error
 from templates.plan_context import get_evaluation_context_reminder
 
 
@@ -95,7 +95,7 @@ def main() -> int:
         session_id = str(payload.get("session_id", ""))
         if session_id:
             mark_questions_asked(session_id)
-            eprint(f"[add_plan_context] Marked questions asked for session {session_id[:8]}...")
+            log_info("add_plan_context", f"Marked questions asked for session {session_id[:8]}...")
         return 0
 
     if tool_name != "Write":
@@ -110,7 +110,7 @@ def main() -> int:
 
     # Check if feature is disabled
     if not config.get("enabled", True):
-        eprint("[add_plan_context] planContext disabled in config")
+        log_debug("add_plan_context", "planContext disabled in config")
         return 0
 
     # Get session_id
@@ -118,29 +118,21 @@ def main() -> int:
 
     # Fail-safe: skip enforcement if no session_id
     if not session_id:
-        eprint("[add_plan_context] No session_id, skipping enforcement")
+        log_debug("add_plan_context", "No session_id, skipping enforcement")
         return inject_evaluation_context()
 
     session_id_str = str(session_id)
 
     # Check if questions were asked this session
     if was_questions_asked(session_id_str):
-        eprint("[add_plan_context] Questions asked, allowing write with eval context")
+        log_info("add_plan_context", "Questions asked, allowing write with eval context")
         return inject_evaluation_context()
 
     # Questions NOT asked: block and inject Phase B prompt
-    eprint("[add_plan_context] Questions not asked yet - blocking plan write")
+    log_info("add_plan_context", "Questions not asked yet - blocking plan write")
     return block_with_questions_prompt()
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except SystemExit:
-        raise
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        from base.hook_utils import log_hook_error
-        log_hook_error("add_plan_context", e, "PreToolUse", traceback_str=tb)
-        raise SystemExit(0)
+    from base.hook_utils import run_hook
+    run_hook(main, "add_plan_context")

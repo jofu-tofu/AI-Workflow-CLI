@@ -15,8 +15,13 @@ from typing import Any, Dict, List, Optional
 _lib_dir = Path(__file__).resolve().parent
 sys.path.insert(0, str(_lib_dir))
 
-from utils import OrchestratorResult, eprint, parse_json_maybe
+from utils import OrchestratorResult, parse_json_maybe
 from reviewers.base import AgentConfig, OrchestratorConfig
+
+# Import logger
+_shared_logger = Path(__file__).resolve().parent.parent.parent / "_shared" / "lib"
+sys.path.insert(0, str(_shared_logger))
+from base.logger import log_debug, log_info, log_warn, log_error
 
 # Import shared subprocess utilities
 _shared_lib = Path(__file__).resolve().parent.parent.parent / "_shared" / "lib" / "base"
@@ -119,18 +124,18 @@ def _parse_claude_output(raw: str) -> Optional[Dict[str, Any]]:
         result = json.loads(raw)
         if isinstance(result, dict):
             if "structured_output" in result:
-                eprint("[orchestrator:parse] Found structured_output in root dict")
+                log_debug("orchestrator", "Found structured_output in root dict", component="parse")
                 return result["structured_output"]
             if result.get("type") == "assistant":
                 message = result.get("message", {})
                 content = message.get("content", [])
                 for item in content:
                     if isinstance(item, dict) and item.get("name") == "StructuredOutput":
-                        eprint("[orchestrator:parse] Found StructuredOutput in assistant message content")
+                        log_debug("orchestrator", "Found StructuredOutput in assistant message content", component="parse")
                         return item.get("input", {})
-                eprint("[orchestrator:parse] Assistant message found but no StructuredOutput tool use in content")
+                log_debug("orchestrator", "Assistant message found but no StructuredOutput tool use in content", component="parse")
         elif isinstance(result, list):
-            eprint(f"[orchestrator:parse] Received list of {len(result)} events, searching for assistant message")
+            log_debug("orchestrator", f"Received list of {len(result)} events, searching for assistant message", component="parse")
             for i, event in enumerate(result):
                 if not isinstance(event, dict):
                     continue
@@ -139,16 +144,16 @@ def _parse_claude_output(raw: str) -> Optional[Dict[str, Any]]:
                     content = message.get("content", [])
                     for item in content:
                         if isinstance(item, dict) and item.get("name") == "StructuredOutput":
-                            eprint(f"[orchestrator:parse] Found StructuredOutput in event[{i}] assistant message")
+                            log_debug("orchestrator", f"Found StructuredOutput in event[{i}] assistant message", component="parse")
                             return item.get("input", {})
-            eprint("[orchestrator:parse] No StructuredOutput found in any assistant message in event list")
+            log_debug("orchestrator", "No StructuredOutput found in any assistant message in event list", component="parse")
     except json.JSONDecodeError as e:
-        eprint(f"[orchestrator:parse] JSON decode error: {e}")
+        log_warn("orchestrator", f"JSON decode error: {e}", component="parse")
     except Exception as e:
-        eprint(f"[orchestrator:parse] Unexpected error during structured parsing: {e}")
+        log_error("orchestrator", f"Unexpected error during structured parsing: {e}", component="parse")
 
     # Fallback to heuristic extraction
-    eprint("[orchestrator:parse] No structured output found, falling back to heuristic JSON extraction")
+    log_debug("orchestrator", "No structured output found, falling back to heuristic JSON extraction", component="parse")
     return parse_json_maybe(raw)
 
 
@@ -175,7 +180,7 @@ def run_orchestrator(
     Returns:
         OrchestratorResult with complexity, category, and selected agents
     """
-    eprint("[orchestrator] Starting plan analysis...")
+    log_info("orchestrator", "Starting plan analysis...")
 
     if mandatory_names is None:
         mandatory_names = set()
@@ -188,12 +193,12 @@ def run_orchestrator(
     non_mandatory = [a for a in agent_library if a.enabled and a.name not in mandatory_names]
     valid_names = [a.name for a in non_mandatory]
 
-    eprint(f"[orchestrator] Mandatory agents (always run): {sorted(mandatory_names)}")
-    eprint(f"[orchestrator] Non-mandatory agents for selection: {valid_names}")
+    log_debug("orchestrator", f"Mandatory agents (always run): {sorted(mandatory_names)}")
+    log_debug("orchestrator", f"Non-mandatory agents for selection: {valid_names}")
 
     claude_path = shutil.which("claude")
     if claude_path is None:
-        eprint("[orchestrator] Claude CLI not found on PATH, falling back to medium complexity")
+        log_warn("orchestrator", "Claude CLI not found on PATH, falling back to medium complexity")
         return OrchestratorResult(
             complexity="medium",
             category="code",
@@ -202,7 +207,7 @@ def run_orchestrator(
             error="claude CLI not found on PATH",
         )
 
-    eprint(f"[orchestrator] Found Claude CLI at: {claude_path}")
+    log_debug("orchestrator", f"Found Claude CLI at: {claude_path}")
 
     # Build agent list from non-mandatory agents only
     agent_list = "\n".join([
@@ -266,7 +271,7 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning"
         "--system-prompt", system_prompt,
     ]
 
-    eprint(f"[orchestrator] Running with model: {config.model}, timeout: {config.timeout}s")
+    log_info("orchestrator", f"Running with model: {config.model}, timeout: {config.timeout}s")
 
     # Get environment for internal subprocess (bypasses hooks)
     env = get_internal_subprocess_env()
@@ -283,7 +288,7 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning"
             env=env,
         )
     except subprocess.TimeoutExpired:
-        eprint(f"[orchestrator] TIMEOUT after {config.timeout}s, falling back to medium complexity")
+        log_warn("orchestrator", f"TIMEOUT after {config.timeout}s, falling back to medium complexity")
         return OrchestratorResult(
             complexity="medium",
             category="code",
@@ -292,7 +297,7 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning"
             error=f"Orchestrator timed out after {config.timeout}s",
         )
     except Exception as ex:
-        eprint(f"[orchestrator] EXCEPTION: {ex}, falling back to medium complexity")
+        log_error("orchestrator", f"Exception: {ex}, falling back to medium complexity")
         return OrchestratorResult(
             complexity="medium",
             category="code",
@@ -301,26 +306,26 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning"
             error=str(ex),
         )
 
-    eprint(f"[orchestrator] Exit code: {p.returncode}")
+    log_debug("orchestrator", f"Exit code: {p.returncode}")
 
     raw = (p.stdout or "").strip()
     if p.stderr:
-        eprint(f"[orchestrator] stderr: {p.stderr[:300]}")
+        log_debug("orchestrator", f"stderr: {p.stderr[:300]}")
 
     obj = _parse_claude_output(raw)
 
     # Debug logging to diagnose empty selectedAgents issue
-    eprint(f"[orchestrator:debug] Raw output length: {len(raw)} chars")
+    log_debug("orchestrator", f"Raw output length: {len(raw)} chars")
     if raw:
-        eprint(f"[orchestrator:debug] Raw output (first 500 chars): {raw[:500]}")
-    eprint(f"[orchestrator:debug] Parsed obj: {obj}")
+        log_debug("orchestrator", f"Raw output (first 500 chars): {raw[:500]}")
+    log_debug("orchestrator", f"Parsed obj: {obj}")
     if obj:
-        eprint(f"[orchestrator:debug] obj keys: {list(obj.keys())}")
-        eprint(f"[orchestrator:debug] selectedAgents value: {obj.get('selectedAgents', 'MISSING')}")
-        eprint(f"[orchestrator:debug] reasoning value: {obj.get('reasoning', 'MISSING')}")
+        log_debug("orchestrator", f"obj keys: {list(obj.keys())}")
+        log_debug("orchestrator", f"selectedAgents value: {obj.get('selectedAgents', 'MISSING')}")
+        log_debug("orchestrator", f"reasoning value: {obj.get('reasoning', 'MISSING')}")
 
     if not obj:
-        eprint("[orchestrator] Failed to parse output, falling back to medium complexity")
+        log_warn("orchestrator", "Failed to parse output, falling back to medium complexity")
         return OrchestratorResult(
             complexity="medium",
             category="code",
@@ -345,8 +350,8 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning"
     reasoning = str(obj.get("reasoning", "")).strip() or "No reasoning provided"
     skip_reason = obj.get("skipReason")
 
-    eprint(f"[orchestrator] Result: complexity={complexity}, category={category}, agents={selected_agents}")
-    eprint(f"[orchestrator] Reasoning: {reasoning}")
+    log_info("orchestrator", f"Result: complexity={complexity}, category={category}, agents={selected_agents}")
+    log_debug("orchestrator", f"Reasoning: {reasoning}")
 
     return OrchestratorResult(
         complexity=complexity,

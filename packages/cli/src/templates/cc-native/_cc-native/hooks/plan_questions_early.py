@@ -17,8 +17,9 @@ _shared_lib_dir = _hook_dir.parent.parent / "_shared" / "lib"
 sys.path.insert(0, str(_cc_native_lib_dir))
 sys.path.insert(0, str(_shared_lib_dir))
 
-from utils import eprint, was_questions_asked
+from utils import was_questions_asked
 from base.hook_utils import load_hook_input
+from base.logger import log_debug, log_info, log_warn, log_error
 
 
 PHASE_A_PROMPT = """
@@ -57,23 +58,24 @@ def main() -> int:
 
         session_id = str(payload.get("session_id", ""))
         if not session_id:
-            eprint("[plan_questions_early] No session_id, skipping")
+            log_debug("plan_questions_early", "No session_id, skipping")
             return 0
 
         if was_questions_asked(session_id):
-            eprint("[plan_questions_early] Questions already asked, skipping")
+            log_debug("plan_questions_early", "Questions already asked, skipping")
             return 0
 
-        eprint("[plan_questions_early] Plan mode detected, injecting Phase A prompt")
+        log_info("plan_questions_early", "Plan mode detected, injecting Phase A prompt")
         print(f"<system-reminder>{PHASE_A_PROMPT}</system-reminder>")
 
     except Exception as e:
         from base.hook_utils import log_hook_error
         log_hook_error("plan_questions_early", e, "UserPromptSubmit")
-        eprint(f"[plan_questions_early] Error: {e}")
+        log_error("plan_questions_early", str(e))
 
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    from base.hook_utils import run_hook
+    run_hook(main, "plan_questions_early")

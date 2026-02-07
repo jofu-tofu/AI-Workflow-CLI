@@ -15,9 +15,14 @@ from typing import Any, Dict, Optional
 _lib_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_lib_dir))
 
-from utils import ReviewerResult, eprint, parse_json_maybe, coerce_to_review
+from utils import ReviewerResult, parse_json_maybe, coerce_to_review
 from debug import debug_log, debug_raw
 from .base import AgentConfig, AGENT_REVIEW_PROMPT_PREFIX
+
+# Import logger
+_shared_logger = Path(__file__).resolve().parent.parent.parent.parent / "_shared" / "lib"
+sys.path.insert(0, str(_shared_logger))
+from base.logger import log_debug, log_info, log_warn, log_error
 
 # Import shared subprocess utilities
 _shared_lib = Path(__file__).resolve().parent.parent.parent.parent / "_shared" / "lib" / "base"
@@ -43,18 +48,18 @@ def _parse_claude_output(raw: str) -> Optional[Dict[str, Any]]:
         result = json.loads(raw)
         if isinstance(result, dict):
             if "structured_output" in result:
-                eprint("[parse] Found structured_output in root dict")
+                log_debug("agent", "Found structured_output in root dict", component="parse")
                 return result["structured_output"]
             if result.get("type") == "assistant":
                 message = result.get("message", {})
                 content = message.get("content", [])
                 for item in content:
                     if isinstance(item, dict) and item.get("name") == "StructuredOutput":
-                        eprint("[parse] Found StructuredOutput in assistant message content")
+                        log_debug("agent", "Found StructuredOutput in assistant message content", component="parse")
                         return item.get("input", {})
-                eprint("[parse] Assistant message found but no StructuredOutput tool use in content")
+                log_debug("agent", "Assistant message found but no StructuredOutput tool use in content", component="parse")
         elif isinstance(result, list):
-            eprint(f"[parse] Received list of {len(result)} events, searching for assistant message")
+            log_debug("agent", f"Received list of {len(result)} events, searching for assistant message", component="parse")
             for i, event in enumerate(result):
                 if not isinstance(event, dict):
                     continue
@@ -63,16 +68,16 @@ def _parse_claude_output(raw: str) -> Optional[Dict[str, Any]]:
                     content = message.get("content", [])
                     for item in content:
                         if isinstance(item, dict) and item.get("name") == "StructuredOutput":
-                            eprint(f"[parse] Found StructuredOutput in event[{i}] assistant message")
+                            log_debug("agent", f"Found StructuredOutput in event[{i}] assistant message", component="parse")
                             return item.get("input", {})
-            eprint("[parse] No StructuredOutput found in any assistant message in event list")
+            log_debug("agent", "No StructuredOutput found in any assistant message in event list", component="parse")
     except json.JSONDecodeError as e:
-        eprint(f"[parse] JSON decode error: {e}")
+        log_warn("agent", f"JSON decode error: {e}", component="parse")
     except Exception as e:
-        eprint(f"[parse] Unexpected error during structured parsing: {e}")
+        log_error("agent", f"Unexpected error during structured parsing: {e}", component="parse")
 
     # Fallback to heuristic extraction with required field validation
-    eprint("[parse] No structured output found, falling back to heuristic JSON extraction")
+    log_debug("agent", "No structured output found, falling back to heuristic JSON extraction", component="parse")
     return parse_json_maybe(raw, require_fields=["verdict", "summary"])
 
 
@@ -99,7 +104,7 @@ def run_agent_review(
     """
     claude_path = shutil.which("claude")
     if claude_path is None:
-        eprint(f"[{agent.name}] Claude CLI not found on PATH")
+        log_warn(agent.name, "Claude CLI not found on PATH")
         return ReviewerResult(
             name=agent.name,
             ok=False,
@@ -109,7 +114,7 @@ def run_agent_review(
             err="claude CLI not found on PATH",
         )
 
-    eprint(f"[{agent.name}] Found Claude CLI at: {claude_path}")
+    log_debug(agent.name, f"Found Claude CLI at: {claude_path}")
 
     # User prompt - direct instruction to call StructuredOutput immediately
     prompt = f"""IMMEDIATELY call StructuredOutput with your review of the plan below.
@@ -139,7 +144,7 @@ PLAN:
         full_prompt = AGENT_REVIEW_PROMPT_PREFIX + "\n\n---\n\n" + agent.system_prompt
         cmd_args.extend(["--system-prompt", full_prompt])
 
-    eprint(f"[{agent.name}] Running with model: {agent.model}, timeout: {timeout}s")
+    log_info(agent.name, f"Running with model: {agent.model}, timeout: {timeout}s")
 
     # Get environment for internal subprocess (bypasses hooks)
     env = get_internal_subprocess_env()
@@ -156,16 +161,16 @@ PLAN:
             env=env,
         )
     except subprocess.TimeoutExpired:
-        eprint(f"[{agent.name}] TIMEOUT after {timeout}s")
+        log_warn(agent.name, f"TIMEOUT after {timeout}s")
         return ReviewerResult(agent.name, False, "error", {}, "", f"{agent.name} timed out after {timeout}s")
     except Exception as ex:
-        eprint(f"[{agent.name}] EXCEPTION: {ex}")
+        log_error(agent.name, f"Exception: {ex}")
         return ReviewerResult(agent.name, False, "error", {}, "", f"{agent.name} failed to run: {ex}")
 
-    eprint(f"[{agent.name}] Exit code: {p.returncode}")
-    eprint(f"[{agent.name}] stdout length: {len(p.stdout or '')} chars")
+    log_debug(agent.name, f"Exit code: {p.returncode}")
+    log_debug(agent.name, f"stdout length: {len(p.stdout or '')} chars")
     if p.stderr:
-        eprint(f"[{agent.name}] stderr: {p.stderr[:500]}")
+        log_debug(agent.name, f"stderr: {p.stderr[:500]}")
 
     raw = (p.stdout or "").strip()
     err = (p.stderr or "").strip()
@@ -184,7 +189,7 @@ PLAN:
         })
 
     if raw:
-        eprint(f"[{agent.name}] stdout preview: {raw[:500]}")
+        log_debug(agent.name, f"stdout preview: {raw[:500]}")
 
     obj = _parse_claude_output(raw)
 
@@ -201,9 +206,9 @@ PLAN:
         })
 
     if obj:
-        eprint(f"[{agent.name}] Parsed JSON successfully, verdict: {obj.get('verdict', 'N/A')}")
+        log_info(agent.name, f"Parsed JSON successfully, verdict: {obj.get('verdict', 'N/A')}")
     else:
-        eprint(f"[{agent.name}] Failed to parse JSON from output")
+        log_warn(agent.name, "Failed to parse JSON from output")
 
     ok, verdict, norm = coerce_to_review(obj, "Retry or check agent configuration.")
 

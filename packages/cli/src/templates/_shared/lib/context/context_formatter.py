@@ -7,9 +7,27 @@ All functions accept a ContextState (from context_store.py) with fields:
 """
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from ..base.utils import parse_iso_timestamp
+
+MAX_PLAN_INLINE_CHARS = 30_000
+
+
+def _read_plan_content(plan_path: str) -> Tuple[Optional[str], bool, int]:
+    """Read plan content from disk for inline injection.
+    Returns (content, truncated, total_chars) or (None, False, 0) on error."""
+    try:
+        pf = Path(plan_path)
+        if not pf.exists():
+            return None, False, 0
+        content = pf.read_text(encoding="utf-8")
+        total = len(content)
+        if total > MAX_PLAN_INLINE_CHARS:
+            return content[:MAX_PLAN_INLINE_CHARS], True, total
+        return content, False, total
+    except Exception:
+        return None, False, 0
 
 MODE_DISPLAY_MAP = {
     "idle": "",
@@ -59,8 +77,14 @@ def _task_attr(task, key: str, default: str = "") -> str:
     return task.get(key, default) if isinstance(task, dict) else getattr(task, key, default)
 
 
-def _build_restore_sections(ctx, project_root: Path = None) -> str:
-    """Build restore sections from last_session, tasks, and plan_path."""
+def _build_restore_sections(ctx, project_root: Path = None, inline_plan: bool = False) -> str:
+    """Build restore sections from last_session, tasks, and plan_path.
+
+    Args:
+        inline_plan: If True, read and inline plan file content (for compact restore
+            where plan is NOT auto-pasted). If False, just reference the path (for
+            clear restore where Claude Code auto-pastes the plan).
+    """
     sections = []
     last_session = getattr(ctx, "last_session", None) or {}
 
@@ -87,7 +111,19 @@ def _build_restore_sections(ctx, project_root: Path = None) -> str:
 
     plan_path = getattr(ctx, "plan_path", None)
     if plan_path:
-        sections.extend(["", "### Plan", f"Read the plan at: `{plan_path}`"])
+        if inline_plan:
+            content, truncated, total_chars = _read_plan_content(plan_path)
+            if content:
+                header = f"Plan loaded from: `{plan_path}`"
+                if truncated:
+                    header += f" (truncated, {total_chars} chars total)"
+                sections.extend(["", "### Plan", header, "", content])
+                if truncated:
+                    sections.append(f"\n*Plan truncated at {MAX_PLAN_INLINE_CHARS} characters. Full plan at: `{plan_path}`*")
+            else:
+                sections.extend(["", "### Plan", f"*Plan file not found at `{plan_path}`.*"])
+        else:
+            sections.extend(["", "### Plan", f"Read the plan at: `{plan_path}`"])
 
     git_state = last_session.get("git_state", {}) if last_session else {}
     if git_state:
@@ -113,7 +149,7 @@ def _mode_label(ctx) -> str:
 def _resume_block(ctx, project_root, mode_text, instructions):
     """Common pattern: resume header + restore + instructions."""
     lines = [f"## Resuming Context: {ctx.id}", "", f"**Summary:** {ctx.summary}", f"**Mode:** {mode_text}"]
-    restore = _build_restore_sections(ctx, project_root)
+    restore = _build_restore_sections(ctx, project_root, inline_plan=True)
     if restore:
         lines.append(restore)
     lines.extend(["", "---", "", "**Instructions:**"])
@@ -139,7 +175,7 @@ def format_handoff_continuation(ctx, project_root: Path = None) -> str:
             lines.extend([f"*Handoff document not found at `{handoff_path}`*", ""])
     except Exception as e:
         lines.extend([f"*Handoff document at `{handoff_path}` could not be read: {e}*", ""])
-    restore = _build_restore_sections(ctx, project_root)
+    restore = _build_restore_sections(ctx, project_root, inline_plan=True)
     if restore:
         lines.append(restore)
     lines.extend(["", "---", "", "**Instructions:**",
@@ -196,7 +232,7 @@ def format_active_context_reminder(ctx, project_root: Path = None, include_resto
     label = _mode_label(ctx)
     if include_restore:
         lines = [f"## Resuming Context: {ctx.id}", "", f"**Summary:** {ctx.summary}", f"**Mode:** {label}"]
-        restore = _build_restore_sections(ctx, project_root)
+        restore = _build_restore_sections(ctx, project_root, inline_plan=True)
         if restore:
             lines.append(restore)
         lines.extend(["", "---", "", "**Instructions:**",

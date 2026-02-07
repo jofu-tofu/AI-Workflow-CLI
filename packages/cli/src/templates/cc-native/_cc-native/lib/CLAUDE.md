@@ -54,7 +54,7 @@ Hooks (cc-native-plan-review.py, etc.)
     └── _shared/lib/ (shared across all methods)
             ├── lib/base/subprocess_utils.py
             ├── lib/base/constants.py
-            └── lib/context/ (context_store, context_selector, context_formatter, plan_manager, task_tracker)
+            └── lib/context/context_manager.py
 ```
 
 **Import direction:** Hooks → cc-native lib → shared lib. Never the reverse.
@@ -245,7 +245,7 @@ content = path.read_text()  # May use cp1252 on Windows
 These are reminders based on past issues. Not enforcement rules.
 
 - **Don't import from `_cc-native/lib/` in `_shared/lib/`** - wrong direction, creates circular deps
-- **Don't use `print()` for debugging** - use `eprint()` to avoid corrupting stdout
+- **Don't use `print()` for debugging** - use `log_debug/log_info/log_warn/log_error` from `_shared/lib/base/logger.py` (writes to stderr + `_output/hook-log.jsonl`)
 - **Don't modify data class fields** without updating all consumers (hooks, formatters, tests)
 - **Don't hardcode paths** - use `Path(__file__)`, env vars, or config
 - **Don't forget `encoding="utf-8"`** on file operations - Windows defaults are unsafe
@@ -260,5 +260,6 @@ These are reminders based on past issues. Not enforcement rules.
 
 | Date | Change |
 |------|--------|
+| 2026-02-07 | Unified logger: all diagnostic logging uses `_shared/lib/base/logger.py` instead of eprint/print-to-stderr |
 | 2026-02-06 | Remove duplicate `atomic_write.py` — consolidated to `_shared/lib/base/atomic_write.py` |
 | 2026-02-03 | Initial creation |

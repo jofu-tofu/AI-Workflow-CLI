@@ -3,17 +3,16 @@
 Single entry point: determine_context(prompt, session_id, project_root)
 Returns (context_id, method, output_text).
 
-Selection priority (5 cases):
+Selection priority:
 1. session_match       - session_id found in index.json sessions map
 2. caret_command       - prompt starts with ^ -> parse and execute
-3. plan_content_match  - hash prompt, match against has_plan contexts' plan_hash
-4. plan_signature_match - check prompt[:500] against plan_signature (fallback)
-5. default             - create new context
+3. plan_content_match  - FALLBACK: match against has_plan contexts via hash/signature
+4. default             - create new context
 
-Cases 3-4 fix the concurrent plan bug: after /clear, Claude Code pastes
-the plan as the first prompt in a new session. session_match fails because
-/clear creates a new session_id. Plan content matching identifies which
-has_plan context's plan was pasted.
+Note: The primary plan restore path is now session_start.py which handles
+SessionStart(source=clear). It finds has_plan contexts and binds the new
+session before UserPromptSubmit fires. Case 3 here is a fallback for edge
+cases where session_start didn't consume the has_plan state (e.g., startup/resume).
 """
 import hashlib
 import re
@@ -41,8 +40,9 @@ from .context_formatter import (
     format_plan_continuation,
     format_active_continuation,
 )
+from .plan_manager import normalize_plan_content
 from ..base.subprocess_utils import is_internal_call
-from ..base.utils import eprint
+from ..base.logger import log_debug, log_info, log_warn, log_error
 
 # Minimum characters required for new context description
 MIN_NEW_CONTEXT_CHARS = 10
@@ -232,31 +232,55 @@ def parse_chained_caret(prompt: str, contexts: List[ContextState]) -> Tuple[Opti
 
 
 # ---------------------------------------------------------------------------
-# Plan content matching (the concurrent plan bug fix)
+# Plan content matching (fallback — primary path is session_start.py)
 # ---------------------------------------------------------------------------
 
 def _match_plan_content(prompt: str, has_plan_contexts: List[ContextState]) -> Optional[ContextState]:
-    """Match pasted plan content to a has_plan context.
+    """Fallback plan matching for edge cases where session_start didn't consume has_plan.
 
-    After /clear, Claude Code pastes the plan as the first prompt.
-    1. Deterministic hash match (plan_hash stored in state.json)
-    2. Signature match (plan_signature in prompt[:500])
-    3. Most recent has_plan context (last resort)
+    The primary plan restore path is session_start.py (SessionStart source=clear).
+    This fallback handles cases like startup/resume where has_plan persisted.
+
+    Tiers (cascading):
+    1. Embedded plan-id (HTML comment)
+    2. Normalized content hash
+    3. Multi-anchor signature
+    4. Legacy signature fallback
     """
     if not has_plan_contexts:
         return None
 
-    prompt_hash = hashlib.sha256(prompt.encode('utf-8')).hexdigest()[:12]
+    # Tier 1: Plan ID match (most reliable)
+    id_match = re.search(r'<!-- plan-id: ([a-f0-9]+) -->', prompt)
+    if id_match:
+        found_id = id_match.group(1)
+        for ctx in has_plan_contexts:
+            if getattr(ctx, 'plan_id', None) == found_id:
+                log_debug("context_selector", f"Tier 1 plan-id match: {ctx.id} (id: {found_id})")
+                return ctx
 
-    # Case 3: Deterministic hash match
+    # Tier 2: Normalized hash match
+    normalized = normalize_plan_content(prompt)
+    norm_hash = hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:12]
     for ctx in has_plan_contexts:
-        if ctx.plan_hash and ctx.plan_hash == prompt_hash:
+        if ctx.plan_hash and ctx.plan_hash == norm_hash:
+            log_debug("context_selector", f"Tier 2 normalized hash match: {ctx.id} (hash: {norm_hash})")
             return ctx
 
-    # Case 4: Signature match
+    # Tier 3: Multi-anchor signature match
+    for ctx in has_plan_contexts:
+        anchors = getattr(ctx, 'plan_anchors', [])
+        if anchors:
+            hits = sum(1 for a in anchors if a in prompt)
+            if hits >= 2 and hits >= len(anchors) // 2:
+                log_debug("context_selector", f"Tier 3 anchor match: {ctx.id} ({hits}/{len(anchors)} anchors)")
+                return ctx
+
+    # Tier 4 (legacy fallback): Signature match for pre-upgrade contexts
     prompt_head = prompt[:500]
     for ctx in has_plan_contexts:
         if ctx.plan_signature and ctx.plan_signature in prompt_head:
+            log_debug("context_selector", f"Tier 4 legacy signature match: {ctx.id}")
             return ctx
 
     # No match — let caller fall through to new context creation
@@ -273,10 +297,10 @@ def _create_new_context(prompt: str, project_root: Path) -> Tuple[Optional[str],
         new_ctx = create_context_from_prompt(prompt, project_root)
         update_mode(new_ctx.id, "active", project_root=project_root)
         new_ctx.mode = "active"
-        eprint(f"[context_selector] Auto-created context: {new_ctx.id}")
+        log_info("context_selector", f"Auto-created context: {new_ctx.id}")
         return (new_ctx.id, "auto_created", format_context_created(new_ctx))
     except Exception as e:
-        eprint(f"[context_selector] Primary context creation failed: {e}")
+        log_error("context_selector", f"Primary context creation failed: {e}")
         try:
             from datetime import datetime
             fallback_id = datetime.now().strftime("%y%m%d-%H%M") + "-context"
@@ -289,10 +313,10 @@ def _create_new_context(prompt: str, project_root: Path) -> Tuple[Optional[str],
             )
             update_mode(new_ctx.id, "active", project_root=project_root)
             new_ctx.mode = "active"
-            eprint(f"[context_selector] Fallback context created: {new_ctx.id}")
+            log_info("context_selector", f"Fallback context created: {new_ctx.id}")
             return (new_ctx.id, "auto_created_fallback", format_context_created(new_ctx))
         except Exception as e2:
-            eprint(f"[context_selector] ALL context creation failed: {e2}")
+            log_error("context_selector", f"ALL context creation failed: {e2}")
             return (None, "creation_failed", None)
 
 
@@ -347,7 +371,7 @@ def _handle_caret_command(
             raise BlockRequest(f"Context '{ctx_id}' no longer exists.\n" + format_context_picker_stderr(contexts))
         complete_context(ctx_to_end.id, project_root)
         ended_contexts.append(ctx_to_end)
-        eprint(f"[context_selector] Ended context: {ctx_to_end.id}")
+        log_info("context_selector", f"Ended context: {ctx_to_end.id}")
 
     if cmd.new_context_desc:
         ctx_id, method, output = _create_new_context(cmd.new_context_desc, project_root)
@@ -360,7 +384,7 @@ def _handle_caret_command(
         selected_ctx = next((c for c in contexts if c.id == cmd.select), None)
         if selected_ctx is None:
             raise BlockRequest(f"Context '{cmd.select}' no longer exists.\n" + format_context_picker_stderr(contexts))
-        eprint(f"[context_selector] Caret-selected context: {selected_ctx.id}")
+        log_info("context_selector", f"Caret-selected context: {selected_ctx.id}")
         return (selected_ctx.id, "caret_select", format_command_feedback(ended_contexts, selected_ctx))
 
     if ended_contexts:
@@ -391,12 +415,15 @@ def determine_context(
 ) -> Tuple[Optional[str], str, Optional[str]]:
     """Determine which context this prompt belongs to.
 
-    Selection priority (5 cases):
+    Selection priority (4 cases):
     1. session_match        - session_id already bound to a context
     2. caret_command        - prompt starts with ^, parse and execute
-    3. plan_content_match   - hash prompt matches a has_plan context's plan_hash
-    4. plan_signature_match - prompt[:500] contains plan's first 200 chars
-    5. default              - create new context
+    3. plan_content_match   - FALLBACK: match has_plan contexts via hash/signature
+    4. default              - create new context
+
+    Note: The primary plan restore is handled by session_start.py on
+    SessionStart(source=clear), which binds the session before this runs.
+    Case 3 is a fallback for edge cases.
 
     Returns:
         (context_id, method, output_text)
@@ -405,14 +432,14 @@ def determine_context(
         BlockRequest: When request should be blocked to show picker
     """
     if is_internal_call():
-        eprint("[context_selector] Skipping: internal subprocess call")
+        log_debug("context_selector", "Skipping: internal subprocess call")
         return (None, "skip_internal", None)
 
     # --- Case 1: session_match ---
     if session_id:
         session_context = get_context_by_session_id(session_id, project_root)
         if session_context:
-            eprint(f"[context_selector] Session match: {session_context.id}")
+            log_info("context_selector", f"Session match: {session_context.id}")
             return (
                 session_context.id,
                 "session_match",
@@ -433,7 +460,7 @@ def determine_context(
         contexts = get_all_contexts(status="active", project_root=project_root)
         return _handle_caret_command(prompt, contexts, project_root)
 
-    # --- Cases 3-4: plan_content_match / plan_signature_match ---
+    # --- Case 3: plan_content_match (fallback — primary path is session_start.py) ---
     has_plan_contexts = [
         c for c in get_all_contexts(status="active", project_root=project_root)
         if c.mode == "has_plan"
@@ -442,19 +469,16 @@ def determine_context(
     if has_plan_contexts:
         matched = _match_plan_content(prompt, has_plan_contexts)
         if matched:
-            prompt_hash = hashlib.sha256(prompt.encode('utf-8')).hexdigest()[:12]
-            method = "plan_content_match" if matched.plan_hash == prompt_hash else "plan_signature_match"
-
             if session_id:
                 bind_session(matched.id, session_id, project_root)
 
             update_mode(matched.id, "active", project_root=project_root)
             matched.mode = "active"
 
-            eprint(f"[context_selector] Plan {method}: {matched.id}")
-            return (matched.id, method, format_plan_continuation(matched, project_root))
+            log_info("context_selector", f"Plan match (fallback): {matched.id}")
+            return (matched.id, "plan_content_match", format_plan_continuation(matched, project_root))
 
-    # --- Case 5: default ---
+    # --- Case 4: default ---
     return _create_new_context(prompt, project_root)
 
 

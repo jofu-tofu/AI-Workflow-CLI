@@ -34,9 +34,10 @@ except ImportError:
     _spec.loader.exec_module(_mod)
     atomic_write = _mod.atomic_write
 
-# Import canonical eprint from shared lib
+# Import canonical eprint and logger from shared lib
 try:
     from ...lib.base.utils import eprint
+    from ...lib.base.logger import log_debug, log_info, log_warn, log_error
 except ImportError:
     # Fallback for direct execution
     import sys as _sys
@@ -44,6 +45,7 @@ except ImportError:
     _shared_lib = _Path(__file__).resolve().parent.parent.parent / "_shared" / "lib"
     _sys.path.insert(0, str(_shared_lib))
     from base.utils import eprint
+    from base.logger import log_debug, log_info, log_warn, log_error
 
 
 # ---------------------------
@@ -97,18 +99,18 @@ def load_state(plan_path: str) -> Optional[Dict[str, Any]]:
         if schema_version is None:
             # Existing state files without version - auto-migrate
             state["schema_version"] = STATE_SCHEMA_VERSION
-            eprint(f"[state] Migrated state file to schema v{STATE_SCHEMA_VERSION}")
+            log_info("state", f"Migrated state file to schema v{STATE_SCHEMA_VERSION}")
         elif schema_version != STATE_SCHEMA_VERSION:
-            eprint(f"[state] WARNING: Schema mismatch (expected {STATE_SCHEMA_VERSION}, got {schema_version})")
+            log_warn("state", f"Schema mismatch (expected {STATE_SCHEMA_VERSION}, got {schema_version})")
             # For now, accept with warning - add migration logic here if schema changes
 
         return state
 
     except ValueError as e:
-        eprint(f"[state] SECURITY: Invalid plan path: {e}")
+        log_error("state", f"SECURITY: Invalid plan path: {e}")
         return None
     except Exception as e:
-        eprint(f"[state] ERROR: Failed to load state: {e}")
+        log_error("state", f"Failed to load state: {e}")
         return None
 
 
@@ -132,16 +134,16 @@ def save_state(plan_path: str, state: Dict[str, Any]) -> bool:
         )
 
         if not success:
-            eprint(f"[state] Failed to save state: {error}")
+            log_error("state", f"Failed to save state: {error}")
             return False
 
         return True
 
     except ValueError as e:
-        eprint(f"[state] SECURITY: Invalid plan path: {e}")
+        log_error("state", f"SECURITY: Invalid plan path: {e}")
         return False
     except Exception as e:
-        eprint(f"[state] ERROR: {e}")
+        log_error("state", str(e))
         return False
 
 
@@ -154,13 +156,13 @@ def delete_state(plan_path: str) -> bool:
         state_file = get_state_file_path(plan_path)
         if state_file.exists():
             state_file.unlink()
-            eprint(f"[state] Deleted state file: {state_file}")
+            log_info("state", f"Deleted state file: {state_file}")
         return True
     except ValueError as e:
-        eprint(f"[state] SECURITY: Invalid plan path in delete: {e}")
+        log_error("state", f"SECURITY: Invalid plan path in delete: {e}")
         return False
     except Exception as e:
-        eprint(f"[state] Warning: failed to delete state file: {e}")
+        log_warn("state", f"Failed to delete state file: {e}")
         return False
 
 
@@ -250,7 +252,7 @@ def should_continue_iterating(
 
     # At or past max iterations - no more iterations
     if current >= max_iter:
-        eprint(f"[state] At max iterations ({current}/{max_iter}), no more iterations")
+        log_info("state", f"At max iterations ({current}/{max_iter}), no more iterations")
         return False
 
     # Check early exit on all pass
@@ -258,9 +260,9 @@ def should_continue_iterating(
     if config:
         early_exit = config.get("earlyExitOnAllPass", True)
     if early_exit and verdict == "pass":
-        eprint(f"[state] All reviewers passed and earlyExitOnAllPass=true, exiting early")
+        log_info("state", "All reviewers passed and earlyExitOnAllPass=true, exiting early")
         return False
 
     # More iterations available and verdict is not pass (or early exit disabled)
-    eprint(f"[state] Continuing to next iteration ({current + 1}/{max_iter}), verdict={verdict}")
+    log_info("state", f"Continuing to next iteration ({current + 1}/{max_iter}), verdict={verdict}")
     return True

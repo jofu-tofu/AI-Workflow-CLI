@@ -50,6 +50,7 @@ try:
         sanitize_filename,
         sanitize_title,
     )
+    from ...lib.base.logger import log_debug, log_info, log_warn, log_error
 except ImportError:
     # Fallback for direct execution
     import sys
@@ -63,6 +64,7 @@ except ImportError:
         sanitize_filename,
         sanitize_title,
     )
+    from base.logger import log_debug, log_info, log_warn, log_error
 
 
 # ---------------------------
@@ -200,9 +202,9 @@ def mark_plan_reviewed(
 
         marker.write_text(json.dumps(data), encoding="utf-8")
         iter_info = f" (iteration {data.get('iteration', {}).get('current', '?')}/{data.get('iteration', {}).get('max', '?')})" if iteration_state else ""
-        eprint(f"[{hook_name}] Created review marker: {marker} (hash: {plan_hash}){iter_info}")
+        log_info(hook_name, f"Created review marker: {marker} (hash: {plan_hash}){iter_info}")
     except Exception as e:
-        eprint(f"[{hook_name}] Warning: failed to create review marker: {e}")
+        log_warn(hook_name, f"Failed to create review marker: {e}")
 
 
 # ---------------------------
@@ -236,7 +238,7 @@ def mark_questions_asked(session_id: str) -> bool:
         marker.write_text(json.dumps({"asked_at": datetime.now().isoformat()}), encoding="utf-8")
         return True
     except Exception as e:
-        eprint(f"[utils] Failed to write questions-asked marker: {e}")
+        log_warn("utils", f"Failed to write questions-asked marker: {e}")
         return False
 
 
@@ -282,17 +284,17 @@ def parse_json_maybe(text: str, require_fields: Optional[List[str]] = None) -> O
                 if isinstance(parsed, dict):
                     obj = parsed
                     parse_method = "heuristic"
-                    eprint(f"[parse] Used heuristic extraction (chars {start}-{end})")
+                    log_debug("parse", f"Used heuristic extraction (chars {start}-{end})")
             except Exception:
-                eprint(f"[parse] Heuristic extraction failed for candidate at chars {start}-{end}")
+                log_debug("parse", f"Heuristic extraction failed for candidate at chars {start}-{end}")
                 return None
 
     # If we parsed something, validate required fields
     if obj and require_fields:
         missing = [f for f in require_fields if f not in obj or not obj[f]]
         if missing:
-            eprint(f"[parse] WARNING: parsed JSON ({parse_method}) missing/empty fields: {missing}")
-            eprint(f"[parse] Keys present: {list(obj.keys())}")
+            log_warn("parse", f"Parsed JSON ({parse_method}) missing/empty fields: {missing}")
+            log_debug("parse", f"Keys present: {list(obj.keys())}")
 
     return obj
 
@@ -306,7 +308,7 @@ def coerce_to_review(obj: Optional[Dict[str, Any]], default_fix_msg: str = "Retr
         'default' if it was defaulted due to missing/empty summary.
     """
     if not obj:
-        eprint("[coerce] WARNING: No object provided to coerce_to_review")
+        log_warn("coerce", "No object provided to coerce_to_review")
         return False, "error", {
             "verdict": "fail",
             "summary": "No structured output returned.",
@@ -318,19 +320,19 @@ def coerce_to_review(obj: Optional[Dict[str, Any]], default_fix_msg: str = "Retr
 
     verdict = obj.get("verdict")
     if verdict not in ("pass", "warn", "fail"):
-        eprint(f"[coerce] WARNING: Invalid or missing verdict '{verdict}', defaulting to 'warn'")
+        log_warn("coerce", f"Invalid or missing verdict '{verdict}', defaulting to 'warn'")
         verdict = "warn"
 
     # Log when fields are being defaulted
     summary_raw = str(obj.get("summary", "")).strip()
     if not summary_raw:
-        eprint("[coerce] WARNING: summary missing or empty from parsed output, using default")
+        log_warn("coerce", "summary missing or empty from parsed output, using default")
         # Add diagnostic output
-        eprint(f"[coerce] Raw object keys: {list(obj.keys()) if obj else 'None'}")
+        log_debug("coerce", f"Raw object keys: {list(obj.keys()) if obj else 'None'}")
         if obj:
-            eprint(f"[coerce] verdict={obj.get('verdict')}, issues_count={len(obj.get('issues', []))}")
+            log_debug("coerce", f"verdict={obj.get('verdict')}, issues_count={len(obj.get('issues', []))}")
     if not obj.get("issues"):
-        eprint("[coerce] INFO: issues array empty or missing")
+        log_debug("coerce", "issues array empty or missing")
 
     norm = {
         "verdict": verdict,
@@ -360,28 +362,26 @@ def compute_review_decision(
     all_verdicts: List[str],
     warn_threshold: float = 0.5,
 ) -> Tuple[bool, str, float]:
-    """Two-stage verdict aggregation.
+    """Verdict aggregation: only fail triggers a block.
 
-    Stage 1 (Fail Veto): Any fail -> deny. From safety engineering (ISO 61508) —
+    Fail Veto: Any fail -> deny. From safety engineering (ISO 61508) —
     critical alarms use zero-tolerance.
 
-    Stage 2 (Warn Consensus): warn_ratio >= threshold -> deny. From Condorcet's
-    Jury Theorem — if each reviewer is better than random at detecting issues,
-    majority vote maximizes decision correctness.
+    Warns are informational only — the warn_ratio is computed for logging
+    and visibility but does NOT trigger blocking.
 
     Error exclusion: Detectors that produce no signal (error/skip) are excluded
     from the denominator. They provide no information about plan quality.
 
     Args:
         all_verdicts: List of verdict strings from all reviewers.
-        warn_threshold: Fraction of warn verdicts (among signal verdicts) that
-            triggers denial. Default 0.5 (Condorcet majority).
+        warn_threshold: Kept for backward compatibility. No longer used for blocking.
 
     Returns:
         Tuple of (should_deny, reason, score).
         - should_deny: True if the plan should be denied.
-        - reason: "fail_veto", "warn_consensus", "acceptable", or "no_signal".
-        - score: 1.0 for fail_veto, warn_ratio for warn cases, 0.0 for pass/no_signal.
+        - reason: "fail_veto", "acceptable", or "no_signal".
+        - score: 1.0 for fail_veto, warn_ratio for informational cases, 0.0 for no_signal.
     """
     # Exclude non-signal verdicts
     signal_verdicts = [v for v in all_verdicts if v in ("pass", "warn", "fail")]
@@ -389,18 +389,14 @@ def compute_review_decision(
     if not signal_verdicts:
         return False, "no_signal", 0.0
 
-    # Stage 1: Fail veto
+    # Only fail blocks — warns are informational
     fail_count = signal_verdicts.count("fail")
     if fail_count > 0:
         return True, "fail_veto", 1.0
 
-    # Stage 2: Warn consensus (Condorcet majority)
+    # Warn ratio still computed for logging/visibility, but does NOT block
     warn_count = signal_verdicts.count("warn")
     warn_ratio = warn_count / len(signal_verdicts)
-
-    if warn_ratio >= warn_threshold:
-        return True, "warn_consensus", warn_ratio
-
     return False, "acceptable", warn_ratio
 
 
@@ -614,6 +610,143 @@ def format_combined_markdown(
     return "\n".join(lines).strip() + "\n"
 
 
+def build_inline_review_summary(
+    combined: CombinedReviewResult,
+    max_issues: int = 5,
+    max_chars: int = 2000,
+) -> str:
+    """Build compact inline summary of HIGH-severity review findings for additionalContext.
+
+    Extracts per-reviewer verdicts, high-severity issues with suggested fixes,
+    missing sections, and key questions into a compact string suitable for
+    injection into Claude's additionalContext.
+
+    Args:
+        combined: The combined review result from all reviewers.
+        max_issues: Maximum number of high-severity issues to include.
+        max_chars: Character budget for the summary (truncated if exceeded).
+
+    Returns:
+        Compact summary string, or empty string if no high-severity findings.
+    """
+    parts: List[str] = []
+
+    # Per-reviewer verdict + summary (1 line each)
+    all_reviewers: List[ReviewerResult] = []
+    all_reviewers.extend(combined.cli_reviewers.values())
+    all_reviewers.extend(combined.agents.values())
+
+    for r in all_reviewers:
+        summary = r.data.get("summary", "").strip() if r.data else ""
+        # Truncate long summaries
+        if len(summary) > 120:
+            summary = summary[:117] + "..."
+        parts.append(f"- {r.name}: {r.verdict}" + (f" — {summary}" if summary else ""))
+
+    # Collect HIGH severity issues across all reviewers
+    high_issues: List[Dict[str, Any]] = []
+    for r in all_reviewers:
+        if not r.data:
+            continue
+        for issue in r.data.get("issues", []):
+            if issue.get("severity") == "high":
+                high_issues.append({**issue, "_reviewer": r.name})
+
+    if high_issues:
+        parts.append("")
+        parts.append("HIGH-severity issues:")
+        for issue in high_issues[:max_issues]:
+            cat = issue.get("category", "general")
+            text = issue.get("issue", "")
+            fix = issue.get("suggested_fix", "")
+            reviewer = issue.get("_reviewer", "unknown")
+            line = f"- [{cat}] {text}"
+            if fix:
+                line += f" → Fix: {fix}"
+            line += f" ({reviewer})"
+            parts.append(line)
+        remaining = len(high_issues) - max_issues
+        if remaining > 0:
+            parts.append(f"  ...and {remaining} more high-severity issue(s)")
+
+    # Missing sections (deduplicated across reviewers)
+    missing: List[str] = []
+    seen_missing: set = set()
+    for r in all_reviewers:
+        if not r.data:
+            continue
+        for section in r.data.get("missing_sections", []):
+            lower = section.lower().strip()
+            if lower not in seen_missing:
+                seen_missing.add(lower)
+                missing.append(section)
+
+    if missing:
+        parts.append("")
+        parts.append(f"Missing sections: {', '.join(missing[:8])}")
+
+    # Key questions (deduplicated)
+    questions: List[str] = []
+    seen_q: set = set()
+    for r in all_reviewers:
+        if not r.data:
+            continue
+        for q in r.data.get("questions", []):
+            lower = q.lower().strip()
+            if lower not in seen_q:
+                seen_q.add(lower)
+                questions.append(q)
+
+    if questions:
+        parts.append("")
+        parts.append("Key questions:")
+        for q in questions[:5]:
+            parts.append(f"- {q}")
+
+    result = "\n".join(parts)
+    if len(result) > max_chars:
+        result = result[:max_chars - 3] + "..."
+    return result
+
+
+def extract_top_issues_text(
+    combined: CombinedReviewResult,
+    max_count: int = 3,
+    severity: str = "high",
+) -> str:
+    """Extract top issues as a compact text string for permissionDecisionReason.
+
+    Args:
+        combined: The combined review result.
+        max_count: Maximum number of issues to include.
+        severity: Severity level to filter for.
+
+    Returns:
+        Compact semicolon-separated issue text.
+    """
+    all_reviewers: List[ReviewerResult] = []
+    all_reviewers.extend(combined.cli_reviewers.values())
+    all_reviewers.extend(combined.agents.values())
+
+    issues: List[str] = []
+    for r in all_reviewers:
+        if not r.data:
+            continue
+        for issue in r.data.get("issues", []):
+            if issue.get("severity") == severity:
+                text = issue.get("issue", "").strip()
+                if text:
+                    issues.append(text)
+            if len(issues) >= max_count:
+                break
+        if len(issues) >= max_count:
+            break
+
+    if not issues:
+        return "Review found critical issues"
+    return "; ".join(issues)
+
+
 def _append_review_details(
     lines: List[str],
     data: Dict[str, Any],
@@ -821,13 +954,13 @@ def write_combined_artifacts(
     if not out_dir:
         raise ValueError("Either context_reviews_dir or review_folder is required")
 
-    eprint(f"[utils] Using review folder: {out_dir}")
+    log_debug("utils", f"Using review folder: {out_dir}")
 
     # Check directory creation explicitly
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
     except PermissionError as e:
-        eprint(f"[utils] FATAL: Cannot create directory {out_dir}: {e}")
+        log_error("utils", f"Cannot create directory {out_dir}: {e}")
         raise
 
     # JSON write with atomic operation - use combined.json for folder-based
@@ -842,7 +975,7 @@ def write_combined_artifacts(
         else:
             json_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False), encoding="utf-8")
     except Exception as e:
-        eprint(f"[utils] FATAL: Failed to write {json_path.name}: {e}")
+        log_error("utils", f"Failed to write {json_path.name}: {e}")
         raise
 
     # Markdown write with atomic operation - use combined.md for folder-based
@@ -857,7 +990,7 @@ def write_combined_artifacts(
         else:
             md_path.write_text(md_content, encoding="utf-8")
     except Exception as e:
-        eprint(f"[utils] FATAL: Failed to write {md_path.name}: {e}")
+        log_error("utils", f"Failed to write {md_path.name}: {e}")
         raise
 
     # Individual reviewer writes (non-critical - continue on failure)
@@ -869,11 +1002,11 @@ def write_combined_artifacts(
                 if ENABLE_ROBUST_PLAN_WRITES:
                     success, error = atomic_write(reviewer_path, content)
                     if not success:
-                        eprint(f"[utils] WARNING: Failed to write {reviewer_path.name}: {error}")
+                        log_warn("utils", f"Failed to write {reviewer_path.name}: {error}")
                 else:
                     reviewer_path.write_text(content, encoding="utf-8")
             except Exception as e:
-                eprint(f"[utils] WARNING: Failed to write {reviewer_path.name}: {e}")
+                log_warn("utils", f"Failed to write {reviewer_path.name}: {e}")
                 # Continue - individual reviewer failures not critical
     for name, r in result.agents.items():
         if r.data:
@@ -883,11 +1016,11 @@ def write_combined_artifacts(
                 if ENABLE_ROBUST_PLAN_WRITES:
                     success, error = atomic_write(reviewer_path, content)
                     if not success:
-                        eprint(f"[utils] WARNING: Failed to write {reviewer_path.name}: {error}")
+                        log_warn("utils", f"Failed to write {reviewer_path.name}: {error}")
                 else:
                     reviewer_path.write_text(content, encoding="utf-8")
             except Exception as e:
-                eprint(f"[utils] WARNING: Failed to write {reviewer_path.name}: {e}")
+                log_warn("utils", f"Failed to write {reviewer_path.name}: {e}")
                 # Continue - individual reviewer failures not critical
 
     # Generate index.md for folder-based reviews
@@ -898,11 +1031,11 @@ def write_combined_artifacts(
             if ENABLE_ROBUST_PLAN_WRITES:
                 success, error = atomic_write(index_path, index_content)
                 if not success:
-                    eprint(f"[utils] WARNING: Failed to write index.md: {error}")
+                    log_warn("utils", f"Failed to write index.md: {error}")
             else:
                 index_path.write_text(index_content, encoding="utf-8")
         except Exception as e:
-            eprint(f"[utils] WARNING: Failed to write index.md: {e}")
+            log_warn("utils", f"Failed to write index.md: {e}")
 
         return index_path
 
@@ -922,7 +1055,7 @@ def load_config(project_dir: Path) -> Dict[str, Any]:
         with open(settings_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        eprint(f"[cc-native] Failed to load config: {e}")
+        log_warn("cc-native", f"Failed to load config: {e}")
         return {}
 
 

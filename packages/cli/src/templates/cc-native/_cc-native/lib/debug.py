@@ -1,19 +1,34 @@
 """
 Permanent debug logging for cc-native hooks.
 
-Logs are written to context folder: _output/contexts/<context-id>/debug/<session-name>.log
+Thin delegation layer over the unified logger (_shared/lib/base/logger.py).
+Logs are written to context folder: _output/contexts/<context-id>/debug/hook-log.jsonl
 Append-only, cleaned up when context is archived.
 Can be disabled via CCNATIVE_DEBUG_DISABLE=1 environment variable.
 """
 
-import json
 import os
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
 # Feature flag - set CCNATIVE_DEBUG_DISABLE=1 to turn off
 DEBUG_ENABLED = os.environ.get("CCNATIVE_DEBUG_DISABLE", "").lower() not in ("1", "true", "yes")
+
+# Import unified logger
+try:
+    from _shared.lib.base.logger import hook_log
+except ImportError:
+    # Fallback: try relative import path used by hooks
+    try:
+        import sys
+        _shared = Path(__file__).parent.parent.parent.parent / "_shared"
+        if str(_shared) not in sys.path:
+            sys.path.insert(0, str(_shared))
+        from lib.base.logger import hook_log
+    except ImportError:
+        # Last resort: no-op
+        def hook_log(*args, **kwargs):
+            pass
 
 
 def get_debug_dir(context_path: Path) -> Path:
@@ -51,7 +66,7 @@ def debug_log(
     message: str,
     data: Optional[Any] = None
 ) -> None:
-    """Write a debug log entry (append-only).
+    """Write a debug log entry. Delegates to unified logger.
 
     Args:
         context_path: Path to context folder
@@ -63,22 +78,15 @@ def debug_log(
     if not DEBUG_ENABLED:
         return
 
-    try:
-        log_path = get_log_path(context_path, session_name)
-        timestamp = datetime.now().isoformat()
-
-        entry = f"[{timestamp}] [{component}] {message}"
-        if data is not None:
-            try:
-                data_str = json.dumps(data, indent=2, ensure_ascii=True, default=str)
-                entry += f"\n{data_str}"
-            except Exception:
-                entry += f"\n<data serialization failed: {type(data)}>"
-
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(entry + "\n\n")
-    except Exception:
-        pass  # Never fail on debug logging
+    hook_log(
+        "debug",
+        session_name,
+        message,
+        component=component,
+        data=data,
+        context_path=context_path,
+        stderr=False,
+    )
 
 
 def debug_raw(
@@ -89,7 +97,7 @@ def debug_raw(
     raw: str,
     max_len: int = 10000
 ) -> None:
-    """Log raw output (stdout, stderr, etc).
+    """Log raw output (stdout, stderr, etc). Delegates to unified logger.
 
     Args:
         context_path: Path to context folder
@@ -104,7 +112,14 @@ def debug_raw(
 
     truncated = raw[:max_len] if len(raw) > max_len else raw
     suffix = f" [TRUNCATED from {len(raw)} chars]" if len(raw) > max_len else ""
-    debug_log(context_path, session_name, component, f"{label}{suffix}:", truncated)
+    hook_log(
+        "debug",
+        session_name,
+        f"{label}{suffix}: {truncated}",
+        component=component,
+        context_path=context_path,
+        stderr=False,
+    )
 
 
 def cleanup_debug_folder(context_path: Path) -> None:

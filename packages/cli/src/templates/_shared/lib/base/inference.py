@@ -9,7 +9,7 @@ import sys
 import os
 from typing import Optional
 
-from .utils import eprint
+from .logger import log_debug, log_info, log_warn, log_error
 from dataclasses import dataclass
 
 
@@ -288,7 +288,7 @@ def generate_context_id_slug(prompt: str, timeout: int = 3) -> Optional[str]:
     )
 
     if not result.success or not result.output:
-        eprint(f"[inference] Context ID slug inference failed: {result.error}")
+        log_warn("inference", f"Context ID slug inference failed: {result.error}")
         return None
 
     slug = result.output.strip()
@@ -310,9 +310,9 @@ def generate_context_id_slug(prompt: str, timeout: int = 3) -> Optional[str]:
     if len(words) > 12:
         words = words[:12]
     if len(words) < 3:
-        eprint(f"[inference] Context ID slug too short ({len(words)} words): '{slug}'")
+        log_debug("inference", f"Context ID slug too short ({len(words)} words): '{slug}'")
         return None
 
     result_slug = ' '.join(words)
-    eprint(f"[inference] Generated context ID slug: '{result_slug}' ({result.latency_ms}ms)")
+    log_debug("inference", f"Generated context ID slug: '{result_slug}' ({result.latency_ms}ms)")
     return result_slug

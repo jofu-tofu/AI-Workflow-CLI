@@ -15,7 +15,12 @@ from typing import Any, Dict
 _lib_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_lib_dir))
 
-from utils import ReviewerResult, eprint, parse_json_maybe, coerce_to_review
+from utils import ReviewerResult, parse_json_maybe, coerce_to_review
+
+# Import logger
+_shared_logger = Path(__file__).resolve().parent.parent.parent.parent / "_shared" / "lib"
+sys.path.insert(0, str(_shared_logger))
+from base.logger import log_debug, log_info, log_warn, log_error
 
 
 def run_gemini_review(
@@ -39,7 +44,7 @@ def run_gemini_review(
 
     gemini_path = shutil.which("gemini")
     if gemini_path is None:
-        eprint("[gemini] CLI not found on PATH")
+        log_warn("gemini", "CLI not found on PATH")
         return ReviewerResult(
             name="gemini",
             ok=False,
@@ -49,7 +54,7 @@ def run_gemini_review(
             err="gemini CLI not found on PATH",
         )
 
-    eprint(f"[gemini] Found CLI at: {gemini_path}")
+    log_debug("gemini", f"Found CLI at: {gemini_path}")
 
     instruction = f"""
 
@@ -73,7 +78,7 @@ Return ONLY a JSON object that matches this JSON Schema (no markdown, no code fe
     if model:
         cmd.extend(["--model", model])
 
-    eprint("[gemini] Running command: gemini -y -p <instruction>")
+    log_debug("gemini", "Running command: gemini -y -p <instruction>")
 
     try:
         p = subprocess.run(
@@ -86,13 +91,13 @@ Return ONLY a JSON object that matches this JSON Schema (no markdown, no code fe
             errors='replace',
         )
     except subprocess.TimeoutExpired:
-        eprint(f"[gemini] TIMEOUT after {timeout}s")
+        log_warn("gemini", f"TIMEOUT after {timeout}s")
         return ReviewerResult("gemini", False, "error", {}, "", f"gemini timed out after {timeout}s")
     except Exception as ex:
-        eprint(f"[gemini] EXCEPTION: {ex}")
+        log_error("gemini", f"Exception: {ex}")
         return ReviewerResult("gemini", False, "error", {}, "", f"gemini failed to run: {ex}")
 
-    eprint(f"[gemini] Exit code: {p.returncode}")
+    log_debug("gemini", f"Exit code: {p.returncode}")
 
     raw = (p.stdout or "").strip()
     err = (p.stderr or "").strip()

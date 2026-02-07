@@ -15,51 +15,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TypeVar
 
-from .utils import eprint
-
-_MAX_LOG_SIZE = 512 * 1024  # 512KB
-_TRUNCATE_TO = 256 * 1024   # 256KB
-
-
-def log_hook_error(hook_name: str, error: Exception, hook_event: str = "unknown", traceback_str: str = "") -> None:
-    """Write a summary-level error to _output/hook-errors.log.
-
-    Format: [ISO-timestamp] [hook_name] [hook_event] ErrorType: message
-    Optionally followed by full traceback if traceback_str is provided.
-    Message capped at 200 chars, newlines stripped.
-    File truncated to most recent 256KB when it exceeds 512KB.
-    Opt-out via HOOK_ERROR_LOG_DISABLE=1 env var.
-    Never raises — wrapped in try/except pass.
-    """
-    try:
-        if os.environ.get("HOOK_ERROR_LOG_DISABLE") == "1":
-            return
-
-        # Build log line
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S%z")
-        err_type = type(error).__name__
-        msg = str(error).replace("\n", " ").replace("\r", "")[:200]
-        line = f"[{ts}] [{hook_name}] [{hook_event}] {err_type}: {msg}\n"
-
-        # Append full traceback if provided
-        if traceback_str:
-            line += traceback_str.rstrip() + "\n"
-
-        # Resolve _output relative to project root (best effort)
-        _env_dir = os.environ.get("CLAUDE_PROJECT_DIR", "")
-        project_root = Path(_env_dir) if _env_dir else Path.cwd()
-        log_path = project_root / "_output" / "hook-errors.log"
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Size guard: truncate to most recent _TRUNCATE_TO bytes
-        if log_path.exists() and log_path.stat().st_size > _MAX_LOG_SIZE:
-            data = log_path.read_bytes()
-            log_path.write_bytes(data[-_TRUNCATE_TO:])
-
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(line)
-    except Exception:
-        pass  # Never crash
+from .logger import log_hook_error, hook_log, log_debug, log_info, log_warn, log_error, set_context_path
 
 
 # Context window baseline: tokens not visible in hook data
@@ -132,6 +88,10 @@ def get_context_percent_remaining(hook_input: dict) -> tuple:
 # Type variable for generic decorators
 F = TypeVar('F', bound=Callable[..., Any])
 
+# Event metadata stash — populated by load_hook_input(), read by run_hook()
+_last_hook_event: Optional[str] = None
+_last_tool_name: Optional[str] = None
+
 
 def load_hook_input() -> Optional[Dict[str, Any]]:
     """
@@ -140,11 +100,16 @@ def load_hook_input() -> Optional[Dict[str, Any]]:
     Returns:
         Parsed JSON dict, or None if stdin is empty or invalid JSON
     """
+    global _last_hook_event, _last_tool_name
     try:
         input_data = sys.stdin.read().strip()
         if not input_data:
             return None
-        return json.loads(input_data)
+        result = json.loads(input_data)
+        if isinstance(result, dict):
+            _last_hook_event = result.get("hook_event_name")
+            _last_tool_name = result.get("tool_name")
+        return result
     except json.JSONDecodeError:
         return None
 
@@ -203,7 +168,7 @@ def check_skip_persistence(payload: Dict[str, Any], hook_name: str = "hook") -> 
 
     metadata = tool_input.get("metadata", {})
     if isinstance(metadata, dict) and metadata.get("skip_persistence"):
-        eprint(f"[{hook_name}] Skipping persistence (skip_persistence flag set)")
+        log_debug(hook_name, "Skipping persistence (skip_persistence flag set)")
         return True
     return False
 
@@ -235,14 +200,13 @@ def safe_hook_main(hook_name: str) -> Callable[[F], F]:
                 import traceback
                 tb = traceback.format_exc()
                 log_hook_error(hook_name, e, traceback_str=tb)
-                eprint(f"[{hook_name}] JSON decode error: {e}")
+                log_error(hook_name, f"JSON decode error: {e}")
                 return 0
             except Exception as e:
                 import traceback
                 tb = traceback.format_exc()
                 log_hook_error(hook_name, e, traceback_str=tb)
-                eprint(f"[{hook_name}] Unexpected error: {e}")
-                eprint(tb)
+                log_error(hook_name, f"Unexpected error: {e}", traceback_str=tb)
                 return 0
         return wrapper  # type: ignore
     return decorator
@@ -285,11 +249,26 @@ def emit_context_and_block(
     print(json.dumps(out, ensure_ascii=ensure_ascii))
 
 
+def _detect_template(script_path: str = "") -> str:
+    """Auto-detect template origin from the hook script path.
+
+    Returns "shared", a template name (e.g., "cc-native"), or "unknown".
+    """
+    import re
+    path = (script_path or (sys.argv[0] if sys.argv else "")).replace("\\", "/")
+    if "/_shared/hooks/" in path or path.startswith("_shared/hooks/"):
+        return "shared"
+    match = re.search(r'_([a-z][a-z0-9-]*)/hooks/', path)
+    if match:
+        return match.group(1)  # e.g., "cc-native"
+    return "unknown"
+
+
 def run_hook(main_func: Callable[[], int], hook_name: str = "unknown") -> None:
     """
-    Standard hook entry point wrapper.
+    Standard hook entry point wrapper with lifecycle logging.
 
-    Calls main function and exits with its return code.
+    Logs HOOK_START before calling main, HOOK_END after completion.
     Catches unhandled exceptions and logs them before exiting cleanly.
 
     Args:
@@ -300,14 +279,55 @@ def run_hook(main_func: Callable[[], int], hook_name: str = "unknown") -> None:
         if __name__ == "__main__":
             run_hook(main, "my_hook")
     """
+    import time
+    start_time = time.monotonic()
+    template = _detect_template()
+    event = _last_hook_event or "unknown"
+    tool = _last_tool_name
+
+    # HOOK_START
+    start_data: Dict[str, Any] = {"lifecycle": "start", "template": template, "event": event}
+    if tool:
+        start_data["tool"] = tool
+    log_info(hook_name, "HOOK_START", data=start_data)
+
+    exit_code = 0
+    status = "success"
+    error_info = None
+
     try:
-        raise SystemExit(main_func())
-    except SystemExit:
-        raise
+        result = main_func()
+        exit_code = result if isinstance(result, int) else 0
+        status = "blocked" if exit_code != 0 else "success"
+    except SystemExit as e:
+        exit_code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
+        status = "blocked" if exit_code != 0 else "success"
     except Exception as e:
         import traceback
-        tb = traceback.format_exc()
+        exit_code = 0  # Non-blocking
+        status = "error"
+        error_info = (e, traceback.format_exc())
+
+    # HOOK_END
+    duration_ms = round((time.monotonic() - start_time) * 1000, 1)
+    end_data: Dict[str, Any] = {
+        "lifecycle": "end", "status": status,
+        "duration_ms": duration_ms, "exit_code": exit_code,
+        "template": template,
+    }
+    end_event = _last_hook_event or event  # Re-read after main() populated it
+    end_tool = _last_tool_name or tool
+    end_data["event"] = end_event
+    if end_tool:
+        end_data["tool"] = end_tool
+    if error_info:
+        e, tb = error_info
+        end_data["error_type"] = type(e).__name__
         log_hook_error(hook_name, e, traceback_str=tb)
-        eprint(f"[{hook_name}] FATAL: {e}")
-        eprint(tb)
-        raise SystemExit(0)
+        log_error(hook_name, f"HOOK_END: {e}", data=end_data, traceback_str=tb)
+    elif status == "blocked":
+        log_warn(hook_name, "HOOK_END", data=end_data)
+    else:
+        log_info(hook_name, "HOOK_END", data=end_data)
+
+    raise SystemExit(exit_code)

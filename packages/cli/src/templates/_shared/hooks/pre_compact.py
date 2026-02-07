@@ -26,8 +26,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import load_hook_input
-from lib.base.utils import eprint, project_dir
+from lib.base.hook_utils import load_hook_input, log_debug, log_info, log_error
+from lib.base.utils import project_dir
 from lib.context.context_store import get_context_by_session_id, save_state
 
 
@@ -43,15 +43,15 @@ def main():
         project_root = project_dir(hook_input)
 
         if not session_id:
-            eprint("[pre_compact] No session_id, skipping")
+            log_debug("pre_compact", "No session_id, skipping")
             return
 
-        eprint(f"[pre_compact] Saving state before compaction: {session_id[:8]}...")
+        log_info("pre_compact", f"Saving state before compaction: {session_id[:8]}...")
 
         # Find context bound to this session
         context = get_context_by_session_id(session_id, project_root)
         if not context:
-            eprint("[pre_compact] No context bound to this session, skipping")
+            log_debug("pre_compact", "No context bound to this session, skipping")
             return
 
         # Save last_session snapshot directly to state.json
@@ -90,15 +90,15 @@ def main():
             "git_state": git_state,
         }
         save_state(context, project_root)
-        eprint(f"[pre_compact] State saved for {context.id}")
+        log_info("pre_compact", f"State saved for {context.id}")
 
     except Exception as e:
-        from lib.base.hook_utils import log_hook_error
-        log_hook_error("pre_compact", e, "PreCompact")
-        eprint(f"[pre_compact] ERROR: {e}")
         import traceback
-        eprint(traceback.format_exc())
+        tb = traceback.format_exc()
+        from lib.base.hook_utils import log_hook_error
+        log_hook_error("pre_compact", e, "PreCompact", traceback_str=tb)
 
 
 if __name__ == "__main__":
-    main()
+    from lib.base.hook_utils import run_hook
+    run_hook(main, "pre_compact")

@@ -24,7 +24,8 @@ from ..base.constants import (
     get_archive_index_path,
     validate_context_id,
 )
-from ..base.utils import eprint, now_iso, generate_context_id
+from ..base.logger import log_debug, log_info, log_warn, log_error, set_context_path
+from ..base.utils import now_iso, generate_context_id
 
 # Mode mapping from old context_manager values to new values
 _MODE_MIGRATION = {
@@ -55,6 +56,8 @@ class ContextState:
     plan_path: str = None
     plan_hash: str = None               # Content hash for plan matching after /clear
     plan_signature: str = None          # First 200 chars for fallback matching
+    plan_id: str = None                 # Embedded UUID for reliable matching
+    plan_anchors: list = field(default_factory=list)  # Structural anchors for fuzzy matching
     handoff_path: str = None
     session_ids: list = field(default_factory=list)
     last_session: dict = None           # {session_id, git_branch, uncommitted_files, last_commit}
@@ -93,7 +96,7 @@ def _load_index(project_root: Path = None) -> Dict[str, Any]:
         try:
             return json.loads(index_path.read_text(encoding="utf-8"))
         except Exception as e:
-            eprint(f"[context_store] WARNING: Failed to read index, recreating: {e}")
+            log_warn("context_store", f"Failed to read index, recreating: {e}")
     return {"version": INDEX_VERSION, "updated_at": now_iso(), "sessions": {}, "contexts": {}}
 
 
@@ -103,7 +106,7 @@ def _save_index(index: Dict[str, Any], project_root: Path = None) -> bool:
     content = json.dumps(index, indent=2, ensure_ascii=False)
     success, error = atomic_write(get_index_path(project_root), content)
     if not success:
-        eprint(f"[context_store] WARNING: Failed to write index: {error}")
+        log_warn("context_store", f"Failed to write index: {error}")
     return success
 
 
@@ -123,6 +126,8 @@ def _dict_to_state(data: Dict[str, Any]) -> ContextState:
         plan_path=data.get("plan_path"),
         plan_hash=data.get("plan_hash"),
         plan_signature=data.get("plan_signature"),
+        plan_id=data.get("plan_id"),
+        plan_anchors=data.get("plan_anchors", []),
         handoff_path=data.get("handoff_path"),
         session_ids=data.get("session_ids", []),
         last_session=data.get("last_session"),
@@ -160,7 +165,7 @@ def _migrate_context_json(context_id: str, project_root: Path = None) -> Optiona
             tasks=[],
         )
     except Exception as e:
-        eprint(f"[context_store] WARNING: Failed to migrate context.json for '{context_id}': {e}")
+        log_warn("context_store", f"Failed to migrate context.json for '{context_id}': {e}")
         return None
 
 
@@ -176,7 +181,7 @@ def load_state(context_id: str, project_root: Path = None) -> Optional[ContextSt
             data = json.loads(sp.read_text(encoding="utf-8"))
             return _dict_to_state(data)
         except Exception as e:
-            eprint(f"[context_store] WARNING: Failed to read state.json for '{context_id}': {e}")
+            log_warn("context_store", f"Failed to read state.json for '{context_id}': {e}")
             return None
 
     # Backward compat: migrate from legacy context.json
@@ -191,7 +196,7 @@ def save_state(state: ContextState, project_root: Path = None) -> bool:
     content = json.dumps(state.to_dict(), indent=2, ensure_ascii=False)
     success, error = atomic_write(sp, content)
     if not success:
-        eprint(f"[context_store] WARNING: Failed to write state.json for '{state.id}': {error}")
+        log_warn("context_store", f"Failed to write state.json for '{state.id}': {error}")
         return False
 
     # 2. Update index.json
@@ -242,7 +247,7 @@ def create_context(
         last_active=now,
     )
     save_state(state, project_root)
-    eprint(f"[context_store] Created context: {context_id}")
+    log_info("context_store", f"Created context: {context_id}")
     return state
 
 
@@ -326,13 +331,13 @@ def complete_context(context_id: str, project_root: Path = None) -> Optional[Con
         return None
 
     if state.status == "completed":
-        eprint(f"[context_store] Context '{context_id}' already completed")
+        log_info("context_store", f"Context '{context_id}' already completed")
         return state
 
     state.status = "completed"
     state.last_active = now_iso()
     save_state(state, project_root)
-    eprint(f"[context_store] Completed context: {context_id}")
+    log_info("context_store", f"Completed context: {context_id}")
 
     archived = archive_context(context_id, project_root)
     return archived if archived else state
@@ -342,17 +347,17 @@ def archive_context(context_id: str, project_root: Path = None) -> Optional[Cont
     """Move completed context folder to _archive/, update indices."""
     state = get_context(context_id, project_root)
     if not state:
-        eprint(f"[context_store] Cannot archive: context '{context_id}' not found")
+        log_warn("context_store", f"Cannot archive: context '{context_id}' not found")
         return None
     if state.status != "completed":
-        eprint(f"[context_store] Cannot archive: context '{context_id}' not completed")
+        log_warn("context_store", f"Cannot archive: context '{context_id}' not completed")
         return None
 
     source_dir = get_context_dir(context_id, project_root)
     archive_dest = get_archive_context_dir(context_id, project_root)
 
     if archive_dest.exists():
-        eprint(f"[context_store] Cannot archive: archive folder already exists for '{context_id}'")
+        log_warn("context_store", f"Cannot archive: archive folder already exists for '{context_id}'")
         return None
 
     archive_dest.parent.mkdir(parents=True, exist_ok=True)
@@ -360,7 +365,7 @@ def archive_context(context_id: str, project_root: Path = None) -> Optional[Cont
     try:
         shutil.move(str(source_dir), str(archive_dest))
     except Exception as e:
-        eprint(f"[context_store] ERROR: Failed to move context to archive: {e}")
+        log_error("context_store", f"Failed to move context to archive: {e}")
         return None
 
     # Remove from main index (entry + session mappings)
@@ -375,7 +380,7 @@ def archive_context(context_id: str, project_root: Path = None) -> Optional[Cont
     # Add to archive index
     _update_archive_index(state, project_root)
 
-    eprint(f"[context_store] Archived context: {context_id}")
+    log_info("context_store", f"Archived context: {context_id}")
     return state
 
 
@@ -391,13 +396,13 @@ def reopen_context(context_id: str, project_root: Path = None) -> Optional[Conte
         return None
 
     if state.status == "active":
-        eprint(f"[context_store] Context '{context_id}' already active")
+        log_info("context_store", f"Context '{context_id}' already active")
         return state
 
     state.status = "active"
     state.last_active = now_iso()
     save_state(state, project_root)
-    eprint(f"[context_store] Reopened context: {context_id}")
+    log_info("context_store", f"Reopened context: {context_id}")
     return state
 
 
@@ -409,20 +414,38 @@ def get_context_by_session_id(
     session_id: str,
     project_root: Path = None,
 ) -> Optional[ContextState]:
-    """O(1) lookup: check index.json sessions map first."""
+    """O(1) lookup: check index.json sessions map first.
+
+    Side effect: sets the logger context path so all subsequent log calls
+    in this process write to the context's debug/hook-log.jsonl.
+    """
     if not session_id or session_id == "unknown":
         return None
 
     index = _load_index(project_root)
     cid = index.get("sessions", {}).get(session_id)
     if cid:
-        return load_state(cid, project_root)
+        state = load_state(cid, project_root)
+        if state:
+            _set_logger_context(state.id, project_root)
+        return state
 
     # Fallback: scan all contexts (handles un-indexed sessions)
     for state in get_all_contexts(status="active", project_root=project_root):
         if session_id in state.session_ids:
+            _set_logger_context(state.id, project_root)
             return state
     return None
+
+
+def _set_logger_context(context_id: str, project_root: Path = None) -> None:
+    """Set the logger's context path for per-context log routing."""
+    try:
+        ctx_dir = get_context_dir(context_id, project_root)
+        if ctx_dir.exists():
+            set_context_path(ctx_dir)
+    except Exception:
+        pass  # Never crash on logging setup
 
 
 def bind_session(
@@ -453,6 +476,8 @@ def update_mode(
     plan_path: str = None,
     plan_hash: str = None,
     plan_signature: str = None,
+    plan_id: str = None,
+    plan_anchors: list = None,
 ) -> Optional[ContextState]:
     """Change the mode field (idle | has_plan | active), optionally setting plan fields."""
     state = get_context(context_id, project_root)
@@ -468,15 +493,50 @@ def update_mode(
         state.plan_hash = plan_hash
     if plan_signature is not None:
         state.plan_signature = plan_signature
+    if plan_id is not None:
+        state.plan_id = plan_id
+    if plan_anchors is not None:
+        state.plan_anchors = plan_anchors
 
     # Clear plan fields when returning to idle
     if mode == "idle":
         state.plan_path = None
         state.plan_hash = None
         state.plan_signature = None
+        state.plan_id = None
+        state.plan_anchors = []
 
     save_state(state, project_root)
     return state
+
+
+def maybe_activate(
+    context_id: str,
+    permission_mode: str,
+    project_root: Path = None,
+    caller: str = "",
+) -> bool:
+    """Transition idle/has_plan -> active, unless in plan mode.
+
+    Centralised mode-activation logic used by context_monitor (PostToolUse)
+    and user_prompt_submit (UserPromptSubmit).
+
+    Returns True if a transition occurred, False otherwise.
+    """
+    if permission_mode == "plan":
+        return False
+
+    state = get_context(context_id, project_root)
+    if not state:
+        return False
+
+    if state.mode in ("idle", "has_plan"):
+        old_mode = state.mode
+        update_mode(context_id, "active", project_root=project_root)
+        log_info("context_store", f"maybe_activate ({caller}): {context_id} {old_mode} -> active")
+        return True
+
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -516,7 +576,7 @@ def _update_archive_index(state: ContextState, project_root: Path = None) -> boo
         try:
             archive_index = json.loads(archive_index_path.read_text(encoding="utf-8"))
         except Exception as e:
-            eprint(f"[context_store] WARNING: Failed to read archive index, recreating: {e}")
+            log_warn("context_store", f"Failed to read archive index, recreating: {e}")
 
     archive_index["contexts"][state.id] = state.to_index_entry()
     archive_index["updated_at"] = now_iso()
@@ -524,7 +584,7 @@ def _update_archive_index(state: ContextState, project_root: Path = None) -> boo
     content = json.dumps(archive_index, indent=2, ensure_ascii=False)
     success, error = atomic_write(archive_index_path, content)
     if not success:
-        eprint(f"[context_store] WARNING: Failed to write archive index: {error}")
+        log_warn("context_store", f"Failed to write archive index: {error}")
     return success
 
 
@@ -536,20 +596,20 @@ def _restore_from_archive(context_id: str, project_root: Path = None) -> Optiona
     if not archive_dir.exists():
         return None
     if active_dir.exists():
-        eprint(f"[context_store] Cannot restore: active folder already exists for '{context_id}'")
+        log_warn("context_store", f"Cannot restore: active folder already exists for '{context_id}'")
         return None
 
     try:
         shutil.move(str(archive_dir), str(active_dir))
     except Exception as e:
-        eprint(f"[context_store] ERROR: Failed to restore context from archive: {e}")
+        log_error("context_store", f"Failed to restore context from archive: {e}")
         return None
 
     # Remove from archive index
     _remove_from_archive_index(context_id, project_root)
 
     state = load_state(context_id, project_root)
-    eprint(f"[context_store] Restored context from archive: {context_id}")
+    log_info("context_store", f"Restored context from archive: {context_id}")
     return state
 
 
@@ -562,7 +622,7 @@ def _remove_from_archive_index(context_id: str, project_root: Path = None) -> bo
     try:
         archive_index = json.loads(archive_index_path.read_text(encoding="utf-8"))
     except Exception as e:
-        eprint(f"[context_store] WARNING: Failed to read archive index: {e}")
+        log_warn("context_store", f"Failed to read archive index: {e}")
         return False
 
     if context_id in archive_index.get("contexts", {}):
@@ -571,6 +631,6 @@ def _remove_from_archive_index(context_id: str, project_root: Path = None) -> bo
         content = json.dumps(archive_index, indent=2, ensure_ascii=False)
         success, error = atomic_write(archive_index_path, content)
         if not success:
-            eprint(f"[context_store] WARNING: Failed to write archive index: {error}")
+            log_warn("context_store", f"Failed to write archive index: {error}")
             return False
     return True

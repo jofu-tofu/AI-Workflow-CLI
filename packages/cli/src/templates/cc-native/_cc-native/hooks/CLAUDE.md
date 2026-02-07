@@ -11,8 +11,6 @@
 | `cc-native-plan-review.py` | PreToolUse: ExitPlanMode | Review plans before user approval |
 | `add_plan_context.py` | PostToolUse: AskUserQuestion, PreToolUse: Write | Mark questions asked; add context when writing plan files |
 | `suggest-fresh-perspective.py` | PostToolUse | Suggest fresh perspective workflow |
-| `plan_accepted.py` | PostToolUse: ExitPlanMode | Set context mode to has_plan after plan acceptance |
-| `plan_questions_early.py` | UserPromptSubmit | Inject Phase A clarification prompt in plan mode |
 
 ---
 
@@ -115,21 +113,29 @@ These handle the JSON serialization and stdout printing. `emit_context` defaults
 
 ## Debugging Output
 
-Hooks communicate via stdout (JSON) and stderr (logs). Use them correctly:
+Hooks communicate via stdout (JSON) and stderr (logs). Use the unified logger for all diagnostic output:
 
 ```python
-# CORRECT - logs go to stderr, visible in terminal
-def eprint(*args):
-    print(*args, file=sys.stderr)
+from base.hook_utils import log_debug, log_info, log_warn, log_error
 
-eprint("[hook-name] Starting hook...")
-eprint(f"[hook-name] Found {len(items)} items")
+# CORRECT - unified logger: writes to stderr AND _output/hook-log.jsonl
+log_debug("hook-name", f"Found {len(items)} items")
+log_info("hook-name", "Starting hook...")
+log_warn("hook-name", f"Fallback used: {reason}")
+log_error("hook-name", f"Failed: {e}", traceback_str=tb)
+```
+
+```python
+# ACCEPTABLE - eprint() for terminal-only UX (usage help, progress)
+eprint("Usage: python hook.py <args>")
 ```
 
 ```python
 # WRONG - print() goes to stdout, corrupts JSON output
 print("Debug info")  # Breaks JSON parsing
-print(json.dumps(output))  # Now invalid because of previous print
+
+# WRONG - raw print to stderr instead of logger
+print(f"Error: {e}", file=sys.stderr)  # Use log_error() instead
 ```
 
 ---
@@ -139,32 +145,31 @@ print(json.dumps(output))  # Now invalid because of previous print
 Plan review hooks integrate with the shared context system for state management:
 
 ```python
-from lib.context.context_store import (
-    ContextState,
-    get_all_contexts,
+from lib.context.context_manager import (
     get_context_by_session_id,
+    get_all_in_flight_contexts,
 )
 from lib.base.constants import get_context_reviews_dir
 
 # Find active context
-state = get_context_by_session_id(session_id, project_root)
-if not state:
-    # Fallback: find single has_plan context
-    contexts = get_all_contexts(project_root)
-    has_plan = [c for c in contexts if c.mode == "has_plan"]
-    if len(has_plan) == 1:
-        state = has_plan[0]
+context = get_context_by_session_id(session_id, project_root)
+if not context:
+    # Fallback: find single planning context
+    in_flight = get_all_in_flight_contexts(project_root)
+    planning = [c for c in in_flight if c.in_flight and c.in_flight.mode == "planning"]
+    if len(planning) == 1:
+        context = planning[0]
 
 # Get reviews directory for this context
-reviews_dir = get_context_reviews_dir(state.id, project_root)
+reviews_dir = get_context_reviews_dir(context.id, project_root)
 ```
 
-If state isn't found, add diagnostic logging:
+If context isn't found, add diagnostic logging:
 
 ```python
-eprint(f"[hook] Session ID: {session_id}")
-eprint(f"[hook] Contexts: {len(contexts)}")
-eprint(f"[hook] Modes: {[c.mode for c in contexts]}")
+log_debug("hook", f"Session ID: {session_id}")
+log_debug("hook", f"In-flight contexts: {len(in_flight)}")
+log_debug("hook", f"Modes: {[c.in_flight.mode for c in in_flight]}")
 ```
 
 ---
@@ -174,24 +179,21 @@ eprint(f"[hook] Modes: {[c.mode for c in contexts]}")
 Hooks should fail gracefully - a broken hook shouldn't break the user's workflow:
 
 ```python
+from base.hook_utils import log_error, run_hook
+
 def main() -> int:
     try:
         # Hook logic...
         return 0
     except Exception as e:
-        eprint(f"[hook-name] Error: {e}")
+        import traceback
+        tb = traceback.format_exc()
+        log_error("hook-name", str(e), traceback_str=tb)
         # Return 0 to not block the user
         return 0
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except Exception as e:
-        import traceback
-        eprint(f"[hook-name] FATAL: {e}")
-        traceback.print_exc(file=sys.stderr)
-        # Still exit 0 to not block - or exit 1 if blocking is intentional
-        raise SystemExit(0)
+    run_hook(main, "hook-name")
 ```
 
 Use `sys.exit(1)` only for intentional blocking (e.g., two-stage review decision denies the plan).
@@ -237,6 +239,8 @@ Hooks fail silently on syntax errors - this catches them before they reach produ
 
 | Date | Change |
 |------|--------|
+| 2026-02-07 | Hook lifecycle diagnostics: all hooks now use `run_hook(main, "hook_name")` entry point. Logs HOOK_START/HOOK_END with template origin, event type, duration_ms, and status. Millisecond timestamps in logger. |
+| 2026-02-07 | Unified logger: all diagnostic logging uses `log_debug/log_info/log_warn/log_error` from `_shared/lib/base/logger.py` instead of eprint/print-to-stderr. Updated debugging and error handling docs. |
 | 2026-02-06 | Merged mark_questions_asked.py into add_plan_context.py. Hook now handles both PostToolUse:AskUserQuestion and PreToolUse:Write. Deleted standalone mark_questions_asked.py. |
 | 2026-02-06 | Fixed add_plan_context.py trigger docs (was PostToolUse: EnterPlanMode, is PreToolUse: Write). Added emit_context/emit_context_and_block utility docs. |
 | 2026-02-03 | Initial creation |

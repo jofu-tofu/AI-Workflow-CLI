@@ -23,6 +23,15 @@ from .utils import (
     sanitize_title,
     generate_context_id,
 )
+from .logger import (
+    hook_log,
+    log_debug,
+    log_info,
+    log_warn,
+    log_error,
+    log_hook_error,
+    set_context_path,
+)
 
 __all__ = [
     "atomic_write",
@@ -46,4 +55,11 @@ __all__ = [
     "sanitize_filename",
     "sanitize_title",
     "generate_context_id",
+    "hook_log",
+    "log_debug",
+    "log_info",
+    "log_warn",
+    "log_error",
+    "log_hook_error",
+    "set_context_path",
 ]

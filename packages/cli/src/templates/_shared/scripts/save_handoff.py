@@ -32,7 +32,7 @@ SHARED_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(SHARED_ROOT))
 
 from lib.context.context_store import get_context, save_state, update_mode
-from lib.base.utils import eprint
+from lib.base.logger import log_info, log_warn, log_error
 from lib.base.atomic_write import atomic_write
 from lib.base.constants import get_handoff_folder_path
 
@@ -204,7 +204,7 @@ def write_section_file(folder: Path, filename: str, title: str, content: str) ->
     file_path = folder / filename
     success, error = atomic_write(file_path, '\n'.join(lines))
     if not success:
-        eprint(f"[save_handoff] Warning: Failed to write {filename}: {error}")
+        log_warn("save_handoff", f"Failed to write {filename}: {error}")
         return False
     return True
 
@@ -222,7 +222,7 @@ def main():
     # Read content from stdin
     content = sys.stdin.read()
     if not content.strip():
-        print("Error: No content provided via stdin", file=sys.stderr)
+        log_error("save_handoff", "No content provided via stdin")
         sys.exit(1)
 
     # Project root is the parent of .aiwcli
@@ -231,19 +231,19 @@ def main():
     # Verify context exists
     context = get_context(context_id, project_root)
     if not context:
-        print(f"Error: Context not found: {context_id}", file=sys.stderr)
+        log_error("save_handoff", f"Context not found: {context_id}")
         sys.exit(1)
 
     # Parse frontmatter and sections
     frontmatter, body = parse_frontmatter(content)
     sections = parse_handoff_sections(body)
 
-    eprint(f"[save_handoff] Parsed {len(sections)} sections: {list(sections.keys())}")
+    log_info("save_handoff", f"Parsed {len(sections)} sections: {list(sections.keys())}")
 
     # Create handoff folder
     handoff_folder = get_handoff_folder_path(context_id, project_root)
     handoff_folder.mkdir(parents=True, exist_ok=True)
-    eprint(f"[save_handoff] Created folder: {handoff_folder}")
+    log_info("save_handoff", f"Created folder: {handoff_folder}")
 
     # Get git status
     git_status = get_git_status()
@@ -259,18 +259,18 @@ def main():
             plan_dest = handoff_folder / "plan.md"
             success, error = atomic_write(plan_dest, plan_content)
             if success:
-                eprint(f"[save_handoff] Copied plan from {plan_path}")
+                log_info("save_handoff", f"Copied plan from {plan_path}")
             else:
-                eprint(f"[save_handoff] Warning: Failed to copy plan: {error}")
+                log_warn("save_handoff", f"Failed to copy plan: {error}")
         except Exception as e:
-            eprint(f"[save_handoff] Warning: Failed to read plan: {e}")
+            log_warn("save_handoff", f"Failed to read plan: {e}")
 
     # Write index.md
     index_content = generate_index(frontmatter, sections, git_status, has_plan)
     index_path = handoff_folder / "index.md"
     success, error = atomic_write(index_path, index_content)
     if not success:
-        print(f"Error: Failed to write index.md: {error}", file=sys.stderr)
+        log_error("save_handoff", f"Failed to write index.md: {error}")
         sys.exit(1)
 
     # Write section files
@@ -311,7 +311,7 @@ def main():
         full_content = '\n'.join(content_parts) + '\n'
         success, error = atomic_write(file_path, full_content)
         if not success:
-            eprint(f"[save_handoff] Warning: Failed to write {filename}: {error}")
+            log_warn("save_handoff", f"Failed to write {filename}: {error}")
 
     # Ensure all expected files exist (even if empty)
     expected_files = ['completed-work.md', 'dead-ends.md', 'decisions.md', 'pending.md', 'context.md']
@@ -335,20 +335,20 @@ def main():
         if state:
             state.handoff_path = index_path_str
             save_state(state, project_root)
-            eprint(f"[save_handoff] Set handoff_path: {index_path_str}")
+            log_info("save_handoff", f"Set handoff_path: {index_path_str}")
         else:
-            eprint(f"[save_handoff] Warning: Could not load context state for {context_id}")
+            log_warn("save_handoff", f"Could not load context state for {context_id}")
     except Exception as e:
-        eprint(f"[save_handoff] Warning: Handoff saved but auto-resume won't work (context update failed): {e}")
+        log_warn("save_handoff", f"Handoff saved but auto-resume won't work (context update failed): {e}")
 
     # Transition context to idle — handoff is saved, no longer "active work"
     # This prevents auto-selection in new sessions while keeping the context
     # accessible via explicit caret commands (^, ^N)
     try:
         update_mode(context_id, "idle", project_root=project_root)
-        eprint(f"[save_handoff] Set mode to 'idle' (dormant) for context: {context_id}")
+        log_info("save_handoff", f"Set mode to 'idle' (dormant) for context: {context_id}")
     except Exception as e:
-        eprint(f"[save_handoff] Warning: Failed to set dormant mode: {e}")
+        log_warn("save_handoff", f"Failed to set dormant mode: {e}")
 
     # Output success message (ASCII-safe for Windows)
     print(f"[OK] Created handoff folder: {handoff_folder}")

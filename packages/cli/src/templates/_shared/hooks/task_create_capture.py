@@ -38,8 +38,12 @@ from lib.base.hook_utils import (
     check_skip_persistence,
     safe_hook_main,
     run_hook,
+    log_debug,
+    log_info,
+    log_warn,
+    log_error,
 )
-from lib.base.utils import eprint, project_dir
+from lib.base.utils import project_dir
 from lib.context.context_store import get_context_by_session_id
 from lib.context.task_tracker import add_task, generate_next_task_id
 
@@ -56,7 +60,7 @@ def main() -> int:
 
     tool_input = get_tool_input(payload)
     if not tool_input:
-        eprint("[task_create_capture] Invalid tool_input: not a dict")
+        log_warn("task_create_capture", "Invalid tool_input: not a dict")
         return 0
 
     if check_skip_persistence(payload, "task_create_capture"):
@@ -68,7 +72,7 @@ def main() -> int:
     # Find context by session ID
     state = get_context_by_session_id(session_id, project_root)
     if not state:
-        eprint("[task_create_capture] No context available - skipping persistence")
+        log_debug("task_create_capture", "No context available - skipping persistence")
         return 0
 
     context_id = state.id
@@ -76,7 +80,7 @@ def main() -> int:
     # Extract task data
     subject = tool_input.get("subject", "")
     if not subject:
-        eprint("[task_create_capture] Missing required field: subject")
+        log_warn("task_create_capture", "Missing required field: subject")
         return 0
 
     description = tool_input.get("description", "")
@@ -93,12 +97,12 @@ def main() -> int:
     )
 
     if task:
-        eprint(f"[task_create_capture] Recorded task: {task['id']} in {context_id}")
+        log_info("task_create_capture", f"Recorded task: {task['id']} in {context_id}")
     else:
-        eprint(f"[task_create_capture] Failed to add task in {context_id}")
+        log_error("task_create_capture", f"Failed to add task in {context_id}")
 
     return 0
 
 
 if __name__ == "__main__":
-    run_hook(main)
+    run_hook(main, "task_create_capture")

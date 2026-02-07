@@ -18,7 +18,8 @@ from typing import Any, Dict, List, Optional
 
 from ..base.atomic_write import atomic_write
 from ..base.constants import get_context_handoffs_dir, get_context_dir
-from ..base.utils import eprint, now_iso
+from ..base.logger import log_info, log_error
+from ..base.utils import now_iso
 from ..context.context_store import get_context as _get_context_state, save_state as _save_state
 from ..context.task_tracker import get_tasks
 from ..templates.formatters import render_task_list, format_continuation_header, format_reason
@@ -80,7 +81,7 @@ def generate_handoff_document(
     """
     context = _get_context_state(context_id, project_root)
     if not context:
-        eprint(f"[handoff] ERROR: Context '{context_id}' not found")
+        log_error("handoff", f"Context '{context_id}' not found")
         return None
 
     # Generate session ID
@@ -131,10 +132,10 @@ def generate_handoff_document(
 
     success, error = atomic_write(file_path, markdown)
     if not success:
-        eprint(f"[handoff] ERROR: Failed to write handoff document: {error}")
+        log_error("handoff", f"Failed to write handoff document: {error}")
         return None
 
-    eprint(f"[handoff] Created handoff document: {file_path}")
+    log_info("handoff", f"Created handoff document: {file_path}")
     return doc
 
 

@@ -16,8 +16,13 @@ from typing import Any, Dict
 _lib_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_lib_dir))
 
-from utils import ReviewerResult, eprint, parse_json_maybe, coerce_to_review
+from utils import ReviewerResult, parse_json_maybe, coerce_to_review
 from .base import REVIEW_PROMPT_PREFIX
+
+# Import logger
+_shared_logger = Path(__file__).resolve().parent.parent.parent.parent / "_shared" / "lib"
+sys.path.insert(0, str(_shared_logger))
+from base.logger import log_debug, log_info, log_warn, log_error
 
 
 def run_codex_review(
@@ -41,7 +46,7 @@ def run_codex_review(
 
     codex_path = shutil.which("codex")
     if codex_path is None:
-        eprint("[codex] CLI not found on PATH")
+        log_warn("codex", "CLI not found on PATH")
         return ReviewerResult(
             name="codex",
             ok=False,
@@ -51,7 +56,7 @@ def run_codex_review(
             err="codex CLI not found on PATH",
         )
 
-    eprint(f"[codex] Found CLI at: {codex_path}")
+    log_debug("codex", f"Found CLI at: {codex_path}")
 
     prompt = f"""{REVIEW_PROMPT_PREFIX}
 Return ONLY a JSON object that matches this JSON Schema:
@@ -87,7 +92,7 @@ PLAN:
             cmd.insert(2, "--model")
             cmd.insert(3, model)
 
-        eprint(f"[codex] Running command: {' '.join(cmd)}")
+        log_debug("codex", f"Running command: {' '.join(cmd)}")
 
         try:
             p = subprocess.run(
@@ -100,13 +105,13 @@ PLAN:
                 errors='replace',
             )
         except subprocess.TimeoutExpired:
-            eprint(f"[codex] TIMEOUT after {timeout}s")
+            log_warn("codex", f"TIMEOUT after {timeout}s")
             return ReviewerResult("codex", False, "error", {}, "", f"codex timed out after {timeout}s")
         except Exception as ex:
-            eprint(f"[codex] EXCEPTION: {ex}")
+            log_error("codex", f"Exception: {ex}")
             return ReviewerResult("codex", False, "error", {}, "", f"codex failed to run: {ex}")
 
-        eprint(f"[codex] Exit code: {p.returncode}")
+        log_debug("codex", f"Exit code: {p.returncode}")
 
         raw = ""
         if out_path.exists():

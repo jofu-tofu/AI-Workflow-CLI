@@ -54,12 +54,12 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import emit_context, load_hook_input, get_context_percent_remaining
-from lib.base.utils import eprint, now_iso, project_dir
+from lib.base.hook_utils import emit_context, load_hook_input, get_context_percent_remaining, log_debug, log_info, log_warn, log_error
+from lib.base.utils import now_iso, project_dir
 from lib.context.context_store import (
     get_all_contexts,
     get_context_by_session_id,
-    update_mode,
+    maybe_activate,
     save_state,
 )
 
@@ -159,13 +159,6 @@ def check_and_transition_mode(hook_input: dict) -> None:
     if not state:
         return
 
-    current_mode = state.mode
-    permission_mode = hook_input.get("permission_mode", "default")
-
-    # Don't transition if in plan mode (runtime-only state)
-    if permission_mode == "plan":
-        return
-
     # Implementation transitions only trigger on implementation tools
     implementation_tools = {"Edit", "Write", "Bash", "NotebookEdit"}
     tool_name = hook_input.get("tool_name", "")
@@ -173,10 +166,8 @@ def check_and_transition_mode(hook_input: dict) -> None:
     if tool_name not in implementation_tools:
         return
 
-    # Transition from has_plan or idle to active
-    if current_mode in ["has_plan", "idle"]:
-        eprint(f"[context_monitor] Transitioning {state.id} from {current_mode} to active")
-        update_mode(state.id, "active", project_root=project_root)
+    permission_mode = hook_input.get("permission_mode", "default")
+    maybe_activate(state.id, permission_mode, project_root=project_root, caller="context_monitor")
 
 
 def _try_progressive_save(hook_input: dict, percent_remaining: int) -> None:
@@ -201,7 +192,7 @@ def _try_progressive_save(hook_input: dict, percent_remaining: int) -> None:
             except OSError:
                 pass
 
-        eprint(f"[context_monitor] Progressive save at {percent_remaining}% remaining")
+        log_info("context_monitor", f"Progressive save at {percent_remaining}% remaining")
 
         # Just update last_active and save state
         state.last_active = now_iso()
@@ -213,7 +204,7 @@ def _try_progressive_save(hook_input: dict, percent_remaining: int) -> None:
             pass
 
     except Exception as e:
-        eprint(f"[context_monitor] Progressive save error (non-fatal): {e}")
+        log_warn("context_monitor", f"Progressive save error (non-fatal): {e}")
 
 
 def check_context_level(hook_input: dict) -> Optional[str]:
@@ -231,10 +222,10 @@ def check_context_level(hook_input: dict) -> Optional[str]:
         return None
 
     if tokens_used is not None and max_tokens is not None:
-        eprint(f"[context_monitor] Context: {percent_remaining}% remaining "
-               f"(~{tokens_used//1000}k/{max_tokens//1000}k tokens)")
+        log_info("context_monitor", f"Context: {percent_remaining}% remaining "
+                 f"(~{tokens_used//1000}k/{max_tokens//1000}k tokens)")
     else:
-        eprint(f"[context_monitor] Context: ~{percent_remaining}% remaining (from context.json)")
+        log_info("context_monitor", f"Context: ~{percent_remaining}% remaining (from context.json)")
 
     project_root = project_dir(hook_input)
     context_id = get_current_context_id(project_root)
@@ -261,9 +252,8 @@ def main():
         tb = traceback.format_exc()
         from lib.base.hook_utils import log_hook_error
         log_hook_error("context_monitor", e, "PostToolUse", traceback_str=tb)
-        eprint(f"[context_monitor] ERROR: {e}")
-        eprint(tb)
 
 
 if __name__ == "__main__":
-    main()
+    from lib.base.hook_utils import run_hook
+    run_hook(main, "context_monitor")

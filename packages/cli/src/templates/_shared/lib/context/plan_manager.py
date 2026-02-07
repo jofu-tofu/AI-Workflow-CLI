@@ -11,13 +11,15 @@ context_store.update_mode() after archival succeeds.
 """
 import hashlib
 import re
+import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from ..base.atomic_write import atomic_write
 from ..base.constants import get_context_dir, get_context_plans_dir
-from ..base.utils import eprint, sanitize_title
+from ..base.logger import log_debug, log_info, log_warn, log_error
+from ..base.utils import sanitize_title
 
 
 # ---------------------------------------------------------------------------
@@ -51,14 +53,14 @@ def archive_plan(
     """
     plan_file = Path(plan_path)
     if not plan_file.exists():
-        eprint(f"[plan_manager] Plan file not found: {plan_path}")
+        log_warn("plan_manager", f"Plan file not found: {plan_path}")
         return None, None, None
 
     # Read plan content
     try:
         content = plan_file.read_text(encoding="utf-8")
     except Exception as e:
-        eprint(f"[plan_manager] Failed to read plan: {e}")
+        log_error("plan_manager", f"Failed to read plan: {e}")
         return None, None, None
 
     # Compute hash and signature
@@ -85,10 +87,10 @@ def archive_plan(
     # Write archived plan atomically
     success, error = atomic_write(archive_path, content)
     if not success:
-        eprint(f"[plan_manager] Failed to write archive: {error}")
+        log_error("plan_manager", f"Failed to write archive: {error}")
         return None, None, None
 
-    eprint(f"[plan_manager] Archived plan to: {archive_path}")
+    log_info("plan_manager", f"Archived plan to: {archive_path}")
     return str(archive_path), plan_hash, plan_signature
 
 
@@ -123,7 +125,7 @@ def find_latest_plan(
             if plan_path.exists():
                 return str(plan_path)
     except Exception as e:
-        eprint(f"[plan_manager] Failed to check state.json plan_path: {e}")
+        log_warn("plan_manager", f"Failed to check state.json plan_path: {e}")
 
     # 2. Fall back to most recent .md in plans/ dir by mtime
     plans_dir = get_context_plans_dir(context_id, project_root)
@@ -138,6 +140,44 @@ def find_latest_plan(
 
     # 3. No plan found
     return None
+
+
+# ---------------------------------------------------------------------------
+# Plan identification and normalization
+# ---------------------------------------------------------------------------
+
+def generate_plan_id() -> str:
+    """Generate a short unique plan identifier (8 hex chars)."""
+    return uuid.uuid4().hex[:8]
+
+
+def normalize_plan_content(text: str) -> str:
+    """Aggressively normalize plan content for hashing.
+
+    Strips all XML/HTML tags and collapses whitespace so that
+    wrapper variations (e.g. <system-reminder>) don't affect the hash.
+    """
+    text = re.sub(r'<[^>]+>', '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def extract_plan_anchors(content: str, max_anchors: int = 5) -> List[str]:
+    """Extract structural anchors from plan content.
+
+    Returns markdown headings + first substantial paragraph as short strings.
+    Used for fuzzy matching when hash-based matching fails.
+    """
+    anchors = []
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith('#') and len(line) > 3:
+            anchors.append(line[:80])
+        elif not anchors and len(line) > 20:
+            anchors.append(line[:80])
+        if len(anchors) >= max_anchors:
+            break
+    return anchors
 
 
 # ---------------------------------------------------------------------------
