@@ -44,19 +44,17 @@ from hooks.context_enforcer import determine_context, BlockRequest
 def format_claudemd_reminder() -> str:
     """Generate reminder to update directory-specific CLAUDE.md files."""
     return """
-## CLAUDE.md Decision Capture
+## CLAUDE.md — Persistent Memory
 
-**Placement rule:** CLAUDE.md files cascade — subdirectories inherit from parents. Default to updating the nearest existing CLAUDE.md. Only create a new one at a semantic boundary where responsibility genuinely shifts (package roots with their own manifest, technology boundaries, domain boundaries, integration points).
+CLAUDE.md files are this project's persistent memory across sessions. **After making a significant decision or learning something non-obvious during this task, write it to the nearest CLAUDE.md.** If you don't write it, it's lost when this session ends.
 
-**Before creating a new CLAUDE.md, ask:** "Do the rules here actually differ from the parent?" If not, update the parent instead.
-
-**Keep files lean (progressive disclosure):** Each CLAUDE.md should contain only decisions relevant at that directory level. Verbose files become noise that degrades future task quality — every entry competes for attention in the context window. Capture only non-obvious rationale, not descriptions of what the code does.
-
-**What to capture** (only when decisions have non-obvious rationale):
-- Architectural choices and their alternatives
+**What to write:**
+- Architectural choices and why alternatives were rejected
 - Non-obvious constraints (what breaks if this changes)
 - Workarounds with context on the underlying issue
-- Learned patterns that prevent future mistakes
+- Patterns that prevent future mistakes
+
+**Placement:** CLAUDE.md files cascade — subdirectories inherit from parents. Update the nearest existing one. Only create a new one at a genuine semantic boundary (package root, technology boundary, domain boundary).
 
 **Format:**
 
@@ -65,6 +63,8 @@ def format_claudemd_reminder() -> str:
 **Decision:** [What was decided]
 **Rationale:** [Why — the non-obvious part]
 ```
+
+**When in doubt, write it.** A lean entry is better than a lost decision.
 """
 
 
