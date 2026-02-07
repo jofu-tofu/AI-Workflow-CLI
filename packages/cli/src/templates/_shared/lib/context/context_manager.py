@@ -896,6 +896,82 @@ def update_plan_status(
     return context
 
 
+def update_handoff_path(
+    context_id: str,
+    handoff_path: str,
+    project_root: Path = None
+) -> bool:
+    """
+    Set in_flight.handoff_path to the handoff index.md path.
+
+    Called by save_handoff.py after writing the handoff folder so the
+    next session can auto-detect and load the handoff document.
+
+    Args:
+        context_id: Context identifier
+        handoff_path: Path to the handoff index.md file
+        project_root: Project root directory
+
+    Returns:
+        True if successful, False otherwise
+    """
+    context = get_context(context_id, project_root)
+    if not context:
+        return False
+
+    if not context.in_flight:
+        context.in_flight = InFlightState()
+
+    context.in_flight.handoff_path = handoff_path
+    context.last_active = now_iso()
+
+    # Append event
+    append_event(context_id, EVENT_HANDOFF_CREATED, project_root, handoff_path=handoff_path)
+
+    # Update caches
+    _write_context_cache(context, project_root)
+    _update_index_cache(context, project_root)
+
+    return True
+
+
+def clear_handoff_path(
+    context_id: str,
+    project_root: Path = None
+) -> bool:
+    """
+    Clear in_flight.handoff_path (after resume injection).
+
+    Called by user_prompt_submit.py after the handoff content has been
+    injected into the new session's context, preventing re-injection.
+
+    Args:
+        context_id: Context identifier
+        project_root: Project root directory
+
+    Returns:
+        True if successful, False otherwise
+    """
+    context = get_context(context_id, project_root)
+    if not context:
+        return False
+
+    if not context.in_flight:
+        return True  # Nothing to clear
+
+    context.in_flight.handoff_path = None
+    context.last_active = now_iso()
+
+    # Append event
+    append_event(context_id, EVENT_HANDOFF_CLEARED, project_root)
+
+    # Update caches
+    _write_context_cache(context, project_root)
+    _update_index_cache(context, project_root)
+
+    return True
+
+
 def get_context_with_pending_plan(project_root: Path = None) -> Optional[Context]:
     """
     Find context with plan.status = "pending_implementation".
@@ -966,7 +1042,13 @@ def get_all_in_flight_contexts(project_root: Path = None) -> List[Context]:
     """
     IN_FLIGHT_MODES = {"pending_implementation"}
     contexts = get_all_contexts(status="active", project_root=project_root)
-    return [c for c in contexts if c.in_flight and c.in_flight.mode in IN_FLIGHT_MODES]
+    return [
+        c for c in contexts
+        if c.in_flight and (
+            c.in_flight.mode in IN_FLIGHT_MODES
+            or c.in_flight.handoff_path  # Also in-flight if handoff pending
+        )
+    ]
 
 
 def get_context_by_session_id(session_id: str, project_root: Path = None) -> Optional[Context]:

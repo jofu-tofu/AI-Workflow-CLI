@@ -31,7 +31,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(SHARED_ROOT))
 
-from lib.context.context_manager import get_context
+from lib.context.context_manager import get_context, update_handoff_path
 from lib.base.utils import eprint
 from lib.base.atomic_write import atomic_write
 from lib.base.constants import get_handoff_folder_path
@@ -329,6 +329,14 @@ def main():
         file_path = handoff_folder / filename
         if not file_path.exists():
             write_section_file(handoff_folder, filename, titles[filename], "")
+
+    # Set handoff_path so next session auto-detects it
+    try:
+        index_path_str = str(handoff_folder / "index.md")
+        update_handoff_path(context_id, index_path_str, project_root)
+        eprint(f"[save_handoff] Set handoff_path: {index_path_str}")
+    except Exception as e:
+        eprint(f"[save_handoff] Warning: Handoff saved but auto-resume won't work (context update failed): {e}")
 
     # Output success message (ASCII-safe for Windows)
     print(f"[OK] Created handoff folder: {handoff_folder}")

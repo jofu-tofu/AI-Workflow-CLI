@@ -302,6 +302,66 @@ def format_implementation_continuation(context: Context, project_root: Path = No
     return "\n".join(lines)
 
 
+def format_handoff_continuation(context: Context, project_root: Path = None) -> str:
+    """
+    Format output when resuming a context with a pending handoff.
+
+    Reads the handoff index.md and injects its content so the agent
+    has full continuity without needing to Read the file.
+
+    Args:
+        context: Context with in_flight.handoff_path set
+        project_root: Project root directory
+
+    Returns:
+        Formatted instructions with handoff content for Claude
+    """
+    handoff_path = context.in_flight.handoff_path
+
+    lines = [
+        f"## Resuming Context: {context.id} (Handoff Available)",
+        "",
+        f"**Summary:** {context.summary}",
+        f"**Mode:** Implementing (handoff from previous session)",
+        "",
+    ]
+
+    # Read and inject handoff index.md content
+    try:
+        handoff_file = Path(handoff_path)
+        if handoff_file.exists():
+            content = handoff_file.read_text(encoding="utf-8")
+            lines.extend([
+                "### Previous Session Handoff",
+                "",
+                content,
+                "",
+            ])
+        else:
+            lines.append(f"*Handoff document not found at `{handoff_path}`*")
+            lines.append("")
+    except Exception as e:
+        lines.append(f"*Handoff document at `{handoff_path}` could not be read: {e}*")
+        lines.append("")
+
+    # Add restore sections (auto-state, tasks, git, plan path)
+    restore = _build_restore_sections(context, project_root)
+    if restore:
+        lines.append(restore)
+
+    lines.extend([
+        "",
+        "---",
+        "",
+        "**Instructions:**",
+        "1. Review the handoff document above - especially dead ends",
+        "2. Check the plan file for remaining tasks",
+        "3. Continue implementation from where the previous session left off",
+    ])
+
+    return "\n".join(lines)
+
+
 def format_context_picker_prompt() -> str:
     """
     Format the prompt asking user which context to continue.

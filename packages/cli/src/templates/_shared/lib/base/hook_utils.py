@@ -15,6 +15,35 @@ from typing import Any, Callable, Dict, Optional, TypeVar
 
 from .utils import eprint
 
+# Context window baseline: tokens not visible in hook data
+# (system prompt, tools, MCP tokens)
+# See: https://github.com/anthropics/claude-code/issues/13783
+CONTEXT_BASELINE_TOKENS = 22_600
+DEFAULT_CONTEXT_WINDOW_SIZE = 200_000
+
+
+def parse_context_window(hook_input: dict) -> tuple:
+    """Parse context window from hook input.
+
+    Returns (tokens_used, max_tokens) or (None, None).
+    tokens_used includes baseline offset for system prompt/tools.
+    """
+    context_window = hook_input.get("context_window")
+    if not context_window:
+        return None, None
+    current_usage = context_window.get("current_usage")
+    if not current_usage:
+        return None, None
+    cache_read = current_usage.get("cache_read_input_tokens", 0) or 0
+    input_tokens = current_usage.get("input_tokens", 0) or 0
+    cache_creation = current_usage.get("cache_creation_input_tokens", 0) or 0
+    output_tokens = current_usage.get("output_tokens", 0) or 0
+    content_tokens = cache_read + input_tokens + cache_creation + output_tokens
+    tokens_used = content_tokens + CONTEXT_BASELINE_TOKENS
+    max_tokens = context_window.get("context_window_size") or DEFAULT_CONTEXT_WINDOW_SIZE
+    return tokens_used, max_tokens
+
+
 # Type variable for generic decorators
 F = TypeVar('F', bound=Callable[..., Any])
 

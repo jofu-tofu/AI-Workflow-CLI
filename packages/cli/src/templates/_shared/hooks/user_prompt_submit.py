@@ -35,6 +35,7 @@ from lib.context.context_manager import (
     update_plan_status,
     get_context,
     get_context_by_session_id,
+    clear_handoff_path,
 )
 
 # Import the enforcement module
@@ -142,6 +143,15 @@ def main():
                     # Update in-flight status based on permission mode
                     _update_in_flight_status(context_id, hook_input, project_root)
                     active_context_id = context_id
+
+                    # Clear handoff_path after it's been injected via context_enforcer
+                    try:
+                        ctx = get_context(context_id, project_root)
+                        if ctx and ctx.in_flight and ctx.in_flight.handoff_path:
+                            clear_handoff_path(context_id, project_root)
+                            eprint(f"[user_prompt_submit] Cleared handoff_path for {context_id}")
+                    except Exception as e:
+                        eprint(f"[user_prompt_submit] Warning: Failed to clear handoff_path: {e}")
 
                 if context_output:
                     outputs.append(context_output)

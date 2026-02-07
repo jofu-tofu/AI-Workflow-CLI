@@ -248,8 +248,8 @@ def main() -> int:
     except json.JSONDecodeError:
         return 0  # Fail-safe
 
-    # 1. Check hook_type (cheap dict lookup)
-    if payload.get("hook_type") != "PostToolUse":
+    # 1. Check hook_event_name (cheap dict lookup)
+    if payload.get("hook_event_name") != "PostToolUse":
         return 0
 
     # 2. Check session_id exists (cheap dict lookup)

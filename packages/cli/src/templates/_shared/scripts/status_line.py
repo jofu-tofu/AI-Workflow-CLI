@@ -10,6 +10,7 @@ Usage: echo '{"session_id":"...","model":{"display_name":"Opus"},...}' | python 
 """
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -25,13 +26,7 @@ sys.path.insert(0, str(SHARED_ROOT))
 
 from lib.base.atomic_write import atomic_write
 from lib.base.constants import get_context_file_path
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-# Context baseline: preloaded tokens not visible to hooks (~22.6k typical)
-CONTEXT_BASELINE = 22600
+from lib.base.hook_utils import CONTEXT_BASELINE_TOKENS
 
 # Cache file for session_id → context_id mapping
 OUTPUT_DIR = Path(".") / "_output"
@@ -199,7 +194,6 @@ def render_context(
     max_k: int,
     time_display: str,
     model_name: str,
-    context_id: Optional[str] = None,
 ) -> None:
     """Render the context usage section."""
     if context_pct <= 33:
@@ -211,22 +205,12 @@ def render_context(
 
     short_model = shorten_model(model_name)
 
-    # Truncate context_id for display
-    ctx_display = ""
-    if context_id:
-        max_len = {"nano": 12, "micro": 16, "mini": 20, "normal": 25}.get(mode, 25)
-        truncated = context_id[:max_len]
-        if len(context_id) > max_len:
-            truncated += "\u2026"
-        ctx_display = f" {SLATE_500}{truncated}{RESET}"
-
     if mode == "nano":
         bar, _ = render_context_bar(5, context_pct)
         print(
             f"{CTX_PRIMARY}\u25C9{RESET} {CTX_ACCENT}{short_model}{RESET} "
             f"{bar} {pct_color}{context_pct}%{RESET} "
             f"{CTX_ACCENT}\u23F1{RESET} {SLATE_300}{time_display}{RESET}"
-            f"{ctx_display}"
         )
     elif mode == "micro":
         bar, _ = render_context_bar(6, context_pct)
@@ -235,7 +219,6 @@ def render_context(
             f"{SLATE_600}\u2502{RESET} "
             f"{bar} {pct_color}{context_pct}%{RESET} {SLATE_500}({context_k}k){RESET} "
             f"{CTX_ACCENT}\u23F1{RESET} {SLATE_300}{time_display}{RESET}"
-            f"{ctx_display}"
         )
     elif mode == "mini":
         bar, _ = render_context_bar(8, context_pct)
@@ -245,7 +228,6 @@ def render_context(
             f"{CTX_SECONDARY}CTX:{RESET} {bar} "
             f"{pct_color}{context_pct}%{RESET} {SLATE_500}({context_k}k/{max_k}k){RESET} "
             f"{CTX_ACCENT}\u23F1{RESET} {SLATE_300}{time_display}{RESET}"
-            f"{ctx_display}"
         )
     else:  # normal
         bar, last_color = render_context_bar(16, context_pct)
@@ -256,7 +238,6 @@ def render_context(
             f"{last_color}{context_pct}%{RESET} {SLATE_500}({context_k}k/{max_k}k){RESET} "
             f"{SLATE_600}\u2502{RESET} "
             f"{CTX_ACCENT}\u23F1{RESET} {SLATE_300}{time_display}{RESET}"
-            f"{ctx_display}"
         )
 
     print(SEPARATOR)
@@ -441,6 +422,77 @@ def render_git(mode: str, git: Dict[str, Any], dir_name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Context manager line (line 3)
+# ---------------------------------------------------------------------------
+
+def render_context_manager(
+    mode: str,
+    context_id: str,
+    context_data: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Render the context manager line (line 3) showing context ID, mode, and plan."""
+    # Strip YYMMDD-HHMM- timestamp prefix from context ID for display
+    display_id = re.sub(r"^\d{6}-\d{4}-", "", context_id)
+    if not display_id:
+        display_id = context_id  # fallback if regex strips everything
+
+    # Truncate display_id per mode
+    max_id_len = {"nano": 14, "micro": 18, "mini": 22, "normal": 30}.get(mode, 30)
+    truncated_id = display_id[:max_id_len]
+    if len(display_id) > max_id_len:
+        truncated_id += "\u2026"
+
+    # Extract in_flight data
+    in_flight = {}
+    if context_data:
+        in_flight = context_data.get("in_flight", {})
+    flight_mode = in_flight.get("mode", "none")
+
+    # Build mode badge
+    mode_badge = ""
+    if flight_mode == "planning":
+        label = "Plan" if mode == "nano" else "Planning"
+        mode_badge = f" {SLATE_600}\u2502{RESET} {CTX_SECONDARY}Mode:{RESET} {AMBER}{label}{RESET}"
+    elif flight_mode == "pending_implementation":
+        label = "Ready" if mode == "nano" else "Plan Ready"
+        mode_badge = f" {SLATE_600}\u2502{RESET} {CTX_SECONDARY}Mode:{RESET} {EMERALD}{label}{RESET}"
+    elif flight_mode == "implementing":
+        label = "Impl" if mode == "nano" else "Implementing"
+        mode_badge = f" {SLATE_600}\u2502{RESET} {CTX_SECONDARY}Mode:{RESET} {CTX_ACCENT}{label}{RESET}"
+
+    # Build plan name (mini/normal only)
+    plan_part = ""
+    if mode in ("mini", "normal") and in_flight.get("artifact_path"):
+        plan_stem = re.sub(r"^\d{4}-\d{2}-\d{2}-", "", Path(in_flight["artifact_path"]).stem)
+        max_plan_len = 20 if mode == "mini" else 30
+        truncated_plan = plan_stem[:max_plan_len]
+        if len(plan_stem) > max_plan_len:
+            truncated_plan += "\u2026"
+        plan_part = f" {SLATE_600}\u2502{RESET} {CTX_SECONDARY}Plan:{RESET} {SLATE_300}{truncated_plan}{RESET}"
+
+    if mode == "nano":
+        print(
+            f"{CTX_ACCENT}\u25C6{RESET} {SLATE_400}{truncated_id}{RESET}"
+            f"{mode_badge}"
+        )
+    elif mode == "micro":
+        print(
+            f"{CTX_ACCENT}\u25C6{RESET} {SLATE_400}{truncated_id}{RESET}"
+            f"{mode_badge}"
+        )
+    elif mode == "mini":
+        print(
+            f"{CTX_ACCENT}\u25C6{RESET} {SLATE_400}{truncated_id}{RESET}"
+            f"{mode_badge}{plan_part}"
+        )
+    else:  # normal
+        print(
+            f"{CTX_ACCENT}\u25C6{RESET} {CTX_SECONDARY}Context:{RESET} {SLATE_300}{truncated_id}{RESET}"
+            f"{mode_badge}{plan_part}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Context persistence
 # ---------------------------------------------------------------------------
 
@@ -495,6 +547,17 @@ def _resolve_context_id(session_id: str) -> Optional[str]:
         cache["sessions"] = {}
     cache["sessions"][session_id] = {"context_id": None}
     _save_cache(cache)
+    return None
+
+
+def _load_context_data(context_id: str) -> Optional[Dict[str, Any]]:
+    """Load context.json for a context ID and return parsed dict, or None on error."""
+    try:
+        context_file = get_context_file_path(context_id)
+        if context_file.exists():
+            return json.loads(context_file.read_text(encoding="utf-8"))
+    except Exception:
+        pass
     return None
 
 
@@ -554,10 +617,10 @@ def main() -> None:
     if used_pct is not None:
         context_pct = int(used_pct)
         total_input = cache_read + input_tokens + cache_creation
-        context_used = total_input + output_tokens + CONTEXT_BASELINE
+        context_used = total_input + output_tokens + CONTEXT_BASELINE_TOKENS
     else:
         total_input = cache_read + input_tokens + cache_creation
-        context_used = total_input + output_tokens + CONTEXT_BASELINE
+        context_used = total_input + output_tokens + CONTEXT_BASELINE_TOKENS
         context_pct = (context_used * 100) // context_max if context_max > 0 else 0
 
     context_k = context_used // 1000
@@ -576,12 +639,18 @@ def main() -> None:
     context_id = _resolve_context_id(session_id)
 
     # Render context section
-    render_context(mode, context_pct, context_k, max_k, time_display, model_name, context_id)
+    render_context(mode, context_pct, context_k, max_k, time_display, model_name)
 
     # Render git section
     git = get_git_status(current_dir)
     if git:
         render_git(mode, git, dir_name)
+
+    # Render context manager line (line 3) with separator
+    if context_id:
+        print(SEPARATOR)
+        context_data = _load_context_data(context_id)
+        render_context_manager(mode, context_id, context_data)
 
     # Persist context_window to context.json
     if context_id:

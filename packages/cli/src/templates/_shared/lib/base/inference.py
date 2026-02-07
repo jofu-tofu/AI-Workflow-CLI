@@ -201,29 +201,66 @@ def generate_semantic_summary(prompt: str, timeout: int = 15) -> Optional[str]:
 
 
 # System prompt for generating context ID slugs (3-12 keyword tags for folder names)
-CONTEXT_ID_SLUG_PROMPT = """Extract 3-12 keyword tags describing what this task is about.
+CONTEXT_ID_SLUG_PROMPT = """You are extracting keyword tags from a user's request to create a **folder name** for a work session.
 
-## Rules
+## Why This Matters
 
-- Start with an action verb when possible (fix, add, implement, refactor, update, create, migrate, optimize, debug, configure)
-- Every word must be high-signal: specific nouns, verbs, technical terms, proper names
-- Ban these word categories completely: articles (the, a, an), prepositions (to, with, for, in, of, on, at, by, from), conjunctions (and, or, but), pronouns (I, my, this, it, that), auxiliary verbs (is, are, was, be, can, want, need, help), filler (really, just, some, also, please, actually, basically)
-- Prefer specific terms over generic: "authentication" over "code", "PostgreSQL" over "database", "navbar" over "component"
-- Does NOT need to be grammatically correct -- these are search tags, not sentences
-- No punctuation, no quotes, no hyphens, no markdown
+These tags become part of a context ID like `260206-1959-refactor-webhook-retry-logic`. Users scan lists of 50-100+ such folder names to find past work sessions. Your job is to extract the 3-12 words that make THIS session instantly recognizable among hundreds of others.
 
-## Examples
+Think: "If someone had 100 folders and needed to find this one by scanning names, which words would make it jump out?"
 
-"I want to add user authentication to my Express app" -> add authentication Express JWT middleware
-"Can you help me fix the bug where login redirects to a blank page" -> fix login redirect blank page
-"Please refactor the database queries to use connection pooling" -> refactor database queries connection pooling
-"I'm trying to set up GitHub Actions for CI/CD" -> configure GitHub Actions CICD pipeline
-"Update the README with the new API endpoints documentation" -> update README API endpoints documentation
-"We need to migrate our app from React class components to hooks" -> migrate React classes hooks
+## First Word: Action Verb (REQUIRED)
+
+The first word MUST be a specific action verb. Choose the most precise verb available:
+
+Common: fix, add, implement, refactor, update, create, remove, replace, optimize, debug
+Specific (preferred when they fit): scaffold, instrument, serialize, throttle, migrate, integrate, extract, redesign, restructure, decouple, consolidate, parallelize, configure, deploy, benchmark, normalize, validate, document, deprecate, upstream
+
+## Word Selection: Rarity = Quality
+
+The less common a word is in everyday language, the better it is as an identifier. Apply this mental filter:
+
+BEST (+3):  Proper nouns, brand names, unique identifiers (PostgreSQL, Webpack, OAuth, JWT, CICD)
+GOOD (+2):  Domain-specific technical terms (middleware, pooling, webhook, serialization, throttle)
+OKAY (+1):  Specific common nouns (authentication, redirect, navbar, pagination, dropdown)
+WEAK (-1):  Generic nouns that appear in most prompts (code, file, app, feature, issue, project, stuff, thing)
+BANNED:     See banned list below — these must NEVER appear in output
+
+Select the 3-12 highest-value words. When choosing between two words that mean similar things, always pick the rarer/more specific one.
+
+## Banned Words (NEVER include these)
+
+Greetings/social: sure, okay, ok, hi, hello, hey, thanks, yeah, yes, no, well, right, um, uh
+Pronouns/articles: I, my, me, we, our, you, your, he, she, it, they, the, a, an, this, that, these, those
+Auxiliaries/modals: is, are, was, were, be, been, being, can, could, would, should, will, shall, may, might, must, do, does, did, have, has, had
+Prepositions: to, with, for, in, of, on, at, by, from, into, about, through, between, after, before, during
+Conjunctions: and, or, but, so, because, if, when, while, although, since
+Filler/hedging: want, need, help, try, think, know, look, going, trying, looking, basically, actually, really, just, some, also, please, maybe, probably, kind, sort, pretty, very, quite, like
+Generic: code, file, app, stuff, thing, feature, issue, problem, way, part, bit, lot, something
+
+## Bad vs Good Examples
+
+BAD:  sure help refactor code cleanup          -> starts with filler, "code" is generic
+GOOD: refactor database queries connection pooling
+
+BAD:  want add feature authentication          -> "want" is filler, "feature" is noise
+GOOD: add authentication Express JWT middleware
+
+BAD:  looking fix issue login page             -> gerund opener, "issue" is generic
+GOOD: fix login redirect blank page session
+
+BAD:  improve things make better setup         -> vague nouns, no technical specificity
+GOOD: improve CI pipeline GitHub Actions caching
+
+BAD:  help update documentation readme stuff   -> "help" opener, "stuff" is noise
+GOOD: update README API endpoints documentation
+
+BAD:  thinking about maybe changing prompt     -> hedging words, no specificity
+GOOD: optimize context ID extraction prompting Opus
 
 ## Output
 
-Output ONLY the keyword tags separated by spaces. Nothing else."""
+Output ONLY the keyword tags separated by spaces. Nothing else. No reasoning, no labels, no punctuation, no quotes, no hyphens, no markdown."""
 
 
 def generate_context_id_slug(prompt: str, timeout: int = 90) -> Optional[str]:

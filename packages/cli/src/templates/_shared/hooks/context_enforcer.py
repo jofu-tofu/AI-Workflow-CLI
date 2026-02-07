@@ -65,6 +65,7 @@ from lib.context.discovery import (
     format_context_created,
     format_pending_plan_continuation,
     format_implementation_continuation,
+    format_handoff_continuation,
     format_relative_time,
 )
 from lib.templates.formatters import get_mode_display
@@ -260,7 +261,9 @@ def format_context_picker_stderr(contexts: List[Context]) -> str:
 
         # Add status indicator for in-flight work
         status = ""
-        if ctx.in_flight and ctx.in_flight.mode != "none":
+        if ctx.in_flight and ctx.in_flight.handoff_path:
+            status = " [Handoff Ready]"
+        elif ctx.in_flight and ctx.in_flight.mode != "none":
             mode_display = get_mode_display(ctx.in_flight.mode)
             if mode_display:
                 status = f" {mode_display}"
@@ -435,7 +438,10 @@ def determine_context(
         eprint(f"[context_enforcer] Auto-selected single in-flight context: {ctx.id} (mode={mode})")
 
         # Use mode-specific formatter for better continuation context
-        if mode == "pending_implementation":
+        # Check handoff_path FIRST — it takes priority over mode
+        if ctx.in_flight and ctx.in_flight.handoff_path:
+            output = format_handoff_continuation(ctx, project_root)
+        elif mode == "pending_implementation":
             output = format_pending_plan_continuation(ctx, project_root)
         elif mode == "implementing":
             output = format_implementation_continuation(ctx, project_root)

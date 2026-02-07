@@ -47,14 +47,14 @@ https://github.com/anthropics/claude-code/issues/13783
 """
 import sys
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 # Add parent directories to path for imports
 SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import emit_context, load_hook_input
+from lib.base.hook_utils import emit_context, load_hook_input, parse_context_window
 from lib.base.utils import eprint, project_dir
 from lib.context.context_manager import (
     get_all_contexts,
@@ -70,56 +70,34 @@ _PROGRESSIVE_SAVE_MARKER = ".progressive-save-done"
 
 # Configuration
 SAVE_STATE_THRESHOLD = 60  # Silently save auto-state at 60% remaining
-LOW_CONTEXT_THRESHOLD = 40  # Warn when below 40% remaining
-CRITICAL_CONTEXT_THRESHOLD = 25  # Urgent warning below 25%
-
-# Context baseline: preloaded tokens not visible to hooks (~22.6k typical)
-# This includes system prompt, tools, MCP tokens that aren't in hook data
-CONTEXT_BASELINE = 22_600
-
-# Default context window size (used when not provided in hook input)
-DEFAULT_CONTEXT_WINDOW = 200_000
+HANDOFF_SUGGEST_THRESHOLD = 30  # Gentle nudge at 30% remaining (70% used)
+HANDOFF_PREPARE_THRESHOLD = 20  # Stronger warning at 20% remaining (80% used)
+CRITICAL_CONTEXT_THRESHOLD = 10  # Urgent warning at 10% remaining (90% used)
 
 
-def get_context_tokens_from_hook(hook_input: dict) -> Tuple[Optional[int], Optional[int]]:
+def get_percent_remaining_from_context(hook_input: dict) -> Optional[int]:
     """
-    Extract actual token counts from Claude Code hook input.
+    Fallback: read remaining_percentage from context.json (written by status_line).
 
-    Claude Code provides context_window data with actual token counts:
-    - cache_read_input_tokens: Tokens read from cache
-    - input_tokens: New input tokens
-    - cache_creation_input_tokens: Tokens written to cache
-    - output_tokens: Model output tokens
+    When hook_input doesn't have context_window data, we can read the
+    percentage that status_line.py writes to context.json on every update.
 
     Args:
         hook_input: Hook input data from Claude Code
 
     Returns:
-        Tuple of (tokens_used, max_tokens) or (None, None) if not available
+        Remaining percentage (0-100) or None if not available
     """
-    context_window = hook_input.get("context_window")
-    if not context_window:
-        return None, None
+    session_id = hook_input.get("session_id")
+    if not session_id:
+        return None
 
-    current_usage = context_window.get("current_usage")
-    if not current_usage:
-        return None, None
+    project_root = project_dir(hook_input)
+    context = get_context_by_session_id(session_id, project_root)
+    if not context or not context.context_window:
+        return None
 
-    # Sum all token types
-    cache_read = current_usage.get("cache_read_input_tokens", 0) or 0
-    input_tokens = current_usage.get("input_tokens", 0) or 0
-    cache_creation = current_usage.get("cache_creation_input_tokens", 0) or 0
-    output_tokens = current_usage.get("output_tokens", 0) or 0
-
-    content_tokens = cache_read + input_tokens + cache_creation + output_tokens
-
-    # Add baseline for system prompt, tools, MCP tokens not in hook data
-    tokens_used = content_tokens + CONTEXT_BASELINE
-
-    # Get max context window from hook input
-    max_tokens = context_window.get("context_window_size") or DEFAULT_CONTEXT_WINDOW
-
-    return tokens_used, max_tokens
+    return context.context_window.get("remaining_percentage")
 
 
 def get_current_context_id(project_root: Path = None) -> Optional[str]:
@@ -139,60 +117,80 @@ def get_current_context_id(project_root: Path = None) -> Optional[str]:
 
 def get_context_warning(
     percent_remaining: int,
-    tokens_used: int,
-    max_tokens: int,
+    tokens_used: Optional[int],
+    max_tokens: Optional[int],
     context_id: Optional[str],
     tool_name: str
 ) -> str:
     """
     Generate appropriate warning based on context level.
 
+    Three tiers:
+    - SUGGEST (<=30%): Gentle nudge to consider /handoff
+    - PREPARE (<=20%): Stronger warning to finish up and run /handoff
+    - CRITICAL (<=10%): Urgent — run /handoff now
+
     Args:
         percent_remaining: Percentage of context remaining
-        tokens_used: Estimated tokens used
-        max_tokens: Maximum context window
+        tokens_used: Estimated tokens used (may be None if from fallback)
+        max_tokens: Maximum context window (may be None if from fallback)
         context_id: Current context ID (if any)
         tool_name: Tool that triggered this check
 
     Returns:
         System reminder markdown
     """
-    # Format token counts
-    tokens_used_k = tokens_used // 1000
-    max_tokens_k = max_tokens // 1000
+    # Format usage info — handle None when from context.json fallback
+    if tokens_used is not None and max_tokens is not None:
+        tokens_used_k = tokens_used // 1000
+        max_tokens_k = max_tokens // 1000
+        usage_line = f"**Estimated usage**: ~{tokens_used_k}k / {max_tokens_k}k tokens"
+    else:
+        usage_line = f"**Estimated usage**: ~{percent_remaining}% remaining"
+
+    context_line = f"\nContext ID: `{context_id}`" if context_id else ""
 
     if percent_remaining <= CRITICAL_CONTEXT_THRESHOLD:
-        urgency = "CRITICAL"
-        instruction = "You MUST wrap up immediately and create a handoff document."
-    else:
-        urgency = "LOW"
-        instruction = "Please wrap up your current task and prepare for handoff."
+        return f"""<system-reminder>
+## CRITICAL CONTEXT WARNING ({percent_remaining}% remaining)
 
-    context_info = ""
-    if context_id:
-        context_info = f"""
-To create a handoff document, use the /handoff command or describe:
-- What you were working on
-- What's completed
-- What still needs to be done
-- Any important decisions or context
-
-Context ID: `{context_id}`"""
-
-    return f"""<system-reminder>
-## {urgency} CONTEXT WARNING ({percent_remaining}% remaining)
-
-**Estimated usage**: ~{tokens_used_k}k / {max_tokens_k}k tokens
+{usage_line}
 **Triggered by**: {tool_name} tool completion
 
-{instruction}
-{context_info}
+**CRITICAL: Run `/handoff` now before context is compacted.**
+{context_line}
+
+You are about to lose context. Stop all other work and run `/handoff` immediately.
+</system-reminder>"""
+
+    elif percent_remaining <= HANDOFF_PREPARE_THRESHOLD:
+        return f"""<system-reminder>
+## LOW CONTEXT WARNING ({percent_remaining}% remaining)
+
+{usage_line}
+**Triggered by**: {tool_name} tool completion
+
+**Context is getting low. Please finish your current task and run `/handoff`.**
+{context_line}
 
 **Actions:**
 1. Complete your current atomic task (if 1-2 steps away)
 2. Do NOT start new multi-step work
-3. Create a handoff document summarizing progress
-4. Ask user: "Context is getting low. I've summarized my progress. Should we continue in a new session?"
+3. Run `/handoff` to generate a handoff document
+</system-reminder>"""
+
+    else:
+        # SUGGEST tier (<=30%)
+        return f"""<system-reminder>
+## CONTEXT NOTICE ({percent_remaining}% remaining)
+
+{usage_line}
+**Triggered by**: {tool_name} tool completion
+
+**Consider preparing a handoff soon. When ready, run `/handoff` to generate a handoff document.**
+{context_line}
+
+Continue your current work, but avoid starting large new tasks.
 </system-reminder>"""
 
 
@@ -327,25 +325,26 @@ def check_context_level(hook_input: dict) -> Optional[str]:
     """
     # === FAST PATH: No I/O, just dict lookups and math ===
 
-    # 1. Try to get context_window data (fast dict access)
-    tokens_used, max_tokens = get_context_tokens_from_hook(hook_input)
+    # 1. Try to get context_window data from hook input (most accurate, real-time)
+    tokens_used, max_tokens = parse_context_window(hook_input)
 
-    # 2. If no context_window data, exit immediately - can't monitor accurately
-    if tokens_used is None or max_tokens is None:
-        # Only log if we want to debug
-        # eprint("[context_monitor] context_window data unavailable")
-        return None
+    if tokens_used is not None and max_tokens is not None and max_tokens > 0:
+        remaining = max_tokens - tokens_used
+        percent_remaining = max(0, min(100, int((remaining / max_tokens) * 100)))
+    else:
+        # 2. Fallback: read from context.json (written by status_line.py)
+        percent_remaining = get_percent_remaining_from_context(hook_input)
+        if percent_remaining is None:
+            return None  # No data available from either source
+        tokens_used = None  # Unknown from this source
+        max_tokens = None
 
-    # 3. Calculate percentage (fast math)
-    remaining = max_tokens - tokens_used
-    percent_remaining = max(0, min(100, int((remaining / max_tokens) * 100)))
-
-    # 4. Most common case: context is fine, exit early
+    # 3. Most common case: context is fine, exit early
     if percent_remaining > SAVE_STATE_THRESHOLD:
         return None
 
     # === PROGRESSIVE SAVE: At 60% remaining, silently save auto-state ===
-    if percent_remaining > LOW_CONTEXT_THRESHOLD:
+    if percent_remaining > HANDOFF_SUGGEST_THRESHOLD:
         # Only save once per session (check marker file)
         _try_progressive_save(hook_input, percent_remaining)
         return None
@@ -353,8 +352,11 @@ def check_context_level(hook_input: dict) -> Optional[str]:
     # === SLOW PATH: Only reached when context is low (rare) ===
 
     # Log since we're in warning territory
-    eprint(f"[context_monitor] Context: {percent_remaining}% remaining "
-           f"(~{tokens_used//1000}k/{max_tokens//1000}k tokens)")
+    if tokens_used is not None and max_tokens is not None:
+        eprint(f"[context_monitor] Context: {percent_remaining}% remaining "
+               f"(~{tokens_used//1000}k/{max_tokens//1000}k tokens)")
+    else:
+        eprint(f"[context_monitor] Context: ~{percent_remaining}% remaining (from context.json)")
 
     # Get current context for handoff info (file I/O)
     project_root = project_dir(hook_input)
