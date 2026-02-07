@@ -15,11 +15,24 @@ from typing import Any, Dict, Optional
 
 try:
     from .constants import validate_plan_path, PLANS_DIR
-    from .atomic_write import atomic_write
 except ImportError:
     # When imported directly via sys.path (not as a package)
     from constants import validate_plan_path, PLANS_DIR
-    from atomic_write import atomic_write
+
+# Import atomic_write from shared lib (canonical copy)
+try:
+    from ...lib.base.atomic_write import atomic_write
+except ImportError:
+    # Fallback for direct execution
+    from pathlib import Path as _P
+    _shared_lib = _P(__file__).resolve().parent.parent.parent / "_shared" / "lib"
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location(
+        "atomic_write", str(_shared_lib / "base" / "atomic_write.py")
+    )
+    _mod = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    atomic_write = _mod.atomic_write
 
 # Import canonical eprint from shared lib
 try:

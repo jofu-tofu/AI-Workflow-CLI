@@ -7,6 +7,8 @@
  * Hook command configuration
  */
 export interface HookCommand {
+  /** If true, runs in background without blocking */
+  async?: boolean
   /** Command to execute */
   command: string
   /** Optional timeout in seconds */

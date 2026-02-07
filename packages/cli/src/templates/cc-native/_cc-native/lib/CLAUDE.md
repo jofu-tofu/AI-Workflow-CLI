@@ -12,7 +12,6 @@
 | `state.py` | Plan state file management and iteration tracking |
 | `orchestrator.py` | Plan complexity analysis and agent selection |
 | `reviewers/` | Plan review implementations (package — see below) |
-| `atomic_write.py` | Atomic file writes for crash safety |
 | `constants.py` | Shared constants and feature flags (e.g., `ENABLE_ROBUST_PLAN_WRITES`) |
 | `debug.py` | Permanent debug logging to context folder (`CCNATIVE_DEBUG_DISABLE=1` to disable) |
 | `__init__.py` | Package exports |
@@ -35,8 +34,8 @@
 Hooks (cc-native-plan-review.py, etc.)
     │
     ├── lib/utils.py (core utilities)
-    │       └── lib/atomic_write.py
     │       └── lib/constants.py
+    │       └── _shared/lib/base/atomic_write.py
     │
     ├── lib/state.py (state management)
     │       └── lib/utils.py (eprint)
@@ -135,7 +134,8 @@ This is a recurring issue. Any path string comparison must handle both separator
 For critical files (state, reviews), use atomic writes to prevent corruption on crash:
 
 ```python
-from atomic_write import atomic_write
+# Import from shared lib (canonical location)
+from _shared.lib.base.atomic_write import atomic_write
 
 # CORRECT - atomic write
 success, error = atomic_write(path, content)
@@ -260,4 +260,5 @@ These are reminders based on past issues. Not enforcement rules.
 
 | Date | Change |
 |------|--------|
+| 2026-02-06 | Remove duplicate `atomic_write.py` — consolidated to `_shared/lib/base/atomic_write.py` |
 | 2026-02-03 | Initial creation |

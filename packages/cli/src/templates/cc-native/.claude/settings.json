@@ -79,7 +79,8 @@
           {
             "type": "command",
             "command": "python .aiwcli/_shared/hooks/task_create_capture.py",
-            "timeout": 3000
+            "timeout": 3000,
+            "async": true
           }
         ]
       },
@@ -89,7 +90,8 @@
           {
             "type": "command",
             "command": "python .aiwcli/_shared/hooks/task_update_capture.py",
-            "timeout": 3000
+            "timeout": 3000,
+            "async": true
           }
         ]
       },
@@ -131,9 +133,17 @@
         "matcher": "TaskCreate",
         "hooks": [
           {
-            "type": "command",
-            "command": "python .aiwcli/_shared/hooks/task_create_atomicity.py",
-            "timeout": 15000
+            "type": "prompt",
+            "prompt": "Evaluate this TaskCreate call for atomicity. Tasks become ISC criteria checked during verification — vague criteria cannot be verified, so precision matters. A well-specified task includes: (1) Explicit file paths like 'src/lib/auth.py' instead of 'the file above' or 'as discussed', (2) Specific function or component names instead of pronouns like 'it' or 'the function', (3) Clear expected state or behavior that is binary-testable in 2 seconds, (4) Concrete scope — one concern per task, not compound goals. If all four criteria are met and an agent with zero conversation history could verify the task was completed, return ok:true. If any criterion is missing, return ok:false with a response like: 'Missing context: [list each gap — e.g., no file path specified for the auth module, expected behavior is vague: what does fix the bug mean specifically, compound task should be split into separate criteria]'."
+          }
+        ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Evaluate this Task tool call for sub-agent context completeness. The sub-agent receives ONLY the prompt parameter — zero conversation history, no access to files read in this session, no knowledge of prior decisions. A complete Task prompt includes: (1) Task description with scope boundaries — what to do AND what to leave out, (2) Explicit file paths using exact references like 'src/lib/auth.py:45-67' instead of 'the auth file' or 'the file we looked at', (3) Key constraints or decisions already made that the sub-agent must respect, (4) Expected output format or structure. Check the subagent_type parameter: when it is 'Explore', the agent's purpose is discovery — accept prompts without pre-loaded file paths for Explore agents. For all other agent types, verify the prompt is self-contained. If file paths, function names, architectural decisions, or research findings from this conversation are omitted and the sub-agent would need to re-discover them, return ok:false with a response like: 'Missing context: [list each omitted item — e.g., file path for auth module at src/lib/auth.py, decision to use JWT over sessions, constraint: no breaking API changes]'. If the prompt is self-contained for a fresh agent, return ok:true."
           }
         ]
       },

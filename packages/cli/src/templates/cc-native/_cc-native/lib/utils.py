@@ -22,12 +22,24 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
-    from .atomic_write import atomic_write
     from .constants import ENABLE_ROBUST_PLAN_WRITES
 except ImportError:
     # When imported directly via sys.path (not as a package)
-    from atomic_write import atomic_write
     from constants import ENABLE_ROBUST_PLAN_WRITES
+
+# Import atomic_write from shared lib (canonical copy)
+try:
+    from ...lib.base.atomic_write import atomic_write
+except ImportError:
+    # Fallback for direct execution
+    _shared_lib = Path(__file__).resolve().parent.parent.parent / "_shared" / "lib"
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location(
+        "atomic_write", str(_shared_lib / "base" / "atomic_write.py")
+    )
+    _mod = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    atomic_write = _mod.atomic_write
 
 # Import canonical utilities from shared lib (with Windows bug fixes)
 try:
