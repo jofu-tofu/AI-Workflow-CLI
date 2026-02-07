@@ -66,24 +66,23 @@ Plan assignment is decoupled from mode transitions. Each hook has a single respo
 | Hook | Event | Responsibility |
 |------|-------|---------------|
 | `archive_plan.py` | PermissionRequest:ExitPlanMode | Archives plan file to `plans/` folder only. No state.json changes. |
-| `plan_accepted.py` | PostToolUse:ExitPlanMode | Assigns plan fields (`plan_hash`, `plan_signature`, `plan_path`) to state.json. No mode change. **Note: Does not fire when ExitPlanMode triggers /clear (race condition).** |
-| `session_end.py` | SessionEnd | **Fallback:** assigns plan fields from archived plan if plan_hash missing (covers PostToolUse race). Transitions `active` → `has_plan` when `plan_hash` exists. |
-| `session_start.py` | SessionStart(clear) | Finds `has_plan` context, binds new session, transitions `has_plan` → `active`. Injects task/git restoration. |
+| `session_end.py` | SessionEnd | **Fallback:** assigns plan fields from archived plan if plan_hash missing. Transitions `active` → `has_plan` when `plan_hash` exists **and `plan_consumed` is False**. |
+| `session_start.py` | SessionStart(clear) | Finds `has_plan` context, binds new session, transitions `has_plan` → `active`, sets `plan_consumed=True`. Injects task/git restoration. |
 | `session_start.py` | SessionStart(compact) | Restores context after compaction. Inlines plan content (not auto-pasted in compact). |
-| `context_selector.py` | UserPromptSubmit (via determine_context) | Fallback: cross-session plan matching via hash/signature for edge cases. |
+| `context_selector.py` | UserPromptSubmit (via determine_context) | Fallback: cross-session plan matching via hash/signature for edge cases. Sets `plan_consumed=True`. |
 
 **Mode lifecycle:**
 ```
 Plan accepted → archive_plan archives file (PermissionRequest, before user decision)
-                plan_accepted WOULD set plan_hash (PostToolUse) — but doesn't fire due to /clear race
-Session ends  → session_end: fallback assigns plan_hash from archived plan if missing
-                session_end: active → has_plan (plan "staged" — transient)
-/clear fires  → session_start: has_plan → active (plan "consumed" — context bound)
+Session ends  → session_end: fallback assigns plan_hash from archived plan if missing (plan_consumed=False)
+                session_end: active → has_plan ONLY when plan_hash exists AND plan_consumed=False
+/clear fires  → session_start: has_plan → active (plan_consumed=True — one-shot latch)
+Next /clear   → session_end: plan_consumed=True → skip has_plan (no infinite loop)
 ```
 
-**Critical: PostToolUse:ExitPlanMode does NOT fire.** When ExitPlanMode triggers /clear, the session terminates before Claude Code invokes PostToolUse hooks. The `session_end.py` fallback covers this by detecting archived plans without plan_hash.
-
 **Critical: Auto-paste bypasses hooks.** After ExitPlanMode "clear context", Claude Code runs `/clear` and auto-pastes the plan content. This auto-paste is an internal mechanism that does NOT trigger UserPromptSubmit. The `session_start.py` handler for `source=clear` bridges this gap.
+
+**plan_consumed is a one-shot latch.** Set to `True` when a plan transitions from `has_plan` → `active` (consumed by session_start or context_selector). Prevents `session_end` from re-staging the same plan. Reset to `False` when a new plan is archived (fallback assignment in session_end) or when mode returns to idle.
 
 **has_plan is transient.** It exists only between SessionEnd (which sets it) and SessionStart(clear) (which consumes it). It should not persist across multiple sessions. If not consumed, `context_selector.py` in UserPromptSubmit provides fallback matching via plan hash.
 
@@ -97,3 +96,4 @@ Session ends  → session_end: fallback assigns plan_hash from archived plan if 
 - `has_plan` = transient bridge between SessionEnd and SessionStart(clear)
 - `active` = "working" (with or without plan)
 - Plan fields (`plan_path`, `plan_hash`, `plan_signature`) are persistent metadata — never cleared by mode transitions
+- `plan_consumed` = one-shot latch preventing infinite plan re-staging

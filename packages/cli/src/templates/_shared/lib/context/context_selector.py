@@ -472,7 +472,7 @@ def determine_context(
             if session_id:
                 bind_session(matched.id, session_id, project_root)
 
-            update_mode(matched.id, "active", project_root=project_root)
+            update_mode(matched.id, "active", project_root=project_root, plan_consumed=True)
             matched.mode = "active"
 
             log_info("context_selector", f"Plan match (fallback): {matched.id}")

@@ -58,6 +58,7 @@ class ContextState:
     plan_signature: str = None          # First 200 chars for fallback matching
     plan_id: str = None                 # Embedded UUID for reliable matching
     plan_anchors: list = field(default_factory=list)  # Structural anchors for fuzzy matching
+    plan_consumed: bool = False                         # True after plan has been delivered to a session
     handoff_path: str = None
     session_ids: list = field(default_factory=list)
     last_session: dict = None           # {session_id, git_branch, uncommitted_files, last_commit}
@@ -128,6 +129,7 @@ def _dict_to_state(data: Dict[str, Any]) -> ContextState:
         plan_signature=data.get("plan_signature"),
         plan_id=data.get("plan_id"),
         plan_anchors=data.get("plan_anchors", []),
+        plan_consumed=data.get("plan_consumed", False),
         handoff_path=data.get("handoff_path"),
         session_ids=data.get("session_ids", []),
         last_session=data.get("last_session"),
@@ -478,6 +480,7 @@ def update_mode(
     plan_signature: str = None,
     plan_id: str = None,
     plan_anchors: list = None,
+    plan_consumed: bool = None,
 ) -> Optional[ContextState]:
     """Change the mode field (idle | has_plan | active), optionally setting plan fields."""
     state = get_context(context_id, project_root)
@@ -497,6 +500,8 @@ def update_mode(
         state.plan_id = plan_id
     if plan_anchors is not None:
         state.plan_anchors = plan_anchors
+    if plan_consumed is not None:
+        state.plan_consumed = plan_consumed
 
     # Clear plan fields when returning to idle
     if mode == "idle":
@@ -505,6 +510,7 @@ def update_mode(
         state.plan_signature = None
         state.plan_id = None
         state.plan_anchors = []
+        state.plan_consumed = False
 
     save_state(state, project_root)
     return state
@@ -532,7 +538,10 @@ def maybe_activate(
 
     if state.mode in ("idle", "has_plan"):
         old_mode = state.mode
-        update_mode(context_id, "active", project_root=project_root)
+        kwargs = {}
+        if old_mode == "has_plan":
+            kwargs["plan_consumed"] = True
+        update_mode(context_id, "active", project_root=project_root, **kwargs)
         log_info("context_store", f"maybe_activate ({caller}): {context_id} {old_mode} -> active")
         return True
 

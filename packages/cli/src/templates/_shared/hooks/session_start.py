@@ -114,8 +114,8 @@ def _handle_clear_restore(hook_input, session_id, project_root):
     log_info("session_start", f"Bound session {session_id[:8]}... to {target.id}")
 
     # Transition has_plan → active (consume the transient state)
-    update_mode(target.id, "active", project_root=project_root)
-    log_info("session_start", f"Transitioned {target.id}: has_plan -> active")
+    update_mode(target.id, "active", project_root=project_root, plan_consumed=True)
+    log_info("session_start", f"Transitioned {target.id}: has_plan -> active (plan_consumed=True)")
 
     # Inject restoration context (tasks, git state, plan path reference)
     # Plan CONTENT is not injected — Claude Code auto-pastes it after /clear

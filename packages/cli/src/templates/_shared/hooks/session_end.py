@@ -121,14 +121,17 @@ def main():
                     state.plan_signature = content[:200]
                     state.plan_id = generate_plan_id()
                     state.plan_anchors = extract_plan_anchors(content)
+                    state.plan_consumed = False
                     log_info("session_end", f"Fallback: assigned archived plan for {state.id} (hash: {state.plan_hash})")
                 except Exception as e:
                     log_warn("session_end", f"Fallback plan assignment failed: {e}")
 
-        # If a plan is assigned and mode is active, stage it for next session
-        if state.plan_hash and state.mode == "active":
+        # If a plan is assigned, not yet consumed, and mode is active, stage it for next session
+        if state.plan_hash and state.mode == "active" and not state.plan_consumed:
             state.mode = "has_plan"
             log_info("session_end", f"Staged plan for next session: {state.id} -> has_plan")
+        elif state.plan_hash and state.mode == "active" and state.plan_consumed:
+            log_debug("session_end", f"Plan already consumed for {state.id}, not re-staging")
             log_diagnostic("session_end", "decide", f"Staging plan for {state.id}",
                             decision="stage_plan", reasoning="plan_hash exists and mode was active",
                             inputs={"plan_hash": state.plan_hash, "mode_transition": "active->has_plan"})

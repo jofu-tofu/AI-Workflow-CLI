@@ -109,16 +109,6 @@
         ]
       },
       {
-        "matcher": "ExitPlanMode",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python .aiwcli/_cc-native/hooks/plan_accepted.py",
-            "timeout": 5000
-          }
-        ]
-      },
-      {
         "matcher": "Bash|Edit",
         "hooks": [
           {
@@ -167,6 +157,16 @@
           {
             "type": "prompt",
             "prompt": "The sub-agent receives ONLY the prompt text — no conversation history, no prior context.\n\nCheck 1 — Dangling References: Does the prompt use pronouns or demonstratives that ONLY make sense with prior conversation? Violations: 'the file we looked at', 'as discussed above', 'that approach we chose', 'the error from earlier', 'fix the issue mentioned above'. NOT violations: relative paths ('_output/', 'src/lib/'), search terms ('context-manager', 'auth module'), directory exploration ('find files matching X'), tool names, or any concrete noun — even if imprecise. Only flag references that are truly UNRESOLVABLE without conversation history.\n\nCheck 2 — Implicit Contract: Does the prompt have ANY discernible goal? 'Explore the _output directory and find context files' IS a clear goal. 'Search for hooks that handle Task events' IS a clear goal. 'Read and summarize all files in X' IS a clear goal. Only flag if the prompt is truly goalless — e.g., a sentence fragment with no verb, or pure context with no request.\n\nIf both checks pass, return ok:true. When in doubt, pass — false negatives (letting a vague prompt through) are far less costly than false positives (blocking legitimate work).\n\nWhen returning ok:false, end your response with: 'Retry: Re-invoke the Task tool with a revised prompt that resolves the issues above.'"
+          }
+        ]
+      },
+      {
+        "matcher": "^Task$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .aiwcli/_cc-native/hooks/add_plan_context.py",
+            "timeout": 5000
           }
         ]
       },
