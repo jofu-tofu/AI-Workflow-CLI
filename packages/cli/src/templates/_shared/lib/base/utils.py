@@ -154,10 +154,23 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
     if not summary or not summary.strip():
         base_id = f"{timestamp}-context"
     else:
-        # Use stop word filter, limit to 12 words
-        from .stop_words import STOP_WORDS
-        words = [w for w in summary.lower().split() if w not in STOP_WORDS and len(w) > 1][:12]
-        slug = sanitize_title(' '.join(words), max_len=50)
+        slug = None
+
+        # Try AI inference first for high-quality keyword slugs
+        try:
+            from .inference import generate_context_id_slug
+            ai_slug = generate_context_id_slug(summary)
+            if ai_slug:
+                slug = sanitize_title(ai_slug, max_len=100)
+        except Exception as e:
+            eprint(f"[utils] AI context ID slug failed, using fallback: {e}")
+
+        # Fallback: stopword filtering
+        if not slug:
+            from .stop_words import STOP_WORDS
+            words = [w for w in summary.lower().split() if w not in STOP_WORDS and len(w) > 1][:12]
+            slug = sanitize_title(' '.join(words), max_len=50)
+
         base_id = f"{timestamp}-{slug}"
 
     if not existing_ids:

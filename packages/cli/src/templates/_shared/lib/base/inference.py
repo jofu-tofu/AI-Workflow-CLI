@@ -3,10 +3,13 @@
 Provides a unified interface for Claude API calls using the claude CLI.
 Supports multiple model tiers: fast (Haiku), standard (Sonnet), smart (Opus).
 """
+import re
 import subprocess
 import sys
 import os
 from typing import Optional
+
+from .utils import eprint
 from dataclasses import dataclass
 
 
@@ -195,3 +198,84 @@ def generate_semantic_summary(prompt: str, timeout: int = 15) -> Optional[str]:
         return None
 
     return summary
+
+
+# System prompt for generating context ID slugs (3-12 keyword tags for folder names)
+CONTEXT_ID_SLUG_PROMPT = """Extract 3-12 keyword tags describing what this task is about.
+
+## Rules
+
+- Start with an action verb when possible (fix, add, implement, refactor, update, create, migrate, optimize, debug, configure)
+- Every word must be high-signal: specific nouns, verbs, technical terms, proper names
+- Ban these word categories completely: articles (the, a, an), prepositions (to, with, for, in, of, on, at, by, from), conjunctions (and, or, but), pronouns (I, my, this, it, that), auxiliary verbs (is, are, was, be, can, want, need, help), filler (really, just, some, also, please, actually, basically)
+- Prefer specific terms over generic: "authentication" over "code", "PostgreSQL" over "database", "navbar" over "component"
+- Does NOT need to be grammatically correct -- these are search tags, not sentences
+- No punctuation, no quotes, no hyphens, no markdown
+
+## Examples
+
+"I want to add user authentication to my Express app" -> add authentication Express JWT middleware
+"Can you help me fix the bug where login redirects to a blank page" -> fix login redirect blank page
+"Please refactor the database queries to use connection pooling" -> refactor database queries connection pooling
+"I'm trying to set up GitHub Actions for CI/CD" -> configure GitHub Actions CICD pipeline
+"Update the README with the new API endpoints documentation" -> update README API endpoints documentation
+"We need to migrate our app from React class components to hooks" -> migrate React classes hooks
+
+## Output
+
+Output ONLY the keyword tags separated by spaces. Nothing else."""
+
+
+def generate_context_id_slug(prompt: str, timeout: int = 90) -> Optional[str]:
+    """
+    Generate a 3-12 word context ID slug from a user prompt using AI inference.
+
+    Uses Opus (smart tier) for maximum quality keyword extraction.
+    Returns a cleaned, validated slug or None on failure.
+
+    Args:
+        prompt: Raw user prompt to extract keywords from
+        timeout: Timeout in seconds (default 90)
+
+    Returns:
+        Space-separated keyword slug (3-12 words) or None if failed
+    """
+    # Truncate input to 500 chars to keep inference fast
+    truncated = prompt[:500] if len(prompt) > 500 else prompt
+
+    result = inference(
+        system_prompt=CONTEXT_ID_SLUG_PROMPT,
+        user_prompt=truncated,
+        level="smart",
+        timeout=timeout,
+    )
+
+    if not result.success or not result.output:
+        eprint(f"[inference] Context ID slug inference failed: {result.error}")
+        return None
+
+    slug = result.output.strip()
+
+    # Clean: strip quotes, punctuation, hyphens
+    slug = slug.strip('"\'`')
+    slug = slug.rstrip('.!?')
+    slug = slug.replace('-', ' ')
+
+    # Remove non-alphanumeric chars (except spaces)
+    slug = re.sub(r'[^a-zA-Z0-9 ]', '', slug)
+
+    # Normalize whitespace
+    slug = re.sub(r'\s+', ' ', slug).strip()
+
+    words = slug.split()
+
+    # Validate word count: truncate if over 12, reject if under 3
+    if len(words) > 12:
+        words = words[:12]
+    if len(words) < 3:
+        eprint(f"[inference] Context ID slug too short ({len(words)} words): '{slug}'")
+        return None
+
+    result_slug = ' '.join(words)
+    eprint(f"[inference] Generated context ID slug: '{result_slug}' ({result.latency_ms}ms)")
+    return result_slug
