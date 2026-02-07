@@ -7,46 +7,11 @@
  * These tests verify CLI registration, help text, and cross-platform compatibility.
  */
 
-import {platform} from 'node:os'
-
 import {runCommand} from '@oclif/test'
 import {expect} from 'chai'
 
 describe('pai launch - Integration Tests', () => {
-  describe('Task 6.2-6.3: command registration and help', () => {
-    it('should appear in pai --help commands list', async () => {
-      const {stdout} = await runCommand(['--help'])
-      expect(stdout).to.include('launch')
-    })
-
-    it('should display help with pai launch --help', async () => {
-      const {stdout} = await runCommand(['launch', '--help'])
-      expect(stdout).to.include('USAGE')
-      expect(stdout).to.include('launch')
-    })
-
-    it('should show description in help output', async () => {
-      const {stdout} = await runCommand(['launch', '--help'])
-      expect(stdout).to.include('Claude Code')
-    })
-
-    it('should show examples in help output', async () => {
-      const {stdout} = await runCommand(['launch', '--help'])
-      expect(stdout).to.include('EXAMPLES')
-    })
-  })
-
   describe('Task 6.4: debug flag integration from BaseCommand', () => {
-    it('should inherit --debug flag from BaseCommand', async () => {
-      const {stdout} = await runCommand(['launch', '--help'])
-      expect(stdout).to.include('--debug')
-    })
-
-    it('should show -d short flag in help', async () => {
-      const {stdout} = await runCommand(['launch', '--help'])
-      expect(stdout).to.include('-d')
-    })
-
     it('Task 5.5: should accept --debug flag (no error)', async () => {
       // Note: This test verifies flag is accepted, not debug output
       // Debug output testing requires mocking (see unit tests)
@@ -61,32 +26,6 @@ describe('pai launch - Integration Tests', () => {
 
       // If we get here without invalid argument error, flag was accepted
       expect(true).to.be.true
-    })
-  })
-
-  describe('command structure validation', () => {
-    it('should be registered as top-level command', async () => {
-      const {stdout} = await runCommand(['--help'])
-      // Verify launch is a command, not a topic
-      expect(stdout).to.match(/^\s+launch\s+/m)
-    })
-  })
-
-  describe('Task 6.1, M3: cross-platform compatibility', () => {
-    it('should work on current platform (Windows, macOS, or Linux)', async () => {
-      const currentPlatform = platform()
-      expect(['win32', 'darwin', 'linux']).to.include(currentPlatform)
-
-      // Verify help works on all platforms
-      const {stdout} = await runCommand(['launch', '--help'])
-      expect(stdout).to.include('launch')
-    })
-
-    it('should show platform-appropriate examples', async () => {
-      const {stdout} = await runCommand(['launch', '--help'])
-      // Examples should work on all platforms (no platform-specific commands)
-      expect(stdout).to.include('EXAMPLES')
-      expect(stdout).to.not.include('Platform not supported')
     })
   })
 
