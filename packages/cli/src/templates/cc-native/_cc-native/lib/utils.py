@@ -343,6 +343,54 @@ def worst_verdict(verdicts: List[str]) -> str:
     return worst
 
 
+def compute_review_decision(
+    all_verdicts: List[str],
+    warn_threshold: float = 0.5,
+) -> Tuple[bool, str, float]:
+    """Two-stage verdict aggregation.
+
+    Stage 1 (Fail Veto): Any fail -> deny. From safety engineering (ISO 61508) —
+    critical alarms use zero-tolerance.
+
+    Stage 2 (Warn Consensus): warn_ratio >= threshold -> deny. From Condorcet's
+    Jury Theorem — if each reviewer is better than random at detecting issues,
+    majority vote maximizes decision correctness.
+
+    Error exclusion: Detectors that produce no signal (error/skip) are excluded
+    from the denominator. They provide no information about plan quality.
+
+    Args:
+        all_verdicts: List of verdict strings from all reviewers.
+        warn_threshold: Fraction of warn verdicts (among signal verdicts) that
+            triggers denial. Default 0.5 (Condorcet majority).
+
+    Returns:
+        Tuple of (should_deny, reason, score).
+        - should_deny: True if the plan should be denied.
+        - reason: "fail_veto", "warn_consensus", "acceptable", or "no_signal".
+        - score: 1.0 for fail_veto, warn_ratio for warn cases, 0.0 for pass/no_signal.
+    """
+    # Exclude non-signal verdicts
+    signal_verdicts = [v for v in all_verdicts if v in ("pass", "warn", "fail")]
+
+    if not signal_verdicts:
+        return False, "no_signal", 0.0
+
+    # Stage 1: Fail veto
+    fail_count = signal_verdicts.count("fail")
+    if fail_count > 0:
+        return True, "fail_veto", 1.0
+
+    # Stage 2: Warn consensus (Condorcet majority)
+    warn_count = signal_verdicts.count("warn")
+    warn_ratio = warn_count / len(signal_verdicts)
+
+    if warn_ratio >= warn_threshold:
+        return True, "warn_consensus", warn_ratio
+
+    return False, "acceptable", warn_ratio
+
+
 # ---------------------------
 # Artifact writing
 # ---------------------------

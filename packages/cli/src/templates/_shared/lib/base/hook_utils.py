@@ -129,6 +129,43 @@ def safe_hook_main(hook_name: str) -> Callable[[F], F]:
     return decorator
 
 
+def emit_context(additional_context: str, ensure_ascii: bool = False) -> None:
+    """Emit hookSpecificOutput with additionalContext to stdout.
+
+    Args:
+        additional_context: Context string to inject into Claude's context
+        ensure_ascii: If True, escape non-ASCII characters in JSON output
+    """
+    out = {
+        "hookSpecificOutput": {
+            "additionalContext": additional_context,
+        }
+    }
+    print(json.dumps(out, ensure_ascii=ensure_ascii))
+
+
+def emit_context_and_block(
+    additional_context: str,
+    reason: str,
+    ensure_ascii: bool = True,
+) -> None:
+    """Emit hookSpecificOutput that denies the tool call with context and reason.
+
+    Args:
+        additional_context: Context string to inject into Claude's context
+        reason: Reason shown to Claude for why the tool call was denied
+        ensure_ascii: If True, escape non-ASCII characters in JSON output
+    """
+    out = {
+        "hookSpecificOutput": {
+            "additionalContext": additional_context,
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        }
+    }
+    print(json.dumps(out, ensure_ascii=ensure_ascii))
+
+
 def run_hook(main_func: Callable[[], int]) -> None:
     """
     Standard hook entry point wrapper.

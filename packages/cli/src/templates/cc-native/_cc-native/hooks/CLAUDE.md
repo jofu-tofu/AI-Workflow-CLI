@@ -9,7 +9,7 @@
 | Hook | Trigger | Purpose |
 |------|---------|---------|
 | `cc-native-plan-review.py` | PreToolUse: ExitPlanMode | Review plans before user approval |
-| `add_plan_context.py` | PostToolUse: EnterPlanMode | Add context when entering plan mode |
+| `add_plan_context.py` | PreToolUse: Write | Add context when writing plan files |
 | `suggest-fresh-perspective.py` | PostToolUse | Suggest fresh perspective workflow |
 
 ---
@@ -89,6 +89,25 @@ print(json.dumps(out, ensure_ascii=False))
 ```
 
 **Key insight:** The old `decision`/`reason` format fails silently. If your hook isn't affecting Claude's behavior, check the output format first.
+
+### Using Hook Utilities (Preferred)
+
+Instead of manually constructing hookSpecificOutput dicts, use the shared utilities from `base.hook_utils`:
+
+```python
+from base.hook_utils import emit_context, emit_context_and_block
+
+# Inject context without blocking:
+emit_context("Information for Claude to see...")
+
+# Block the tool call with context and reason:
+emit_context_and_block(
+    "Review feedback for Claude to see...",
+    "Reason shown to Claude for the denial"
+)
+```
+
+These handle the JSON serialization and stdout printing. `emit_context` defaults to `ensure_ascii=False`; `emit_context_and_block` defaults to `ensure_ascii=True` (safe for Windows cp1252).
 
 ---
 
@@ -172,7 +191,7 @@ if __name__ == "__main__":
         raise SystemExit(0)
 ```
 
-Use `sys.exit(1)` only for intentional blocking (e.g., `blockOnFail: true` configured).
+Use `sys.exit(1)` only for intentional blocking (e.g., two-stage review decision denies the plan).
 
 ---
 
@@ -215,4 +234,5 @@ Hooks fail silently on syntax errors - this catches them before they reach produ
 
 | Date | Change |
 |------|--------|
+| 2026-02-06 | Fixed add_plan_context.py trigger docs (was PostToolUse: EnterPlanMode, is PreToolUse: Write). Added emit_context/emit_context_and_block utility docs. |
 | 2026-02-03 | Initial creation |

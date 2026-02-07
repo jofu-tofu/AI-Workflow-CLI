@@ -20,7 +20,6 @@ Hook input:
     ...
 }
 """
-import json
 import sys
 from pathlib import Path
 
@@ -29,7 +28,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import load_hook_input
+from lib.base.hook_utils import emit_context, load_hook_input
 from lib.base.utils import eprint, project_dir
 from lib.context.context_manager import (
     get_all_in_flight_contexts,
@@ -117,13 +116,8 @@ def _handle_compact_restore(hook_input, session_id, project_root):
 
     restore_context = "\n".join(lines)
 
-    # Output as additionalContext so Claude sees it
-    output = {
-        "hookSpecificOutput": {
-            "additionalContext": restore_context
-        }
-    }
-    print(json.dumps(output, ensure_ascii=False))
+    # Emit via utility so Claude sees it
+    emit_context(restore_context)
     eprint(f"[session_start] Injected post-compaction restore context for {context_id}")
 
 

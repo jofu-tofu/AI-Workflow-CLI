@@ -13,7 +13,6 @@
         "timeout": 120
       }
     },
-    "blockOnFail": false,
     "display": {
       "maxIssues": 12,
       "maxMissingSections": 12,
@@ -23,7 +22,7 @@
   "agentReview": {
     "enabled": true,
     "timeout": 180,
-    "blockOnFail": true,
+    "warnThreshold": 0.01,
     "orchestrator": {
       "enabled": true,
       "model": "haiku",

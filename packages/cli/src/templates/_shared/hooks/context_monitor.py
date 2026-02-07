@@ -45,7 +45,6 @@ Hook JSON excludes system prompt, tools, MCP tokens. We add a baseline
 to compensate (~22.6k tokens typical). See:
 https://github.com/anthropics/claude-code/issues/13783
 """
-import json
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
@@ -55,7 +54,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import load_hook_input
+from lib.base.hook_utils import emit_context, load_hook_input
 from lib.base.utils import eprint, project_dir
 from lib.context.context_manager import (
     get_all_contexts,
@@ -394,14 +393,9 @@ def main():
         warning = check_context_level(hook_input)
 
         if warning:
-            # Output JSON with additionalContext so Claude sees the warning
+            # Emit via utility so Claude sees the warning
             # Plain stdout from PostToolUse only goes to verbose mode, not Claude's context
-            output = {
-                "hookSpecificOutput": {
-                    "additionalContext": warning
-                }
-            }
-            print(json.dumps(output))
+            emit_context(warning)
 
     except Exception as e:
         eprint(f"[context_monitor] ERROR: {e}")

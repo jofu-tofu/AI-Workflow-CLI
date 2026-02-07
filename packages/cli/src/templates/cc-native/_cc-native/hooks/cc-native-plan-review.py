@@ -45,8 +45,9 @@ try:
     _shared = Path(__file__).parent.parent.parent / "_shared"
     sys.path.insert(0, str(_shared))
 
-    # Import subprocess utilities
+    # Import subprocess and hook utilities
     from lib.base.subprocess_utils import is_internal_call
+    from lib.base.hook_utils import emit_context, emit_context_and_block
 
     from utils import (
         DEFAULT_DISPLAY,
@@ -58,6 +59,7 @@ try:
         project_dir,
         find_plan_file,
         compute_plan_hash,
+        compute_review_decision,
         is_plan_already_reviewed,
         mark_plan_reviewed,
         worst_verdict,
@@ -115,11 +117,7 @@ def skip_with_info(reason: str) -> int:
     making failures diagnosable instead of invisible.
     """
     eprint(f"[cc-native-plan-review] Skipping: {reason}")
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "additionalContext": f"[Plan Review Skipped] {reason}",
-        }
-    }, ensure_ascii=True))
+    emit_context(f"[Plan Review Skipped] {reason}", ensure_ascii=True)
     return 0
 
 
@@ -297,14 +295,14 @@ def update_iteration_state_in_context(
 
 def should_continue_iterating_context(
     iteration: Dict[str, Any],
-    verdict: str,
+    review_score: float,
     config: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Determine if more review iterations are needed.
 
     Args:
         iteration: The iteration state dict
-        verdict: Current review verdict
+        review_score: Score from compute_review_decision (0.0 = all pass, >0 = concerns)
         config: Optional config dict with earlyExitOnAllPass setting
 
     Returns:
@@ -322,12 +320,12 @@ def should_continue_iterating_context(
     early_exit = False
     if config:
         early_exit = config.get("earlyExitOnAllPass", False)
-    if early_exit and verdict == "pass":
-        eprint(f"[cc-native-plan-review] All reviewers passed and earlyExitOnAllPass=true, exiting early")
+    if early_exit and review_score == 0.0:
+        eprint(f"[cc-native-plan-review] All reviewers passed (score=0.0) and earlyExitOnAllPass=true, exiting early")
         return False
 
-    # More iterations available and verdict is not pass (or early exit disabled)
-    eprint(f"[cc-native-plan-review] Continuing to next iteration ({current + 1}/{max_iter}), verdict={verdict}")
+    # More iterations available and score is not zero (or early exit disabled)
+    eprint(f"[cc-native-plan-review] Continuing to next iteration ({current + 1}/{max_iter}), score={review_score:.2f}")
     return True
 
 
@@ -344,14 +342,13 @@ def load_settings(proj_dir: Path) -> Dict[str, Any]:
                 "codex": {"enabled": True, "model": "", "timeout": 120},
                 "gemini": {"enabled": False, "model": "", "timeout": 120},
             },
-            "blockOnFail": False,
             "display": DEFAULT_DISPLAY.copy(),
         },
         "agentReview": {
             "enabled": True,
             "orchestrator": DEFAULT_ORCHESTRATOR.copy(),
             "timeout": 180,
-            "blockOnFail": True,
+            "warnThreshold": 0.5,
             "legacyMode": False,
             "display": DEFAULT_DISPLAY.copy(),
             "agentSelection": DEFAULT_AGENT_SELECTION.copy(),
@@ -739,9 +736,7 @@ def main() -> int:
     )
     eprint(f"[cc-native-plan-review] Saved review: {review_file}")
 
-    # Build context message
-    md_content = format_combined_markdown(combined_result, combined_settings)
-
+    # Build compact context message (file reference only, no inline markdown)
     context_parts = [
         "**CC-Native Plan Review Complete**\n\n",
         f"Review saved to: `{review_file}`\n\n",
@@ -754,13 +749,12 @@ def main() -> int:
     if orch_result:
         context_parts.append(f"**Orchestration:** Complexity=`{orch_result.complexity}`, Category=`{orch_result.category}`, Agents selected: {len(agent_results)}\n")
 
-    context_parts.append("\nUse these findings before starting implementation.\n\n")
-    context_parts.append(md_content)
+    context_parts.append(f"\nRead the full review at `{review_file}` and address all findings before implementation.\n")
 
-    # Check blocking conditions
-    block_on_fail_plan = plan_settings.get("blockOnFail", False)
-    block_on_fail_agent = agent_settings.get("blockOnFail", True)
-    should_block = (overall == "fail") and (block_on_fail_plan or block_on_fail_agent)
+    # Two-stage review decision
+    warn_threshold = agent_settings.get("warnThreshold", 0.5)
+    should_deny, deny_reason, review_score = compute_review_decision(all_verdicts, warn_threshold)
+    eprint(f"[cc-native-plan-review] Review decision: deny={should_deny}, reason={deny_reason}, score={review_score:.2f}")
 
     # Handle iteration logic
     needs_more_iterations = False
@@ -769,7 +763,7 @@ def main() -> int:
         iteration_state = update_iteration_state_in_context(reviews_dir, iteration_state, plan_hash, overall)
 
         # Check if more iterations needed
-        if should_continue_iterating_context(iteration_state, overall, agent_settings):
+        if should_continue_iterating_context(iteration_state, review_score, agent_settings):
             needs_more_iterations = True
             # Increment iteration counter for next round
             iteration_state["current"] = iteration_state.get("current", 1) + 1
@@ -785,39 +779,38 @@ def main() -> int:
             iteration_state["max"] = iteration_state.get("max", 1) + 1
             save_iteration_state(reviews_dir, iteration_state)
 
-    # Build output with correct Claude Code hook format
-    # See: https://docs.anthropic.com/en/docs/claude-code/hooks
-    out: Dict[str, Any] = {
-        "hookSpecificOutput": {
-            "additionalContext": "".join(context_parts),
-        }
-    }
+    # Emit output with correct Claude Code hook format
+    context_text = "".join(context_parts)
+    mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review", iteration_state)
 
-    # Handle blocking scenarios - use permissionDecision/permissionDecisionReason inside hookSpecificOutput
-    # Note: md_content is already in additionalContext, so permissionDecisionReason only needs the instruction
+    _REVIEWER_CAVEAT = (
+        "Reviewers have limited context compared to your full session — "
+        "adopt valid points, use your judgment where they lack context."
+    )
+
     if needs_more_iterations:
         current = iteration_state["current"] - 1  # Display the just-completed iteration
         max_iter = iteration_state["max"]
         remaining = max_iter - current
-
-        out["hookSpecificOutput"]["permissionDecision"] = "deny"
-        out["hookSpecificOutput"]["permissionDecisionReason"] = (
-            f"CC-Native plan review iteration {current}/{max_iter} verdict = {overall.upper()}. "
-            f"REVISION REQUIRED: Address the issues in additionalContext. "
+        emit_context_and_block(
+            context_text,
+            f"Plan review iteration {current}/{max_iter} ({deny_reason}, score={review_score:.2f}). "
+            f"Read the full review at `{review_file}` and address the findings. "
+            f"{_REVIEWER_CAVEAT} "
             f"Revise the plan in place, then attempt ExitPlanMode again. "
-            f"({remaining} revision{'s' if remaining != 1 else ''} remaining)"
+            f"({remaining} revision{'s' if remaining != 1 else ''} remaining)",
         )
-    elif should_block:
-        out["hookSpecificOutput"]["permissionDecision"] = "deny"
-        out["hookSpecificOutput"]["permissionDecisionReason"] = (
-            "CC-Native plan review verdict = FAIL. Do NOT start implementation yet. "
-            "Revise the plan to address the issues in additionalContext, "
-            "then attempt ExitPlanMode again."
+    elif should_deny:
+        emit_context_and_block(
+            context_text,
+            f"Plan review ({deny_reason}, score={review_score:.2f}). "
+            f"Read the full review at `{review_file}` and address the findings. "
+            f"{_REVIEWER_CAVEAT} "
+            f"Revise the plan in place, then attempt ExitPlanMode again.",
         )
+    else:
+        emit_context(context_text, ensure_ascii=True)
 
-    mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review", iteration_state)
-    # Use ensure_ascii=True to avoid Windows cp1252 encoding errors
-    print(json.dumps(out, ensure_ascii=True))
     return 0
 
 
@@ -829,9 +822,8 @@ if __name__ == "__main__":
         print(f"[cc-native-plan-review] FATAL ERROR: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
         # Output error to Claude via hook format so it's visible
-        print(json.dumps({
-            "hookSpecificOutput": {
-                "additionalContext": f"**CC-Native Plan Review Hook Error**\n\nThe hook encountered an error:\n```\n{traceback.format_exc()}\n```\n\nPlease report this issue.",
-            }
-        }))
+        emit_context(
+            f"**CC-Native Plan Review Hook Error**\n\nThe hook encountered an error:\n```\n{traceback.format_exc()}\n```\n\nPlease report this issue.",
+            ensure_ascii=True,
+        )
         raise SystemExit(1)

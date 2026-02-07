@@ -31,6 +31,7 @@ from utils import (
     mark_questions_offered,
     project_dir,
 )
+from base.hook_utils import emit_context
 from templates.plan_context import (
     get_evaluation_context_reminder,
     get_questions_offer_template,
@@ -60,29 +61,24 @@ def load_plan_context_config(proj_dir: Path) -> Dict[str, Any]:
 
 
 CONTEXT_REMINDER = get_evaluation_context_reminder()
-QUESTIONS_OFFER_CONTEXT = get_questions_offer_template()
+try:
+    QUESTIONS_OFFER_CONTEXT = get_questions_offer_template()
+except Exception:
+    QUESTIONS_OFFER_CONTEXT = None
 
 
 def inject_evaluation_context() -> int:
     """Inject evaluation context reminder without blocking."""
-    out = {
-        "hookSpecificOutput": {
-            "additionalContext": CONTEXT_REMINDER
-        }
-    }
-    print(json.dumps(out, ensure_ascii=False))
+    emit_context(CONTEXT_REMINDER)
     return 0
 
 
 def offer_questions_nonblocking() -> int:
     """Inject questions offer without blocking - plan Write succeeds."""
+    if QUESTIONS_OFFER_CONTEXT is None:
+        return inject_evaluation_context()
     context = CONTEXT_REMINDER + "\n\n---\n\n" + QUESTIONS_OFFER_CONTEXT
-    out = {
-        "hookSpecificOutput": {
-            "additionalContext": context
-        }
-    }
-    print(json.dumps(out, ensure_ascii=False))
+    emit_context(context)
     return 0
 
 

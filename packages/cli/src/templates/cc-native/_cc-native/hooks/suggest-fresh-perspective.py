@@ -29,11 +29,14 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict
 
-# Add lib directory to path for imports
+# Add lib directories to path for imports
 _hook_dir = Path(__file__).resolve().parent
 _lib_dir = _hook_dir.parent / "lib"
+_shared_lib = _hook_dir.parent.parent / "_shared" / "lib"
 sys.path.insert(0, str(_lib_dir))
+sys.path.insert(0, str(_shared_lib))
 
+from base.hook_utils import emit_context
 from utils import eprint, sanitize_filename
 
 
@@ -226,19 +229,15 @@ def should_suggest(state: Dict[str, Any], cooldown: int) -> bool:
     return state.get("tool_calls_since_suggestion", 0) >= cooldown
 
 
-def create_suggestion() -> Dict[str, Any]:
-    """Create the suggestion output."""
-    return {
-        "hookSpecificOutput": {
-            "additionalContext": (
-                "\n---\n"
-                "**Stuck?** You've been working on similar issues for a while. "
-                "Consider running `/fresh-perspective` to get an unbiased view of the problem "
-                "without code context anchoring your thinking.\n"
-                "---\n"
-            )
-        }
-    }
+def create_suggestion() -> None:
+    """Emit the suggestion via hook utility."""
+    emit_context(
+        "\n---\n"
+        "**Stuck?** You've been working on similar issues for a while. "
+        "Consider running `/fresh-perspective` to get an unbiased view of the problem "
+        "without code context anchoring your thinking.\n"
+        "---\n"
+    )
 
 
 def main() -> int:
@@ -330,7 +329,7 @@ def main() -> int:
         # Only suggest up to maxSuggestions times per session
         if state["suggestion_count"] <= max_suggestions:
             eprint(f"[suggest-fresh-perspective] Suggesting fresh perspective (suggestion #{state['suggestion_count']})")
-            print(json.dumps(create_suggestion(), ensure_ascii=False))
+            create_suggestion()
 
     return 0
 

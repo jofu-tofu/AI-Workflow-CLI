@@ -1,4 +1,8 @@
 {
+  "statusLine": {
+    "type": "command",
+    "command": "python .aiwcli/_shared/scripts/status_line.py"
+  },
   "permissions": {
     "allow": [],
     "deny": []

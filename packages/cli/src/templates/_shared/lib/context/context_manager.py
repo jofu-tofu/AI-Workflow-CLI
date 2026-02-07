@@ -69,6 +69,7 @@ class Context:
     last_active: Optional[str] = None
     folder: Optional[str] = None
     in_flight: InFlightState = None
+    context_window: Optional[Dict[str, Any]] = None  # Transient: written by status line
 
     def __post_init__(self):
         if self.tags is None:
@@ -78,7 +79,7 @@ class Context:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return {
+        d = {
             "id": self.id,
             "status": self.status,
             "summary": self.summary,
@@ -88,6 +89,9 @@ class Context:
             "last_active": self.last_active,
             "in_flight": asdict(self.in_flight) if self.in_flight else {"mode": "none"}
         }
+        if self.context_window:
+            d["context_window"] = self.context_window
+        return d
 
     def to_index_entry(self) -> Dict[str, Any]:
         """Convert to index.json entry format."""
@@ -393,7 +397,8 @@ def _load_context_from_cache(context_id: str, project_root: Path = None) -> Opti
                     [in_flight_data["session_id"]] if in_flight_data.get("session_id") else None
                 ),  # Migrate from old session_id to session_ids
                 handoff_path=in_flight_data.get("handoff_path"),
-            )
+            ),
+            context_window=data.get("context_window"),
         )
     except Exception as e:
         eprint(f"[context_manager] WARNING: Failed to load context cache: {e}")
