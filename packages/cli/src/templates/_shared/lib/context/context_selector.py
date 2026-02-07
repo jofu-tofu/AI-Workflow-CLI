@@ -7,12 +7,13 @@ Selection priority:
 1. session_match       - session_id found in index.json sessions map
 2. caret_command       - prompt starts with ^ -> parse and execute
 3. plan_content_match  - FALLBACK: match against has_plan contexts via hash/signature
+3b. handoff_match      - FALLBACK: match against has_handoff contexts
 4. default             - create new context
 
-Note: The primary plan restore path is now session_start.py which handles
-SessionStart(source=clear). It finds has_plan contexts and binds the new
-session before UserPromptSubmit fires. Case 3 here is a fallback for edge
-cases where session_start didn't consume the has_plan state (e.g., startup/resume).
+Note: The primary plan/handoff restore path is now session_start.py which handles
+SessionStart(source=clear). It finds has_plan/has_handoff contexts and binds the new
+session before UserPromptSubmit fires. Cases 3/3b here are fallbacks for edge
+cases where session_start didn't consume the staged state (e.g., startup/resume).
 """
 import hashlib
 import re
@@ -415,15 +416,16 @@ def determine_context(
 ) -> Tuple[Optional[str], str, Optional[str]]:
     """Determine which context this prompt belongs to.
 
-    Selection priority (4 cases):
+    Selection priority (5 cases):
     1. session_match        - session_id already bound to a context
     2. caret_command        - prompt starts with ^, parse and execute
     3. plan_content_match   - FALLBACK: match has_plan contexts via hash/signature
+    3b. handoff_match       - FALLBACK: match has_handoff contexts
     4. default              - create new context
 
-    Note: The primary plan restore is handled by session_start.py on
+    Note: The primary plan/handoff restore is handled by session_start.py on
     SessionStart(source=clear), which binds the session before this runs.
-    Case 3 is a fallback for edge cases.
+    Cases 3/3b are fallbacks for edge cases.
 
     Returns:
         (context_id, method, output_text)
@@ -477,6 +479,21 @@ def determine_context(
 
             log_info("context_selector", f"Plan match (fallback): {matched.id}")
             return (matched.id, "plan_content_match", format_plan_continuation(matched, project_root))
+
+    # --- Case 3b: handoff_match (fallback — primary path is session_start.py) ---
+    has_handoff_contexts = [
+        c for c in get_all_contexts(status="active", project_root=project_root)
+        if c.mode == "has_handoff"
+    ]
+
+    if has_handoff_contexts:
+        target = has_handoff_contexts[0]  # most recent
+        if session_id:
+            bind_session(target.id, session_id, project_root)
+        update_mode(target.id, "active", project_root=project_root, handoff_consumed=True)
+        target.mode = "active"
+        log_info("context_selector", f"Handoff match (fallback): {target.id}")
+        return (target.id, "handoff_match", format_handoff_continuation(target, project_root))
 
     # --- Case 4: default ---
     return _create_new_context(prompt, project_root)

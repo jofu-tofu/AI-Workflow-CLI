@@ -40,33 +40,6 @@ from lib.context.context_store import (
 from lib.context.context_selector import determine_context, BlockRequest
 
 
-def format_claudemd_reminder() -> str:
-    """Generate reminder to update directory-specific CLAUDE.md files."""
-    return """
-## CLAUDE.md \u2014 Persistent Memory
-
-CLAUDE.md files are this project's persistent memory across sessions. **After making a significant decision or learning something non-obvious during this task, write it to the nearest CLAUDE.md.** If you don't write it, it's lost when this session ends.
-
-**What to write:**
-- Architectural choices and why alternatives were rejected
-- Non-obvious constraints (what breaks if this changes)
-- Workarounds with context on the underlying issue
-- Patterns that prevent future mistakes
-
-**Placement:** CLAUDE.md files cascade \u2014 subdirectories inherit from parents. Update the nearest existing one. Only create a new one at a genuine semantic boundary (package root, technology boundary, domain boundary).
-
-**Format:**
-
-```markdown
-## [Topic]
-**Decision:** [What was decided]
-**Rationale:** [Why \u2014 the non-obvious part]
-```
-
-**When in doubt, write it.** A lean entry is better than a lost decision.
-"""
-
-
 def _update_in_flight_status(context_id: str, hook_input: dict, project_root: Path) -> None:
     """
     Update context mode based on permission mode.
@@ -147,13 +120,6 @@ def main():
             except BlockRequest as e:
                 log_error("user_prompt_submit", e.message)
                 sys.exit(2)
-
-        # Inject CLAUDE.md reminder when in active mode
-        if active_context_id:
-            context = get_context(active_context_id, project_root)
-            if context and context.mode == "active":
-                outputs.append(f"<system-reminder>{format_claudemd_reminder()}</system-reminder>")
-                log_debug("user_prompt_submit", "Injected CLAUDE.md reminder (mode=active)")
 
         log_diagnostic("user_prompt_submit", "result", f"context={active_context_id}, outputs={len(outputs)}",
                         inputs={"active_context_id": active_context_id, "output_count": len(outputs)})

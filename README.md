@@ -1,226 +1,225 @@
 # AI Workflow CLI
 
-**Your AI coding assistants, working together.**
+**A context management and hook harness that multiplies the power of Claude Code.**
 
 [![npm](https://img.shields.io/npm/v/aiwcli.svg)](https://npmjs.org/package/aiwcli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-## The Problem
+## What AIW Does
 
-You're using Claude Code. Your teammate uses Windsurf. Someone else is on GitHub Copilot. You've built workflows, agents, and prompts that make you productive—but they're locked to one platform.
+AIW wraps Claude Code with infrastructure that it doesn't have natively: **persistent context across sessions**, **automated lifecycle hooks**, and **pluggable workflow templates**. You install it once into a project, and every Claude Code session from that point forward gets:
 
-Every time you switch tools or collaborate, you start from scratch.
+- **Context that survives `/clear` and compaction** — AIW tracks what you're working on, which plan you approved, what tasks remain, and restores all of it when a new session starts. No more re-explaining.
+- **A hook system that automates the boring parts** — 13 Python hooks fire on Claude Code lifecycle events (session start, prompt submit, tool use, plan exit, session end). They archive plans, track tasks, monitor context window usage, suggest relevant files, and manage state transitions — automatically.
+- **Workflow templates you can swap** — Four template methods (cc-native, bmad, gsd, planning-with-files) provide different development philosophies. Each brings its own hooks, workflows, agents, and libraries. Install one, switch later, or build your own.
+- **Parallel workstreams via git worktrees** — Branch into isolated worktrees with their own Claude Code sessions. Work on three features simultaneously without stashing.
 
-## The Solution
+---
 
-**AIW** lets you write AI workflows once and deploy them everywhere. Define your agents, prompts, and automation in a universal format. AIW handles the translation.
+## Quick Start
 
 ```bash
-# Install
+# Install globally
 npm install -g aiwcli
 
-# Initialize templates in your project
-aiw init
+# Initialize in your project (cc-native is the recommended template)
+cd your-project
+aiw init --method cc-native
 
-# Launch Claude Code with full permissions
+# Launch Claude Code with AIW hooks active
 aiw launch
 ```
 
+That's it. The hook system activates automatically. Your sessions now have persistent context, plan tracking, and automated state management.
+
 ---
 
-## What AIW Does For You
+## Commands
 
-### 1. Work on Multiple Features Simultaneously
+| Command | Description |
+|---------|-------------|
+| `aiw init` | Install templates into your project. `--method cc-native` for full setup, or bare `aiw init` for shared infrastructure only. `--interactive` for guided setup. |
+| `aiw launch` | Launch Claude Code with hooks enabled. `--codex` for Codex, `--new` for a new terminal window. |
+| `aiw branch <name>` | Create a git worktree + branch in a sibling directory, auto-launch Claude Code in it. |
+| `aiw branch --delete --all` | Safely remove worktrees with no unpushed commits or open PRs. |
+| `aiw clean` | Remove output folders (`_output/`). `--method cc-native` for one method, `--all` for everything. |
+| `aiw clear` | Comprehensive uninstall — removes workflow folders, output, IDE config, and updates settings. |
 
-Stop stashing and switching branches. AIW creates isolated worktrees so you can work on multiple features at once, each with its own Claude Code session.
+Run `aiw help` or `aiw help <command>` for full flag details.
+
+---
+
+## Template System
+
+AIW uses a two-layer template architecture:
+
+**Shared infrastructure** (`_shared/`) is installed by every template method. It provides the context management system, session lifecycle hooks, task tracking, and core libraries. This is the foundation.
+
+**Method-specific code** (`_cc-native/`, `_bmad/`, etc.) adds workflows, agents, hooks, and libraries tailored to a specific development philosophy.
+
+### Available Methods
+
+| Method | Philosophy | What It Adds |
+|--------|-----------|--------------|
+| **cc-native** | Native Claude Code power features — planning, review, agents | Plan review pipeline, stuck detection, early clarification prompts, plan context injection |
+| **bmad** | Build-Measure-Analyze-Deploy — multi-agent team | Analyst, Architect, Dev, PM, Tech Writer, UX Designer agents |
+| **gsd** | Get Stuff Done — streamlined productivity | Unified review system, goal-staged workflows |
+| **planning-with-files** | Manus-style file-based planning | File-based project planning with session hooks |
 
 ```bash
-# Create a new feature branch in an isolated directory
-aiw branch feature-auth
+# Install a specific method
+aiw init --method cc-native
 
-# Creates: ../your-project-feature-auth/
-# Opens: Claude Code in the new worktree
+# Interactive setup (choose method, IDE, settings)
+aiw init --interactive
 
-# Meanwhile, your main branch is untouched
+# Multiple IDEs
+aiw init --method cc-native --ide claude --ide windsurf
 ```
 
-When you're done, clean up safely:
-
-```bash
-# Removes worktrees without unpushed commits or open PRs
-aiw branch --delete --all
-```
-
-### 2. Pre-Built AI Development Teams
-
-AIW includes **BMAD** (Build-Measure-Analyze-Deploy)—a complete set of AI agents that work like a development team:
-
-- **Analyst** — Code analysis and metrics
-- **Architect** — System design decisions
-- **Dev** — Implementation and coding
-- **PM** — Project planning and coordination
-- **Tech Writer** — Documentation
-- **UX Designer** — Interface planning
-
-Initialize BMAD in any project:
-
-```bash
-aiw init --method bmad
-```
-
-Then invoke agents through Claude Code's slash commands or let them activate automatically based on context.
-
-### 3. Templates That Work Everywhere
-
-Write a workflow once:
-
-```yaml
----
-name: code-review
-description: Comprehensive code review for quality and security
-allowed-tools:
-  - Read
-  - Grep
-  - Bash(git diff *)
----
-
-Review the changes for:
-- Code quality and maintainability
-- Security vulnerabilities
-- Performance implications
-```
-
-AIW converts it to the right format for each platform:
-- **Claude Code** → `.claude/commands/`
-- **Windsurf** → `.windsurf/workflows/`
-- **GitHub Copilot** → `.github/prompts/`
-
-### 4. Hooks That Automate Your Workflow
-
-AIW templates can include hooks that run automatically:
-
-- Archive plans before editing
-- Update state when exiting plan mode
-- Run validation after code changes
-- Trigger notifications on completion
-
-These integrate directly with Claude Code's hook system.
-
----
-
-## Architecture Overview
-
-Understanding this architecture is essential for development work. See [DEVELOPMENT.md](./DEVELOPMENT.md) for detailed development instructions.
-
-### Template System
-
-AIW uses a template-based architecture with two key locations:
-
-| Location | Purpose | When Modified |
-|----------|---------|---------------|
-| `.aiwcli/` | Working directory (runtime hooks and libraries) | During development |
-| `packages/cli/src/templates/cc-native/` | Template directory (distribution source) | After `.aiwcli/` changes |
-
-**Synchronization Rule:** Changes to `.aiwcli/` must be synchronized to `packages/cli/src/templates/cc-native/` to ensure new project initializations receive updates.
-
-### Directory Structure
+### What Gets Installed
 
 ```
 .aiwcli/
-├── _shared/                    # Cross-method infrastructure
-│   ├── hooks/                  # UserPromptSubmit, context_monitor, archive_plan, task capture
-│   └── lib/                    # base/, context/, handoff/, templates/
-└── _cc-native/                 # Method-specific code
-    ├── hooks/                  # plan-review, stuck-detection, plan-context
-    └── lib/                    # reviewers/, orchestrator
+├── _shared/                     # Always installed (context, hooks, libraries)
+│   ├── hooks/                   # Session lifecycle, context binding, task capture
+│   └── lib/                     # base/, context/, handoff/, templates/
+└── _cc-native/                  # Method-specific (varies by method)
+    ├── hooks/                   # Plan review, stuck detection, etc.
+    ├── lib/                     # Method utilities
+    └── workflows/               # Canonical procedures
 
-_output/
-└── contexts/                   # Event-sourced context management
-    └── {context-id}/
-        ├── events.jsonl        # SOURCE OF TRUTH (append-only)
-        ├── context.json        # Derived cache
-        └── plans/              # Archived approved plans
+.claude/
+├── settings.json                # Hook configuration (merged from templates)
+└── commands/{method}/           # Slash commands for Claude Code
 ```
 
-### Data Hierarchy (Event Sourcing)
+---
 
-| Level | File | Role |
+## Hook System
+
+Hooks are Python scripts that fire on Claude Code lifecycle events. They're configured in `.claude/settings.json` and run automatically — no manual intervention.
+
+### Shared Hooks (all methods)
+
+| Hook | Event | What It Does |
+|------|-------|-------------|
+| `session_start.py` | SessionStart | Restores context, plan, tasks, and git state when a session begins |
+| `session_end.py` | SessionEnd | Saves session state, stages plan/handoff for next session |
+| `user_prompt_submit.py` | UserPromptSubmit | Binds session to context, enforces context tracking |
+| `archive_plan.py` | PermissionRequest:ExitPlanMode | Archives approved plan files for persistence |
+| `task_create_capture.py` | PostToolUse:TaskCreate | Persists task creation to context state |
+| `task_update_capture.py` | PostToolUse:TaskUpdate | Persists task status changes to context state |
+| `context_monitor.py` | PostToolUse | Monitors context window usage, warns when running low |
+| `file-suggestion.py` | UserPromptSubmit | Suggests relevant files based on active context |
+| `pre_compact.py` | PreCompact | Saves state before Claude Code compacts token history |
+
+### CC-Native Hooks (cc-native method)
+
+| Hook | Event | What It Does |
+|------|-------|-------------|
+| `cc-native-plan-review.py` | PreToolUse:ExitPlanMode | Multi-reviewer plan analysis before approval |
+| `plan_questions_early.py` | UserPromptSubmit (plan mode) | Prompts clarification questions before code exploration |
+| `suggest-fresh-perspective.py` | PostToolUse | Detects stuck patterns, suggests `/fresh-perspective` |
+| `add_plan_context.py` | PostToolUse:AskUserQuestion | Tracks questions asked, nudges planning agents |
+
+All hooks use `run_hook()` for standardized lifecycle logging and error handling. Diagnostic logs go to `_output/hook-log.jsonl` (JSONL format).
+
+---
+
+## Context Management
+
+This is the core of AIW. Claude Code sessions are ephemeral — when you `/clear` or the context window compacts, everything is lost. AIW fixes this.
+
+### How It Works
+
+Every piece of work gets a **context** — a persistent state container that tracks:
+
+- What you're working on (summary, tags, method)
+- Which sessions have touched it
+- Your approved plan (archived, hashed, ready to restore)
+- Your task list (persisted across sessions)
+- Handoff documents (for session transitions)
+- Mode state (idle, active, has_plan, has_handoff)
+
+### The State Machine
+
+Contexts move through modes that control what happens at session boundaries:
+
+```
+idle → active (user starts working)
+active → has_plan (session ends with an approved plan)
+has_plan → active (next session restores the plan)
+active → has_handoff (session ends with a handoff document)
+has_handoff → active (next session restores the handoff)
+```
+
+**One-shot latches** (`plan_consumed`, `handoff_consumed`) prevent infinite re-staging. A plan is restored once, then marked consumed.
+
+### Two-Layer State Architecture
+
+| Layer | File | Role |
 |-------|------|------|
-| Source of Truth | `events.jsonl` | Append-only event log (never modified) |
-| L1 Cache | `context.json` | Derived from events (rebuilds if corrupted) |
-| L2 Cache | `index.json` | Aggregates all contexts |
+| **Source of Truth** | `_output/contexts/{id}/state.json` | Per-context state (mode, plan, tasks, sessions) |
+| **Fast Lookup** | `_output/index.json` | Session-to-context mapping for O(1) binding |
 
-### Hook Lifecycle
+Both layers use atomic writes with retry logic for crash safety on Windows and POSIX.
 
-Hooks are Python scripts triggered by Claude Code lifecycle events. Configuration in `.claude/settings.json`.
+### Context Directory Structure
 
-| Event | When Triggered | Example Hooks |
-|-------|----------------|---------------|
-| `UserPromptSubmit` | User sends message | Context binding, task hydration |
-| `PreToolUse` | Before tool executes | Plan review, validation |
-| `PostToolUse` | After tool completes | Context monitoring, archival |
-
----
-
-## Example Workflows
-
-### Solo Developer Flow
-
-```bash
-# Start a new project
-mkdir my-app && cd my-app
-git init
-
-# Add AI workflows
-aiw init --method bmad
-
-# Launch Claude Code
-aiw launch
-
-# Inside Claude Code, use the agents:
-# /bmad-dev "implement user authentication"
-# /bmad-analyst "review the auth implementation"
 ```
-
-### Parallel Feature Development
-
-```bash
-# Working on main, need to start a hotfix
-aiw branch hotfix-login-bug
-# → Opens new terminal with Claude Code in ../project-hotfix-login-bug/
-
-# Back in original terminal, start another feature
-aiw branch feature-dashboard
-# → Opens another terminal with Claude Code in ../project-feature-dashboard/
-
-# Three Claude Code sessions, three branches, zero conflicts
-```
-
-### Team Consistency
-
-```bash
-# Set up templates for the whole team
-aiw init --method bmad --ide claude --ide windsurf
-
-# Commit the generated folders
-git add .claude/ .windsurf/ _bmad/
-git commit -m "Add AI workflow templates"
-
-# Now everyone has the same agents, regardless of their IDE
+_output/
+├── index.json                    # Global session→context index
+├── hook-log.jsonl                # Diagnostic logs
+└── contexts/
+    └── {context-id}/
+        ├── state.json            # Source of truth
+        ├── debug/hook-log.jsonl  # Per-context logs
+        ├── plans/                # Archived plan files
+        └── handoffs/             # Handoff documents
 ```
 
 ---
 
-## Available Templates
+## Architecture
 
-| Template | Description |
-|----------|-------------|
-| **bmad** | Full BMAD methodology with agents for analyst, architect, dev, PM, and more |
-| **cc-native** | Claude Code native features—planning, agents, hooks, event-sourced context management |
-| **gsd** | Get Stuff Done—streamlined productivity workflows |
-| **planning-with-files** | File-based project planning system |
+### Template Resolution
+
+Templates live in `packages/cli/src/templates/`. At `aiw init`, the CLI:
+
+1. Copies `_shared/` into `.aiwcli/_shared/` (always)
+2. Copies method folder (e.g., `_cc-native/`) into `.aiwcli/` (if method specified)
+3. Deep-merges settings from `_shared/.claude/settings.json` + method settings into `.claude/settings.json`
+4. Copies IDE-specific folders (`.claude/commands/`, `.windsurf/workflows/`)
+5. Updates `.gitignore`
+
+### Hook Execution
+
+Hooks run as Python subprocesses, triggered by Claude Code's native hook system. They receive context via stdin (JSON) and return instructions via stdout (JSON). The `run_hook()` wrapper provides:
+
+- Automatic `HOOK_START` / `HOOK_END` lifecycle logging
+- Error capture with traceback
+- Duration tracking
+- Template origin detection (shared vs. method-specific)
+
+### Session Lifecycle
+
+```
+Session starts (SessionStart)
+  → session_start.py: bind session, restore context/plan/tasks
+
+User sends message (UserPromptSubmit)
+  → user_prompt_submit.py: select or create context
+  → file-suggestion.py: suggest relevant files
+
+Claude uses tools (PreToolUse / PostToolUse)
+  → Hooks fire per tool (plan review, task capture, context monitoring)
+
+Session ends (SessionEnd)
+  → session_end.py: save state, stage plan/handoff for next session
+```
 
 ---
 
@@ -233,30 +232,8 @@ npm install -g aiwcli
 **Requirements:**
 - Node.js 18+
 - Git (for worktree features)
-- Claude Code, Windsurf, or GitHub Copilot (depending on which you use)
-
----
-
-## Commands
-
-| Command | What it does |
-|---------|--------------|
-| `aiw init` | Initialize templates in your project |
-| `aiw launch` | Launch Claude Code with sandbox disabled |
-| `aiw branch <name>` | Create worktree + branch, auto-launch Claude Code |
-| `aiw branch --delete --all` | Safely clean up finished worktrees |
-| `aiw clear` | Remove installed templates |
-| `aiw clean` | Clean output folders |
-
-Run `aiw help` or `aiw help <command>` for details.
-
----
-
-## Documentation
-
-- **[Development Guide](./DEVELOPMENT.md)** — Contributing and local setup
-- **[Template Guide](./docs/TEMPLATE-USER-GUIDE.md)** — Creating your own templates
-- **[Best Practices](./docs/BEST-PRACTICES.md)** — Patterns and tips
+- Python 3.8+ (for hooks)
+- Claude Code (primary), Windsurf, or GitHub Copilot
 
 ---
 
@@ -269,7 +246,19 @@ bun install
 bun test
 ```
 
-See [DEVELOPMENT.md](./DEVELOPMENT.md) for the full setup.
+See [DEVELOPMENT.md](./DEVELOPMENT.md) for environment setup, template synchronization rules, and testing.
+
+### Template Development
+
+When modifying hooks or libraries in `.aiwcli/`, changes must be synchronized to `packages/cli/src/templates/`. See [CLAUDE.md](./CLAUDE.md) for the synchronization protocol.
+
+---
+
+## Documentation
+
+- **[Development Guide](./DEVELOPMENT.md)** — Local setup, testing, template sync
+- **[Template Guide](./docs/TEMPLATE-USER-GUIDE.md)** — Creating your own templates
+- **[Best Practices](./docs/BEST-PRACTICES.md)** — Patterns and tips
 
 ---
 

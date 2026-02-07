@@ -77,7 +77,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Task|Read|Bash|WebFetch|Edit|Write|NotebookEdit",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
@@ -162,16 +162,6 @@
       },
       {
         "matcher": "^Task$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python .aiwcli/_cc-native/hooks/add_plan_context.py",
-            "timeout": 5000
-          }
-        ]
-      },
-      {
-        "matcher": "Write",
         "hooks": [
           {
             "type": "command",

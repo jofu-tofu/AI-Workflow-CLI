@@ -52,7 +52,7 @@ class ContextState:
     tags: list = field(default_factory=list)
     created_at: str = ""
     last_active: str = ""
-    mode: str = "idle"                  # idle | has_plan | active
+    mode: str = "idle"                  # idle | has_plan | has_handoff | active
     plan_path: str = None
     plan_hash: str = None               # Content hash for plan matching after /clear
     plan_signature: str = None          # First 200 chars for fallback matching
@@ -60,6 +60,7 @@ class ContextState:
     plan_anchors: list = field(default_factory=list)  # Structural anchors for fuzzy matching
     plan_consumed: bool = False                         # True after plan has been delivered to a session
     handoff_path: str = None
+    handoff_consumed: bool = False                      # True after handoff has been delivered to a session
     session_ids: list = field(default_factory=list)
     last_session: dict = None           # {session_id, git_branch, uncommitted_files, last_commit}
     tasks: list = field(default_factory=list)
@@ -131,6 +132,7 @@ def _dict_to_state(data: Dict[str, Any]) -> ContextState:
         plan_anchors=data.get("plan_anchors", []),
         plan_consumed=data.get("plan_consumed", False),
         handoff_path=data.get("handoff_path"),
+        handoff_consumed=data.get("handoff_consumed", False),
         session_ids=data.get("session_ids", []),
         last_session=data.get("last_session"),
         tasks=data.get("tasks", []),
@@ -481,8 +483,9 @@ def update_mode(
     plan_id: str = None,
     plan_anchors: list = None,
     plan_consumed: bool = None,
+    handoff_consumed: bool = None,
 ) -> Optional[ContextState]:
-    """Change the mode field (idle | has_plan | active), optionally setting plan fields."""
+    """Change the mode field (idle | has_plan | has_handoff | active), optionally setting plan/handoff fields."""
     state = get_context(context_id, project_root)
     if not state:
         return None
@@ -502,8 +505,10 @@ def update_mode(
         state.plan_anchors = plan_anchors
     if plan_consumed is not None:
         state.plan_consumed = plan_consumed
+    if handoff_consumed is not None:
+        state.handoff_consumed = handoff_consumed
 
-    # Clear plan fields when returning to idle
+    # Clear plan/handoff fields when returning to idle
     if mode == "idle":
         state.plan_path = None
         state.plan_hash = None
@@ -511,6 +516,7 @@ def update_mode(
         state.plan_id = None
         state.plan_anchors = []
         state.plan_consumed = False
+        state.handoff_consumed = False
 
     save_state(state, project_root)
     return state
@@ -536,11 +542,13 @@ def maybe_activate(
     if not state:
         return False
 
-    if state.mode in ("idle", "has_plan"):
+    if state.mode in ("idle", "has_plan", "has_handoff"):
         old_mode = state.mode
         kwargs = {}
         if old_mode == "has_plan":
             kwargs["plan_consumed"] = True
+        elif old_mode == "has_handoff":
+            kwargs["handoff_consumed"] = True
         update_mode(context_id, "active", project_root=project_root, **kwargs)
         log_info("context_store", f"maybe_activate ({caller}): {context_id} {old_mode} -> active")
         return True

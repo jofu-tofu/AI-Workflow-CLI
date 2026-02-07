@@ -15,7 +15,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TypeVar
 
-from .logger import log_hook_error, hook_log, log_debug, log_info, log_warn, log_error, log_diagnostic, set_context_path
+from .logger import log_hook_error, hook_log, log_debug, log_info, log_warn, log_error, log_diagnostic, set_context_path, _get_context_path
 
 
 # Context window baseline: tokens not visible in hook data
@@ -307,6 +307,14 @@ def run_hook(main_func: Callable[[], int], hook_name: str = "unknown") -> None:
         exit_code = 0  # Non-blocking
         status = "error"
         error_info = (e, traceback.format_exc())
+
+    # Retroactive HOOK_START: if main() set a context path, re-emit HOOK_START
+    # to the per-context log (original HOOK_START went to global log before
+    # context was resolved).
+    resolved_after = _get_context_path()
+    if resolved_after and resolved_after.exists():
+        hook_log("info", hook_name, "HOOK_START", data=start_data,
+                 context_path=resolved_after, stderr=False)
 
     # HOOK_END
     duration_ms = round((time.monotonic() - start_time) * 1000, 1)

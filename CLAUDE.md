@@ -59,19 +59,20 @@ log_error("hook_name", f"failed: {e}", traceback_str=tb)
 - Logs go to `_output/hook-log.jsonl` (JSONL format) and stderr
 - Control via `HOOK_LOG_LEVEL=warn` (minimum level) or `HOOK_LOG_DISABLE=1`
 
-## Plan Lifecycle (Separation of Concerns)
+## Plan & Handoff Lifecycle (Separation of Concerns)
 
-Plan assignment is decoupled from mode transitions. Each hook has a single responsibility:
+Plan and handoff assignment is decoupled from mode transitions. Each hook has a single responsibility:
 
 | Hook | Event | Responsibility |
 |------|-------|---------------|
 | `archive_plan.py` | PermissionRequest:ExitPlanMode | Archives plan file to `plans/` folder only. No state.json changes. |
-| `session_end.py` | SessionEnd | **Fallback:** assigns plan fields from archived plan if plan_hash missing. Transitions `active` → `has_plan` when `plan_hash` exists **and `plan_consumed` is False**. |
-| `session_start.py` | SessionStart(clear) | Finds `has_plan` context, binds new session, transitions `has_plan` → `active`, sets `plan_consumed=True`. Injects task/git restoration. |
+| `save_handoff.py` | /handoff command (script) | Creates handoff folder, sets `handoff_path` and `handoff_consumed=False`. Mode stays `active`. |
+| `session_end.py` | SessionEnd | **Fallback:** assigns plan fields from archived plan if plan_hash missing. Stages `active` → `has_plan` (plan) or `active` → `has_handoff` (handoff) when not consumed. Plan takes priority. |
+| `session_start.py` | SessionStart(clear) | Finds `has_plan` or `has_handoff` context, binds new session, transitions to `active`, sets consumed flag. Injects restoration context. |
 | `session_start.py` | SessionStart(compact) | Restores context after compaction. Inlines plan content (not auto-pasted in compact). |
-| `context_selector.py` | UserPromptSubmit (via determine_context) | Fallback: cross-session plan matching via hash/signature for edge cases. Sets `plan_consumed=True`. |
+| `context_selector.py` | UserPromptSubmit (via determine_context) | Fallback: plan matching via hash/signature, handoff matching via `has_handoff` mode. Sets consumed flags. |
 
-**Mode lifecycle:**
+**Plan mode lifecycle:**
 ```
 Plan accepted → archive_plan archives file (PermissionRequest, before user decision)
 Session ends  → session_end: fallback assigns plan_hash from archived plan if missing (plan_consumed=False)
@@ -80,20 +81,32 @@ Session ends  → session_end: fallback assigns plan_hash from archived plan if 
 Next /clear   → session_end: plan_consumed=True → skip has_plan (no infinite loop)
 ```
 
+**Handoff mode lifecycle:**
+```
+/handoff runs       → save_handoff: creates doc, sets handoff_path, handoff_consumed=False
+Session ends        → session_end: handoff_path AND !handoff_consumed → mode = has_handoff
+/clear fires        → session_start: has_handoff → active (handoff_consumed=True), inject content
+Next session end    → session_end: handoff_consumed=True → skip re-staging
+Next /clear         → fresh context (no staged handoff)
+```
+
+**Priority: plan > handoff.** If both plan and handoff are staged (rare), plan check runs first in session_end and sets `has_plan`. The handoff check then sees `mode != "active"` and skips.
+
 **Critical: Auto-paste bypasses hooks.** After ExitPlanMode "clear context", Claude Code runs `/clear` and auto-pastes the plan content. This auto-paste is an internal mechanism that does NOT trigger UserPromptSubmit. The `session_start.py` handler for `source=clear` bridges this gap.
 
-**plan_consumed is a one-shot latch.** Set to `True` when a plan transitions from `has_plan` → `active` (consumed by session_start or context_selector). Prevents `session_end` from re-staging the same plan. Reset to `False` when a new plan is archived (fallback assignment in session_end) or when mode returns to idle.
+**Consumed flags are one-shot latches.** `plan_consumed` and `handoff_consumed` are set to `True` when their respective mode transitions from staged (`has_plan`/`has_handoff`) → `active`. Prevents `session_end` from re-staging the same artifact. Reset to `False` when a new artifact is created or when mode returns to idle.
 
-**has_plan is transient.** It exists only between SessionEnd (which sets it) and SessionStart(clear) (which consumes it). It should not persist across multiple sessions. If not consumed, `context_selector.py` in UserPromptSubmit provides fallback matching via plan hash.
+**Staged modes are transient.** `has_plan` and `has_handoff` exist only between SessionEnd (which sets them) and SessionStart(clear) (which consumes them). They should not persist across multiple sessions. If not consumed, `context_selector.py` provides fallback matching.
 
 **Rejection handling:** `archive_plan` archives the file on PermissionRequest (before accept/reject decision). If rejected, the archive exists but `session_end`'s fallback may assign plan_hash. This is acceptable — rejected plans with hash set don't cause harm because has_plan matching in context_selector requires content match.
 
 **Two restore paths:**
-- **source=clear** (plan acceptance): Plan auto-pasted by Claude Code. Hook injects task/git context only.
+- **source=clear** (plan/handoff acceptance): Plan auto-pasted by Claude Code (plans only). Hook injects task/git context and handoff content.
 - **source=compact** (auto-compaction): Plan NOT auto-pasted. Hook inlines plan content via `_build_restore_sections(inline_plan=True)`.
 
 **Design principles:**
-- `has_plan` = transient bridge between SessionEnd and SessionStart(clear)
-- `active` = "working" (with or without plan)
+- `has_plan` / `has_handoff` = transient bridge between SessionEnd and SessionStart(clear)
+- `active` = "working" (with or without plan/handoff)
 - Plan fields (`plan_path`, `plan_hash`, `plan_signature`) are persistent metadata — never cleared by mode transitions
-- `plan_consumed` = one-shot latch preventing infinite plan re-staging
+- `plan_consumed` / `handoff_consumed` = one-shot latches preventing infinite re-staging
+- Valid modes: `idle | has_plan | has_handoff | active`

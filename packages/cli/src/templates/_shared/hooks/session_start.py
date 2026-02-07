@@ -34,7 +34,7 @@ sys.path.insert(0, str(SHARED_LIB.parent))
 from lib.base.hook_utils import emit_context, load_hook_input, log_debug, log_info, log_error, log_diagnostic
 from lib.base.utils import project_dir
 from lib.context.context_store import get_context_by_session_id, get_all_contexts, bind_session, update_mode
-from lib.context.context_formatter import _build_restore_sections
+from lib.context.context_formatter import _build_restore_sections, format_handoff_continuation
 
 
 def _handle_compact_restore(hook_input, session_id, project_root):
@@ -102,7 +102,24 @@ def _handle_clear_restore(hook_input, session_id, project_root):
     ]
 
     if not has_plan:
-        log_debug("session_start", "No has_plan contexts found after /clear")
+        # Check for has_handoff contexts (mirrors plan logic)
+        has_handoff = [
+            c for c in get_all_contexts(status="active", project_root=project_root)
+            if c.mode == "has_handoff"
+        ]
+        if has_handoff:
+            target = has_handoff[0]
+            log_info("session_start", f"Found has_handoff context after /clear: {target.id}")
+            bind_session(target.id, session_id, project_root)
+            log_info("session_start", f"Bound session {session_id[:8]}... to {target.id}")
+            update_mode(target.id, "active", project_root=project_root, handoff_consumed=True)
+            log_info("session_start", f"Transitioned {target.id}: has_handoff -> active (handoff_consumed=True)")
+            restore_context = format_handoff_continuation(target, project_root)
+            emit_context(restore_context)
+            log_info("session_start", f"Injected handoff-restore context for {target.id}")
+            return
+
+        log_debug("session_start", "No has_plan or has_handoff contexts found after /clear")
         return
 
     # Pick the most recently active one (first in list, already sorted)

@@ -9,7 +9,7 @@
 | Hook | Trigger | Purpose |
 |------|---------|---------|
 | `cc-native-plan-review.py` | PreToolUse: ExitPlanMode | Review plans before user approval |
-| `add_plan_context.py` | PostToolUse: AskUserQuestion, PreToolUse: Write | Mark questions asked; add context when writing plan files |
+| `add_plan_context.py` | PostToolUse: AskUserQuestion, PreToolUse: Task | Mark questions asked; nudge Plan subagent to ask questions first |
 | `suggest-fresh-perspective.py` | PostToolUse | Suggest fresh perspective workflow |
 
 ---
@@ -239,6 +239,11 @@ Hooks fail silently on syntax errors - this catches them before they reach produ
 
 | Date | Change |
 |------|--------|
+| 2026-02-07 | Handoff staging lifecycle: `has_handoff` mode + `handoff_consumed` flag mirrors plan lifecycle. `save_handoff.py` no longer transitions to idle — stays active for session_end staging. `session_end.py` stages `active→has_handoff` when handoff_path set and not consumed. `session_start.py` restores `has_handoff→active` on /clear. `context_selector.py` has fallback Case 3b for has_handoff. PostToolUse context_monitor matcher simplified from specific tool list to `*`. |
+| 2026-02-07 | Removed PreToolUse:Write matcher from `add_plan_context.py`. Write-time plan nudges were redundant after consolidating enforcement to PreToolUse:Task. Removed `is_plan_file_write()`, `load_plan_context_config()`, `PHASE_B_ENFORCEMENT`, `nudge_write_questions()`, and `project_dir` import. |
+| 2026-02-07 | Question enforcement is now advisory-only (never blocks). `add_plan_context.py` uses `emit_context()` for all question nudges — no `permissionDecision:deny` anywhere. Removed `emit_context_and_block` import and `TASK_ENFORCEMENT_REASON` constant. |
+| 2026-02-07 | Moved question enforcement to PreToolUse:Task (Plan subagent gate). `add_plan_context.py` now handles three events: PostToolUse:AskUserQuestion, PreToolUse:Task (primary gate), PreToolUse:Write (fallback). Added `is_plan_task()`, `is_internal_call()` guard, `TASK_ENFORCEMENT_CONTEXT` constant. Registered `^Task$` command hook in settings.json. |
+| 2026-02-07 | Deleted `plan_accepted.py` (dead code — PostToolUse:ExitPlanMode never fires due to /clear race). Plan field assignment handled by `session_end.py` fallback. Added `plan_consumed` flag to prevent infinite plan re-staging. |
 | 2026-02-07 | Hook lifecycle diagnostics: all hooks now use `run_hook(main, "hook_name")` entry point. Logs HOOK_START/HOOK_END with template origin, event type, duration_ms, and status. Millisecond timestamps in logger. |
 | 2026-02-07 | Unified logger: all diagnostic logging uses `log_debug/log_info/log_warn/log_error` from `_shared/lib/base/logger.py` instead of eprint/print-to-stderr. Updated debugging and error handling docs. |
 | 2026-02-06 | Merged mark_questions_asked.py into add_plan_context.py. Hook now handles both PostToolUse:AskUserQuestion and PreToolUse:Write. Deleted standalone mark_questions_asked.py. |

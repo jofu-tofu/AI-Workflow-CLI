@@ -132,9 +132,17 @@ def main():
             log_info("session_end", f"Staged plan for next session: {state.id} -> has_plan")
         elif state.plan_hash and state.mode == "active" and state.plan_consumed:
             log_debug("session_end", f"Plan already consumed for {state.id}, not re-staging")
-            log_diagnostic("session_end", "decide", f"Staging plan for {state.id}",
-                            decision="stage_plan", reasoning="plan_hash exists and mode was active",
-                            inputs={"plan_hash": state.plan_hash, "mode_transition": "active->has_plan"})
+            log_diagnostic("session_end", "decide", f"Skipping re-stage for {state.id}",
+                            decision="skip_restage", reasoning="plan_hash exists but plan_consumed=True",
+                            inputs={"plan_hash": state.plan_hash, "plan_consumed": True})
+
+        # Handoff staging (mirrors plan staging above)
+        # Note: if plan already set has_plan, mode != "active" so handoff check skips (plan takes priority)
+        if state.handoff_path and state.mode == "active" and not state.handoff_consumed:
+            state.mode = "has_handoff"
+            log_info("session_end", f"Staged handoff for next session: {state.id} -> has_handoff")
+        elif state.handoff_path and state.mode == "active" and state.handoff_consumed:
+            log_debug("session_end", f"Handoff already consumed for {state.id}, not re-staging")
 
         if save_state(state, project_root):
             log_info("session_end", f"Saved last_session for {state.id}")

@@ -42,10 +42,32 @@ What exactly to build/change
 
 ## Constraints
 - Technical requirements, preferences, or limitations
+
+## Documentation
+Decisions not written down are lost when this session ends. Update the nearest CLAUDE.md and MEMORY.md so the next session inherits what you learned.
+
+**CLAUDE.md** (nearest to changed code — cascades to subdirectories):
+- `exact/path/to/CLAUDE.md` — What to document
+
+**What to write:**
+- Architectural choices and why alternatives were rejected
+- Non-obvious constraints (what breaks if this changes)
+- Workarounds with context on the underlying issue
+- Patterns that prevent future mistakes
+
+**Format:** `## Topic` / `**Decision:** ...` / `**Rationale:** ...`
+
+**MEMORY.md** (cross-session learning for the AI agent):
+- Insight that would prevent a future mistake (e.g., "hook X silently drops field Y")
+
+**Include when:** Architectural decisions, non-obvious constraints, workarounds, or patterns discovered during implementation.
+**Omit entries for:** Routine changes with no decisions (rename, formatting, dependency bump).
+When in doubt, write it — a lean entry is better than a lost decision.
 ```
 
 ### Self-Check
 - [ ] Could I execute this if I forgot our entire conversation?
 - [ ] Are file paths exact (not "the auth file")?
 - [ ] Are implementation details specific (not "use the approach we discussed")?
+- [ ] Do documentation entries capture decisions the next session would otherwise lose?
 """.strip()

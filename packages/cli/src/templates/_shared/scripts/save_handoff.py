@@ -31,7 +31,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(SHARED_ROOT))
 
-from lib.context.context_store import get_context, save_state, update_mode
+from lib.context.context_store import get_context, save_state
 from lib.base.logger import log_info, log_warn, log_error
 from lib.base.atomic_write import atomic_write
 from lib.base.constants import get_handoff_folder_path
@@ -334,21 +334,13 @@ def main():
         state = get_context(context_id, project_root)
         if state:
             state.handoff_path = index_path_str
+            state.handoff_consumed = False
             save_state(state, project_root)
             log_info("save_handoff", f"Set handoff_path: {index_path_str}")
         else:
             log_warn("save_handoff", f"Could not load context state for {context_id}")
     except Exception as e:
         log_warn("save_handoff", f"Handoff saved but auto-resume won't work (context update failed): {e}")
-
-    # Transition context to idle — handoff is saved, no longer "active work"
-    # This prevents auto-selection in new sessions while keeping the context
-    # accessible via explicit caret commands (^, ^N)
-    try:
-        update_mode(context_id, "idle", project_root=project_root)
-        log_info("save_handoff", f"Set mode to 'idle' (dormant) for context: {context_id}")
-    except Exception as e:
-        log_warn("save_handoff", f"Failed to set dormant mode: {e}")
 
     # Output success message (ASCII-safe for Windows)
     print(f"[OK] Created handoff folder: {handoff_folder}")

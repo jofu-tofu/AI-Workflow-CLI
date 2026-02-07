@@ -32,6 +32,7 @@ def _read_plan_content(plan_path: str) -> Tuple[Optional[str], bool, int]:
 MODE_DISPLAY_MAP = {
     "idle": "",
     "has_plan": "[Plan Ready]",
+    "has_handoff": "[Handoff Ready]",
     "active": "[Active]",
 }
 
