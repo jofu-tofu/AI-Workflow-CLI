@@ -54,7 +54,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import emit_context, load_hook_input, parse_context_window
+from lib.base.hook_utils import emit_context, load_hook_input, get_context_percent_remaining
 from lib.base.utils import eprint, project_dir
 from lib.context.context_manager import (
     get_all_contexts,
@@ -73,31 +73,6 @@ SAVE_STATE_THRESHOLD = 60  # Silently save auto-state at 60% remaining
 HANDOFF_SUGGEST_THRESHOLD = 30  # Gentle nudge at 30% remaining (70% used)
 HANDOFF_PREPARE_THRESHOLD = 20  # Stronger warning at 20% remaining (80% used)
 CRITICAL_CONTEXT_THRESHOLD = 10  # Urgent warning at 10% remaining (90% used)
-
-
-def get_percent_remaining_from_context(hook_input: dict) -> Optional[int]:
-    """
-    Fallback: read remaining_percentage from context.json (written by status_line).
-
-    When hook_input doesn't have context_window data, we can read the
-    percentage that status_line.py writes to context.json on every update.
-
-    Args:
-        hook_input: Hook input data from Claude Code
-
-    Returns:
-        Remaining percentage (0-100) or None if not available
-    """
-    session_id = hook_input.get("session_id")
-    if not session_id:
-        return None
-
-    project_root = project_dir(hook_input)
-    context = get_context_by_session_id(session_id, project_root)
-    if not context or not context.context_window:
-        return None
-
-    return context.context_window.get("remaining_percentage")
 
 
 def get_current_context_id(project_root: Path = None) -> Optional[str]:
@@ -323,21 +298,14 @@ def check_context_level(hook_input: dict) -> Optional[str]:
     Returns:
         System reminder string if context is low, None otherwise
     """
-    # === FAST PATH: No I/O, just dict lookups and math ===
+    # === FAST PATH: Try hook input first, then context.json fallback ===
 
-    # 1. Try to get context_window data from hook input (most accurate, real-time)
-    tokens_used, max_tokens = parse_context_window(hook_input)
+    # get_context_percent_remaining tries hook input first (fast dict access),
+    # then falls back to context.json (written by status_line.py)
+    percent_remaining, tokens_used, max_tokens = get_context_percent_remaining(hook_input)
 
-    if tokens_used is not None and max_tokens is not None and max_tokens > 0:
-        remaining = max_tokens - tokens_used
-        percent_remaining = max(0, min(100, int((remaining / max_tokens) * 100)))
-    else:
-        # 2. Fallback: read from context.json (written by status_line.py)
-        percent_remaining = get_percent_remaining_from_context(hook_input)
-        if percent_remaining is None:
-            return None  # No data available from either source
-        tokens_used = None  # Unknown from this source
-        max_tokens = None
+    if percent_remaining is None:
+        return None  # No data available from either source
 
     # 3. Most common case: context is fine, exit early
     if percent_remaining > SAVE_STATE_THRESHOLD:

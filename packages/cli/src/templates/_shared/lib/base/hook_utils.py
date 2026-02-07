@@ -44,6 +44,44 @@ def parse_context_window(hook_input: dict) -> tuple:
     return tokens_used, max_tokens
 
 
+def get_context_percent_remaining(hook_input: dict) -> tuple:
+    """Get context percentage remaining with context.json fallback.
+
+    Tries two sources in order:
+    1. Hook input context_window data (most accurate, real-time)
+    2. context.json remaining_percentage (written by status_line.py)
+
+    Returns:
+        (percent_remaining, tokens_used, max_tokens) where tokens_used and
+        max_tokens may be None if data came from context.json fallback.
+        Returns (None, None, None) if no data available from either source.
+    """
+    # Source 1: Hook input (most accurate)
+    tokens_used, max_tokens = parse_context_window(hook_input)
+    if tokens_used is not None and max_tokens is not None and max_tokens > 0:
+        remaining = max_tokens - tokens_used
+        percent_remaining = max(0, min(100, int((remaining / max_tokens) * 100)))
+        return percent_remaining, tokens_used, max_tokens
+
+    # Source 2: context.json fallback (written by status_line.py)
+    try:
+        from .utils import project_dir
+        from ..context.context_manager import get_context_by_session_id
+
+        session_id = hook_input.get("session_id")
+        if session_id:
+            project_root = project_dir(hook_input)
+            context = get_context_by_session_id(session_id, project_root)
+            if context and context.context_window:
+                pct = context.context_window.get("remaining_percentage")
+                if pct is not None:
+                    return pct, None, None
+    except Exception:
+        pass  # Fallback failed — degrade gracefully
+
+    return None, None, None
+
+
 # Type variable for generic decorators
 F = TypeVar('F', bound=Callable[..., Any])
 
