@@ -1,110 +1,100 @@
-"""Context management for AIW CLI templates."""
-from .context_manager import (
-    Context,
-    InFlightState,
+"""Context management for AIW CLI templates.
+
+New 2-layer architecture:
+  context_store.py    — CRUD for state.json + index.json
+  context_selector.py — 5-case context selection (session match, caret, plan match, default)
+  context_formatter.py — All display formatting
+  plan_manager.py     — Plan archival, lookup, path extraction
+  task_tracker.py     — Direct state.json task CRUD
+"""
+from .context_store import (
+    ContextState,
     get_all_contexts,
     get_context,
+    get_context_by_session_id,
     create_context,
+    create_context_from_prompt,
     update_context,
     complete_context,
     reopen_context,
     archive_context,
-    update_plan_status,
-    get_context_with_pending_plan,
-    get_context_with_in_flight_work,
+    bind_session,
+    update_mode,
+    load_state,
+    save_state,
 )
-from .event_log import (
-    Task,
-    ContextState,
-    append_event,
-    read_events,
-    get_current_state,
-    are_all_tasks_completed,
-    get_pending_tasks,
+from .context_selector import (
+    determine_context,
+    BlockRequest,
+    parse_chained_caret,
+    resolve_context_by_prefix,
 )
-from .cache import (
-    rebuild_index_from_folders,
-    rebuild_archive_index,
-    rebuild_context_from_events,
-    rebuild_all_caches,
-    verify_cache_integrity,
-)
-from .discovery import (
-    discover_contexts_for_session,
-    get_in_flight_context,
+from .context_formatter import (
     format_context_list,
-    format_pending_plan_continuation,
-    format_implementation_continuation,
-    format_context_picker_prompt,
-    format_ready_for_new_work,
+    format_context_created,
+    format_context_picker_stderr,
+    format_active_context_reminder,
+    format_handoff_continuation,
+    format_plan_continuation,
+    format_active_continuation,
+    format_command_feedback,
     format_relative_time,
 )
-from .task_sync import (
+from .plan_manager import (
+    archive_plan,
+    find_latest_plan,
+    extract_plan_path_from_result,
+)
+from .task_tracker import (
+    add_task,
+    update_task,
+    delete_task,
+    get_tasks,
     generate_task_summary,
-    record_session_start,
-    record_task_created,
-    record_task_started,
-    record_task_completed,
-    record_task_blocked,
     generate_next_task_id,
-)
-from .plan_archive import (
-    archive_plan_to_context,
-)
-from .context_extractor import (
-    extract_context_id,
-    extract_context_id_for_session,
 )
 
 __all__ = [
-    # Data Classes
-    "Context",
-    "InFlightState",
-    "Task",
+    # Data model
     "ContextState",
-    # Context Manager
+    # Context store (CRUD)
     "get_all_contexts",
     "get_context",
+    "get_context_by_session_id",
     "create_context",
+    "create_context_from_prompt",
     "update_context",
     "complete_context",
     "reopen_context",
     "archive_context",
-    "update_plan_status",
-    "get_context_with_pending_plan",
-    "get_context_with_in_flight_work",
-    # Event Log
-    "append_event",
-    "read_events",
-    "get_current_state",
-    "are_all_tasks_completed",
-    "get_pending_tasks",
-    # Cache
-    "rebuild_index_from_folders",
-    "rebuild_archive_index",
-    "rebuild_context_from_events",
-    "rebuild_all_caches",
-    "verify_cache_integrity",
-    # Discovery
-    "discover_contexts_for_session",
-    "get_in_flight_context",
+    "bind_session",
+    "update_mode",
+    "load_state",
+    "save_state",
+    # Context selector
+    "determine_context",
+    "BlockRequest",
+    "parse_chained_caret",
+    "resolve_context_by_prefix",
+    # Formatting
     "format_context_list",
-    "format_pending_plan_continuation",
-    "format_implementation_continuation",
-    "format_context_picker_prompt",
-    "format_ready_for_new_work",
+    "format_context_created",
+    "format_context_picker_stderr",
+    "format_active_context_reminder",
+    "format_handoff_continuation",
+    "format_plan_continuation",
+    "format_active_continuation",
+    "format_command_feedback",
     "format_relative_time",
-    # Task Sync
+    # Plan manager
+    "archive_plan",
+    "find_latest_plan",
+    "extract_plan_path_from_result",
+    # Task tracker
+    "add_task",
+    "update_task",
+    "delete_task",
+    "get_tasks",
     "generate_task_summary",
-    "record_session_start",
-    "record_task_created",
-    "record_task_started",
-    "record_task_completed",
-    "record_task_blocked",
     "generate_next_task_id",
-    # Plan Archive
-    "archive_plan_to_context",
-    # Context Extractor
-    "extract_context_id",
-    "extract_context_id_for_session",
 ]

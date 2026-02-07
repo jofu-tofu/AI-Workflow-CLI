@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
-PreToolUse hook for Write - offers clarifying questions on first plan write.
+Plan context hook - handles both question marking and plan write enforcement.
 
-On the first plan write in a session:
-1. Allow the write to succeed (plan file is created)
-2. Inject context offering clarifying questions
-3. If user wants questions, Claude asks and writes an updated plan
+Registered for two PostToolUse/PreToolUse events:
+- PostToolUse: AskUserQuestion — marks that questions were asked this session.
+- PreToolUse: Write — enforces questions before plan write.
 
-Subsequent writes inject the evaluation context reminder only.
+Phase B of two-phase question system:
+- If AskUserQuestion was NOT called this session: BLOCK the Write
+  and inject the non-obvious questions prompt.
+- If AskUserQuestion WAS called: ALLOW and inject evaluation context.
 
-Fail-safe: Any error skips the questions feature and allows the write.
+Fail-safe: Any error skips enforcement and allows the write.
 """
 
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any, Dict
@@ -27,15 +28,12 @@ sys.path.insert(0, str(_shared_lib_dir))
 
 from utils import (
     eprint,
-    was_questions_offered,
-    mark_questions_offered,
+    mark_questions_asked,
+    was_questions_asked,
     project_dir,
 )
-from base.hook_utils import emit_context
-from templates.plan_context import (
-    get_evaluation_context_reminder,
-    get_questions_offer_template,
-)
+from base.hook_utils import emit_context, emit_context_and_block
+from templates.plan_context import get_evaluation_context_reminder
 
 
 def is_plan_file_write(payload: Dict[str, Any]) -> bool:
@@ -48,7 +46,7 @@ def is_plan_file_write(payload: Dict[str, Any]) -> bool:
 def load_plan_context_config(proj_dir: Path) -> Dict[str, Any]:
     """Load planContext config with defaults."""
     config_path = proj_dir / "_cc-native" / "config.json"
-    defaults = {"enabled": True, "offerClarifyingQuestions": True}
+    defaults = {"enabled": True}
 
     if not config_path.exists():
         return defaults
@@ -61,10 +59,11 @@ def load_plan_context_config(proj_dir: Path) -> Dict[str, Any]:
 
 
 CONTEXT_REMINDER = get_evaluation_context_reminder()
-try:
-    QUESTIONS_OFFER_CONTEXT = get_questions_offer_template()
-except Exception:
-    QUESTIONS_OFFER_CONTEXT = None
+PHASE_B_ENFORCEMENT = (
+    "You must ask non-obvious questions via AskUserQuestion before writing the plan. "
+    "See the question guidance injected earlier in this session by plan_questions_early. "
+    "This surfaces trade-offs and constraints that code exploration alone cannot reveal."
+)
 
 
 def inject_evaluation_context() -> int:
@@ -73,12 +72,13 @@ def inject_evaluation_context() -> int:
     return 0
 
 
-def offer_questions_nonblocking() -> int:
-    """Inject questions offer without blocking - plan Write succeeds."""
-    if QUESTIONS_OFFER_CONTEXT is None:
-        return inject_evaluation_context()
-    context = CONTEXT_REMINDER + "\n\n---\n\n" + QUESTIONS_OFFER_CONTEXT
-    emit_context(context)
+def block_with_questions_prompt() -> int:
+    """Block Write until non-obvious questions have been asked this session."""
+    emit_context_and_block(
+        PHASE_B_ENFORCEMENT,
+        "Ask non-obvious questions via AskUserQuestion before writing the plan. "
+        "This surfaces trade-offs and constraints that code exploration alone cannot reveal."
+    )
     return 0
 
 
@@ -88,7 +88,17 @@ def main() -> int:
     except json.JSONDecodeError:
         return 0  # Fail-safe
 
-    if payload.get("tool_name") != "Write":
+    tool_name = payload.get("tool_name")
+
+    # PostToolUse: AskUserQuestion — mark that questions were asked
+    if tool_name == "AskUserQuestion":
+        session_id = str(payload.get("session_id", ""))
+        if session_id:
+            mark_questions_asked(session_id)
+            eprint(f"[add_plan_context] Marked questions asked for session {session_id[:8]}...")
+        return 0
+
+    if tool_name != "Write":
         return 0
 
     if not is_plan_file_write(payload):
@@ -103,37 +113,34 @@ def main() -> int:
         eprint("[add_plan_context] planContext disabled in config")
         return 0
 
-    if not config.get("offerClarifyingQuestions", True):
-        eprint("[add_plan_context] Config: offerClarifyingQuestions=false, skipping")
-        return inject_evaluation_context()
-
     # Get session_id
     session_id = payload.get("session_id")
 
-    # Fail-safe: skip feature if no session_id
+    # Fail-safe: skip enforcement if no session_id
     if not session_id:
-        eprint("[add_plan_context] No session_id, skipping questions offer")
+        eprint("[add_plan_context] No session_id, skipping enforcement")
         return inject_evaluation_context()
 
     session_id_str = str(session_id)
 
-    # Check if questions already offered this session
-    if was_questions_offered(session_id_str):
-        eprint("[add_plan_context] Questions already offered, injecting eval context")
+    # Check if questions were asked this session
+    if was_questions_asked(session_id_str):
+        eprint("[add_plan_context] Questions asked, allowing write with eval context")
         return inject_evaluation_context()
 
-    # First plan write: offer questions (non-blocking - Write succeeds)
-    eprint("[add_plan_context] First plan write - offering questions (non-blocking)")
-
-    # Mark as offered so subsequent writes only get eval context
-    if not mark_questions_offered(session_id_str):
-        # If marking fails, skip feature (fail-safe)
-        eprint("[add_plan_context] Failed to mark, skipping questions offer")
-        return inject_evaluation_context()
-
-    # Inject questions offer without blocking - Write succeeds
-    return offer_questions_nonblocking()
+    # Questions NOT asked: block and inject Phase B prompt
+    eprint("[add_plan_context] Questions not asked yet - blocking plan write")
+    return block_with_questions_prompt()
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        from base.hook_utils import log_hook_error
+        log_hook_error("add_plan_context", e, "PreToolUse", traceback_str=tb)
+        raise SystemExit(0)

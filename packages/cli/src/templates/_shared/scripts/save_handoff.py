@@ -31,7 +31,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(SHARED_ROOT))
 
-from lib.context.context_manager import get_context, update_handoff_path
+from lib.context.context_store import get_context, save_state, update_mode
 from lib.base.utils import eprint
 from lib.base.atomic_write import atomic_write
 from lib.base.constants import get_handoff_folder_path
@@ -106,16 +106,14 @@ def get_git_status() -> str:
 
 
 def get_plan_path_from_context(context_id: str, project_root: Path) -> Optional[Path]:
-    """Get the plan path from context.json if available."""
+    """Get the plan path from state.json if available."""
     context = get_context(context_id, project_root)
-    if not context or not context.in_flight:
+    if not context or not context.plan_path:
         return None
 
-    artifact_path = context.in_flight.artifact_path
-    if artifact_path:
-        plan_path = Path(artifact_path)
-        if plan_path.exists():
-            return plan_path
+    plan_path = Path(context.plan_path)
+    if plan_path.exists():
+        return plan_path
 
     return None
 
@@ -333,10 +331,24 @@ def main():
     # Set handoff_path so next session auto-detects it
     try:
         index_path_str = str(handoff_folder / "index.md")
-        update_handoff_path(context_id, index_path_str, project_root)
-        eprint(f"[save_handoff] Set handoff_path: {index_path_str}")
+        state = get_context(context_id, project_root)
+        if state:
+            state.handoff_path = index_path_str
+            save_state(state, project_root)
+            eprint(f"[save_handoff] Set handoff_path: {index_path_str}")
+        else:
+            eprint(f"[save_handoff] Warning: Could not load context state for {context_id}")
     except Exception as e:
         eprint(f"[save_handoff] Warning: Handoff saved but auto-resume won't work (context update failed): {e}")
+
+    # Transition context to idle — handoff is saved, no longer "active work"
+    # This prevents auto-selection in new sessions while keeping the context
+    # accessible via explicit caret commands (^, ^N)
+    try:
+        update_mode(context_id, "idle", project_root=project_root)
+        eprint(f"[save_handoff] Set mode to 'idle' (dormant) for context: {context_id}")
+    except Exception as e:
+        eprint(f"[save_handoff] Warning: Failed to set dormant mode: {e}")
 
     # Output success message (ASCII-safe for Windows)
     print(f"[OK] Created handoff folder: {handoff_folder}")

@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
-"""Plan archival hook for ExitPlanMode PostToolUse event.
+"""Plan archival hook for ExitPlanMode PermissionRequest event.
 
-This hook runs when ExitPlanMode completes, extracting the plan path from
-the tool result and archiving it to the active context.
+This hook runs when ExitPlanMode is requested (BEFORE user accepts/rejects),
+extracting the plan path from the tool input and archiving it to the active
+context. It stores plan_hash and plan_signature for content matching after
+/clear but does NOT change the context mode.
 
-Actions:
-1. Detect ExitPlanMode PostToolUse event
-2. Extract plan path from tool result
-3. Check if plan already archived (avoid duplicates)
-4. Determine active context
-5. Archive plan to context's plans folder
-6. Set context in_flight.mode = "pending_implementation"
+Mode transitions happen separately:
+- plan_accepted.py (PostToolUse:ExitPlanMode) -> sets mode to "has_plan"
+- User rejection -> mode stays unchanged (no hook needed)
 
 Usage in .claude/settings.json:
 {
   "hooks": {
-    "PostToolUse": [{
+    "PermissionRequest": [{
       "matcher": "ExitPlanMode",
       "hooks": [{
         "type": "command",
@@ -26,7 +24,6 @@ Usage in .claude/settings.json:
   }
 }
 """
-import json
 import re
 import sys
 from pathlib import Path
@@ -38,11 +35,10 @@ SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
 from lib.base.hook_utils import load_hook_input
-from lib.context.plan_archive import archive_plan_to_context
-from lib.context.context_manager import get_all_contexts
-from lib.context.context_extractor import extract_context_id_for_session
 from lib.base.utils import eprint, project_dir
 from lib.base.constants import get_context_dir
+from lib.context.context_store import get_context_by_session_id, update_mode
+from lib.context.plan_manager import archive_plan, extract_plan_path_from_result
 
 # Import debug cleanup function from cc-native lib
 _cc_native_lib = SCRIPT_DIR.parent / "_cc-native" / "lib"
@@ -51,29 +47,56 @@ try:
     from debug import cleanup_debug_folder
 except ImportError:
     def cleanup_debug_folder(context_path):
-        pass  # Fallback if debug module not available
+        pass
 
 
-def extract_plan_path_from_result(tool_result: str) -> Optional[str]:
-    """
-    Extract plan path from ExitPlanMode tool result.
+def _find_plan_path(hook_input: dict, project_root: Path) -> Optional[str]:
+    """Find the plan file path from hook input or standard locations."""
+    tool_input = hook_input.get("tool_input", {})
+    tool_result = hook_input.get("tool_result", "")
+    hook_event = hook_input.get("hook_event_name", "")
+    tool_name = hook_input.get("tool_name", "")
 
-    Looks for pattern: "Your plan has been saved to: <path>"
-    """
-    match = re.search(r'Your plan has been saved to:\s*(.+\.md)', tool_result)
-    if match:
-        return match.group(1).strip()
-    return None
+    plan_path = None
+
+    # For ExitPlanMode, extract from tool result
+    if tool_name == "ExitPlanMode" and tool_result:
+        plan_path = extract_plan_path_from_result(tool_result)
+        if plan_path:
+            eprint(f"[archive_plan] Extracted plan path from result: {plan_path}")
+
+    # Check tool_input for plan path
+    if not plan_path:
+        plan_path = tool_input.get("plan_path") or tool_input.get("planPath")
+
+    # Search standard locations
+    if not plan_path:
+        eprint("[archive_plan] No plan_path found, searching standard locations...")
+        claude_plans_dir = Path.home() / ".claude" / "plans"
+        if claude_plans_dir.exists():
+            claude_plans = sorted(
+                claude_plans_dir.glob("*.md"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            if claude_plans:
+                plan_path = str(claude_plans[0])
+
+    if not plan_path:
+        for fallback in [
+            project_root / "_output" / "cc-native" / "plans" / "current-plan.md",
+            project_root / "_output" / "plans" / "current-plan.md",
+            project_root / "plan.md",
+        ]:
+            if fallback.exists():
+                plan_path = str(fallback)
+                break
+
+    return plan_path
 
 
 def on_plan_archive():
-    """
-    Plan archival hook - archives plan when exiting plan mode.
-
-    Called from PostToolUse on ExitPlanMode - extracts plan path from result
-    and archives to the active context.
-    """
-    # Read hook input using shared utility
+    """Archive plan on PermissionRequest:ExitPlanMode — stores hash/signature, no mode change."""
     hook_input = load_hook_input()
     if not hook_input:
         eprint("[archive_plan] No valid JSON input")
@@ -81,180 +104,89 @@ def on_plan_archive():
 
     hook_event = hook_input.get("hook_event_name", "unknown")
     tool_name = hook_input.get("tool_name", "")
-    print(f"[archive_plan] Hook triggered: {hook_event}")
-    print(f"[archive_plan] Tool name: {tool_name}")
-    print(f"[archive_plan] Hook input keys: {list(hook_input.keys())}")
 
-    # Special handling for ExitPlanMode - don't check permission_mode
-    is_exit_plan_mode = (hook_event == "PostToolUse" and tool_name == "ExitPlanMode")
+    eprint(f"[archive_plan] Hook triggered: {hook_event}, tool: {tool_name}")
 
-    if is_exit_plan_mode:
-        print("[archive_plan] ExitPlanMode detected, proceeding with archival")
-    else:
-        # Check if we're in plan mode for other hooks
-        permission_mode = hook_input.get("permission_mode", "default")
-        print(f"[archive_plan] Permission mode: {permission_mode}")
+    # Only handle PermissionRequest for ExitPlanMode
+    if not (hook_event == "PermissionRequest" and tool_name == "ExitPlanMode"):
+        eprint(f"[archive_plan] Skipping: not PermissionRequest:ExitPlanMode")
+        return
 
-        if permission_mode != "plan":
-            print("[archive_plan] Not in plan mode, skipping archival")
-            return
-
-    # Prevent infinite loops from stop_hook_active
     if hook_input.get("stop_hook_active", False):
-        print("[archive_plan] Stop hook already active, skipping to prevent loop")
+        eprint("[archive_plan] Stop hook active, skipping")
         return
 
-    print(f"[archive_plan] Proceeding with archival via {hook_event}")
-
-    # Get project root from hook input or environment
     project_root = project_dir(hook_input)
-
-    # Get plan path from hook input
-    tool_input = hook_input.get("tool_input", {})
-    tool_result = hook_input.get("tool_result", "")
-
-    # Try to find plan path in various locations
-    plan_path = None
-
-    # For ExitPlanMode, extract plan path from tool result first
-    if is_exit_plan_mode and tool_result:
-        plan_path = extract_plan_path_from_result(tool_result)
-        if plan_path:
-            print(f"[archive_plan] Extracted plan path from ExitPlanMode result: {plan_path}")
-
-    # Check if plan path is directly provided in tool_input
-    if not plan_path and "plan_path" in tool_input:
-        plan_path = tool_input["plan_path"]
-    elif not plan_path and "planPath" in tool_input:
-        plan_path = tool_input["planPath"]
-
-    # If not found yet, search standard locations
-    if not plan_path:
-        print("[archive_plan] No plan_path found, searching standard locations...")
-        # Look for plan in common locations
-        possible_paths = []
-
-        # Check Claude Code plan directory first (~/.claude/plans/)
-        claude_plans_dir = Path.home() / ".claude" / "plans"
-        print(f"[archive_plan] Checking Claude plans dir: {claude_plans_dir}")
-        if claude_plans_dir.exists():
-            # Find any .md file in Claude plans directory
-            claude_plans = list(claude_plans_dir.glob("*.md"))
-            print(f"[archive_plan] Found {len(claude_plans)} .md files in Claude plans dir")
-            # Sort by modification time, newest first
-            if claude_plans:
-                claude_plans.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-                possible_paths.extend(claude_plans)
-                for p in claude_plans[:3]:  # Show first 3
-                    print(f"[archive_plan]   - {p}")
-
-        # Existing fallback paths
-        possible_paths.extend([
-            project_root / "_output" / "cc-native" / "plans" / "current-plan.md",
-            project_root / "_output" / "plans" / "current-plan.md",
-            project_root / "plan.md",
-        ])
-
-        for path in possible_paths:
-            if path.exists():
-                plan_path = str(path)
-                break
+    plan_path = _find_plan_path(hook_input, project_root)
 
     if not plan_path:
-        eprint("[archive_plan] Could not determine plan path")
-        # Don't block - let ExitPlanMode proceed
-        print("[archive_plan] Could not find plan file in any of these locations:")
-        print(f"  - ~/.claude/plans/*.md")
-        print(f"  - {project_root}/_output/cc-native/plans/current-plan.md")
-        print(f"  - {project_root}/_output/plans/current-plan.md")
-        print(f"  - {project_root}/plan.md")
-        print("Plan archival skipped: no plan path found")
+        eprint("[archive_plan] Could not find plan file, skipping archival")
         return
 
-    print(f"[archive_plan] Found plan at: {plan_path}")
-
-    # Resolve plan path relative to project root
+    # Resolve plan path
     plan_file = Path(plan_path)
     if not plan_file.is_absolute():
-        # Ensure we have a valid project_root
-        if project_root is None:
-            project_root = project_dir()
         plan_file = project_root / plan_path
-    else:
-        # On Windows, check if absolute path is on a different drive than project_root
-        # In that case, use the absolute path as-is
-        if sys.platform == 'win32':
-            try:
-                # Check if drives match (e.g., C: vs D:)
-                plan_drive = plan_file.drive.upper() if plan_file.drive else None
-                project_drive = project_root.drive.upper() if hasattr(project_root, 'drive') and project_root.drive else None
-                if plan_drive and project_drive and plan_drive != project_drive:
-                    # Different drives - use absolute path as-is
-                    pass  # plan_file is already set correctly
-            except Exception:
-                pass  # Fall through to use plan_file as-is
 
-    print(f"[archive_plan] Resolved plan file path: {plan_file}")
+    eprint(f"[archive_plan] Resolved plan file: {plan_file}")
 
     if not plan_file.exists():
         eprint(f"[archive_plan] Plan file not found: {plan_file}")
-        print(f"[archive_plan] ERROR: File does not exist at resolved path")
-        print(f"Plan archival skipped: file not found ({plan_path})")
         return
 
-    # Find context by session ID using shared extractor
+    # Find context by session ID
     session_id = hook_input.get("session_id", "unknown")
-    context_id = extract_context_id_for_session(session_id, project_root, "archive_plan")
+    state = get_context_by_session_id(session_id, project_root)
 
-    if not context_id:
+    if not state:
         eprint("[archive_plan] Could not determine context for session")
-        print("Plan archival failed: no context found for this session")
         return
 
-    # Check if plan was already archived (avoid duplicates)
-    contexts = get_all_contexts(status="active", project_root=project_root)
-    for ctx in contexts:
-        if ctx.id == context_id:
-            if ctx.in_flight and ctx.in_flight.mode == "pending_implementation":
-                print(f"[archive_plan] Plan already archived for context '{context_id}', skipping")
-                return
-            break
+    context_id = state.id
 
-    # Archive the plan
-    archived_path, plan_hash = archive_plan_to_context(
-        str(plan_file),
-        context_id,
-        project_root
+    # Skip if already has a plan archived (avoid duplicates)
+    if state.mode == "has_plan" and state.plan_hash:
+        eprint(f"[archive_plan] Plan already archived for '{context_id}', skipping")
+        return
+
+    # Archive the plan (returns path, hash, signature)
+    archived_path, plan_hash, plan_signature = archive_plan(
+        str(plan_file), context_id, project_root
     )
 
     if archived_path:
-        # Clean up debug logs before completing archive
+        # Store plan fields in state.json but do NOT change mode
+        # Mode change happens in plan_accepted.py (PostToolUse:ExitPlanMode)
+        update_mode(
+            context_id,
+            state.mode,  # Keep current mode unchanged
+            project_root=project_root,
+            plan_path=archived_path,
+            plan_hash=plan_hash,
+            plan_signature=plan_signature,
+        )
+
+        # Clean up debug logs
         try:
             context_path = get_context_dir(context_id, project_root)
             cleanup_debug_folder(context_path)
-            print(f"[archive_plan] Cleaned up debug logs for context: {context_id}")
         except Exception as e:
-            print(f"[archive_plan] Warning: could not clean debug folder: {e}")
+            eprint(f"[archive_plan] Warning: could not clean debug folder: {e}")
 
-        print(f"")
-        print(f"[archive_plan] SUCCESS!")
-        print(f"[archive_plan] Plan archived to context: {context_id}")
-        print(f"[archive_plan] Archived path: {archived_path}")
-        print(f"[archive_plan] Source path: {plan_file}")
-        print(f"[archive_plan] Hash: {plan_hash}")
-        print(f"")
-        print("After /clear, SessionStart will auto-continue this context for implementation.")
+        eprint(f"[archive_plan] SUCCESS: archived plan for {context_id}")
+        eprint(f"[archive_plan] Path: {archived_path}, hash: {plan_hash}")
     else:
-        print(f"[archive_plan] FAILED: Could not archive plan for context '{context_id}'")
+        eprint(f"[archive_plan] FAILED: Could not archive plan for '{context_id}'")
 
 
 if __name__ == "__main__":
     try:
         on_plan_archive()
     except Exception as e:
-        # Log errors to stderr
-        eprint(f"[archive_plan] Error: {e}")
         import traceback
-        eprint(traceback.format_exc())
-        # Exit cleanly so hook doesn't block
+        tb = traceback.format_exc()
+        from lib.base.hook_utils import log_hook_error
+        log_hook_error("archive_plan", e, "PermissionRequest", traceback_str=tb)
+        eprint(f"[archive_plan] Error: {e}")
+        eprint(tb)
         sys.exit(0)

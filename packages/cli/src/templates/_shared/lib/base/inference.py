@@ -263,16 +263,16 @@ GOOD: optimize context ID extraction prompting Opus
 Output ONLY the keyword tags separated by spaces. Nothing else. No reasoning, no labels, no punctuation, no quotes, no hyphens, no markdown."""
 
 
-def generate_context_id_slug(prompt: str, timeout: int = 90) -> Optional[str]:
+def generate_context_id_slug(prompt: str, timeout: int = 3) -> Optional[str]:
     """
     Generate a 3-12 word context ID slug from a user prompt using AI inference.
 
-    Uses Opus (smart tier) for maximum quality keyword extraction.
+    Uses Haiku (fast tier) for low-latency keyword extraction within hook timeout budgets.
     Returns a cleaned, validated slug or None on failure.
 
     Args:
         prompt: Raw user prompt to extract keywords from
-        timeout: Timeout in seconds (default 90)
+        timeout: Timeout in seconds (default 3, fits within 5-10s hook budget)
 
     Returns:
         Space-separated keyword slug (3-12 words) or None if failed
@@ -283,7 +283,7 @@ def generate_context_id_slug(prompt: str, timeout: int = 90) -> Optional[str]:
     result = inference(
         system_prompt=CONTEXT_ID_SLUG_PROMPT,
         user_prompt=truncated,
-        level="smart",
+        level="fast",
         timeout=timeout,
     )
 

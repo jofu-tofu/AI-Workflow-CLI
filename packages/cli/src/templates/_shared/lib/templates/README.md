@@ -1,6 +1,6 @@
 # Shared Templates Module
 
-Centralized templates and formatters for consistent context management output across discovery, handoff, and hooks.
+Centralized templates and formatters for consistent context management output across context formatting, handoff, and hooks.
 
 ## Purpose
 
@@ -115,10 +115,6 @@ Plan context templates for the add_plan_context hook.
 
 Returns the evaluation context reminder template that prompts Claude to add evaluation context to plans.
 
-**`get_questions_offer_template() -> str`**
-
-Returns the clarifying questions offer template shown on first plan write.
-
 ## Usage
 
 ### In Discovery Functions
@@ -158,28 +154,24 @@ reason_text = format_reason(doc.reason)
 ### In Hooks
 
 ```python
-from templates.plan_context import (
-    get_evaluation_context_reminder,
-    get_questions_offer_template,
-)
+from templates.plan_context import get_evaluation_context_reminder
 
-# Get plan context templates
+# Get plan context template
 CONTEXT_REMINDER = get_evaluation_context_reminder()
-QUESTIONS_OFFER = get_questions_offer_template()
 ```
 
 ## Dependent Files
 
 Files that import from this module:
 
-- `.aiwcli/_shared/lib/context/discovery.py`
+- `.aiwcli/_shared/lib/context/context_formatter.py`
   - Uses: `get_mode_display`, `get_status_icon`, `format_continuation_header`
 
 - `.aiwcli/_shared/lib/handoff/document_generator.py`
   - Uses: `render_task_list`, `format_continuation_header`, `format_reason`
 
 - `.aiwcli/_cc-native/hooks/add_plan_context.py`
-  - Uses: `get_evaluation_context_reminder`, `get_questions_offer_template`
+  - Uses: `get_evaluation_context_reminder`
 
 ## Design Principles
 

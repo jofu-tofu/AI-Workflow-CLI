@@ -8,12 +8,59 @@ Provides standardized boilerplate for:
 """
 
 import json
+import os
 import sys
+from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TypeVar
 
 from .utils import eprint
+
+_MAX_LOG_SIZE = 512 * 1024  # 512KB
+_TRUNCATE_TO = 256 * 1024   # 256KB
+
+
+def log_hook_error(hook_name: str, error: Exception, hook_event: str = "unknown", traceback_str: str = "") -> None:
+    """Write a summary-level error to _output/hook-errors.log.
+
+    Format: [ISO-timestamp] [hook_name] [hook_event] ErrorType: message
+    Optionally followed by full traceback if traceback_str is provided.
+    Message capped at 200 chars, newlines stripped.
+    File truncated to most recent 256KB when it exceeds 512KB.
+    Opt-out via HOOK_ERROR_LOG_DISABLE=1 env var.
+    Never raises — wrapped in try/except pass.
+    """
+    try:
+        if os.environ.get("HOOK_ERROR_LOG_DISABLE") == "1":
+            return
+
+        # Build log line
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S%z")
+        err_type = type(error).__name__
+        msg = str(error).replace("\n", " ").replace("\r", "")[:200]
+        line = f"[{ts}] [{hook_name}] [{hook_event}] {err_type}: {msg}\n"
+
+        # Append full traceback if provided
+        if traceback_str:
+            line += traceback_str.rstrip() + "\n"
+
+        # Resolve _output relative to project root (best effort)
+        _env_dir = os.environ.get("CLAUDE_PROJECT_DIR", "")
+        project_root = Path(_env_dir) if _env_dir else Path.cwd()
+        log_path = project_root / "_output" / "hook-errors.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Size guard: truncate to most recent _TRUNCATE_TO bytes
+        if log_path.exists() and log_path.stat().st_size > _MAX_LOG_SIZE:
+            data = log_path.read_bytes()
+            log_path.write_bytes(data[-_TRUNCATE_TO:])
+
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception:
+        pass  # Never crash
+
 
 # Context window baseline: tokens not visible in hook data
 # (system prompt, tools, MCP tokens)
@@ -66,14 +113,14 @@ def get_context_percent_remaining(hook_input: dict) -> tuple:
     # Source 2: context.json fallback (written by status_line.py)
     try:
         from .utils import project_dir
-        from ..context.context_manager import get_context_by_session_id
+        from ..context.context_store import get_context_by_session_id
 
         session_id = hook_input.get("session_id")
         if session_id:
             project_root = project_dir(hook_input)
             context = get_context_by_session_id(session_id, project_root)
-            if context and context.context_window:
-                pct = context.context_window.get("remaining_percentage")
+            if context and context.last_session:
+                pct = context.last_session.get("context_remaining_pct")
                 if pct is not None:
                     return pct, None, None
     except Exception:
@@ -185,12 +232,17 @@ def safe_hook_main(hook_name: str) -> Callable[[F], F]:
             try:
                 return func(*args, **kwargs)
             except json.JSONDecodeError as e:
+                import traceback
+                tb = traceback.format_exc()
+                log_hook_error(hook_name, e, traceback_str=tb)
                 eprint(f"[{hook_name}] JSON decode error: {e}")
                 return 0
             except Exception as e:
-                eprint(f"[{hook_name}] Unexpected error: {e}")
                 import traceback
-                eprint(traceback.format_exc())
+                tb = traceback.format_exc()
+                log_hook_error(hook_name, e, traceback_str=tb)
+                eprint(f"[{hook_name}] Unexpected error: {e}")
+                eprint(tb)
                 return 0
         return wrapper  # type: ignore
     return decorator
@@ -233,17 +285,29 @@ def emit_context_and_block(
     print(json.dumps(out, ensure_ascii=ensure_ascii))
 
 
-def run_hook(main_func: Callable[[], int]) -> None:
+def run_hook(main_func: Callable[[], int], hook_name: str = "unknown") -> None:
     """
     Standard hook entry point wrapper.
 
     Calls main function and exits with its return code.
+    Catches unhandled exceptions and logs them before exiting cleanly.
 
     Args:
         main_func: Hook main function that returns exit code
+        hook_name: Name of the hook for error logging
 
     Example:
         if __name__ == "__main__":
-            run_hook(main)
+            run_hook(main, "my_hook")
     """
-    raise SystemExit(main_func())
+    try:
+        raise SystemExit(main_func())
+    except SystemExit:
+        raise
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        log_hook_error(hook_name, e, traceback_str=tb)
+        eprint(f"[{hook_name}] FATAL: {e}")
+        eprint(tb)
+        raise SystemExit(0)

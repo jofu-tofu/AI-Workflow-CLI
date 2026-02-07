@@ -335,4 +335,13 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        from base.hook_utils import log_hook_error
+        log_hook_error("suggest-fresh-perspective", e, "PostToolUse", traceback_str=tb)
+        raise SystemExit(0)

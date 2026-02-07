@@ -151,27 +151,45 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
     # Timestamp prefix using local time, to the minute
     timestamp = datetime.now().strftime("%y%m%d-%H%M")
 
-    if not summary or not summary.strip():
+    try:
+        if not summary or not summary.strip():
+            base_id = f"{timestamp}-context"
+        else:
+            slug = None
+
+            # Tier 1: AI inference for high-quality keyword slugs
+            try:
+                from .inference import generate_context_id_slug
+                ai_slug = generate_context_id_slug(summary)
+                if ai_slug:
+                    # Post-inference stop-word filter: remove generic words the AI included
+                    from .stop_words import STOP_WORDS
+                    filtered_words = [w for w in ai_slug.split() if w.lower() not in STOP_WORDS and len(w) > 1]
+                    if len(filtered_words) >= 3:
+                        slug = sanitize_title(' '.join(filtered_words), max_len=100)
+                    else:
+                        eprint(f"[utils] AI slug too generic after stop-word filter ({len(filtered_words)} words remain), using fallback")
+            except Exception as e:
+                eprint(f"[utils] AI context ID slug failed, using fallback: {e}")
+
+            # Tier 2: Stop-word filtering
+            if not slug:
+                try:
+                    from .stop_words import STOP_WORDS
+                    words = [w for w in summary.lower().split() if w not in STOP_WORDS and len(w) > 1][:12]
+                    slug = sanitize_title(' '.join(words), max_len=50)
+                except Exception as e:
+                    eprint(f"[utils] Stop-word fallback failed: {e}")
+
+            # Tier 3: Simple word-length filter (no imports needed)
+            if not slug or slug == "unknown":
+                words = [w for w in summary.lower().split() if len(w) > 2][:6]
+                slug = sanitize_title(' '.join(words), max_len=50) if words else "context"
+
+            base_id = f"{timestamp}-{slug}"
+    except Exception as e:
+        eprint(f"[utils] Context ID generation failed entirely, using timestamp: {e}")
         base_id = f"{timestamp}-context"
-    else:
-        slug = None
-
-        # Try AI inference first for high-quality keyword slugs
-        try:
-            from .inference import generate_context_id_slug
-            ai_slug = generate_context_id_slug(summary)
-            if ai_slug:
-                slug = sanitize_title(ai_slug, max_len=100)
-        except Exception as e:
-            eprint(f"[utils] AI context ID slug failed, using fallback: {e}")
-
-        # Fallback: stopword filtering
-        if not slug:
-            from .stop_words import STOP_WORDS
-            words = [w for w in summary.lower().split() if w not in STOP_WORDS and len(w) > 1][:12]
-            slug = sanitize_title(' '.join(words), max_len=50)
-
-        base_id = f"{timestamp}-{slug}"
 
     if not existing_ids:
         return base_id

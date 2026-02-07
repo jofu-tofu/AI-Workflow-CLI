@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""SessionEnd hook - records session boundary and saves auto-state.
+"""SessionEnd hook - saves session state to state.json.
 
-Fires when session terminates (quit, /clear, logout). Creates a session
-boundary marker in events.jsonl and writes auto-state.json for restoration.
+Fires when session terminates (quit, /clear, logout). Saves last_session
+data directly to state.json for restoration on next session.
 
 Hook input (from Claude Code):
 {
@@ -18,6 +18,7 @@ Hook output:
 - Silent (no stdout output needed for SessionEnd)
 - Logs to stderr for debugging
 """
+import subprocess
 import sys
 from pathlib import Path
 
@@ -27,15 +28,43 @@ SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
 from lib.base.hook_utils import load_hook_input
-from lib.base.utils import eprint, project_dir
-from lib.context.context_manager import get_context_by_session_id
-from lib.context.event_log import get_current_state, EVENT_AUTO_STATE_SAVED, append_event
-from lib.context.task_sync import record_session_ended
-from lib.context.auto_state import save_auto_state
+from lib.base.utils import eprint, now_iso, project_dir
+from lib.context.context_store import get_context_by_session_id, save_state
+
+
+def _get_git_state(project_root: Path) -> dict:
+    """Capture current git state for restoration."""
+    git_state = {}
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, cwd=str(project_root), timeout=5,
+        )
+        if result.returncode == 0:
+            git_state["branch"] = result.stdout.strip()
+
+        result = subprocess.run(
+            ["git", "diff", "--name-only"],
+            capture_output=True, text=True, cwd=str(project_root), timeout=5,
+        )
+        if result.returncode == 0:
+            files = [f for f in result.stdout.strip().split("\n") if f]
+            git_state["uncommitted_files"] = files
+
+        result = subprocess.run(
+            ["git", "log", "-1", "--oneline"],
+            capture_output=True, text=True, cwd=str(project_root), timeout=5,
+        )
+        if result.returncode == 0:
+            git_state["last_commit_short"] = result.stdout.strip()
+    except Exception as e:
+        eprint(f"[session_end] Git state capture error (non-fatal): {e}")
+
+    return git_state
 
 
 def main():
-    """Record session boundary and save auto-state."""
+    """Save session state to state.json."""
     try:
         hook_input = load_hook_input()
         if not hook_input:
@@ -53,55 +82,34 @@ def main():
         eprint(f"[session_end] Session ending: {session_id[:8]}... reason={source}")
 
         # Find context bound to this session
-        context = get_context_by_session_id(session_id, project_root)
-        if not context:
+        state = get_context_by_session_id(session_id, project_root)
+        if not state:
             eprint("[session_end] No context bound to this session, skipping")
             return
 
-        context_id = context.id
-        eprint(f"[session_end] Found context: {context_id}")
+        eprint(f"[session_end] Found context: {state.id}")
 
-        # Get current task state for the session boundary marker
-        state = get_current_state(context_id, project_root)
-        active_tasks = [t.id for t in state.tasks if t.status == "in_progress"]
-        pending_tasks = [t.id for t in state.tasks if t.status == "pending"]
+        # Capture git state
+        git_state = _get_git_state(project_root)
 
-        # Record session_ended event in events.jsonl
-        record_session_ended(
-            context_id=context_id,
-            session_id=session_id,
-            reason=source,
-            active_tasks=active_tasks,
-            pending_tasks=pending_tasks,
-            project_root=project_root,
-        )
-        eprint(f"[session_end] Recorded session_ended: active={len(active_tasks)}, pending={len(pending_tasks)}")
+        # Save last_session directly to state.json
+        state.last_session = {
+            "session_id": session_id,
+            "save_reason": source,
+            "saved_at": now_iso(),
+            "transcript_path": transcript_path,
+            "git_state": git_state,
+        }
+        state.last_active = now_iso()
 
-        # Save auto-state.json
-        in_flight_mode = context.in_flight.mode if context.in_flight else "none"
-        plan_path = context.in_flight.artifact_path if context.in_flight else None
-        handoff_path = context.in_flight.handoff_path if context.in_flight else None
-
-        saved = save_auto_state(
-            context_id=context_id,
-            session_id=session_id,
-            save_reason=source,
-            project_root=project_root,
-            in_flight_mode=in_flight_mode,
-            plan_path=plan_path,
-            handoff_path=handoff_path,
-            transcript_path=transcript_path,
-        )
-
-        if saved:
-            # Record auto_state_saved event
-            append_event(
-                context_id, EVENT_AUTO_STATE_SAVED, project_root,
-                session_id=session_id, save_reason=source,
-            )
-            eprint(f"[session_end] Auto-state saved for {context_id}")
+        if save_state(state, project_root):
+            eprint(f"[session_end] Saved last_session for {state.id}")
+        else:
+            eprint(f"[session_end] Failed to save state for {state.id}")
 
     except Exception as e:
+        from lib.base.hook_utils import log_hook_error
+        log_hook_error("session_end", e, "SessionEnd")
         eprint(f"[session_end] ERROR: {e}")
         import traceback
         eprint(traceback.format_exc())

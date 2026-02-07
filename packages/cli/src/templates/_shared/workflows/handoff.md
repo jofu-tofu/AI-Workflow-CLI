@@ -19,7 +19,7 @@ Generate a handoff document summarizing the current session's work, decisions, a
 
 ### Step 1: Get Context ID
 
-Extract the `context_id` from the system reminder injected by the context enforcer hook.
+Extract the `context_id` from the system reminder injected by the user_prompt_submit hook.
 
 Look for the pattern in the system reminder:
 ```
@@ -160,8 +160,14 @@ This script:
 2. Parses sections and writes sharded files (index.md, completed-work.md, dead-ends.md, etc.)
 3. Copies the current plan (if any) to plan.md
 4. Records the event in the context's event log (informational only)
+5. Sets the context to dormant (`mode="idle"`) so it won't auto-select in new sessions
 
-Use the handoff folder for context in the next session.
+**After handoff is saved, the context becomes dormant:**
+- It will **not** auto-select when starting new sessions — new work gets a fresh context
+- It remains visible in the context picker (`^`) with a `[Handoff Ready]` label
+- To resume, use `^N` (where N is the context number) to explicitly select it
+- When selected via `^N`, the handoff content is automatically injected into the session
+- The `handoff_path` is cleared after injection to prevent re-injection
 
 ## Dead Ends Section Guidelines
 

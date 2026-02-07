@@ -19,13 +19,8 @@ from typing import Any, Dict, List, Optional
 from ..base.atomic_write import atomic_write
 from ..base.constants import get_context_handoffs_dir, get_context_dir
 from ..base.utils import eprint, now_iso
-from ..context.event_log import (
-    append_event,
-    get_current_state,
-    get_pending_tasks,
-    Task,
-    EVENT_HANDOFF_CREATED,
-)
+from ..context.context_store import get_context as _get_context_state, save_state as _save_state
+from ..context.task_tracker import get_tasks
 from ..templates.formatters import render_task_list, format_continuation_header, format_reason
 
 
@@ -83,9 +78,7 @@ def generate_handoff_document(
     Returns:
         HandoffDocument with file_path set, or None on failure
     """
-    from ..context.context_manager import get_context
-
-    context = get_context(context_id, project_root)
+    context = _get_context_state(context_id, project_root)
     if not context:
         eprint(f"[handoff] ERROR: Context '{context_id}' not found")
         return None
@@ -93,9 +86,9 @@ def generate_handoff_document(
     # Generate session ID
     session_id = str(uuid.uuid4())[:8]
 
-    # Get current state
-    state = get_current_state(context_id, project_root)
-    pending_tasks = get_pending_tasks(context_id, project_root)
+    # Get pending tasks from state.json
+    all_tasks = get_tasks(context_id, project_root)
+    pending_tasks = [t for t in all_tasks if t.get("status") in ("pending", "in_progress", "blocked")]
 
     # Build document
     now = now_iso()
@@ -107,10 +100,10 @@ def generate_handoff_document(
         session_id=session_id,
         reason=reason,
         created_at=now,
-        plan_path=context.in_flight.artifact_path if context.in_flight else None,
+        plan_path=context.plan_path,
         context_folder=str(context_dir),
-        events_log_path=str(context_dir / "events.jsonl"),
-        active_tasks=[_task_to_dict(t) for t in pending_tasks],
+        events_log_path=str(context_dir / "state.json"),
+        active_tasks=pending_tasks,
         completed_tasks_this_session=[
             {"subject": s} for s in (completed_this_session or [])
         ],
@@ -141,28 +134,8 @@ def generate_handoff_document(
         eprint(f"[handoff] ERROR: Failed to write handoff document: {error}")
         return None
 
-    # Record event (informational only - no mode change)
-    append_event(
-        context_id,
-        EVENT_HANDOFF_CREATED,
-        project_root,
-        path=str(file_path),
-        reason=reason,
-        session_id=session_id
-    )
-
     eprint(f"[handoff] Created handoff document: {file_path}")
     return doc
-
-
-def _task_to_dict(task: Task) -> Dict[str, Any]:
-    """Convert Task to dictionary for handoff document."""
-    return {
-        "id": task.id,
-        "subject": task.subject,
-        "status": task.status,
-        "description": task.description,
-    }
 
 
 def _render_handoff_markdown(doc: HandoffDocument) -> str:

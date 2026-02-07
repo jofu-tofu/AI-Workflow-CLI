@@ -25,13 +25,12 @@ packages/cli/src/templates/
 │   ├── hooks/                        # Shared hook scripts (context, tasks, sessions)
 │   └── lib/                          # Shared Python libraries
 │       ├── base/                     #   Core: atomic_write, constants, inference, utils
-│       ├── context/                  #   Context management, event sourcing, discovery
+│       ├── context/                  #   Context CRUD, selection, formatting, plans, tasks
 │       ├── handoff/                  #   Session handoff document generation
 │       └── templates/                #   Output formatters, plan context templates
 │
 ├── cc-native/                        # CC-Native method template
 │   ├── _cc-native/                   #   Method-specific hooks, lib, agents, workflows, scripts
-│   ├── _shared/                      #   Copy of shared infrastructure (installed together)
 │   ├── .claude/                      #   Claude Code: settings.json, commands/, agents/
 │   ├── .windsurf/                    #   Windsurf: workflows/
 │   └── .gitignore
@@ -61,7 +60,7 @@ packages/cli/src/templates/
 
 | Tier | Location | Purpose |
 |------|----------|---------|
-| Shared | `_shared/` | Cross-method hooks and libraries (context management, task sync, sessions) |
+| Shared | `_shared/` | Cross-method hooks and libraries (context management, task tracking, sessions) |
 | Method | `_{method}/` or `.aiwcli/_{method}/` | Method-specific templates, workflows, hooks, config |
 | IDE | `.{ide}/` | IDE-specific command stubs, settings, workflow definitions |
 | Config | `.{ide}/settings.json` | Hooks, model prefs, method settings (merged on install) |
@@ -203,3 +202,4 @@ Load and execute `_{method}/workflows/{name}.md`.
 - Full workflows in IDE command files
 - Hardcoded paths without method namespace
 - Putting hook scripts directly in IDE directories (`.claude/hooks/`)
+- Creating `_shared/` directories inside method templates (e.g., `cc-native/_shared/`). All shared code lives in `packages/cli/src/templates/_shared/`. Method templates reference shared code via sys.path at runtime, not by copying.

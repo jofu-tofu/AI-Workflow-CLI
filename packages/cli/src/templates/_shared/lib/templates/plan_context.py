@@ -1,8 +1,7 @@
 """Plan context templates for add_plan_context hook.
 
 Provides standardized templates for:
-- Evaluation context reminder
-- Clarifying questions offer
+- Evaluation context reminder (injected on plan writes)
 """
 
 
@@ -49,40 +48,4 @@ What exactly to build/change
 - [ ] Could I execute this if I forgot our entire conversation?
 - [ ] Are file paths exact (not "the auth file")?
 - [ ] Are implementation details specific (not "use the approach we discussed")?
-""".strip()
-
-
-def get_questions_offer_template() -> str:
-    """Get the clarifying questions offer template.
-
-    Uses persona-based questioning to surface hidden constraints.
-
-    Returns:
-        Formatted markdown prompt for offering clarifying questions
-    """
-    from .persona_questions import format_questions_for_prompt
-
-    persona_questions = format_questions_for_prompt()
-
-    return f"""
-## First Plan Write - Optional Clarifying Questions
-
-Your initial plan has been saved. Before finalizing, ask the user if they'd like to answer clarifying questions to refine it.
-
-**Use AskUserQuestion now:**
-
-Header: "Questions?"
-Question: "I've drafted an initial plan. Would you like to answer a few clarifying questions from different perspectives so I can refine it?"
-Options:
-- "Yes, ask me questions" (description: "I'll ask targeted questions to surface hidden constraints, then update the plan")
-- "No, proceed as-is" (description: "Skip questions and proceed with the current plan")
-
-### If user chooses YES:
-
-{persona_questions}
-
-After gathering answers, **update the plan file** with refined content before calling ExitPlanMode.
-
-### If user chooses NO:
-Proceed directly to ExitPlanMode with the current plan.
 """.strip()

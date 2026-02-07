@@ -10,18 +10,6 @@ CC-Native uses Claude Code's native tools with minimal workflow overhead. Plan r
 
 ```
 packages/cli/src/templates/cc-native/
-├── _shared/                  # SHARED: Cross-method infrastructure (Phase 1)
-│   ├── lib/
-│   │   ├── base/             # Base utilities
-│   │   │   ├── atomic_write.py   # Cross-platform atomic file writes
-│   │   │   ├── constants.py      # Security and configuration constants
-│   │   │   └── utils.py          # Common functions
-│   │   └── context/          # Context management
-│   │       ├── context_manager.py  # Context CRUD operations
-│   │       ├── event_log.py        # JSONL append/read utilities
-│   │       └── cache.py            # Cache rebuild utilities
-│   └── hooks/
-│       └── session_start.py      # SessionStart hook (context discovery)
 ├── _cc-native/               # METHOD-SPECIFIC: CC-Native template code
 │   ├── workflows/*.md        # Workflow definitions
 │   ├── hooks/                # Hook scripts
@@ -77,8 +65,7 @@ _output/
 ├── index.json                # Global context cache
 ├── contexts/                 # Context folders (method-agnostic)
 │   └── {context-id}/
-│       ├── context.json      # Context state cache
-│       ├── events.jsonl      # Event log (source of truth)
+│       ├── state.json        # Context state (source of truth)
 │       └── plans/            # Archived plans for this context
 │           └── YYYY-MM-DD-{slug}.md
 ├── cc-native/                # CC-Native specific outputs
@@ -159,7 +146,7 @@ CC-Native settings are stored in `_cc-native/plan-review.config.json`:
 
 ---
 
-## Context Management (Phase 1 - Event Sourced)
+## Context Management (Phase 1 - State Based)
 
 CC-Native uses **shared infrastructure** for cross-session context persistence:
 
@@ -168,22 +155,19 @@ _output/
 ├── index.json                        # CACHE: Aggregates all contexts
 └── contexts/                         # All contexts (method-agnostic)
     ├── feature-auth/
-    │   ├── context.json              # CACHE: Derived from events
-    │   ├── events.jsonl              # SOURCE OF TRUTH (append-only)
+    │   ├── state.json                # SOURCE OF TRUTH: Context state
     │   └── plans/                    # Archived plans for this context
     │       └── 2026-01-25-auth.md
     └── another-context/
-        ├── context.json
-        └── events.jsonl
+        └── state.json
 ```
 
 ### Data Hierarchy
 
 | Level | File | Role | Recovery |
 |-------|------|------|----------|
-| 1 (Truth) | `events.jsonl` | Append-only event log | Cannot be rebuilt |
-| 2 (Cache) | `context.json` | Current state snapshot | Rebuild from events |
-| 3 (Cache) | `index.json` | Global context index | Rebuild from context files |
+| 1 (Truth) | `state.json` | Context state (source of truth) | Cannot be rebuilt |
+| 2 (Cache) | `index.json` | Global context index | Rebuild from state files |
 
 ### Context Schema
 
@@ -212,16 +196,6 @@ _output/
 | `planning` | In plan mode | Continue planning |
 | `pending_implementation` | Plan approved | Auto-continue implementation |
 | `implementing` | Implementation active | Continue implementation |
-
-### Event Types
-
-```jsonl
-{"event":"context_created","timestamp":"2026-01-20T10:00:00Z","summary":"JWT auth","method":"cc-native"}
-{"event":"task_added","task_id":"aiw-1","subject":"Add JWT middleware","timestamp":"..."}
-{"event":"task_completed","task_id":"aiw-1","evidence":"tests pass","timestamp":"..."}
-{"event":"plan_created","path":"_output/contexts/.../plans/...","hash":"a1b2c3","timestamp":"..."}
-{"event":"context_completed","timestamp":"..."}
-```
 
 ### Robust Writes
 
@@ -255,12 +229,14 @@ Hook scripts live in `_cc-native/hooks/`. IDE-specific wiring in `.claude/settin
 }
 ```
 
-**Hook order matters:** Reviews run first; archive runs on Edit/Write/Bash. If a review blocks, the plan is not archived. Only plans that pass all reviews get archived.
+**Hook order matters:** Archive runs on PermissionRequest:ExitPlanMode before reviews. If a review blocks, the archived plan is available for reference. Only plans that pass all reviews proceed to implementation.
 
 | Hook | Trigger | Purpose |
 |------|---------|---------|
 | `cc-native-plan-review.py` | ExitPlanMode | Unified review: CLI + orchestrator + agents |
-| `archive_plan.py` | Edit/Write/Bash | Archives approved plans when implementation starts |
+| `archive_plan.py` | PermissionRequest:ExitPlanMode | Archives plan content and stores hash/signature before user acceptance |
+| `plan_accepted.py` | PostToolUse:ExitPlanMode | Sets context mode to has_plan |
+| `plan_questions_early.py` | UserPromptSubmit | Injects Phase A clarification in plan mode |
 
 ### Claude Feedback Mechanism
 
@@ -269,11 +245,10 @@ The unified review hook returns structured JSON to Claude Code:
 ```json
 {
   "hookSpecificOutput": {
-    "hookEventName": "PreToolUse",
-    "additionalContext": "Review results and recommendations..."
-  },
-  "decision": "block",  // Optional: blocks Claude if review fails
-  "reason": "Reason for blocking..."
+    "additionalContext": "Review results and recommendations...",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "Reason for blocking..."
+  }
 }
 ```
 

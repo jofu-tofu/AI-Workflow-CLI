@@ -28,9 +28,7 @@ sys.path.insert(0, str(SHARED_LIB.parent))
 
 from lib.base.hook_utils import load_hook_input
 from lib.base.utils import eprint, project_dir
-from lib.context.context_manager import get_context_by_session_id
-from lib.context.event_log import EVENT_AUTO_STATE_SAVED, append_event
-from lib.context.auto_state import save_auto_state
+from lib.context.context_store import get_context_by_session_id, save_state
 
 
 def main():
@@ -56,30 +54,47 @@ def main():
             eprint("[pre_compact] No context bound to this session, skipping")
             return
 
-        context_id = context.id
-        in_flight_mode = context.in_flight.mode if context.in_flight else "none"
-        plan_path = context.in_flight.artifact_path if context.in_flight else None
-        handoff_path = context.in_flight.handoff_path if context.in_flight else None
-
-        saved = save_auto_state(
-            context_id=context_id,
-            session_id=session_id,
-            save_reason="pre_compact",
-            project_root=project_root,
-            in_flight_mode=in_flight_mode,
-            plan_path=plan_path,
-            handoff_path=handoff_path,
-            transcript_path=transcript_path,
-        )
-
-        if saved:
-            append_event(
-                context_id, EVENT_AUTO_STATE_SAVED, project_root,
-                session_id=session_id, save_reason="pre_compact",
+        # Save last_session snapshot directly to state.json
+        import subprocess
+        git_state = {}
+        try:
+            branch = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True, text=True, timeout=5
             )
-            eprint(f"[pre_compact] Auto-state saved for {context_id}")
+            git_state["branch"] = branch.stdout.strip() if branch.returncode == 0 else "unknown"
+
+            status = subprocess.run(
+                ["git", "status", "--short"],
+                capture_output=True, text=True, timeout=5
+            )
+            if status.returncode == 0 and status.stdout.strip():
+                git_state["uncommitted_files"] = [
+                    line.split(None, 1)[-1] for line in status.stdout.strip().split("\n")[:10]
+                ]
+
+            log = subprocess.run(
+                ["git", "log", "-1", "--format=%h %s"],
+                capture_output=True, text=True, timeout=5
+            )
+            if log.returncode == 0:
+                git_state["last_commit_short"] = log.stdout.strip()
+        except Exception:
+            pass
+
+        from lib.base.utils import now_iso
+        context.last_session = {
+            "session_id": session_id,
+            "saved_at": now_iso(),
+            "save_reason": "pre_compact",
+            "git_state": git_state,
+        }
+        save_state(context, project_root)
+        eprint(f"[pre_compact] State saved for {context.id}")
 
     except Exception as e:
+        from lib.base.hook_utils import log_hook_error
+        log_hook_error("pre_compact", e, "PreCompact")
         eprint(f"[pre_compact] ERROR: {e}")
         import traceback
         eprint(traceback.format_exc())

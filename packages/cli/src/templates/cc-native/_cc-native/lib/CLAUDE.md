@@ -54,7 +54,7 @@ Hooks (cc-native-plan-review.py, etc.)
     └── _shared/lib/ (shared across all methods)
             ├── lib/base/subprocess_utils.py
             ├── lib/base/constants.py
-            └── lib/context/context_manager.py
+            └── lib/context/ (context_store, context_selector, context_formatter, plan_manager, task_tracker)
 ```
 
 **Import direction:** Hooks → cc-native lib → shared lib. Never the reverse.

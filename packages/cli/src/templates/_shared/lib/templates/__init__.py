@@ -6,7 +6,7 @@ This module provides centralized templates for:
 - Task rendering
 - Context continuation headers
 
-Used by discovery.py, document_generator.py, and hooks.
+Used by context_formatter.py, document_generator.py, and hooks.
 """
 
 from .formatters import (
@@ -20,10 +20,7 @@ from .formatters import (
     format_continuation_header,
     format_reason,
 )
-from .plan_context import (
-    get_evaluation_context_reminder,
-    get_questions_offer_template,
-)
+from .plan_context import get_evaluation_context_reminder
 
 __all__ = [
     "MODE_DISPLAY_MAP",
@@ -36,5 +33,4 @@ __all__ = [
     "format_continuation_header",
     "format_reason",
     "get_evaluation_context_reminder",
-    "get_questions_offer_template",
 ]

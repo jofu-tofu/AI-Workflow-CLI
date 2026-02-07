@@ -41,7 +41,7 @@ mv config.json plan-review.config.json
 ### Context-Integrated Reviews (v1.5.0)
 - Reviews written to `_output/contexts/{context_id}/reviews/`
 - Iteration state persists across sessions in context folder
-- Automatic context discovery via session_id or single in-flight context
+- Automatic context selection via session_id or single active context
 
 ### Atomic Writes
 - Cross-platform atomic file writes (Windows + POSIX)

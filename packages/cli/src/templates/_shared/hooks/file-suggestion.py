@@ -36,9 +36,9 @@ from lib.base.constants import (
     get_context_reviews_dir,
     get_context_file_path,
 )
-from lib.context.context_manager import (
+from lib.context.context_store import (
     get_context_by_session_id,
-    get_all_in_flight_contexts,
+    get_all_contexts,
     get_context,
 )
 
@@ -150,13 +150,14 @@ def get_active_context_id(session_id: str, project_root: Path) -> Optional[str]:
             eprint(f"[file-suggestion] Found context by session: {context.id}")
             return context.id
 
-    # Fall back to single in-flight context
-    in_flight = get_all_in_flight_contexts(project_root)
-    if len(in_flight) == 1:
-        eprint(f"[file-suggestion] Using single in-flight context: {in_flight[0].id}")
-        return in_flight[0].id
+    # Fall back to single active (non-idle) context
+    active = [c for c in get_all_contexts(status="active", project_root=project_root)
+              if c.mode != "idle"]
+    if len(active) == 1:
+        eprint(f"[file-suggestion] Using single active context: {active[0].id}")
+        return active[0].id
 
-    eprint(f"[file-suggestion] No unique context found (in-flight: {len(in_flight)})")
+    eprint(f"[file-suggestion] No unique context found (active: {len(active)})")
     return None
 
 
@@ -202,6 +203,8 @@ def main():
         print(json.dumps(suggestions))
 
     except Exception as e:
+        from lib.base.hook_utils import log_hook_error
+        log_hook_error("file-suggestion", e, "SessionStart")
         eprint(f"[file-suggestion] ERROR: {e}")
         import traceback
         eprint(traceback.format_exc())

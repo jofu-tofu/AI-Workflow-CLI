@@ -30,22 +30,20 @@ sys.path.insert(0, str(SHARED_LIB.parent))
 
 from lib.base.hook_utils import load_hook_input
 from lib.base.utils import eprint, project_dir
-from lib.context.context_manager import (
-    update_context_session_id,
-    update_plan_status,
+from lib.context.context_store import (
     get_context,
     get_context_by_session_id,
-    clear_handoff_path,
+    bind_session,
+    update_mode,
+    save_state,
 )
-
-# Import the enforcement module
-from hooks.context_enforcer import determine_context, BlockRequest
+from lib.context.context_selector import determine_context, BlockRequest
 
 
 def format_claudemd_reminder() -> str:
     """Generate reminder to update directory-specific CLAUDE.md files."""
     return """
-## CLAUDE.md — Persistent Memory
+## CLAUDE.md \u2014 Persistent Memory
 
 CLAUDE.md files are this project's persistent memory across sessions. **After making a significant decision or learning something non-obvious during this task, write it to the nearest CLAUDE.md.** If you don't write it, it's lost when this session ends.
 
@@ -55,14 +53,14 @@ CLAUDE.md files are this project's persistent memory across sessions. **After ma
 - Workarounds with context on the underlying issue
 - Patterns that prevent future mistakes
 
-**Placement:** CLAUDE.md files cascade — subdirectories inherit from parents. Update the nearest existing one. Only create a new one at a genuine semantic boundary (package root, technology boundary, domain boundary).
+**Placement:** CLAUDE.md files cascade \u2014 subdirectories inherit from parents. Update the nearest existing one. Only create a new one at a genuine semantic boundary (package root, technology boundary, domain boundary).
 
 **Format:**
 
 ```markdown
 ## [Topic]
 **Decision:** [What was decided]
-**Rationale:** [Why — the non-obvious part]
+**Rationale:** [Why \u2014 the non-obvious part]
 ```
 
 **When in doubt, write it.** A lean entry is better than a lost decision.
@@ -71,30 +69,28 @@ CLAUDE.md files are this project's persistent memory across sessions. **After ma
 
 def _update_in_flight_status(context_id: str, hook_input: dict, project_root: Path) -> None:
     """
-    Update context in-flight status based on permission mode.
+    Update context mode based on permission mode.
 
-    - If permission_mode == "plan": set to "planning"
-    - If permission_mode in ["acceptEdits", "bypassPermissions"]: set to "implementing"
+    - permission_mode == "plan": no-op (planning is runtime-only, not persisted)
+    - permission_mode != "plan" and mode == "idle": set to "active"
+    - permission_mode != "plan" and mode == "has_plan": set to "active" (plan was accepted)
     """
-    context = get_context(context_id, project_root)
-    if not context or not context.in_flight:
+    state = get_context(context_id, project_root)
+    if not state:
         return
 
-    current_mode = context.in_flight.mode
+    current_mode = state.mode
     permission_mode = hook_input.get("permission_mode", "default")
     eprint(f"[user_prompt_submit] Current mode: {current_mode}, permission_mode: {permission_mode}")
 
-    # Set status based on permission mode
+    # planning is runtime-only — don't persist it
     if permission_mode == "plan":
-        if current_mode != "planning":
-            update_plan_status(context_id, "planning", project_root=project_root)
-            eprint(f"[user_prompt_submit] Set status to 'planning'")
-    elif permission_mode != "plan":
-        # Any non-plan permission mode transitions pending/planning to implementing
-        # This includes "default" (after /clear) and "acceptEdits"/"bypassPermissions"
-        if current_mode in ["pending_implementation", "planning", "none"]:
-            update_plan_status(context_id, "implementing", project_root=project_root)
-            eprint(f"[user_prompt_submit] Set status to 'implementing' (permission_mode={permission_mode})")
+        return
+
+    # Transition idle or has_plan to active when not in plan mode
+    if current_mode in ["idle", "has_plan"]:
+        update_mode(context_id, "active", project_root=project_root)
+        eprint(f"[user_prompt_submit] Set mode to 'active' (was '{current_mode}', permission_mode={permission_mode})")
 
 
 def main():
@@ -105,50 +101,46 @@ def main():
     Uses session_id to detect first prompt vs subsequent prompts.
     """
     try:
-        # Read hook input using shared utility
         hook_input = load_hook_input()
-
         if not hook_input:
             return
 
-        # Get user prompt and project root
         user_prompt = hook_input.get("prompt", "")
         project_root = project_dir(hook_input)
         session_id = hook_input.get("session_id", "unknown")
 
         outputs: List[str] = []
-        active_context_id = None  # Track context for CLAUDE.md reminder
+        active_context_id = None
 
         # First-prompt detection: check if session_id is already bound to a context
         existing_context = get_context_by_session_id(session_id, project_root)
 
         if existing_context:
             # NOT first prompt - session already bound to context
-            # Skip expensive context detection
             eprint(f"[user_prompt_submit] Session {session_id[:8]}... already bound to {existing_context.id}")
-            # Still update in-flight status based on permission mode
             _update_in_flight_status(existing_context.id, hook_input, project_root)
             active_context_id = existing_context.id
         elif user_prompt:
             # FIRST prompt - need context detection
             try:
-                context_id, method, context_output = determine_context(user_prompt, project_root, session_id)
+                context_id, method, context_output = determine_context(user_prompt, session_id, project_root)
                 eprint(f"[user_prompt_submit] Context: {method} -> {context_id}")
 
                 if context_id:
                     # Bind session to context
-                    update_context_session_id(context_id, session_id, project_root)
+                    bind_session(context_id, session_id, project_root)
                     eprint(f"[user_prompt_submit] Bound session {session_id[:8]}... to context '{context_id}'")
 
-                    # Update in-flight status based on permission mode
+                    # Update mode based on permission mode
                     _update_in_flight_status(context_id, hook_input, project_root)
                     active_context_id = context_id
 
-                    # Clear handoff_path after it's been injected via context_enforcer
+                    # Clear handoff_path after it's been injected via context_selector
                     try:
                         ctx = get_context(context_id, project_root)
-                        if ctx and ctx.in_flight and ctx.in_flight.handoff_path:
-                            clear_handoff_path(context_id, project_root)
+                        if ctx and ctx.handoff_path:
+                            ctx.handoff_path = None
+                            save_state(ctx, project_root)
                             eprint(f"[user_prompt_submit] Cleared handoff_path for {context_id}")
                     except Exception as e:
                         eprint(f"[user_prompt_submit] Warning: Failed to clear handoff_path: {e}")
@@ -157,23 +149,22 @@ def main():
                     outputs.append(context_output)
 
             except BlockRequest as e:
-                # Block the request - print to stderr and exit with code 2
-                # This shows the context picker to the user
                 print(e.message, file=sys.stderr)
                 sys.exit(2)
 
-        # Inject CLAUDE.md reminder when in implementing mode
+        # Inject CLAUDE.md reminder when in active mode
         if active_context_id:
             context = get_context(active_context_id, project_root)
-            if context and context.in_flight and context.in_flight.mode == "implementing":
+            if context and context.mode == "active":
                 outputs.append(f"<system-reminder>{format_claudemd_reminder()}</system-reminder>")
-                eprint(f"[user_prompt_submit] Injected CLAUDE.md reminder (mode=implementing)")
+                eprint(f"[user_prompt_submit] Injected CLAUDE.md reminder (mode=active)")
 
-        # Print output
         if outputs:
             print("\n\n".join(outputs))
 
     except Exception as e:
+        from lib.base.hook_utils import log_hook_error
+        log_hook_error("user_prompt_submit", e, "UserPromptSubmit")
         eprint(f"[user_prompt_submit] ERROR: {e}")
         import traceback
         eprint(traceback.format_exc())

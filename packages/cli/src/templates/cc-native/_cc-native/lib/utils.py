@@ -150,25 +150,40 @@ def is_plan_already_reviewed(session_id: str, plan_hash: str) -> bool:
         return False
 
 
+def was_plan_previously_denied(session_id: str, plan_hash: str) -> bool:
+    """Check if this plan hash was previously reviewed and denied."""
+    marker_path = get_review_marker_path(session_id)
+    if not marker_path.exists():
+        return False
+    try:
+        data = json.loads(marker_path.read_text(encoding="utf-8"))
+        return data.get("plan_hash") == plan_hash and data.get("decision") == "deny"
+    except Exception:
+        return False
+
+
 def mark_plan_reviewed(
     session_id: str,
     plan_hash: str,
     hook_name: str = "cc-native",
     iteration_state: Optional[Dict[str, Any]] = None,
+    decision: str = "allow",
 ) -> None:
-    """Mark this plan as reviewed (stores hash in marker file).
+    """Mark this plan as reviewed (stores hash and decision in marker file).
 
     Args:
         session_id: The session identifier
         plan_hash: Hash of the plan content
         hook_name: Name of the hook (for logging)
         iteration_state: Optional iteration state dict with current, max, verdict info
+        decision: Review decision - "allow" or "deny"
     """
     marker = get_review_marker_path(session_id)
     try:
         data: Dict[str, Any] = {
             "plan_hash": plan_hash,
             "reviewed_at": datetime.now().isoformat(),
+            "decision": decision,
         }
 
         # Include iteration info if provided
@@ -191,39 +206,37 @@ def mark_plan_reviewed(
 
 
 # ---------------------------
-# Questions offered state
+# Questions asked state
 # ---------------------------
 
-def get_questions_marker_path(session_id: str) -> Path:
-    """Get path to questions-offered marker file for this session."""
+def get_questions_asked_marker_path(session_id: str) -> Path:
+    """Get path to questions-asked marker file for this session."""
     safe_id = re.sub(r'[^a-zA-Z0-9_-]', '_', session_id)[:32]
-    return Path(tempfile.gettempdir()) / f"cc-native-questions-offered-{safe_id}.json"
+    return Path(tempfile.gettempdir()) / f"cc-native-questions-asked-{safe_id}.json"
 
 
-def was_questions_offered(session_id: str) -> bool:
-    """Check if clarifying questions were already offered this session.
+def was_questions_asked(session_id: str) -> bool:
+    """Check if AskUserQuestion was called this session.
 
     Returns False on any error (fail-safe: allow feature to work).
     """
     try:
-        marker = get_questions_marker_path(session_id)
-        return marker.exists()
+        return get_questions_asked_marker_path(session_id).exists()
     except Exception:
         return False
 
 
-def mark_questions_offered(session_id: str) -> bool:
-    """Mark that questions were offered. Returns True on success.
+def mark_questions_asked(session_id: str) -> bool:
+    """Mark that AskUserQuestion was called. Returns True on success.
 
     Only stores timestamp, no user data. Returns False on error.
     """
     try:
-        marker = get_questions_marker_path(session_id)
-        data = {"offered_at": datetime.now().isoformat()}
-        marker.write_text(json.dumps(data), encoding="utf-8")
+        marker = get_questions_asked_marker_path(session_id)
+        marker.write_text(json.dumps({"asked_at": datetime.now().isoformat()}), encoding="utf-8")
         return True
     except Exception as e:
-        eprint(f"[utils] Failed to write questions marker: {e}")
+        eprint(f"[utils] Failed to write questions-asked marker: {e}")
         return False
 
 

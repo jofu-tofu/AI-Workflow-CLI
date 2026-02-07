@@ -2,7 +2,7 @@
 """Status line for Claude Code sessions.
 
 Renders context window usage and git status with ANSI colors.
-Optionally persists context_window data to the session's context.json.
+Optionally persists context_window data to the session's state.json.
 
 Ported from PAI statusline.ts — context and git sections only.
 
@@ -25,7 +25,6 @@ SHARED_ROOT = SCRIPT_DIR.parent  # _shared/
 sys.path.insert(0, str(SHARED_ROOT))
 
 from lib.base.atomic_write import atomic_write
-from lib.base.constants import get_context_file_path
 from lib.base.hook_utils import CONTEXT_BASELINE_TOKENS
 
 # Cache file for session_id → context_id mapping
@@ -428,7 +427,7 @@ def render_git(mode: str, git: Dict[str, Any], dir_name: str) -> None:
 def render_context_manager(
     mode: str,
     context_id: str,
-    context_data: Optional[Dict[str, Any]] = None,
+    context_state=None,
 ) -> None:
     """Render the context manager line (line 3) showing context ID, mode, and plan."""
     # Strip YYMMDD-HHMM- timestamp prefix from context ID for display
@@ -442,28 +441,45 @@ def render_context_manager(
     if len(display_id) > max_id_len:
         truncated_id += "\u2026"
 
-    # Extract in_flight data
-    in_flight = {}
-    if context_data:
-        in_flight = context_data.get("in_flight", {})
-    flight_mode = in_flight.get("mode", "none")
+    # Read state fields (ContextState object from context_store)
+    state_mode = getattr(context_state, "mode", "idle") if context_state else "idle"
+    state_plan_path = getattr(context_state, "plan_path", None) if context_state else None
+
+    # Detect plan mode heuristic: if state is idle but a recent plan file exists
+    # in ~/.claude/plans/, we're likely in active planning (transient, not persisted)
+    active_plan_file = _find_active_plan_file()
+    is_planning = state_mode == "idle" and active_plan_file is not None
 
     # Build mode badge
     mode_badge = ""
-    if flight_mode == "planning":
+    if is_planning:
         label = "Plan" if mode == "nano" else "Planning"
         mode_badge = f" {SLATE_600}\u2502{RESET} {CTX_SECONDARY}Mode:{RESET} {AMBER}{label}{RESET}"
-    elif flight_mode == "pending_implementation":
+    elif state_mode == "has_plan":
         label = "Ready" if mode == "nano" else "Plan Ready"
         mode_badge = f" {SLATE_600}\u2502{RESET} {CTX_SECONDARY}Mode:{RESET} {EMERALD}{label}{RESET}"
-    elif flight_mode == "implementing":
-        label = "Impl" if mode == "nano" else "Implementing"
+    elif state_mode == "active":
+        label = "Active" if mode == "nano" else "Active"
         mode_badge = f" {SLATE_600}\u2502{RESET} {CTX_SECONDARY}Mode:{RESET} {CTX_ACCENT}{label}{RESET}"
+
+    # Resolve plan file path for display
+    plan_file_path = None
+    if is_planning:
+        plan_file_path = active_plan_file
+    elif state_plan_path:
+        plan_file_path = state_plan_path
+    elif state_mode in ("has_plan", "active"):
+        # Fallback: check context's plans/ folder
+        try:
+            from lib.context.plan_manager import find_latest_plan
+            plan_file_path = find_latest_plan(context_id)
+        except Exception:
+            pass
 
     # Build plan name (mini/normal only)
     plan_part = ""
-    if mode in ("mini", "normal") and in_flight.get("artifact_path"):
-        plan_stem = re.sub(r"^\d{4}-\d{2}-\d{2}-", "", Path(in_flight["artifact_path"]).stem)
+    if mode in ("mini", "normal") and plan_file_path:
+        plan_stem = re.sub(r"^\d{4}-\d{2}-\d{2}-", "", Path(plan_file_path).stem)
         max_plan_len = 20 if mode == "mini" else 30
         truncated_plan = plan_stem[:max_plan_len]
         if len(plan_stem) > max_plan_len:
@@ -530,7 +546,7 @@ def _resolve_context_id(session_id: str) -> Optional[str]:
 
     # Cache miss — look up via context manager
     try:
-        from lib.context.context_manager import get_context_by_session_id
+        from lib.context.context_store import get_context_by_session_id
         context = get_context_by_session_id(session_id)
         if context:
             # Update cache
@@ -550,25 +566,40 @@ def _resolve_context_id(session_id: str) -> Optional[str]:
     return None
 
 
-def _load_context_data(context_id: str) -> Optional[Dict[str, Any]]:
-    """Load context.json for a context ID and return parsed dict, or None on error."""
+def _load_context_state(context_id: str):
+    """Load context state from state.json (with context.json fallback)."""
     try:
-        context_file = get_context_file_path(context_id)
-        if context_file.exists():
-            return json.loads(context_file.read_text(encoding="utf-8"))
+        from lib.context.context_store import load_state
+        return load_state(context_id)
     except Exception:
-        pass
-    return None
+        return None
+
+
+def _find_active_plan_file() -> Optional[str]:
+    """Find most recent plan file in ~/.claude/plans/."""
+    try:
+        plans_dir = Path.home() / ".claude" / "plans"
+        if not plans_dir.exists():
+            return None
+        plan_files = list(plans_dir.glob("*.md"))
+        if not plan_files:
+            return None
+        plan_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        return str(plan_files[0])
+    except Exception:
+        return None
 
 
 def _write_context_window(context_id: str, context_window_data: Dict[str, Any]) -> None:
-    """Write context_window data to the context's context.json."""
+    """Write context_window data to state.json last_session."""
     try:
-        from lib.context.context_manager import get_context, _write_context_cache
-        context = get_context(context_id)
-        if context:
-            context.context_window = context_window_data
-            _write_context_cache(context)
+        from lib.context.context_store import get_context as get_ctx, save_state
+        state = get_ctx(context_id)
+        if state:
+            if state.last_session is None:
+                state.last_session = {}
+            state.last_session["context_remaining_pct"] = context_window_data.get("remaining_percentage")
+            save_state(state)
     except Exception:
         pass
 
@@ -649,10 +680,10 @@ def main() -> None:
     # Render context manager line (line 3) with separator
     if context_id:
         print(SEPARATOR)
-        context_data = _load_context_data(context_id)
-        render_context_manager(mode, context_id, context_data)
+        context_state = _load_context_state(context_id)
+        render_context_manager(mode, context_id, context_state)
 
-    # Persist context_window to context.json
+    # Persist context_window to state.json
     if context_id:
         _write_context_window(context_id, {
             "used_percentage": context_pct,

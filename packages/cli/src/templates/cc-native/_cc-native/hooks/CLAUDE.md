@@ -9,8 +9,10 @@
 | Hook | Trigger | Purpose |
 |------|---------|---------|
 | `cc-native-plan-review.py` | PreToolUse: ExitPlanMode | Review plans before user approval |
-| `add_plan_context.py` | PreToolUse: Write | Add context when writing plan files |
+| `add_plan_context.py` | PostToolUse: AskUserQuestion, PreToolUse: Write | Mark questions asked; add context when writing plan files |
 | `suggest-fresh-perspective.py` | PostToolUse | Suggest fresh perspective workflow |
+| `plan_accepted.py` | PostToolUse: ExitPlanMode | Set context mode to has_plan after plan acceptance |
+| `plan_questions_early.py` | UserPromptSubmit | Inject Phase A clarification prompt in plan mode |
 
 ---
 
@@ -137,31 +139,32 @@ print(json.dumps(output))  # Now invalid because of previous print
 Plan review hooks integrate with the shared context system for state management:
 
 ```python
-from lib.context.context_manager import (
+from lib.context.context_store import (
+    ContextState,
+    get_all_contexts,
     get_context_by_session_id,
-    get_all_in_flight_contexts,
 )
 from lib.base.constants import get_context_reviews_dir
 
 # Find active context
-context = get_context_by_session_id(session_id, project_root)
-if not context:
-    # Fallback: find single planning context
-    in_flight = get_all_in_flight_contexts(project_root)
-    planning = [c for c in in_flight if c.in_flight and c.in_flight.mode == "planning"]
-    if len(planning) == 1:
-        context = planning[0]
+state = get_context_by_session_id(session_id, project_root)
+if not state:
+    # Fallback: find single has_plan context
+    contexts = get_all_contexts(project_root)
+    has_plan = [c for c in contexts if c.mode == "has_plan"]
+    if len(has_plan) == 1:
+        state = has_plan[0]
 
 # Get reviews directory for this context
-reviews_dir = get_context_reviews_dir(context.id, project_root)
+reviews_dir = get_context_reviews_dir(state.id, project_root)
 ```
 
-If context isn't found, add diagnostic logging:
+If state isn't found, add diagnostic logging:
 
 ```python
 eprint(f"[hook] Session ID: {session_id}")
-eprint(f"[hook] In-flight contexts: {len(in_flight)}")
-eprint(f"[hook] Modes: {[c.in_flight.mode for c in in_flight]}")
+eprint(f"[hook] Contexts: {len(contexts)}")
+eprint(f"[hook] Modes: {[c.mode for c in contexts]}")
 ```
 
 ---
@@ -192,20 +195,6 @@ if __name__ == "__main__":
 ```
 
 Use `sys.exit(1)` only for intentional blocking (e.g., two-stage review decision denies the plan).
-
----
-
-## Ralph Loop Hook Incompatibility
-
-**Decision:** Ralph child instances run with `--setting-sources user` to bypass all project hooks.
-**Rationale:** Three hooks are fundamentally incompatible with autonomous iteration:
-- `cc-native-plan-review.py` — 10-minute timeout, blocks ExitPlanMode. Would stall every iteration that tries to plan.
-- `context_monitor.py` — Injects "WRAP UP IMMEDIATELY" at 40% context. Overrides Ralph's own prompt instructions.
-- `suggest-fresh-perspective.py` — Injects "try /fresh-perspective" on stuck patterns. Distracts from autonomous execution.
-
-Safe hooks (async task capture, session_end) are collateral — they get disabled too, but Ralph doesn't need them (it has its own state files).
-
-The bypass is in the runner script CLI call, not settings files. This keeps isolation self-contained.
 
 ---
 
@@ -248,5 +237,6 @@ Hooks fail silently on syntax errors - this catches them before they reach produ
 
 | Date | Change |
 |------|--------|
+| 2026-02-06 | Merged mark_questions_asked.py into add_plan_context.py. Hook now handles both PostToolUse:AskUserQuestion and PreToolUse:Write. Deleted standalone mark_questions_asked.py. |
 | 2026-02-06 | Fixed add_plan_context.py trigger docs (was PostToolUse: EnterPlanMode, is PreToolUse: Write). Added emit_context/emit_context_and_block utility docs. |
 | 2026-02-03 | Initial creation |

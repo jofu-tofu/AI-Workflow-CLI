@@ -92,29 +92,26 @@ The brackets indicate optional steps. Research only needs Clarify → Explore �
 
 ---
 
-## Context Management (Phase 1 - Shared Infrastructure)
+## Context Management (Phase 2 - Shared Infrastructure)
 
-CC-Native uses **event-sourced context management** via shared infrastructure in `_shared/`:
+CC-Native uses **direct-state context management** via shared infrastructure in `_shared/`:
 
 ```
 _output/contexts/
 ├── feature-auth/                    # Context folder (method-agnostic)
-│   ├── context.json                 # Derived cache with current state
-│   ├── events.jsonl                 # SOURCE OF TRUTH (append-only)
+│   ├── state.json                   # SOURCE OF TRUTH (direct read/write)
 │   └── plans/                       # Archived plans for this context
 │       └── 2026-01-25-auth-plan.md
 └── another-context/
-    ├── context.json
-    └── events.jsonl
+    └── state.json
 ```
 
 ### Data Hierarchy
 
 | File | Role | Notes |
 |------|------|-------|
-| `events.jsonl` | **Source of truth** | Append-only, never modified |
-| `context.json` | Derived cache | Rebuilt from events if corrupted |
-| `_output/index.json` | Global cache | Aggregates all contexts |
+| `state.json` | **Source of truth** | Direct read/write per context |
+| `_output/index.json` | Global cache | Fast session-to-context lookup |
 
 ### Context Schema
 
@@ -124,27 +121,25 @@ _output/contexts/
   "status": "active",
   "summary": "JWT authentication system",
   "method": "cc-native",
-  "in_flight": {
-    "mode": "implementing",
-    "artifact_path": "_output/contexts/feature-auth/plans/2026-01-25-auth.md",
-    "artifact_hash": "a1b2c3d4"
-  }
+  "mode": "active",
+  "plan_path": "_output/contexts/feature-auth/plans/2026-01-25-auth.md",
+  "plan_hash": "a1b2c3d4",
+  "plan_signature": "approved"
 }
 ```
 
-### In-Flight Modes
+### Context Modes
 
 | Mode | Meaning |
 |------|---------|
-| `none` | Normal context, no special handling |
-| `planning` | Currently in plan mode |
-| `pending_implementation` | Plan approved, awaiting implementation |
-| `implementing` | Implementation in progress |
+| `idle` | No active plan or work in progress |
+| `has_plan` | Plan exists but not yet being implemented |
+| `active` | Implementation in progress |
 
-### Why Event Sourcing?
+### Why 2-Layer Architecture?
 
-- **Crash recovery**: Replay events to rebuild state
-- **Audit trail**: Full history of all actions
+- **Simple reads**: `state.json` is read directly, no event replay needed
+- **Fast lookup**: `index.json` provides global session-to-context mapping without scanning directories
 - **No orphan state**: Contexts always visible (no "in_progress" limbo)
 - **Cross-session**: State persists across `/clear` and session restarts
 
@@ -158,7 +153,7 @@ _output/contexts/
 
 **Check:**
 1. Context exists: `ls _output/contexts/`
-2. Events logged: `cat _output/contexts/{id}/events.jsonl`
+2. State file exists: `cat _output/contexts/{id}/state.json`
 3. Hook logs in terminal output
 
 **Solutions:**
@@ -167,13 +162,15 @@ _output/contexts/
 
 ### Context Recovery
 
-**Symptom:** `context.json` appears corrupted
+**Symptom:** `state.json` appears corrupted
 
-**Fix:** Context can be rebuilt from events:
+**WARNING:** Do NOT delete `state.json` -- it IS the source of truth and cannot be rebuilt.
+
+**Fix:** Edit `state.json` directly to correct invalid fields, or restore from a backup:
 ```bash
-# Events are the source of truth - context.json is derived
-# Delete context.json and it will be rebuilt on next access
-rm _output/contexts/{id}/context.json
+# state.json is the source of truth - do NOT delete it
+# Instead, inspect and fix the JSON manually
+cat _output/contexts/{id}/state.json
 ```
 
 ### Notification Issues

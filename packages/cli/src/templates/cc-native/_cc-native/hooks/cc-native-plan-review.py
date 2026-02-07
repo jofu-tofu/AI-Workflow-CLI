@@ -61,6 +61,7 @@ try:
         compute_plan_hash,
         compute_review_decision,
         is_plan_already_reviewed,
+        was_plan_previously_denied,
         mark_plan_reviewed,
         worst_verdict,
         format_combined_markdown,
@@ -81,9 +82,8 @@ try:
         DEFAULT_COMPLEXITY_CATEGORIES,
     )
     # Import shared context system
-    from lib.context.context_manager import (
+    from lib.context.context_store import (
         get_context_by_session_id,
-        get_all_in_flight_contexts,
         get_all_contexts,
     )
     from lib.base.constants import get_context_reviews_dir, get_review_folder_path, get_context_dir
@@ -176,7 +176,9 @@ def get_active_context_for_review(session_id: str, project_root: Path) -> Option
 
     # Strategy 2: Single planning context (only planning mode)
     all_active = get_all_contexts(status="active", project_root=project_root)
-    planning_contexts = [c for c in all_active if c.in_flight and c.in_flight.mode == "planning"]
+    # In the new system, "planning" is runtime-only (not persisted).
+    # Since this hook fires during ExitPlanMode, any active non-idle context is a candidate.
+    planning_contexts = [c for c in all_active if c.mode in ("active", "has_plan")]
     if len(planning_contexts) == 1:
         eprint(f"[cc-native-plan-review] Found single planning context: {planning_contexts[0].id}")
         return planning_contexts[0]
@@ -185,7 +187,7 @@ def get_active_context_for_review(session_id: str, project_root: Path) -> Option
     if len(planning_contexts) > 1:
         eprint(f"[cc-native-plan-review] Multiple planning contexts ({len(planning_contexts)}), cannot determine which to use")
     elif len(all_active) > 0:
-        modes = [c.in_flight.mode if c.in_flight else "none" for c in all_active]
+        modes = [c.mode for c in all_active]
         eprint(f"[cc-native-plan-review] Found {len(all_active)} active context(s) with modes {modes}, but none in 'planning' mode")
     else:
         eprint("[cc-native-plan-review] No active contexts found")
@@ -509,17 +511,21 @@ def main() -> int:
     context_path = get_context_dir(active_context.id, base)
     eprint(f"[cc-native-plan-review] Context path for debug: {context_path}")
 
-    # Plan-hash deduplication
+    # Plan-hash deduplication (decision-aware)
     plan_hash = compute_plan_hash(plan)
     eprint(f"[cc-native-plan-review] Plan hash: {plan_hash}")
     if is_plan_already_reviewed(session_id, plan_hash):
-        # Still increment iteration even when skipping review
-        existing_iteration = load_iteration_state(reviews_dir)
-        if existing_iteration:
-            existing_iteration["current"] = existing_iteration.get("current", 1) + 1
-            save_iteration_state(reviews_dir, existing_iteration)
-            eprint(f"[cc-native-plan-review] Incremented iteration to {existing_iteration['current']} (review skipped, same hash)")
-        return skip_with_info("Plan content unchanged since last review (same hash). Modify the plan to trigger a new review.")
+        if was_plan_previously_denied(session_id, plan_hash):
+            # Plan was denied and hasn't changed — block, don't re-review
+            emit_context_and_block(
+                "[Plan Review] Plan content unchanged since last review which found issues.",
+                "Plan unchanged since denial. Modify the plan to address review findings, "
+                "then attempt ExitPlanMode again.",
+            )
+            return 0
+        else:
+            # Plan was reviewed and allowed — skip review, allow through
+            return skip_with_info("Plan already reviewed and approved (same hash).")
 
     # Initialize combined result
     cli_results: Dict[str, ReviewerResult] = {}
@@ -781,14 +787,19 @@ def main() -> int:
 
     # Emit output with correct Claude Code hook format
     context_text = "".join(context_parts)
-    mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review", iteration_state)
 
     _REVIEWER_CAVEAT = (
         "Reviewers have limited context compared to your full session — "
         "adopt valid points, use your judgment where they lack context."
     )
 
+    _RESUBMIT_INSTRUCTION = (
+        "IMPORTANT: After revising the plan file, you MUST call ExitPlanMode again "
+        "to trigger re-review. Do not end your turn or ask the user without calling ExitPlanMode."
+    )
+
     if needs_more_iterations:
+        mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review", iteration_state, decision="deny")
         current = iteration_state["current"] - 1  # Display the just-completed iteration
         max_iter = iteration_state["max"]
         remaining = max_iter - current
@@ -798,17 +809,21 @@ def main() -> int:
             f"Read the full review at `{review_file}` and address the findings. "
             f"{_REVIEWER_CAVEAT} "
             f"Revise the plan in place, then attempt ExitPlanMode again. "
-            f"({remaining} revision{'s' if remaining != 1 else ''} remaining)",
+            f"({remaining} revision{'s' if remaining != 1 else ''} remaining) "
+            f"{_RESUBMIT_INSTRUCTION}",
         )
     elif should_deny:
+        mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review", iteration_state, decision="deny")
         emit_context_and_block(
             context_text,
             f"Plan review ({deny_reason}, score={review_score:.2f}). "
             f"Read the full review at `{review_file}` and address the findings. "
             f"{_REVIEWER_CAVEAT} "
-            f"Revise the plan in place, then attempt ExitPlanMode again.",
+            f"Revise the plan in place, then attempt ExitPlanMode again. "
+            f"{_RESUBMIT_INSTRUCTION}",
         )
     else:
+        mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review", iteration_state, decision="allow")
         emit_context(context_text, ensure_ascii=True)
 
     return 0
@@ -817,7 +832,11 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
+    except SystemExit:
+        raise
     except Exception as e:
+        from base.hook_utils import log_hook_error
+        log_hook_error("cc-native-plan-review", e, "PreToolUse")
         import traceback
         print(f"[cc-native-plan-review] FATAL ERROR: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)

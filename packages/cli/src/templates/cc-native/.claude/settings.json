@@ -61,7 +61,16 @@
           {
             "type": "command",
             "command": "python .aiwcli/_shared/hooks/user_prompt_submit.py",
-            "timeout": 5000
+            "timeout": 10000
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .aiwcli/_cc-native/hooks/plan_questions_early.py",
+            "timeout": 3000
           }
         ]
       }
@@ -104,7 +113,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .aiwcli/_shared/hooks/archive_plan.py",
+            "command": "python .aiwcli/_cc-native/hooks/plan_accepted.py",
             "timeout": 5000
           }
         ]
@@ -116,6 +125,16 @@
             "type": "command",
             "command": "python .aiwcli/_cc-native/hooks/suggest-fresh-perspective.py",
             "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .aiwcli/_cc-native/hooks/add_plan_context.py",
+            "timeout": 3000
           }
         ]
       }
@@ -134,20 +153,20 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "TaskCreate",
+        "matcher": "^TaskCreate$",
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Evaluate this TaskCreate call for atomicity. Tasks become ISC criteria checked during verification — vague criteria cannot be verified, so precision matters. A well-specified task includes: (1) Explicit file paths like 'src/lib/auth.py' instead of 'the file above' or 'as discussed', (2) Specific function or component names instead of pronouns like 'it' or 'the function', (3) Clear expected state or behavior that is binary-testable in 2 seconds, (4) Concrete scope — one concern per task, not compound goals. If all four criteria are met and an agent with zero conversation history could verify the task was completed, return ok:true. If any criterion is missing, return ok:false with a response like: 'Missing context: [list each gap — e.g., no file path specified for the auth module, expected behavior is vague: what does fix the bug mean specifically, compound task should be split into separate criteria]'."
+            "prompt": "Evaluate this TaskCreate call for atomicity. Tasks become ISC criteria checked during verification — vague criteria cannot be verified, so precision matters. A well-specified task includes: (1) Explicit file paths like 'src/lib/auth.py' instead of 'the file above' or 'as discussed', (2) Specific function or component names instead of pronouns like 'it' or 'the function', (3) Clear expected state or behavior that is binary-testable in 2 seconds, (4) Concrete scope — one concern per task, not compound goals. If all four criteria are met and an agent with zero conversation history could verify the task was completed, return ok:true. If any criterion is missing, return ok:false with a response like: 'Missing context: [list each gap — e.g., no file path specified for the auth module, expected behavior is vague: what does fix the bug mean specifically, compound task should be split into separate criteria]'. When returning ok:false, end your response with: 'Retry: Re-invoke TaskCreate with a revised subject and description that address the gaps above.' This directive ensures the calling agent corrects and retries rather than abandoning the task."
           }
         ]
       },
       {
-        "matcher": "Task",
+        "matcher": "^Task$",
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "The sub-agent receives ONLY the prompt text — no conversation history, no prior context.\n\nCheck 1 — Dangling References: Does the prompt reference context only visible in this conversation? Look for: 'the file we looked at', 'as discussed above', 'that approach', 'the function we identified', 'as mentioned', or similar unresolved pronouns/demonstratives. If found, return ok:false listing each dangling reference and what concrete value should replace it.\n\nCheck 2 — Implicit Contract: Does the prompt state a discernible goal? Could a fresh agent answer 'what does done look like?' If no clear success criterion or expected output exists, return ok:false noting the missing goal.\n\nIf both checks pass, return ok:true. The prompt need not contain file paths, function names, or technical specifics unless the task requires them — that judgment belongs to the caller, not this hook."
+            "prompt": "The sub-agent receives ONLY the prompt text — no conversation history, no prior context.\n\nCheck 1 — Dangling References: Does the prompt use pronouns or demonstratives that ONLY make sense with prior conversation? Violations: 'the file we looked at', 'as discussed above', 'that approach we chose', 'the error from earlier', 'fix the issue mentioned above'. NOT violations: relative paths ('_output/', 'src/lib/'), search terms ('context-manager', 'auth module'), directory exploration ('find files matching X'), tool names, or any concrete noun — even if imprecise. Only flag references that are truly UNRESOLVABLE without conversation history.\n\nCheck 2 — Implicit Contract: Does the prompt have ANY discernible goal? 'Explore the _output directory and find context files' IS a clear goal. 'Search for hooks that handle Task events' IS a clear goal. 'Read and summarize all files in X' IS a clear goal. Only flag if the prompt is truly goalless — e.g., a sentence fragment with no verb, or pure context with no request.\n\nIf both checks pass, return ok:true. When in doubt, pass — false negatives (letting a vague prompt through) are far less costly than false positives (blocking legitimate work).\n\nWhen returning ok:false, end your response with: 'Retry: Re-invoke the Task tool with a revised prompt that resolves the issues above.'"
           }
         ]
       },
