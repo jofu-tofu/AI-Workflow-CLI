@@ -405,8 +405,11 @@ def determine_context(
         ]
         prompt_lower = user_prompt.lower().strip()
 
-        # Don't auto-create for greetings or help commands
-        if any(prompt_lower.startswith(p) or prompt_lower == p for p in skip_patterns):
+        # Only skip for short greeting-like prompts (under 20 chars)
+        # Longer prompts starting with "hey" are real tasks with a casual opener
+        if len(prompt_lower) <= 20 and any(
+            prompt_lower.startswith(p) or prompt_lower == p for p in skip_patterns
+        ):
             return (None, "no_context_needed", None)
 
         # Auto-create context from prompt
