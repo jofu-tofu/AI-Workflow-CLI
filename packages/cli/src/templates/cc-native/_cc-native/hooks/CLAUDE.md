@@ -195,6 +195,20 @@ Use `sys.exit(1)` only for intentional blocking (e.g., two-stage review decision
 
 ---
 
+## Ralph Loop Hook Incompatibility
+
+**Decision:** Ralph child instances run with `--setting-sources user` to bypass all project hooks.
+**Rationale:** Three hooks are fundamentally incompatible with autonomous iteration:
+- `cc-native-plan-review.py` — 10-minute timeout, blocks ExitPlanMode. Would stall every iteration that tries to plan.
+- `context_monitor.py` — Injects "WRAP UP IMMEDIATELY" at 40% context. Overrides Ralph's own prompt instructions.
+- `suggest-fresh-perspective.py` — Injects "try /fresh-perspective" on stuck patterns. Distracts from autonomous execution.
+
+Safe hooks (async task capture, session_end) are collateral — they get disabled too, but Ralph doesn't need them (it has its own state files).
+
+The bypass is in the runner script CLI call, not settings files. This keeps isolation self-contained.
+
+---
+
 ## DO NOT
 
 These are reminders based on past issues. Not enforcement rules.
