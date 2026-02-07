@@ -54,7 +54,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import emit_context, load_hook_input, get_context_percent_remaining, log_debug, log_info, log_warn, log_error
+from lib.base.hook_utils import emit_context, load_hook_input, get_context_percent_remaining, log_debug, log_info, log_warn, log_error, log_diagnostic
 from lib.base.utils import now_iso, project_dir
 from lib.context.context_store import (
     get_all_contexts,
@@ -209,7 +209,12 @@ def _try_progressive_save(hook_input: dict, percent_remaining: int) -> None:
 
 def check_context_level(hook_input: dict) -> Optional[str]:
     """Check context level and return warning if low."""
+    tool_name = hook_input.get("tool_name", "Unknown")
     percent_remaining, tokens_used, max_tokens = get_context_percent_remaining(hook_input)
+
+    log_diagnostic("context_monitor", "receive", f"tool={tool_name}, pct_remaining={percent_remaining}",
+                    inputs={"tool_name": tool_name, "percent_remaining": percent_remaining,
+                            "tokens_used": tokens_used, "max_tokens": max_tokens})
 
     if percent_remaining is None:
         return None
@@ -229,7 +234,13 @@ def check_context_level(hook_input: dict) -> Optional[str]:
 
     project_root = project_dir(hook_input)
     context_id = get_current_context_id(project_root)
-    tool_name = hook_input.get("tool_name", "Unknown")
+
+    threshold = ("critical" if percent_remaining <= CRITICAL_CONTEXT_THRESHOLD
+                 else "prepare" if percent_remaining <= HANDOFF_PREPARE_THRESHOLD
+                 else "suggest")
+    log_diagnostic("context_monitor", "decide", f"Threshold={threshold} at {percent_remaining}%",
+                    decision=threshold, reasoning=f"{percent_remaining}% remaining",
+                    inputs={"context_id": context_id, "percent_remaining": percent_remaining})
 
     return get_context_warning(percent_remaining, tokens_used, max_tokens, context_id, tool_name)
 

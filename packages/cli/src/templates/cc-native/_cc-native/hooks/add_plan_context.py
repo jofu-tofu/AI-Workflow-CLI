@@ -32,7 +32,7 @@ from utils import (
     project_dir,
 )
 from base.hook_utils import emit_context, emit_context_and_block
-from base.logger import log_debug, log_info, log_warn, log_error
+from base.logger import log_debug, log_info, log_warn, log_error, log_diagnostic
 from templates.plan_context import get_evaluation_context_reminder
 
 
@@ -89,6 +89,9 @@ def main() -> int:
         return 0  # Fail-safe
 
     tool_name = payload.get("tool_name")
+    hook_event = payload.get("hook_event_name", "unknown")
+    log_diagnostic("add_plan_context", "receive", f"tool={tool_name}, event={hook_event}",
+                    inputs={"tool_name": tool_name, "hook_event": hook_event})
 
     # PostToolUse: AskUserQuestion — mark that questions were asked
     if tool_name == "AskUserQuestion":
@@ -126,10 +129,14 @@ def main() -> int:
     # Check if questions were asked this session
     if was_questions_asked(session_id_str):
         log_info("add_plan_context", "Questions asked, allowing write with eval context")
+        log_diagnostic("add_plan_context", "decide", "Questions asked, allowing with eval context",
+                        decision="allow_with_context", reasoning="was_questions_asked=True")
         return inject_evaluation_context()
 
     # Questions NOT asked: block and inject Phase B prompt
     log_info("add_plan_context", "Questions not asked yet - blocking plan write")
+    log_diagnostic("add_plan_context", "decide", "Questions not asked, blocking plan write",
+                    decision="block", reasoning="was_questions_asked=False, enforcing Phase B")
     return block_with_questions_prompt()
 
 

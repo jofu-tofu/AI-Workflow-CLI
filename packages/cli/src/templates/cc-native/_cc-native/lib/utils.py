@@ -613,13 +613,13 @@ def format_combined_markdown(
 def build_inline_review_summary(
     combined: CombinedReviewResult,
     max_issues: int = 5,
-    max_chars: int = 2000,
+    max_chars: int = 800,
 ) -> str:
     """Build compact inline summary of HIGH-severity review findings for additionalContext.
 
-    Extracts per-reviewer verdicts, high-severity issues with suggested fixes,
-    missing sections, and key questions into a compact string suitable for
-    injection into Claude's additionalContext.
+    Returns an overall verdict line plus up to 5 high-severity issues as bullet points.
+    Per-reviewer verdicts, missing sections, and key questions are omitted from inline
+    output (they remain in the full review artifact on disk).
 
     Args:
         combined: The combined review result from all reviewers.
@@ -629,21 +629,11 @@ def build_inline_review_summary(
     Returns:
         Compact summary string, or empty string if no high-severity findings.
     """
-    parts: List[str] = []
-
-    # Per-reviewer verdict + summary (1 line each)
+    # Collect HIGH severity issues across all reviewers
     all_reviewers: List[ReviewerResult] = []
     all_reviewers.extend(combined.cli_reviewers.values())
     all_reviewers.extend(combined.agents.values())
 
-    for r in all_reviewers:
-        summary = r.data.get("summary", "").strip() if r.data else ""
-        # Truncate long summaries
-        if len(summary) > 120:
-            summary = summary[:117] + "..."
-        parts.append(f"- {r.name}: {r.verdict}" + (f" — {summary}" if summary else ""))
-
-    # Collect HIGH severity issues across all reviewers
     high_issues: List[Dict[str, Any]] = []
     for r in all_reviewers:
         if not r.data:
@@ -652,56 +642,27 @@ def build_inline_review_summary(
             if issue.get("severity") == "high":
                 high_issues.append({**issue, "_reviewer": r.name})
 
-    if high_issues:
-        parts.append("")
-        parts.append("HIGH-severity issues:")
-        for issue in high_issues[:max_issues]:
-            cat = issue.get("category", "general")
-            text = issue.get("issue", "")
-            fix = issue.get("suggested_fix", "")
-            reviewer = issue.get("_reviewer", "unknown")
-            line = f"- [{cat}] {text}"
-            if fix:
-                line += f" → Fix: {fix}"
-            line += f" ({reviewer})"
-            parts.append(line)
-        remaining = len(high_issues) - max_issues
-        if remaining > 0:
-            parts.append(f"  ...and {remaining} more high-severity issue(s)")
+    parts: List[str] = []
 
-    # Missing sections (deduplicated across reviewers)
-    missing: List[str] = []
-    seen_missing: set = set()
-    for r in all_reviewers:
-        if not r.data:
-            continue
-        for section in r.data.get("missing_sections", []):
-            lower = section.lower().strip()
-            if lower not in seen_missing:
-                seen_missing.add(lower)
-                missing.append(section)
+    # Overall verdict line
+    parts.append(f"**Plan Review: {combined.overall_verdict.upper()}**"
+                 + (f" ({len(high_issues)} high-severity issue{'s' if len(high_issues) != 1 else ''})"
+                    if high_issues else ""))
 
-    if missing:
-        parts.append("")
-        parts.append(f"Missing sections: {', '.join(missing[:8])}")
-
-    # Key questions (deduplicated)
-    questions: List[str] = []
-    seen_q: set = set()
-    for r in all_reviewers:
-        if not r.data:
-            continue
-        for q in r.data.get("questions", []):
-            lower = q.lower().strip()
-            if lower not in seen_q:
-                seen_q.add(lower)
-                questions.append(q)
-
-    if questions:
-        parts.append("")
-        parts.append("Key questions:")
-        for q in questions[:5]:
-            parts.append(f"- {q}")
+    # High-severity issue bullets (max 5)
+    for issue in high_issues[:max_issues]:
+        cat = issue.get("category", "general")
+        text = issue.get("issue", "")
+        fix = issue.get("suggested_fix", "")
+        reviewer = issue.get("_reviewer", "unknown")
+        line = f"- [{cat}] {text}"
+        if fix:
+            line += f" \u2192 {fix}"
+        line += f" ({reviewer})"
+        parts.append(line)
+    remaining = len(high_issues) - max_issues
+    if remaining > 0:
+        parts.append(f"  ...and {remaining} more")
 
     result = "\n".join(parts)
     if len(result) > max_chars:

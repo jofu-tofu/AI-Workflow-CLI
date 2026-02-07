@@ -15,7 +15,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TypeVar
 
-from .logger import log_hook_error, hook_log, log_debug, log_info, log_warn, log_error, set_context_path
+from .logger import log_hook_error, hook_log, log_debug, log_info, log_warn, log_error, log_diagnostic, set_context_path
 
 
 # Context window baseline: tokens not visible in hook data

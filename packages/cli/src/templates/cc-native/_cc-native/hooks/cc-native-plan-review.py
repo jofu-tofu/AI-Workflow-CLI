@@ -48,7 +48,7 @@ try:
     # Import subprocess and hook utilities
     from lib.base.subprocess_utils import is_internal_call
     from lib.base.hook_utils import emit_context, emit_context_and_block
-    from lib.base.logger import log_debug, log_info, log_warn, log_error
+    from lib.base.logger import log_debug, log_info, log_warn, log_error, log_diagnostic
 
     from utils import (
         DEFAULT_DISPLAY,
@@ -503,6 +503,9 @@ def main() -> int:
 
     log_info("cc-native-plan-review", f"Found plan at: {plan_path}")
     log_debug("cc-native-plan-review", f"Plan length: {len(plan)} chars")
+    log_diagnostic("cc-native-plan-review", "receive", f"plan_size={len(plan)}, session={session_id[:8]}",
+                    inputs={"plan_hash": compute_plan_hash(plan), "plan_size": len(plan),
+                            "session_id": session_id[:12]})
 
     # Find active context for this review (required)
     active_context = get_active_context_for_review(session_id, base)
@@ -666,6 +669,14 @@ def main() -> int:
                 selected_agents = enabled_agents
                 detected_complexity = "medium"  # Default for legacy mode
 
+        log_diagnostic("cc-native-plan-review", "decide",
+                        f"Selected {len(selected_agents)} agents, complexity={detected_complexity}",
+                        decision="agents_selected",
+                        reasoning=f"orchestrator={orch_result is not None}, legacy={legacy_mode}",
+                        inputs={"agents": [a.name for a in selected_agents],
+                                "complexity": detected_complexity,
+                                "mandatory_count": len([a for a in selected_agents if a.name in mandatory_names])})
+
         # Initialize iteration state based on complexity (after orchestrator runs)
         if reviews_dir:
             iteration_state = get_iteration_state_from_context(reviews_dir, detected_complexity, agent_settings)
@@ -752,22 +763,7 @@ def main() -> int:
     # Build inline review summary for additionalContext
     inline_summary = build_inline_review_summary(combined_result)
 
-    context_parts = [
-        "**CC-Native Plan Review Complete**\n\n",
-        f"Review saved to: `{review_file}`\n\n",
-    ]
-
-    if cli_results:
-        cli_verdicts = [f"{name}={r.verdict}" for name, r in cli_results.items()]
-        context_parts.append(f"**CLI Reviewers:** {', '.join(cli_verdicts)}\n")
-
-    if orch_result:
-        context_parts.append(f"**Orchestration:** Complexity=`{orch_result.complexity}`, Agents: {len(agent_results)}\n")
-
-    if inline_summary:
-        context_parts.append(f"\n**Key Findings (high severity):**\n{inline_summary}\n")
-
-    context_parts.append(f"\nFull review: `{review_file}`\n")
+    context_parts = [inline_summary, f"\nFull review: `{review_file}`\n"]
 
     # Review decision — only fail triggers a block
     warn_threshold = agent_settings.get("warnThreshold", 0.5)
@@ -783,6 +779,13 @@ def main() -> int:
 
     # Structured log entries for review influence tracking
     log_info("cc-native-plan-review", f"REVIEW_DECISION: verdict={combined_result.overall_verdict}, deny={should_deny}, score={review_score:.2f}, high_issues={high_count}")
+    log_diagnostic("cc-native-plan-review", "result",
+                    f"verdict={combined_result.overall_verdict}, deny={should_deny}, high={high_count}",
+                    decision="deny" if should_deny else "allow",
+                    reasoning=f"score={review_score:.2f}, threshold={warn_threshold}",
+                    inputs={"overall_verdict": combined_result.overall_verdict,
+                            "high_issue_count": high_count, "review_score": round(review_score, 2),
+                            "cli_count": len(cli_results), "agent_count": len(agent_results)})
 
     # Terminal progress indicator
     verdict_emoji = "✅" if not should_deny else "❌"

@@ -28,7 +28,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import load_hook_input, log_debug, log_info, log_warn, log_error
+from lib.base.hook_utils import load_hook_input, log_debug, log_info, log_warn, log_error, log_diagnostic
 from lib.base.utils import project_dir
 from lib.context.context_store import (
     get_context,
@@ -96,6 +96,9 @@ def main():
         project_root = project_dir(hook_input)
         session_id = hook_input.get("session_id", "unknown")
 
+        log_diagnostic("user_prompt_submit", "receive", f"session={session_id[:8]}, prompt_len={len(user_prompt)}",
+                        inputs={"session_id": session_id[:12], "prompt_length": len(user_prompt)})
+
         outputs: List[str] = []
         active_context_id = None
 
@@ -105,6 +108,9 @@ def main():
         if existing_context:
             # NOT first prompt - session already bound to context
             log_debug("user_prompt_submit", f"Session {session_id[:8]}... already bound to {existing_context.id}")
+            log_diagnostic("user_prompt_submit", "decide", f"Session already bound to {existing_context.id}",
+                            decision="session_match", reasoning="session_id found in existing context",
+                            inputs={"context_id": existing_context.id, "mode": existing_context.mode})
             _update_in_flight_status(existing_context.id, hook_input, project_root)
             active_context_id = existing_context.id
         elif user_prompt:
@@ -112,6 +118,9 @@ def main():
             try:
                 context_id, method, context_output = determine_context(user_prompt, session_id, project_root)
                 log_info("user_prompt_submit", f"Context: {method} -> {context_id}")
+                log_diagnostic("user_prompt_submit", "decide", f"Context detected via {method}: {context_id}",
+                                decision=method, reasoning=f"determine_context returned method={method}",
+                                inputs={"context_id": context_id, "has_output": bool(context_output)})
 
                 if context_id:
                     # Bind session to context
@@ -145,6 +154,9 @@ def main():
             if context and context.mode == "active":
                 outputs.append(f"<system-reminder>{format_claudemd_reminder()}</system-reminder>")
                 log_debug("user_prompt_submit", "Injected CLAUDE.md reminder (mode=active)")
+
+        log_diagnostic("user_prompt_submit", "result", f"context={active_context_id}, outputs={len(outputs)}",
+                        inputs={"active_context_id": active_context_id, "output_count": len(outputs)})
 
         if outputs:
             print("\n\n".join(outputs))

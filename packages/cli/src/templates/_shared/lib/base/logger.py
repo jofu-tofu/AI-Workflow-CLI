@@ -25,7 +25,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 _LEVELS = {"debug": 0, "info": 1, "warn": 2, "error": 3}
 
@@ -215,6 +215,51 @@ def log_warn(hook_name: str, message: str, **kwargs: Any) -> None:
 def log_error(hook_name: str, message: str, **kwargs: Any) -> None:
     """Log an error-level message."""
     hook_log("error", hook_name, message, **kwargs)
+
+
+def log_diagnostic(
+    hook_name: str,
+    phase: str,
+    summary: str,
+    *,
+    inputs: Any = None,
+    decision: Any = None,
+    reasoning: Any = None,
+    component: str = "diag",
+    data: Any = None,
+) -> None:
+    """Log a structured diagnostic entry at a hook decision point.
+
+    Emits a debug-level JSONL entry with tagged, filterable data.
+    Use at key decision points: receive (what came in), decide (what was chosen),
+    result (what happened).
+
+    Args:
+        hook_name: Hook or module name (e.g., "session_start")
+        phase: Decision phase — "receive", "decide", or "result"
+        summary: One-line description (e.g., "source=clear, session=a1b2c3d4")
+        inputs: Input data relevant to this phase
+        decision: The decision made (for "decide" phase)
+        reasoning: Why this decision was made
+        component: Log component tag (default: "diag")
+        data: Extra data to merge into the structured entry
+    """
+    diag_data: Dict[str, Any] = {"phase": phase}
+    if inputs is not None:
+        diag_data["inputs"] = inputs
+    if decision is not None:
+        diag_data["decision"] = decision
+    if reasoning is not None:
+        diag_data["reasoning"] = reasoning
+    if data is not None and isinstance(data, dict):
+        diag_data.update(data)
+    hook_log(
+        "debug",
+        hook_name,
+        f"[DIAG:{phase}] {summary}",
+        component=component,
+        data=diag_data,
+    )
 
 
 def log_hook_error(

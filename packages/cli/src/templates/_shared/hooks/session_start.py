@@ -31,7 +31,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import emit_context, load_hook_input, log_debug, log_info, log_error
+from lib.base.hook_utils import emit_context, load_hook_input, log_debug, log_info, log_error, log_diagnostic
 from lib.base.utils import project_dir
 from lib.context.context_store import get_context_by_session_id, get_all_contexts, bind_session, update_mode
 from lib.context.context_formatter import _build_restore_sections
@@ -80,6 +80,8 @@ def _handle_compact_restore(hook_input, session_id, project_root):
     restore_context = "\n".join(lines)
     emit_context(restore_context)
     log_info("session_start", f"Injected post-compaction restore context for {state.id}")
+    log_diagnostic("session_start", "result", f"Compact restore complete for {state.id}",
+                    decision="injected", inputs={"context_id": state.id, "mode": state.mode})
 
 
 def _handle_clear_restore(hook_input, session_id, project_root):
@@ -142,6 +144,8 @@ def _handle_clear_restore(hook_input, session_id, project_root):
     restore_context = "\n".join(lines)
     emit_context(restore_context)
     log_info("session_start", f"Injected clear-restore context for {target.id}")
+    log_diagnostic("session_start", "result", f"Clear restore complete for {target.id}",
+                    decision="injected", inputs={"context_id": target.id, "mode_transition": "has_plan->active"})
 
 
 def main():
@@ -157,12 +161,20 @@ def main():
         project_root = project_dir(hook_input)
 
         log_info("session_start", f"source={source}, permission_mode={permission_mode}, session={session_id[:8]}...")
+        log_diagnostic("session_start", "receive", f"source={source}, session={session_id[:8]}",
+                        inputs={"source": source, "session_id": session_id[:12], "permission_mode": permission_mode})
 
         if source == "compact":
+            log_diagnostic("session_start", "decide", "Taking compact restore path",
+                            decision="compact_restore", reasoning="source=compact")
             _handle_compact_restore(hook_input, session_id, project_root)
         elif source == "clear":
+            log_diagnostic("session_start", "decide", "Taking clear restore path",
+                            decision="clear_restore", reasoning="source=clear, looking for has_plan context")
             _handle_clear_restore(hook_input, session_id, project_root)
         else:
+            log_diagnostic("session_start", "decide", f"No action for source={source}",
+                            decision="skip", reasoning=f"source={source} has no handler")
             log_debug("session_start", f"No action for source='{source}'")
 
     except Exception as e:

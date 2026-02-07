@@ -28,7 +28,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import load_hook_input, log_debug, log_info, log_warn, log_error
+from lib.base.hook_utils import load_hook_input, log_debug, log_info, log_warn, log_error, log_diagnostic
 from lib.base.utils import now_iso, project_dir
 from lib.context.context_store import get_context_by_session_id, save_state
 from lib.context.plan_manager import find_latest_plan, normalize_plan_content, generate_plan_id, extract_plan_anchors
@@ -82,6 +82,8 @@ def main():
             return
 
         log_info("session_end", f"Session ending: {session_id[:8]}... reason={source}")
+        log_diagnostic("session_end", "receive", f"session={session_id[:8]}, source={source}",
+                        inputs={"session_id": session_id[:12], "source": source})
 
         # Find context bound to this session
         state = get_context_by_session_id(session_id, project_root)
@@ -127,9 +129,16 @@ def main():
         if state.plan_hash and state.mode == "active":
             state.mode = "has_plan"
             log_info("session_end", f"Staged plan for next session: {state.id} -> has_plan")
+            log_diagnostic("session_end", "decide", f"Staging plan for {state.id}",
+                            decision="stage_plan", reasoning="plan_hash exists and mode was active",
+                            inputs={"plan_hash": state.plan_hash, "mode_transition": "active->has_plan"})
 
         if save_state(state, project_root):
             log_info("session_end", f"Saved last_session for {state.id}")
+            log_diagnostic("session_end", "result", f"Saved state for {state.id}",
+                            decision="saved", inputs={"context_id": state.id, "mode": state.mode,
+                                                       "has_plan_hash": bool(state.plan_hash),
+                                                       "git_files": len(git_state.get("uncommitted_files", []))})
         else:
             log_error("session_end", f"Failed to save state for {state.id}")
 
