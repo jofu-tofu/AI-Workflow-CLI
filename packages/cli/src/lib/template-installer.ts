@@ -3,114 +3,6 @@ import {dirname, join} from 'node:path'
 
 import {IdePathResolver} from './ide-path-resolver.js'
 import {pathExists} from './paths.js'
-import {mergeTemplateContent} from './template-merger.js'
-
-/**
- * Deep merge two settings objects, combining hook arrays.
- * Used to merge _shared/settings.json into .claude/settings.json
- */
-function deepMergeSettings(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
-  const result = {...target}
-
-  for (const key of Object.keys(source)) {
-    // Skip comment fields
-    if (key.startsWith('$') || key.startsWith('_')) {
-      continue
-    }
-
-    const sourceValue = source[key]
-    const targetValue = result[key]
-
-    if (key === 'hooks' && typeof sourceValue === 'object' && sourceValue !== null) {
-      // Special handling for hooks - merge by event type
-      result[key] = mergeHooks(
-        (targetValue as Record<string, unknown[]>) || {},
-        sourceValue as Record<string, unknown[]>,
-      )
-    } else if (Array.isArray(sourceValue) && Array.isArray(targetValue)) {
-      // Concatenate arrays
-      result[key] = [...targetValue, ...sourceValue]
-    } else if (typeof sourceValue === 'object' && sourceValue !== null && typeof targetValue === 'object' && targetValue !== null) {
-      // Recursively merge objects
-      result[key] = deepMergeSettings(targetValue as Record<string, unknown>, sourceValue as Record<string, unknown>)
-    } else {
-      // Override with source value
-      result[key] = sourceValue
-    }
-  }
-
-  return result
-}
-
-/**
- * Merge hook configurations, combining arrays for each event type.
- */
-function mergeHooks(
-  target: Record<string, unknown[]>,
-  source: Record<string, unknown[]>,
-): Record<string, unknown[]> {
-  const result: Record<string, unknown[]> = {...target}
-
-  for (const eventType of Object.keys(source)) {
-    const targetHooks = result[eventType]
-    const sourceHooks = source[eventType]
-
-    if (targetHooks && sourceHooks) {
-      // Append source hooks to existing event type
-      result[eventType] = [...targetHooks, ...sourceHooks]
-    } else if (sourceHooks) {
-      // New event type
-      result[eventType] = sourceHooks
-    }
-  }
-
-  return result
-}
-
-/**
- * Merge settings from a source settings.json file into the IDE settings file.
- * Reads from the provided source path and merges into .claude/settings.json at project root.
- *
- * @param targetDir - Project root directory
- * @param sourceSettingsPath - Absolute path to source settings.json file
- * @returns true if merge successful, false otherwise
- */
-async function mergeSharedSettingsFromSource(targetDir: string, sourceSettingsPath: string): Promise<boolean> {
-  const resolver = new IdePathResolver(targetDir)
-  const ideSettingsPath = resolver.getClaudeSettings()
-
-  // Check if source settings exists
-  if (!(await pathExists(sourceSettingsPath))) {
-    return false
-  }
-
-  try {
-    // Read source settings
-    const sourceContent = await fs.readFile(sourceSettingsPath, 'utf8')
-    const sourceSettings = JSON.parse(sourceContent) as Record<string, unknown>
-
-    // Read IDE settings (create empty object if doesn't exist)
-    let ideSettings: Record<string, unknown> = {}
-    if (await pathExists(ideSettingsPath)) {
-      const ideContent = await fs.readFile(ideSettingsPath, 'utf8')
-      ideSettings = JSON.parse(ideContent) as Record<string, unknown>
-    } else {
-      // Create .claude directory if it doesn't exist
-      await fs.mkdir(dirname(ideSettingsPath), {recursive: true})
-    }
-
-    // Merge source settings into IDE settings
-    const mergedSettings = deepMergeSettings(ideSettings, sourceSettings)
-
-    // Write merged settings back
-    await fs.writeFile(ideSettingsPath, JSON.stringify(mergedSettings, null, 4) + '\n', 'utf8')
-
-    return true
-  } catch {
-    // Silently fail on parse/write errors
-    return false
-  }
-}
 
 /**
  * Configuration for template installation
@@ -162,14 +54,8 @@ export interface TemplateInstallationStatus {
 export interface InstallationResult {
   /** List of folder names that were installed (for gitignore) */
   installedFolders: string[]
-  /** Number of files that were merged into existing folders */
-  mergedFileCount: number
-  /** List of folder names that had content merged */
-  mergedFolders: string[]
   /** Whether shared settings were merged into IDE settings */
   sharedSettingsMerged: boolean
-  /** List of folder names that were skipped (already exist) */
-  skippedFolders: string[]
   /** Absolute path to the template that was installed */
   templatePath: string
 }
@@ -285,34 +171,6 @@ export function shouldExclude(name: string): boolean {
 }
 
 /**
- * Merge source directory into destination, skipping existing files.
- * Unlike copyDir, this preserves existing files in destination.
- *
- * @param src - Source directory path
- * @param dest - Destination directory path
- */
-async function mergeDirectory(src: string, dest: string): Promise<void> {
-  await fs.mkdir(dest, {recursive: true})
-  const entries = await fs.readdir(src, {withFileTypes: true})
-
-  for (const entry of entries) {
-    if (shouldExclude(entry.name)) continue
-
-    const srcPath = join(src, entry.name)
-    const destPath = join(dest, entry.name)
-
-    if (entry.isDirectory()) {
-      await mergeDirectory(srcPath, destPath)
-    } else {
-      // Skip if file already exists
-      if (!(await pathExists(destPath))) {
-        await fs.copyFile(srcPath, destPath)
-      }
-    }
-  }
-}
-
-/**
  * Copy directory recursively with proper error handling.
  * Excludes test files, cache directories, and output folders.
  *
@@ -356,21 +214,47 @@ export async function copyDir(src: string, dest: string, excludeIdeFolders: bool
 }
 
 /**
+ * Merge source directory into destination, skipping existing files.
+ * Unlike copyDir, this preserves existing files in destination.
+ *
+ * @param src - Source directory path
+ * @param dest - Destination directory path
+ */
+async function mergeDirectory(src: string, dest: string): Promise<void> {
+  await fs.mkdir(dest, {recursive: true})
+  const entries = await fs.readdir(src, {withFileTypes: true})
+
+  const ops = entries
+    .filter((entry) => !shouldExclude(entry.name))
+    .map(async (entry) => {
+      const srcPath = join(src, entry.name)
+      const destPath = join(dest, entry.name)
+
+      if (entry.isDirectory()) {
+        await mergeDirectory(srcPath, destPath)
+      } else if (!(await pathExists(destPath))) {
+        await fs.copyFile(srcPath, destPath)
+      }
+    })
+  await Promise.all(ops)
+}
+
+/**
  * Install template with IDE-specific folder selection.
- * Supports selective installation - only installs items that don't already exist.
  *
  * Template structure:
- * - Non-dot folders (e.g., _bmad/, GSR/) are installed if not already present
- * - Dot folders (e.g., .claude/, .windsurf/) are installed only if matching IDE flag and not already present
+ * - Non-dot folders (e.g., _bmad/, GSR/) → .aiwcli/ (always overwritten)
+ * - _shared/ → .aiwcli/_shared/ (always overwritten)
+ * - IDE dot folders (e.g., .claude/) → decomposed into method-owned subdirs
+ *
+ * Settings reconstruction is handled separately by the caller via reconstructIdeSettings().
  *
  * @param config - Installation configuration
- * @param skipExisting - If true, skip items that already exist (default: true for regeneration support)
- * @returns Installation result with list of installed and skipped folders
+ * @returns Installation result with list of installed folders
  * @throws Error if template doesn't exist or requested IDE folder not found
  */
 export async function installTemplate(
   config: TemplateInstallConfig,
-  skipExisting: boolean = true,
 ): Promise<InstallationResult> {
   const {templateName, targetDir, ides, templatePath} = config
 
@@ -413,123 +297,91 @@ export async function installTemplate(
   }
 
   const installedFolders: string[] = []
-  const skippedFolders: string[] = []
-  const mergedFolders: string[] = []
-  let mergedFileCount = 0
 
   // Create .aiwcli container folder for method-specific files
   const resolver = new IdePathResolver(targetDir)
   const containerDir = resolver.getAiwcliContainer()
   await fs.mkdir(containerDir, {recursive: true})
 
-  // Install non-dot folders into .aiwcli/ container (skip if already exist and skipExisting is true)
+  // Install non-dot folders into .aiwcli/ container (always overwrite)
   const nonDotInstalls = nonDotFolders.map(async (folder) => {
     const srcPath = join(templatePath, folder)
-    // Destination is inside .aiwcli/ container
     const destPath = join(containerDir, folder)
-
-    if (skipExisting && (await pathExists(destPath))) {
-      return {folder, skipped: true}
-    }
-
     await copyDir(srcPath, destPath)
-    return {folder, skipped: false}
+    return folder
   })
 
   const nonDotResults = await Promise.all(nonDotInstalls)
-  for (const result of nonDotResults) {
-    if (result.skipped) {
-      skippedFolders.push(result.folder)
-    } else {
-      installedFolders.push(result.folder)
-    }
-  }
+  installedFolders.push(...nonDotResults)
 
   // Install root-level _shared directory (shared across all templates)
-  // This is at templates/_shared, not inside the specific template directory
   // Exclude IDE config folders (.claude, .windsurf) - they are used for settings merging only
   const templatesRoot = dirname(templatePath)
   const rootSharedSrc = join(templatesRoot, '_shared')
   const rootSharedDest = join(containerDir, '_shared')
 
   if (await pathExists(rootSharedSrc)) {
-    if (skipExisting && (await pathExists(rootSharedDest))) {
-      skippedFolders.push('_shared')
-    } else {
-      await copyDir(rootSharedSrc, rootSharedDest, true) // excludeIdeFolders = true
-      installedFolders.push('_shared')
-    }
+    await copyDir(rootSharedSrc, rootSharedDest, true) // excludeIdeFolders = true
+    installedFolders.push('_shared')
 
-    // Merge shared IDE folders (commands, workflows) into project IDE folders
-    // This handles _shared/.claude/, _shared/.windsurf/, etc.
+    // Copy shared IDE content (e.g., _shared/.claude/commands/handoff.md)
+    // These are non-method-owned files that live in IDE folders
     const sharedIdeInstalls = ides.map(async (ide) => {
       const sharedIdeFolder = join(rootSharedSrc, `.${ide}`)
       if (await pathExists(sharedIdeFolder)) {
         const destIdeFolder = resolver.getIdeDir(ide)
         await fs.mkdir(destIdeFolder, {recursive: true})
-
-        // Recursively copy, but skip files that already exist
+        // Merge shared IDE content, skipping files that already exist
         await mergeDirectory(sharedIdeFolder, destIdeFolder)
       }
     })
     await Promise.all(sharedIdeInstalls)
   }
 
-  // Install matching IDE folders
-  // If folder exists, merge content recursively by looking for method name folders
+  // Install method-owned IDE content (decomposed approach)
+  // Instead of copying entire .claude/ from template, only copy method-namespaced subdirectories
   const ideInstalls = ides.map(async (ide) => {
     const folderName = dotFolders.get(ide)
-    if (folderName) {
-      const srcPath = join(templatePath, folderName)
-      const destPath = resolver.getIdeDir(ide)
+    if (!folderName) return null
 
-      if (await pathExists(destPath)) {
-        if (skipExisting) {
-          // Folder exists - merge template content by finding method-named folders
-          const mergeResult = await mergeTemplateContent(srcPath, destPath, templateName)
-          return {
-            folder: folderName,
-            skipped: false,
-            merged: true,
-            mergedFiles: mergeResult.copiedFiles.length,
-          }
+    const srcIdePath = join(templatePath, folderName)
+    const destIdePath = resolver.getIdeDir(ide)
+    await fs.mkdir(destIdePath, {recursive: true})
+
+    // Scan the template IDE folder for subdirectories and copy method-owned content
+    const ideEntries = await fs.readdir(srcIdePath, {withFileTypes: true})
+    const subdirOps = ideEntries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const subdirSrc = join(srcIdePath, entry.name)
+        const subdirDest = join(destIdePath, entry.name)
+
+        // Check for method-namespaced child within this subdirectory
+        const methodChildSrc = join(subdirSrc, templateName)
+        if (await pathExists(methodChildSrc)) {
+          // Copy only the method-namespaced subdirectory (overwrite)
+          const methodChildDest = join(subdirDest, templateName)
+          await copyDir(methodChildSrc, methodChildDest)
+        } else {
+          // No method-namespaced child — copy the entire subdirectory, merging with existing
+          await mergeDirectory(subdirSrc, subdirDest)
         }
+      })
+    await Promise.all(subdirOps)
 
-        // skipExisting is false, so overwrite
-        await copyDir(srcPath, destPath)
-        return {folder: folderName, skipped: false, merged: false, mergedFiles: 0}
-      }
-
-      await copyDir(srcPath, destPath)
-      return {folder: folderName, skipped: false, merged: false, mergedFiles: 0}
-    }
-
-    return null
+    return folderName
   })
 
   const ideResults = (await Promise.all(ideInstalls)).filter(
-    (result): result is {folder: string; merged: boolean; mergedFiles: number; skipped: boolean} => result !== null,
+    (result): result is string => result !== null,
   )
-  for (const result of ideResults) {
-    if (result.merged) {
-      mergedFolders.push(result.folder)
-      mergedFileCount += result.mergedFiles
-    } else if (result.skipped) {
-      skippedFolders.push(result.folder)
-    } else {
-      installedFolders.push(result.folder)
-    }
-  }
+  installedFolders.push(...ideResults)
 
-  // Settings merging is now handled by the caller via mergeMethodsSettings()
-  // This allows unified merging of _shared + method-specific settings
+  // Settings reconstruction is handled by the caller via reconstructIdeSettings()
 
   return {
     installedFolders,
-    skippedFolders,
-    mergedFolders,
-    mergedFileCount,
-    sharedSettingsMerged: false, // Deprecated, kept for backwards compatibility
+    sharedSettingsMerged: false,
     templatePath,
   }
 }

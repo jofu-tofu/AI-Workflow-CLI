@@ -6,16 +6,14 @@ import {checkbox, confirm, input, select} from '@inquirer/prompts'
 import {Flags} from '@oclif/core'
 
 import BaseCommand from '../../lib/base-command.js'
-import {detectUsername} from '../../lib/user-utils.js'
 import {updateGitignore} from '../../lib/gitignore-manager.js'
-import {mergeClaudeSettings} from '../../lib/hooks-merger.js'
 import {IdePathResolver} from '../../lib/ide-path-resolver.js'
 import {pathExists} from '../../lib/paths.js'
 import {getTargetSettingsFile, readClaudeSettings, writeClaudeSettings} from '../../lib/settings-hierarchy.js'
 import {checkTemplateStatus, installTemplate, shouldExclude} from '../../lib/template-installer.js'
 import {getAvailableTemplates, getTemplatePath} from '../../lib/template-resolver.js'
-import {getTargetHooksFile, readWindsurfHooks, writeWindsurfHooks} from '../../lib/windsurf-hooks-hierarchy.js'
-import {mergeWindsurfHooks} from '../../lib/windsurf-hooks-merger.js'
+import {reconstructIdeSettings} from '../../lib/template-settings-reconstructor.js'
+import {detectUsername} from '../../lib/user-utils.js'
 import {EXIT_CODES} from '../../types/exit-codes.js'
 
 /**
@@ -117,7 +115,9 @@ export default class Init extends BaseCommand {
         const sharedDestPath = resolver.getSharedFolder()
         const sharedExists = await pathExists(sharedDestPath)
 
-        if (!sharedExists) {
+        if (sharedExists) {
+          this.logInfo('✓ _shared folder already exists - skipping')
+        } else {
           const currentFilePath = fileURLToPath(import.meta.url)
           const currentDir = dirname(currentFilePath)
           const templatesRoot = join(dirname(dirname(currentDir)), 'templates')
@@ -131,12 +131,10 @@ export default class Init extends BaseCommand {
 
           await this.copyDirectory(sharedSrcPath, sharedDestPath, true)
           this.logSuccess('✓ Installed _shared folder')
-        } else {
-          this.logInfo('✓ _shared folder already exists - skipping')
         }
 
-        // Merge settings from _shared template
-        await this.mergeMethodsSettings(targetDir, ['_shared'], ['claude'])
+        // Reconstruct settings from _shared template
+        await reconstructIdeSettings(targetDir, [], ['claude'])
 
         // Update .gitignore if git repository exists
         if (hasGit) {
@@ -206,18 +204,15 @@ export default class Init extends BaseCommand {
 
       this.log('')
 
-      // Install template with selective installation (skip existing items)
-      const result = await installTemplate(
-        {
-          templateName: method,
-          targetDir,
-          ides,
-          username,
-          projectName,
-          templatePath,
-        },
-        true, // skipExisting = true for regeneration support
-      )
+      // Install template (always overwrites method-owned content)
+      const result = await installTemplate({
+        templateName: method,
+        targetDir,
+        ides,
+        username,
+        projectName,
+        templatePath,
+      })
 
       // Collect all folders that need gitignore entries
       // The .aiwcli/ container holds all template infrastructure and runtime data
@@ -226,14 +221,6 @@ export default class Init extends BaseCommand {
       // Report installation results
       if (result.installedFolders.length > 0) {
         this.logSuccess(`✓ Installed: ${result.installedFolders.join(', ')}`)
-      }
-
-      if (result.mergedFolders.length > 0) {
-        this.logSuccess(`✓ Merged content into: ${result.mergedFolders.join(', ')} (${result.mergedFileCount} files)`)
-      }
-
-      if (result.skippedFolders.length > 0) {
-        this.logInfo(`✓ Skipped (already exist): ${result.skippedFolders.join(', ')}`)
       }
 
       // Perform post-installation actions (settings tracking, hook merging, gitignore updates)
@@ -329,103 +316,11 @@ export default class Init extends BaseCommand {
   }
 
   /**
-   * Merge settings from multiple method templates into project settings.
-   * Processes methods in order, allowing later methods to override earlier ones.
-   *
-   * @param targetDir - Project directory
-   * @param methods - Array of method names to merge (e.g., ['_shared', 'cc-native'])
-   * @param ides - IDEs being configured (for IDE-specific merging)
-   */
-  private async mergeMethodsSettings(targetDir: string, methods: string[], ides: string[]): Promise<void> {
-    const targetSettingsPath = getTargetSettingsFile(targetDir)
-    let projectSettings = (await readClaudeSettings(targetSettingsPath)) || {}
-
-    for (const method of methods) {
-      try {
-        // Get template path for this method
-        let templatePath: string
-        if (method === '_shared') {
-          // Special case: _shared is at templates/_shared
-          const currentFilePath = fileURLToPath(import.meta.url)
-          const currentDir = dirname(currentFilePath)
-          const templatesRoot = join(dirname(dirname(currentDir)), 'templates')
-          templatePath = join(templatesRoot, '_shared')
-        } else {
-          // Named method templates
-          templatePath = await getTemplatePath(method)
-        }
-
-        // Merge Claude settings if claude IDE is selected
-        if (ides.includes('claude')) {
-          const templateSettingsPath = join(templatePath, '.claude', 'settings.json')
-          const templateSettings = await readClaudeSettings(templateSettingsPath)
-
-          if (templateSettings) {
-            projectSettings = mergeClaudeSettings(projectSettings, templateSettings)
-            this.logSuccess(`✓ Merged ${method} settings into .claude/settings.json`)
-          }
-        }
-
-        // Merge Windsurf hooks if windsurf IDE is selected
-        if (ides.includes('windsurf')) {
-          await this.mergeWindsurfTemplateHooks(targetDir, templatePath)
-        }
-      } catch (error) {
-        const err = error as Error
-        this.warn(`Failed to merge ${method} settings: ${err.message}`)
-      }
-    }
-
-    // Write merged Claude settings
-    if (ides.includes('claude')) {
-      await writeClaudeSettings(targetSettingsPath, projectSettings)
-    }
-  }
-
-  /**
-   * Merge Windsurf template hooks into project hooks
-   *
-   * @param targetDir - Project directory
-   * @param templatePath - Template source path
-   */
-  private async mergeWindsurfTemplateHooks(targetDir: string, templatePath: string): Promise<void> {
-    try {
-      // Read template hooks
-      const templateHooksPath = join(templatePath, '.windsurf', 'hooks.json')
-      const templateHooks = await readWindsurfHooks(templateHooksPath)
-
-      // If template has no hooks, nothing to merge
-      if (!templateHooks || !templateHooks.hooks || Object.keys(templateHooks.hooks).length === 0) {
-        this.logInfo('No Windsurf hooks in template to merge')
-        return
-      }
-
-      // Get target hooks file path
-      const targetHooksPath = getTargetHooksFile(targetDir)
-
-      // Read existing project hooks
-      const existingHooks = await readWindsurfHooks(targetHooksPath)
-
-      // Merge hooks
-      const mergedHooks = mergeWindsurfHooks(existingHooks, templateHooks)
-
-      // Write merged hooks
-      await writeWindsurfHooks(targetHooksPath, mergedHooks)
-
-      this.logSuccess('✓ Windsurf template hooks merged into project hooks')
-    } catch (error) {
-      const err = error as Error
-      this.warn(`Failed to merge Windsurf template hooks: ${err.message}`)
-      // Don't fail the entire installation if hook merging fails
-    }
-  }
-
-  /**
    * Perform post-installation actions.
    *
    * Handles:
    * - Method tracking in settings.json
-   * - Settings/hooks merging for all methods
+   * - Settings reconstruction from all active templates
    * - .gitignore updates
    *
    * @param config - Post-install configuration
@@ -444,11 +339,17 @@ export default class Init extends BaseCommand {
   }): Promise<void> {
     const {targetDir, method, ides, hasGit, foldersForGitignore} = config
 
-    // Track method installation in settings.json
+    // Track method installation in settings.json first (so reconstructor can read methods list)
     await this.trackMethodInstallation(targetDir, method, ides)
 
-    // Merge settings from _shared and method templates
-    await this.mergeMethodsSettings(targetDir, ['_shared', method], ides)
+    // Read installed methods to build active templates list
+    const settingsPath = getTargetSettingsFile(targetDir)
+    const settings = await readClaudeSettings(settingsPath)
+    const activeTemplates = settings?.methods ? Object.keys(settings.methods) : [method]
+
+    // Reconstruct IDE settings from all active templates
+    await reconstructIdeSettings(targetDir, activeTemplates, ides)
+    this.logSuccess('✓ Reconstructed IDE settings from active templates')
 
     // Update .gitignore if git repository exists
     if (hasGit) {

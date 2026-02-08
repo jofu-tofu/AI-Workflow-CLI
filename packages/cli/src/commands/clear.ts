@@ -7,6 +7,7 @@ import {Flags} from '@oclif/core'
 import BaseCommand from '../lib/base-command.js'
 import {pruneGitignoreStaleEntries} from '../lib/gitignore-manager.js'
 import {pathExists} from '../lib/paths.js'
+import {reconstructIdeSettings} from '../lib/template-settings-reconstructor.js'
 import {EXIT_CODES} from '../types/exit-codes.js'
 
 /**
@@ -344,119 +345,6 @@ function cleanupGitignoreContent(content: string): string {
 }
 
 /**
- * Update IDE settings file to remove method-specific entries.
- * Creates a backup before modifying.
- *
- * @param targetDir - Directory containing the IDE folder
- * @param ideFolder - IDE folder configuration (e.g., IDE_FOLDERS.claude)
- * @param ideFolder.root - Root folder name (e.g., '.claude')
- * @param ideFolder.settingsFile - Settings file name (e.g., 'settings.json')
- * @param methodsToRemove - Method names to remove from settings
- */
-async function updateIdeSettings(
-  targetDir: string,
-  ideFolder: {root: string; settingsFile: string},
-  methodsToRemove: string[],
-): Promise<{backedUp: boolean; updated: boolean}> {
-  const settingsPath = join(targetDir, ideFolder.root, ideFolder.settingsFile)
-  const result = {backedUp: false, updated: false}
-
-  try {
-    const content = await fs.readFile(settingsPath, 'utf8')
-    const settings = JSON.parse(content)
-
-    // Create backup before modifying
-    const backupPath = `${settingsPath}.backup`
-    await fs.writeFile(backupPath, content, 'utf8')
-    result.backedUp = true
-
-    // Remove method-specific entries from methods tracking object
-    let modified = false
-    if (settings.methods && typeof settings.methods === 'object') {
-      for (const method of methodsToRemove) {
-        if (method in settings.methods) {
-          delete settings.methods[method]
-          modified = true
-        }
-      }
-
-      // Remove methods object if empty
-      if (Object.keys(settings.methods).length === 0) {
-        delete settings.methods
-        modified = true
-      }
-    }
-
-    // Remove method-specific hooks from hooks array
-    if (settings.hooks && typeof settings.hooks === 'object') {
-      for (const hookType of Object.keys(settings.hooks)) {
-        const hookArray = settings.hooks[hookType]
-        if (Array.isArray(hookArray)) {
-          const filtered = hookArray.filter((hook: Record<string, unknown>) => {
-            // Check if hook command references any of the methods to remove
-            if (hook.hooks && Array.isArray(hook.hooks)) {
-              const filteredInner = (hook.hooks as Record<string, unknown>[]).filter(
-                (innerHook: Record<string, unknown>) => {
-                  if (typeof innerHook.command === 'string') {
-                    return !methodsToRemove.some(
-                      (method) => innerHook.command?.toString().includes(`_${method}/`),
-                    )
-                  }
-
-                  return true
-                },
-              )
-              if (filteredInner.length !== (hook.hooks as unknown[]).length) {
-                hook.hooks = filteredInner
-                modified = true
-              }
-
-              // Remove hook entry if all inner hooks were removed
-              if (filteredInner.length === 0) {
-                return false
-              }
-            }
-
-            return true
-          })
-          if (filtered.length !== hookArray.length) {
-            settings.hooks[hookType] = filtered
-            modified = true
-          }
-
-          // Remove hook type if empty
-          if (filtered.length === 0) {
-            delete settings.hooks[hookType]
-            modified = true
-          }
-        }
-      }
-
-      // Remove hooks object if empty
-      if (Object.keys(settings.hooks).length === 0) {
-        delete settings.hooks
-        modified = true
-      }
-    }
-
-    if (modified) {
-      // Write updated settings
-      const newContent = JSON.stringify(settings, null, 2) + '\n'
-      await fs.writeFile(settingsPath, newContent, 'utf8')
-      result.updated = true
-    } else {
-      // No changes needed, remove backup
-      await fs.unlink(backupPath)
-      result.backedUp = false
-    }
-  } catch {
-    // Settings file doesn't exist or can't be read
-  }
-
-  return result
-}
-
-/**
  * Clear workflow folders, output folders, IDE method folders, and update configurations.
  */
 export default class ClearCommand extends BaseCommand {
@@ -756,20 +644,39 @@ export default class ClearCommand extends BaseCommand {
         this.logDebug('Pruned stale .gitignore entries')
       }
 
-      // Update IDE settings files to remove method-specific entries
+      // Reconstruct IDE settings from remaining templates
       let updatedClaudeSettings = false
       let updatedWindsurfSettings = false
       if (methodsToRemove.length > 0) {
-        const claudeResult = await updateIdeSettings(targetDir, IDE_FOLDERS.claude, methodsToRemove)
-        if (claudeResult.updated) {
-          this.logDebug('Updated .claude/settings.json (backup created)')
-          updatedClaudeSettings = true
+        // Remove method entries from settings files first
+        await this.removeMethodEntries(targetDir, methodsToRemove)
+
+        // Get remaining installed methods
+        const allMethods = await getInstalledMethodNames(targetDir)
+        // Filter out methods being removed (in case disk scan still finds them)
+        const remainingTemplates = [...allMethods].filter(m => !methodsToRemove.includes(m))
+
+        // Determine which IDEs need reconstruction
+        const ides: string[] = []
+        if (await pathExists(join(targetDir, IDE_FOLDERS.claude.root))) {
+          ides.push('claude')
         }
 
-        const windsurfResult = await updateIdeSettings(targetDir, IDE_FOLDERS.windsurf, methodsToRemove)
-        if (windsurfResult.updated) {
-          this.logDebug('Updated .windsurf/hooks.json (backup created)')
-          updatedWindsurfSettings = true
+        if (await pathExists(join(targetDir, IDE_FOLDERS.windsurf.root))) {
+          ides.push('windsurf')
+        }
+
+        if (ides.length > 0) {
+          await reconstructIdeSettings(targetDir, remainingTemplates, ides)
+          if (ides.includes('claude')) {
+            this.logDebug('Reconstructed .claude/settings.json (backup created)')
+            updatedClaudeSettings = true
+          }
+
+          if (ides.includes('windsurf')) {
+            this.logDebug('Reconstructed .windsurf/hooks.json (backup created)')
+            updatedWindsurfSettings = true
+          }
         }
       }
 
@@ -859,6 +766,201 @@ export default class ClearCommand extends BaseCommand {
       this.error(`Clear failed: ${err.message}`, {
         exit: EXIT_CODES.GENERAL_ERROR,
       })
+    }
+  }
+
+  /**
+   * Clean runtime output artifacts from _output/ at project root.
+   * Handles temp files, cache files, log rotation, and archive cleanup.
+   *
+   * @param targetDir - Project root directory
+   * @param flags - Command flags (dry-run, force)
+   */
+  private async cleanRuntimeOutput(
+    targetDir: string,
+    flags: {'dry-run': boolean; force: boolean},
+  ): Promise<void> {
+    const outputDir = join(targetDir, '_output')
+
+    if (!(await pathExists(outputDir))) {
+      this.logInfo('No _output/ directory found.')
+      return
+    }
+
+    const toDelete: {path: string; reason: string}[] = []
+    let logAction: null | {path: string; sizeBytes: number} = null
+    let archiveDir: null | string = null
+    let archiveCount = 0
+
+    try {
+      const entries = await fs.readdir(outputDir, {withFileTypes: true})
+
+      for (const entry of entries) {
+        const entryPath = join(outputDir, entry.name)
+
+        // Temp files: .index_*.tmp (orphaned atomic write files)
+        if (entry.isFile() && entry.name.startsWith('.index_') && entry.name.endsWith('.tmp')) {
+          toDelete.push({path: entryPath, reason: 'temp file'})
+          continue
+        }
+
+        // Cache files: .*-cache.json
+        if (entry.isFile() && entry.name.startsWith('.') && entry.name.endsWith('-cache.json')) {
+          toDelete.push({path: entryPath, reason: 'cache file'})
+          continue
+        }
+
+        // Log rotation: hook-log.jsonl > 1MB
+        if (entry.isFile() && entry.name === 'hook-log.jsonl') {
+          try {
+            const stat = await fs.stat(entryPath)
+            if (stat.size > 1_048_576) {
+              logAction = {path: entryPath, sizeBytes: stat.size}
+            }
+          } catch {
+            // Can't stat log file
+          }
+
+          continue
+        }
+
+        // Archive cleanup: contexts/_archive/
+        if (entry.isDirectory() && entry.name === 'contexts') {
+          const archivePath = join(entryPath, '_archive')
+          try {
+            const archiveEntries = await fs.readdir(archivePath)
+            if (archiveEntries.length > 0) {
+              archiveDir = archivePath
+              archiveCount = archiveEntries.length
+            }
+          } catch {
+            // No archive directory
+          }
+        }
+      }
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException
+      this.error(`Cannot read _output/: ${err.message}`, {
+        exit: EXIT_CODES.GENERAL_ERROR,
+      })
+    }
+
+    // Nothing to clean
+    if (toDelete.length === 0 && !logAction && !archiveDir) {
+      this.logInfo('No runtime output artifacts to clean.')
+      return
+    }
+
+    // Show what will be cleaned
+    this.log('')
+    this.logInfo('Runtime output cleanup:')
+
+    if (toDelete.length > 0) {
+      for (const item of toDelete) {
+        const relativePath = item.path.replace(targetDir + '\\', '').replace(targetDir + '/', '')
+        this.log(`  ${relativePath} (${item.reason})`)
+      }
+    }
+
+    if (logAction) {
+      const sizeMB = (logAction.sizeBytes / 1_048_576).toFixed(1)
+      this.log(`  _output/hook-log.jsonl (${sizeMB}MB → truncate to ~512KB)`)
+    }
+
+    if (archiveDir) {
+      this.log(`  _output/contexts/_archive/ (${archiveCount} archived context(s))`)
+    }
+
+    this.log('')
+
+    // Dry run
+    if (flags['dry-run']) {
+      this.logInfo('Dry run complete. No files were modified.')
+      return
+    }
+
+    // Confirm archive deletion (unless --force)
+    if (archiveDir && !flags.force) {
+      const shouldDelete = await confirm({
+        message: `Delete ${archiveCount} archived context(s)?`,
+        default: false,
+      })
+
+      if (!shouldDelete) {
+        archiveDir = null
+        archiveCount = 0
+      }
+    }
+
+    // Execute deletions
+    let deletedCount = 0
+    for (const item of toDelete) {
+      try {
+        await fs.unlink(item.path)
+        deletedCount++
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException
+        this.logWarning(`Failed to delete ${item.path}: ${err.message}`)
+      }
+    }
+
+    // Log rotation
+    if (logAction) {
+      try {
+        const content = await fs.readFile(logAction.path, 'utf8')
+        // Keep the most recent 512KB
+        const truncated = content.slice(-524_288)
+        // Find the first complete line
+        const firstNewline = truncated.indexOf('\n')
+        const cleaned = firstNewline === -1 ? truncated : truncated.slice(firstNewline + 1)
+        await fs.writeFile(logAction.path, cleaned, 'utf8')
+        this.logDebug('Rotated hook-log.jsonl')
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException
+        this.logWarning(`Failed to rotate log: ${err.message}`)
+      }
+    }
+
+    // Archive cleanup
+    let archivedCleaned = 0
+    if (archiveDir) {
+      try {
+        const archiveEntries = await fs.readdir(archiveDir)
+        await Promise.all(
+          archiveEntries.map(async (entry) => {
+            try {
+              await fs.rm(join(archiveDir!, entry), {force: true, recursive: true})
+              archivedCleaned++
+            } catch {
+              // Individual entry failed
+            }
+          }),
+        )
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException
+        this.logWarning(`Failed to clean archive: ${err.message}`)
+      }
+    }
+
+    // Summary
+    this.log('')
+    const parts: string[] = []
+    if (deletedCount > 0) {
+      parts.push(`${deletedCount} file(s) removed`)
+    }
+
+    if (logAction) {
+      parts.push('log rotated')
+    }
+
+    if (archivedCleaned > 0) {
+      parts.push(`${archivedCleaned} archived context(s) removed`)
+    }
+
+    if (parts.length > 0) {
+      this.logSuccess(`Output cleanup: ${parts.join(', ')}.`)
+    } else {
+      this.logInfo('No changes made.')
     }
   }
 
@@ -1024,197 +1126,34 @@ export default class ClearCommand extends BaseCommand {
   }
 
   /**
-   * Clean runtime output artifacts from _output/ at project root.
-   * Handles temp files, cache files, log rotation, and archive cleanup.
-   *
-   * @param targetDir - Project root directory
-   * @param flags - Command flags (dry-run, force)
+   * Remove method entries from IDE settings files (methods tracking only).
+   * Settings reconstruction handles hooks/permissions; this only strips the methods object.
    */
-  private async cleanRuntimeOutput(
-    targetDir: string,
-    flags: {'dry-run': boolean; force: boolean},
-  ): Promise<void> {
-    const outputDir = join(targetDir, '_output')
+  private async removeMethodEntries(targetDir: string, methodsToRemove: string[]): Promise<void> {
+    const ops = Object.values(IDE_FOLDERS).map(async (ide) => {
+      const settingsPath = join(targetDir, ide.root, ide.settingsFile)
+      try {
+        const content = await fs.readFile(settingsPath, 'utf8')
+        const settings = JSON.parse(content)
 
-    if (!(await pathExists(outputDir))) {
-      this.logInfo('No _output/ directory found.')
-      return
-    }
-
-    const toDelete: {path: string; reason: string}[] = []
-    let logAction: {path: string; sizeBytes: number} | null = null
-    let archiveDir: string | null = null
-    let archiveCount = 0
-
-    try {
-      const entries = await fs.readdir(outputDir, {withFileTypes: true})
-
-      for (const entry of entries) {
-        const entryPath = join(outputDir, entry.name)
-
-        // Temp files: .index_*.tmp (orphaned atomic write files)
-        if (entry.isFile() && entry.name.startsWith('.index_') && entry.name.endsWith('.tmp')) {
-          toDelete.push({path: entryPath, reason: 'temp file'})
-          continue
-        }
-
-        // Cache files: .*-cache.json
-        if (entry.isFile() && entry.name.startsWith('.') && entry.name.endsWith('-cache.json')) {
-          toDelete.push({path: entryPath, reason: 'cache file'})
-          continue
-        }
-
-        // Log rotation: hook-log.jsonl > 1MB
-        if (entry.isFile() && entry.name === 'hook-log.jsonl') {
-          try {
-            const stat = await fs.stat(entryPath)
-            if (stat.size > 1_048_576) {
-              logAction = {path: entryPath, sizeBytes: stat.size}
+        if (settings.methods && typeof settings.methods === 'object') {
+          for (const method of methodsToRemove) {
+            if (method in settings.methods) {
+              delete settings.methods[method]
             }
-          } catch {
-            // Can't stat log file
           }
 
-          continue
-        }
-
-        // Archive cleanup: contexts/_archive/
-        if (entry.isDirectory() && entry.name === 'contexts') {
-          const archivePath = join(entryPath, '_archive')
-          try {
-            const archiveEntries = await fs.readdir(archivePath)
-            if (archiveEntries.length > 0) {
-              archiveDir = archivePath
-              archiveCount = archiveEntries.length
-            }
-          } catch {
-            // No archive directory
+          if (Object.keys(settings.methods).length === 0) {
+            delete settings.methods
           }
+
+          // Write back with methods removed (backup created by reconstructor)
+          await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf8')
         }
+      } catch {
+        // Settings file doesn't exist or can't be read
       }
-    } catch (error) {
-      const err = error as NodeJS.ErrnoException
-      this.error(`Cannot read _output/: ${err.message}`, {
-        exit: EXIT_CODES.GENERAL_ERROR,
-      })
-    }
-
-    // Nothing to clean
-    if (toDelete.length === 0 && !logAction && !archiveDir) {
-      this.logInfo('No runtime output artifacts to clean.')
-      return
-    }
-
-    // Show what will be cleaned
-    this.log('')
-    this.logInfo('Runtime output cleanup:')
-
-    if (toDelete.length > 0) {
-      for (const item of toDelete) {
-        const relativePath = item.path.replace(targetDir + '\\', '').replace(targetDir + '/', '')
-        this.log(`  ${relativePath} (${item.reason})`)
-      }
-    }
-
-    if (logAction) {
-      const sizeMB = (logAction.sizeBytes / 1_048_576).toFixed(1)
-      this.log(`  _output/hook-log.jsonl (${sizeMB}MB → truncate to ~512KB)`)
-    }
-
-    if (archiveDir) {
-      this.log(`  _output/contexts/_archive/ (${archiveCount} archived context(s))`)
-    }
-
-    this.log('')
-
-    // Dry run
-    if (flags['dry-run']) {
-      this.logInfo('Dry run complete. No files were modified.')
-      return
-    }
-
-    // Confirm archive deletion (unless --force)
-    if (archiveDir && !flags.force) {
-      const shouldDelete = await confirm({
-        message: `Delete ${archiveCount} archived context(s)?`,
-        default: false,
-      })
-
-      if (!shouldDelete) {
-        archiveDir = null
-        archiveCount = 0
-      }
-    }
-
-    // Execute deletions
-    let deletedCount = 0
-    for (const item of toDelete) {
-      try {
-        await fs.unlink(item.path)
-        deletedCount++
-      } catch (error) {
-        const err = error as NodeJS.ErrnoException
-        this.logWarning(`Failed to delete ${item.path}: ${err.message}`)
-      }
-    }
-
-    // Log rotation
-    if (logAction) {
-      try {
-        const content = await fs.readFile(logAction.path, 'utf8')
-        // Keep the most recent 512KB
-        const truncated = content.slice(-524_288)
-        // Find the first complete line
-        const firstNewline = truncated.indexOf('\n')
-        const cleaned = firstNewline >= 0 ? truncated.slice(firstNewline + 1) : truncated
-        await fs.writeFile(logAction.path, cleaned, 'utf8')
-        this.logDebug('Rotated hook-log.jsonl')
-      } catch (error) {
-        const err = error as NodeJS.ErrnoException
-        this.logWarning(`Failed to rotate log: ${err.message}`)
-      }
-    }
-
-    // Archive cleanup
-    let archivedCleaned = 0
-    if (archiveDir) {
-      try {
-        const archiveEntries = await fs.readdir(archiveDir)
-        await Promise.all(
-          archiveEntries.map(async (entry) => {
-            try {
-              await fs.rm(join(archiveDir!, entry), {force: true, recursive: true})
-              archivedCleaned++
-            } catch {
-              // Individual entry failed
-            }
-          }),
-        )
-      } catch (error) {
-        const err = error as NodeJS.ErrnoException
-        this.logWarning(`Failed to clean archive: ${err.message}`)
-      }
-    }
-
-    // Summary
-    this.log('')
-    const parts: string[] = []
-    if (deletedCount > 0) {
-      parts.push(`${deletedCount} file(s) removed`)
-    }
-
-    if (logAction) {
-      parts.push('log rotated')
-    }
-
-    if (archivedCleaned > 0) {
-      parts.push(`${archivedCleaned} archived context(s) removed`)
-    }
-
-    if (parts.length > 0) {
-      this.logSuccess(`Output cleanup: ${parts.join(', ')}.`)
-    } else {
-      this.logInfo('No changes made.')
-    }
+    })
+    await Promise.all(ops)
   }
 }

@@ -121,9 +121,9 @@ describe('clear command', () => {
       expect(source).to.include('updateGitignoreAfterClear')
     })
 
-    it('should update IDE settings after clearing', () => {
+    it('should reconstruct IDE settings after clearing', () => {
       const source = ClearCommand.prototype.run.toString()
-      expect(source).to.include('updateIdeSettings')
+      expect(source).to.include('reconstructIdeSettings')
     })
 
     it('should extract method names for settings update', () => {
