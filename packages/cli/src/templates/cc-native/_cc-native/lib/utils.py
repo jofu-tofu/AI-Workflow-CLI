@@ -361,14 +361,15 @@ def worst_verdict(verdicts: List[str]) -> str:
 def compute_review_decision(
     all_verdicts: List[str],
     warn_threshold: float = 0.5,
+    high_issue_count: int = 0,
+    high_issue_threshold: int = 3,
 ) -> Tuple[bool, str, float]:
-    """Verdict aggregation: only fail triggers a block.
+    """Verdict aggregation: fail or high-severity issue count triggers a block.
 
-    Fail Veto: Any fail -> deny. From safety engineering (ISO 61508) —
-    critical alarms use zero-tolerance.
-
-    Warns are informational only — the warn_ratio is computed for logging
-    and visibility but does NOT trigger blocking.
+    Priority order:
+    1. Fail Veto: Any fail -> deny (ISO 61508 zero-tolerance).
+    2. High-Issue Count: high_issue_count >= high_issue_threshold -> deny.
+    3. Acceptable: warns are informational only.
 
     Error exclusion: Detectors that produce no signal (error/skip) are excluded
     from the denominator. They provide no information about plan quality.
@@ -376,12 +377,14 @@ def compute_review_decision(
     Args:
         all_verdicts: List of verdict strings from all reviewers.
         warn_threshold: Kept for backward compatibility. No longer used for blocking.
+        high_issue_count: Total high-severity issues across all reviewers.
+        high_issue_threshold: Block when high_issue_count >= this value (default: 3).
 
     Returns:
         Tuple of (should_deny, reason, score).
         - should_deny: True if the plan should be denied.
-        - reason: "fail_veto", "acceptable", or "no_signal".
-        - score: 1.0 for fail_veto, warn_ratio for informational cases, 0.0 for no_signal.
+        - reason: "fail_veto", "high_issue_count", "acceptable", or "no_signal".
+        - score: 1.0 for deny cases, warn_ratio for informational, 0.0 for no_signal.
     """
     # Exclude non-signal verdicts
     signal_verdicts = [v for v in all_verdicts if v in ("pass", "warn", "fail")]
@@ -389,10 +392,14 @@ def compute_review_decision(
     if not signal_verdicts:
         return False, "no_signal", 0.0
 
-    # Only fail blocks — warns are informational
+    # Priority 1: fail blocks unconditionally
     fail_count = signal_verdicts.count("fail")
     if fail_count > 0:
         return True, "fail_veto", 1.0
+
+    # Priority 2: high-severity issue count triggers block
+    if high_issue_count >= high_issue_threshold:
+        return True, "high_issue_count", 1.0
 
     # Warn ratio still computed for logging/visibility, but does NOT block
     warn_count = signal_verdicts.count("warn")
@@ -677,13 +684,17 @@ def extract_top_issues_text(
 ) -> str:
     """Extract top issues as a compact text string for permissionDecisionReason.
 
+    Collects the first matching issue from each reviewer/agent, prefixed with
+    the reviewer name for attribution. This gives breadth across agents rather
+    than depth from a single one.
+
     Args:
         combined: The combined review result.
         max_count: Maximum number of issues to include.
         severity: Severity level to filter for.
 
     Returns:
-        Compact semicolon-separated issue text.
+        Compact semicolon-separated issue text with agent attribution.
     """
     all_reviewers: List[ReviewerResult] = []
     all_reviewers.extend(combined.cli_reviewers.values())
@@ -697,15 +708,48 @@ def extract_top_issues_text(
             if issue.get("severity") == severity:
                 text = issue.get("issue", "").strip()
                 if text:
-                    issues.append(text)
-            if len(issues) >= max_count:
-                break
+                    issues.append(f"[{r.name}] {text}")
+                break  # first high issue per reviewer only
         if len(issues) >= max_count:
             break
 
     if not issues:
         return "Review found critical issues"
     return "; ".join(issues)
+
+
+def build_high_issues_document(combined: CombinedReviewResult) -> str:
+    """Build a markdown document containing ONLY high-severity issues.
+
+    Grouped by reviewer/agent name with issue text and suggested fix.
+    This is the primary signal document for plan revision — high severity
+    only, no noise from medium/low issues.
+    """
+    lines = ["# High-Severity Issues\n"]
+    all_reviewers = list(combined.cli_reviewers.values()) + list(combined.agents.values())
+
+    found_any = False
+    for r in all_reviewers:
+        if not r.data:
+            continue
+        high_issues = [i for i in r.data.get("issues", []) if i.get("severity") == "high"]
+        if not high_issues:
+            continue
+        found_any = True
+        lines.append(f"## {r.name} ({r.verdict})\n")
+        for issue in high_issues:
+            cat = issue.get("category", "general")
+            text = issue.get("issue", "").strip()
+            fix = issue.get("suggested_fix", "").strip()
+            lines.append(f"- **[{cat}]** {text}")
+            if fix:
+                lines.append(f"  - Fix: {fix}")
+        lines.append("")  # blank line between agents
+
+    if not found_any:
+        lines.append("No high-severity issues found.\n")
+
+    return "\n".join(lines)
 
 
 def _append_review_details(

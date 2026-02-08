@@ -42,7 +42,7 @@ Output a single JSON object using StructuredOutput with this exact structure:
 - Touches 2-5 files
 - Adds new functionality but within existing patterns
 - Moderate scope changes
-→ Result: Select 1-2 most relevant agents
+→ Result: Select 2-3 most relevant agents
 
 **high** - Select when ANY of these are true:
 - Architectural changes
@@ -51,7 +51,7 @@ Output a single JSON object using StructuredOutput with this exact structure:
 - Performance-critical changes
 - Touches 5+ files
 - New integrations or APIs
-→ Result: Select 2-4 relevant agents
+→ Result: Select 4-7 relevant agents
 
 ## Category Definitions
 
@@ -69,16 +69,24 @@ Only select agents whose categories match the plan category:
 
 | Agent | Categories |
 |-------|------------|
+| completeness-checker | all |
+| hidden-complexity-detector | all |
+| simplicity-guardian | all |
+| assumption-chain-tracer | all |
+| risk-assessor | all |
+| trade-off-illuminator | all |
+| devils-advocate | all |
+| verification-auditor | all |
+| scope-boundary-reviewer | all |
 | architect-reviewer | code, infrastructure, design |
-| penetration-tester | code, infrastructure |
-| performance-engineer | code, infrastructure |
-| accessibility-tester | code, design |
-| documentation-reviewer | documentation, research |
+
+**Note:** Mandatory agents (handoff-readiness, clarity-auditor, skeptic, documentation-philosophy) are added automatically by the system — do NOT include them in selectedAgents.
 
 **Agent selection guidance:**
-- Documentation-only changes: Use documentation-reviewer or skip review
-- Life/business plans: Skip specialized code reviewers (non-technical)
+- Documentation-only changes: Skip specialized reviewers or use minimal set
+- Life/business plans: Skip architect-reviewer (non-technical)
 - Simple config changes: CLI review is sufficient
+- High-complexity plans: Prioritize risk-assessor, completeness-checker, verification-auditor
 
 ## Examples
 
@@ -100,18 +108,18 @@ Plan: "Add pagination to user list API - add limit/offset params, update query, 
 {
   "complexity": "medium",
   "category": "code",
-  "selectedAgents": ["architect-reviewer", "performance-engineer"],
-  "reasoning": "API change affecting data access patterns - needs architecture and performance review"
+  "selectedAgents": ["completeness-checker", "verification-auditor", "architect-reviewer"],
+  "reasoning": "API change affecting data access patterns - needs completeness, verification, and architecture review"
 }
 ```
 
-**Example 3: OAuth2 implementation**
+**Example 3: Auth system implementation**
 Plan: "Implement OAuth2 with JWT tokens - add auth service, middleware, token refresh..."
 ```json
 {
   "complexity": "high",
   "category": "code",
-  "selectedAgents": ["architect-reviewer", "penetration-tester", "performance-engineer"],
+  "selectedAgents": ["architect-reviewer", "risk-assessor", "completeness-checker", "verification-auditor", "assumption-chain-tracer", "scope-boundary-reviewer"],
   "reasoning": "Security-critical feature with architectural impact requiring comprehensive review"
 }
 ```
@@ -123,8 +131,8 @@ Plan: "Training plan for marathon - weekly mileage increase, rest days, nutritio
   "complexity": "simple",
   "category": "life",
   "selectedAgents": [],
-  "reasoning": "Personal life goal - no code review agents applicable",
-  "skipReason": "Non-technical plan - specialized code reviewers not applicable"
+  "reasoning": "Personal life goal - no specialized reviewers applicable",
+  "skipReason": "Non-technical plan - specialized reviewers not applicable"
 }
 ```
 

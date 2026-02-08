@@ -25,21 +25,25 @@
     "warnThreshold": 0.01,
     "orchestrator": {
       "enabled": true,
-      "model": "haiku",
-      "timeout": 30
+      "model": "opus",
+      "timeout": 60
     },
     "legacyMode": false,
-    "mandatoryAgents": ["handoff-readiness", "clarity-auditor", "skeptic"],
+    "mandatoryAgents": {
+      "always": ["handoff-readiness", "clarity-auditor", "skeptic"],
+      "medium+": ["documentation-philosophy"]
+    },
     "fallbackByComplexity": {
       "simple": 0,
-      "medium": 5,
-      "high": 9
+      "medium": 3,
+      "high": 7
     },
     "reviewIterations": {
       "simple": 1,
       "medium": 1,
       "high": 2
     },
+    "highIssueThreshold": 3,
     "earlyExitOnAllPass": true,
     "display": {
       "maxIssues": 12,
@@ -49,8 +53,8 @@
   },
   "agentSelection": {
     "simple": { "min": 3, "max": 3 },
-    "medium": { "min": 8, "max": 8 },
-    "high": { "min": 12, "max": 12 },
+    "medium": { "min": 6, "max": 6 },
+    "high": { "min": 10, "max": 10 },
     "fallbackCount": 3
   },
   "agentDefaults": {

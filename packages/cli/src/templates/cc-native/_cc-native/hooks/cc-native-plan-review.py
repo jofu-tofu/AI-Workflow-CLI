@@ -69,6 +69,7 @@ try:
         write_combined_artifacts,
         build_inline_review_summary,
         extract_top_issues_text,
+        build_high_issues_document,
         load_config,
         get_display_settings,
     )
@@ -133,16 +134,26 @@ def skip_with_info(reason: str) -> int:
 # ---------------------------
 
 DEFAULT_AGENTS: List[Dict[str, Any]] = [
-    {"name": "architect-reviewer", "model": "sonnet", "focus": "architectural concerns and scalability", "enabled": True, "categories": ["code", "infrastructure", "design"]},
-    {"name": "penetration-tester", "model": "sonnet", "focus": "security vulnerabilities and attack vectors", "enabled": True, "categories": ["code", "infrastructure"]},
-    {"name": "performance-engineer", "model": "sonnet", "focus": "performance bottlenecks and optimization", "enabled": True, "categories": ["code", "infrastructure"]},
-    {"name": "accessibility-tester", "model": "sonnet", "focus": "accessibility compliance and UX concerns", "enabled": True, "categories": ["code", "design"]},
+    {"name": "handoff-readiness", "model": "sonnet", "focus": "fresh context execution readiness", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "clarity-auditor", "model": "sonnet", "focus": "communication clarity and execution readiness", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "skeptic", "model": "sonnet", "focus": "problem-solution alignment and assumption validation", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "documentation-philosophy", "model": "sonnet", "focus": "knowledge capture and documentation placement", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "completeness-checker", "model": "sonnet", "focus": "missing steps, edge cases, and feasibility gaps", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "hidden-complexity-detector", "model": "sonnet", "focus": "understated complexity and linguistic deception", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "simplicity-guardian", "model": "sonnet", "focus": "over-engineering and unnecessary complexity", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "assumption-chain-tracer", "model": "sonnet", "focus": "dependency chains and foundational assumptions", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "architect-reviewer", "model": "sonnet", "focus": "plan-level architectural decisions and patterns", "enabled": True, "categories": ["code", "infrastructure", "design"]},
+    {"name": "risk-assessor", "model": "sonnet", "focus": "pre-mortem failure analysis and risk mitigation", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "trade-off-illuminator", "model": "sonnet", "focus": "hidden costs and sacrificed alternatives", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "devils-advocate", "model": "sonnet", "focus": "contrarian analysis and reductio ad absurdum", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "verification-auditor", "model": "sonnet", "focus": "verification step adequacy and test coverage", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "scope-boundary-reviewer", "model": "sonnet", "focus": "scope drift and boundary enforcement", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
 ]
 
 DEFAULT_ORCHESTRATOR: Dict[str, Any] = {
     "enabled": True,
-    "model": "haiku",
-    "timeout": 30,
+    "model": "opus",
+    "timeout": 60,
 }
 
 DEFAULT_AGENT_MODEL: str = "sonnet"
@@ -152,6 +163,30 @@ DEFAULT_REVIEW_ITERATIONS: Dict[str, int] = {
     "medium": 2,
     "high": 2,
 }
+
+
+def resolve_mandatory_agents(config_value, complexity: str) -> set:
+    """Resolve mandatory agent names based on config format and complexity.
+
+    Supports two formats:
+    - Legacy (list): ["a", "b"] — all treated as 'always'
+    - Structured (dict): {"always": [...], "medium+": [...], "high": [...]}
+    """
+    if isinstance(config_value, list):
+        return set(config_value)
+
+    if not isinstance(config_value, dict):
+        return {"handoff-readiness", "clarity-auditor", "skeptic"}
+
+    names = set(config_value.get("always", []))
+
+    if complexity in ("medium", "high"):
+        names.update(config_value.get("medium+", []))
+
+    if complexity == "high":
+        names.update(config_value.get("high", []))
+
+    return names
 
 
 # ---------------------------
@@ -358,6 +393,7 @@ def load_settings(proj_dir: Path) -> Dict[str, Any]:
             "orchestrator": DEFAULT_ORCHESTRATOR.copy(),
             "timeout": 180,
             "warnThreshold": 0.5,
+            "highIssueThreshold": 3,
             "legacyMode": False,
             "display": DEFAULT_DISPLAY.copy(),
             "agentSelection": DEFAULT_AGENT_SELECTION.copy(),
@@ -567,10 +603,14 @@ def main() -> int:
         timeout=orch_settings.get("timeout", 30),
     )
 
-    # Compute mandatory agent names early so orchestrator can exclude them
-    mandatory_names = set(agent_settings.get("mandatoryAgents", [
+    # Two-phase mandatory resolution:
+    # Phase 1 (pre-orchestrator): Only "always" mandatory agents excluded from orchestrator pool
+    # Phase 2 (post-orchestrator): Full mandatory set including conditional agents
+    mandatory_config = agent_settings.get("mandatoryAgents", [
         "handoff-readiness", "clarity-auditor", "skeptic"
-    ]))
+    ])
+    always_mandatory = resolve_mandatory_agents(mandatory_config, "simple")
+    mandatory_names = always_mandatory
 
     log_debug("cc-native-plan-review", f"Codex enabled: {codex_enabled}, Gemini enabled: {gemini_enabled}")
     log_debug("cc-native-plan-review", f"Agent library: {[a.name for a in agent_library]}")
@@ -585,7 +625,7 @@ def main() -> int:
     if gemini_enabled:
         phase1_tasks.append(("gemini", lambda: run_gemini_review(plan, REVIEW_SCHEMA, plan_settings)))
     if orchestrator_config.enabled and enabled_agents and not legacy_mode:
-        phase1_tasks.append(("orchestrator", lambda: run_orchestrator(plan, enabled_agents, orchestrator_config, agent_settings, mandatory_names=mandatory_names)))
+        phase1_tasks.append(("orchestrator", lambda: run_orchestrator(plan, enabled_agents, orchestrator_config, agent_settings, mandatory_names=always_mandatory)))
 
     log_info("cc-native-plan-review", f"=== PHASE 1: Running {len(phase1_tasks)} tasks in parallel ===")
 
@@ -640,6 +680,11 @@ def main() -> int:
             if orch_result and not legacy_mode:
                 detected_complexity = orch_result.complexity
 
+                # Phase 2: Recompute mandatory set with actual complexity
+                mandatory_names = resolve_mandatory_agents(mandatory_config, detected_complexity)
+                mandatory_agents = [a for a in enabled_agents if a.name in mandatory_names]
+                non_mandatory = [a for a in enabled_agents if a.name not in mandatory_names]
+
                 # Get orchestrator's additional selections (excluding mandatory since they always run)
                 orch_selected_names = set(orch_result.selected_agents) - mandatory_names
                 orch_selected = [a for a in non_mandatory if a.name in orch_selected_names]
@@ -666,8 +711,9 @@ def main() -> int:
                 log_info("cc-native-plan-review", f"Final selection: {len(selected_agents)} agents ({len(mandatory_agents)} mandatory + {len(orch_selected)} additional)")
             else:
                 log_info("cc-native-plan-review", "Running in legacy mode (all enabled agents)")
-                selected_agents = enabled_agents
                 detected_complexity = "medium"  # Default for legacy mode
+                mandatory_names = resolve_mandatory_agents(mandatory_config, detected_complexity)
+                selected_agents = enabled_agents
 
         log_diagnostic("cc-native-plan-review", "decide",
                         f"Selected {len(selected_agents)} agents, complexity={detected_complexity}",
@@ -765,11 +811,7 @@ def main() -> int:
 
     context_parts = [inline_summary, f"\nFull review: `{review_file}`\n"]
 
-    # Review decision — only fail triggers a block
-    warn_threshold = agent_settings.get("warnThreshold", 0.5)
-    should_deny, deny_reason, review_score = compute_review_decision(all_verdicts, warn_threshold)
-
-    # Count high-severity issues for logging
+    # Count high-severity issues across all reviewers
     high_count = sum(
         1 for r in list(combined_result.cli_reviewers.values()) + list(combined_result.agents.values())
         if r.data
@@ -777,21 +819,34 @@ def main() -> int:
         if issue.get("severity") == "high"
     )
 
+    # Review decision — fail or high-issue count triggers a block
+    warn_threshold = agent_settings.get("warnThreshold", 0.5)
+    high_issue_threshold = agent_settings.get("highIssueThreshold", 3)
+    should_deny, deny_reason, review_score = compute_review_decision(
+        all_verdicts, warn_threshold,
+        high_issue_count=high_count,
+        high_issue_threshold=high_issue_threshold,
+    )
+
     # Structured log entries for review influence tracking
-    log_info("cc-native-plan-review", f"REVIEW_DECISION: verdict={combined_result.overall_verdict}, deny={should_deny}, score={review_score:.2f}, high_issues={high_count}")
+    log_info("cc-native-plan-review", f"REVIEW_DECISION: verdict={combined_result.overall_verdict}, deny={should_deny}, reason={deny_reason}, score={review_score:.2f}, high_issues={high_count}/{high_issue_threshold}")
     log_diagnostic("cc-native-plan-review", "result",
-                    f"verdict={combined_result.overall_verdict}, deny={should_deny}, high={high_count}",
+                    f"verdict={combined_result.overall_verdict}, deny={should_deny}, reason={deny_reason}, high={high_count}/{high_issue_threshold}",
                     decision="deny" if should_deny else "allow",
-                    reasoning=f"score={review_score:.2f}, threshold={warn_threshold}",
+                    reasoning=f"reason={deny_reason}, score={review_score:.2f}, warn_threshold={warn_threshold}, high_threshold={high_issue_threshold}",
                     inputs={"overall_verdict": combined_result.overall_verdict,
-                            "high_issue_count": high_count, "review_score": round(review_score, 2),
+                            "high_issue_count": high_count, "high_issue_threshold": high_issue_threshold,
+                            "review_score": round(review_score, 2),
                             "cli_count": len(cli_results), "agent_count": len(agent_results)})
 
     # Terminal progress indicator
     verdict_emoji = "✅" if not should_deny else "❌"
     eprint(f"[plan-review] {verdict_emoji} {combined_result.overall_verdict.upper()} (score={review_score:.2f})")
     if should_deny:
-        eprint(f"[plan-review] Blocking ExitPlanMode — {high_count} high-severity issue(s) found")
+        if deny_reason == "high_issue_count":
+            eprint(f"[plan-review] Blocking ExitPlanMode — {high_count} high-severity issue(s) found (threshold: {high_issue_threshold})")
+        else:
+            eprint(f"[plan-review] Blocking ExitPlanMode — {deny_reason}")
 
     # Handle iteration logic
     needs_more_iterations = False
@@ -837,24 +892,36 @@ def main() -> int:
         max_iter = iteration_state["max"]
         remaining = max_iter - current
         top_issues_text = extract_top_issues_text(combined_result, max_count=3, severity="high")
+        # Two-fold deny signal: inline issues (fallback) + high-issues.md (primary)
+        high_issues_doc = build_high_issues_document(combined_result)
+        high_issues_path = review_folder / "high-issues.md"
+        high_issues_path.write_text(high_issues_doc, encoding="utf-8")
         emit_context_and_block(
             context_text,
             f"Plan review iteration {current}/{max_iter} FAILED ({deny_reason}, score={review_score:.2f}). "
             f"Critical issues: {top_issues_text}. "
+            f"IMPORTANT: Read `{high_issues_path}` for ALL high-severity issues — "
+            f"this file contains only the most critical findings, no noise. "
             f"{_REVIEWER_CAVEAT} "
-            f"Revise the plan, then call ExitPlanMode again. "
+            f"Revise the plan to address these issues, then call ExitPlanMode again. "
             f"({remaining} revision{'s' if remaining != 1 else ''} remaining) "
             f"{_RESUBMIT_INSTRUCTION}",
         )
     elif should_deny:
         mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review", iteration_state, decision="deny")
         top_issues_text = extract_top_issues_text(combined_result, max_count=3, severity="high")
+        # Two-fold deny signal: inline issues (fallback) + high-issues.md (primary)
+        high_issues_doc = build_high_issues_document(combined_result)
+        high_issues_path = review_folder / "high-issues.md"
+        high_issues_path.write_text(high_issues_doc, encoding="utf-8")
         emit_context_and_block(
             context_text,
             f"Plan review FAILED ({deny_reason}, score={review_score:.2f}). "
             f"Critical issues: {top_issues_text}. "
+            f"IMPORTANT: Read `{high_issues_path}` for ALL high-severity issues — "
+            f"this file contains only the most critical findings, no noise. "
             f"{_REVIEWER_CAVEAT} "
-            f"Revise the plan, then call ExitPlanMode again. "
+            f"Revise the plan to address these issues, then call ExitPlanMode again. "
             f"{_RESUBMIT_INSTRUCTION}",
         )
     else:
