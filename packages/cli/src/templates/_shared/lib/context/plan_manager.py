@@ -10,6 +10,7 @@ This module does NOT modify mode or state.json.  The calling hook
 context_store.update_mode() after archival succeeds.
 """
 import hashlib
+import json
 import re
 import uuid
 from datetime import datetime
@@ -72,7 +73,7 @@ def archive_plan(
     plans_dir.mkdir(parents=True, exist_ok=True)
 
     # Generate archive filename: YYYY-MM-DD-<slug>.md
-    date_str = datetime.now().strftime("%Y-%m-%d")
+    date_str = datetime.now().strftime("%Y-%m-%d-%H%M")
     slug = sanitize_title(plan_file.stem, max_len=30)
     archive_name = f"{date_str}-{slug}.md"
     archive_path = plans_dir / archive_name
@@ -178,6 +179,90 @@ def extract_plan_anchors(content: str, max_anchors: int = 5) -> List[str]:
         if len(anchors) >= max_anchors:
             break
     return anchors
+
+
+# ---------------------------------------------------------------------------
+# Transcript-based plan path extraction
+# ---------------------------------------------------------------------------
+
+_MAX_TRANSCRIPT_SIZE = 50 * 1024 * 1024  # 50 MB
+
+def find_plan_path_in_transcript(transcript_path: str) -> Optional[str]:
+    """Find the plan file path by parsing the session transcript JSONL.
+
+    Searches the transcript in reverse for the most recent Write tool call
+    whose file_path targets a .claude/plans/ directory. This is deterministic:
+    exact structural match on Path.parts, no fuzzy matching.
+
+    Args:
+        transcript_path: Absolute path to the transcript JSONL file.
+
+    Returns:
+        The file_path string from the Write tool call, or None.
+    """
+    if not transcript_path:
+        return None
+
+    tp = Path(transcript_path)
+    if not tp.exists():
+        log_debug("plan_manager", f"Transcript not found: {transcript_path}")
+        return None
+
+    try:
+        size = tp.stat().st_size
+    except OSError:
+        return None
+
+    if size > _MAX_TRANSCRIPT_SIZE:
+        log_warn("plan_manager", f"Transcript too large ({size} bytes), skipping")
+        return None
+
+    try:
+        lines = tp.read_text(encoding="utf-8").splitlines()
+    except Exception as e:
+        log_warn("plan_manager", f"Failed to read transcript: {e}")
+        return None
+
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            data = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+        content = None
+        try:
+            content = data["message"]["content"]
+        except (KeyError, TypeError):
+            continue
+
+        if not isinstance(content, list):
+            continue
+
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") != "tool_use" or block.get("name") != "Write":
+                continue
+            file_path = None
+            try:
+                file_path = block["input"]["file_path"]
+            except (KeyError, TypeError):
+                continue
+            if not file_path:
+                continue
+
+            # Check if path contains .claude/plans/ as consecutive parts
+            parts = Path(file_path).parts
+            for i in range(len(parts) - 1):
+                if parts[i] == ".claude" and parts[i + 1] == "plans":
+                    log_info("plan_manager", f"Extracted plan path from transcript: {file_path}")
+                    return file_path
+
+    log_debug("plan_manager", "No plan Write found in transcript")
+    return None
 
 
 # ---------------------------------------------------------------------------

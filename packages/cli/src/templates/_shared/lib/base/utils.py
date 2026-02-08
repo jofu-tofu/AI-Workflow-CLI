@@ -167,7 +167,7 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
                     # Post-inference stop-word filter: remove generic words the AI included
                     from .stop_words import STOP_WORDS
                     filtered_words = [w for w in ai_slug.split() if w.lower() not in STOP_WORDS and len(w) > 1]
-                    if len(filtered_words) >= 3:
+                    if len(filtered_words) >= 5:
                         slug = sanitize_title(' '.join(filtered_words), max_len=100)
                     else:
                         log_debug("utils", f"AI slug too generic after stop-word filter ({len(filtered_words)} words remain), using fallback")

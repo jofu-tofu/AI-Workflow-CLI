@@ -3,6 +3,7 @@
 Provides a unified interface for Claude API calls using the claude CLI.
 Supports multiple model tiers: fast (Haiku), standard (Sonnet), smart (Opus).
 """
+import json
 import re
 import subprocess
 import sys
@@ -200,82 +201,55 @@ def generate_semantic_summary(prompt: str, timeout: int = 15) -> Optional[str]:
     return summary
 
 
-# System prompt for generating context ID slugs (3-12 keyword tags for folder names)
-CONTEXT_ID_SLUG_PROMPT = """You are extracting keyword tags from a user's request to create a **folder name** for a work session.
+# System prompt for generating context ID slugs (8-12 word summary phrases for folder names)
+CONTEXT_ID_SLUG_PROMPT = """You generate short title phrases for work sessions. These become folder names like `260206-1959-fix-auth-middleware-redirect-loop-session-timeout`.
 
-## Why This Matters
+Users scan 100+ such names to find past sessions. Your title must make THIS session instantly recognizable.
 
-These tags become part of a context ID like `260206-1959-refactor-webhook-retry-logic`. Users scan lists of 50-100+ such folder names to find past work sessions. Your job is to extract the 3-12 words that make THIS session instantly recognizable among hundreds of others.
+Rules:
+- Exactly 8-12 lowercase words
+- First word is an action verb (fix, add, implement, refactor, update, create, remove, optimize, debug, migrate, integrate, configure, deploy, scaffold, restructure)
+- Coherent phrase, not disjointed keywords — reads like a short task description
+- Prefer specific technical terms over generic words
+- No articles (the, a, an), no pronouns, no filler words, no punctuation, no quotes
+- Input may come from speech-to-text with filler words (uh, um, like, you know, basically, so) — ignore them entirely
 
-Think: "If someone had 100 folders and needed to find this one by scanning names, which words would make it jump out?"
+Examples:
 
-## First Word: Action Verb (REQUIRED)
+Input: "um so basically I need to like fix the auth bug in the login page"
+{"slug": "fix authentication bug login page redirect session handling flow"}
 
-The first word MUST be a specific action verb. Choose the most precise verb available:
+Input: "hey uh can we add dark mode to the settings page"
+{"slug": "add dark mode toggle settings page user preference storage"}
 
-Common: fix, add, implement, refactor, update, create, remove, replace, optimize, debug
-Specific (preferred when they fit): scaffold, instrument, serialize, throttle, migrate, integrate, extract, redesign, restructure, decouple, consolidate, parallelize, configure, deploy, benchmark, normalize, validate, document, deprecate, upstream
+Input: "the context ids are bad can we change how we generate them towards a summary"
+{"slug": "improve context id generation use prompt summary slugs"}
 
-## Word Selection: Rarity = Quality
+Input: "I want to refactor the database connection pooling for PostgreSQL"
+{"slug": "refactor postgresql database connection pooling optimize query performance"}
 
-The less common a word is in everyday language, the better it is as an identifier. Apply this mental filter:
+Input: "so like you know the webhook retry logic is broken and stuff"
+{"slug": "fix webhook retry logic broken error handling recovery mechanism"}
 
-BEST (+3):  Proper nouns, brand names, unique identifiers (PostgreSQL, Webpack, OAuth, JWT, CICD)
-GOOD (+2):  Domain-specific technical terms (middleware, pooling, webhook, serialization, throttle)
-OKAY (+1):  Specific common nouns (authentication, redirect, navbar, pagination, dropdown)
-WEAK (-1):  Generic nouns that appear in most prompts (code, file, app, feature, issue, project, stuff, thing)
-BANNED:     See banned list below — these must NEVER appear in output
+Input: "update the CI pipeline to cache node modules between runs"
+{"slug": "update ci pipeline cache node modules between workflow runs"}
 
-Select the 3-12 highest-value words. When choosing between two words that mean similar things, always pick the rarer/more specific one.
-
-## Banned Words (NEVER include these)
-
-Greetings/social: sure, okay, ok, hi, hello, hey, thanks, yeah, yes, no, well, right, um, uh
-Pronouns/articles: I, my, me, we, our, you, your, he, she, it, they, the, a, an, this, that, these, those
-Auxiliaries/modals: is, are, was, were, be, been, being, can, could, would, should, will, shall, may, might, must, do, does, did, have, has, had
-Prepositions: to, with, for, in, of, on, at, by, from, into, about, through, between, after, before, during
-Conjunctions: and, or, but, so, because, if, when, while, although, since
-Filler/hedging: want, need, help, try, think, know, look, going, trying, looking, basically, actually, really, just, some, also, please, maybe, probably, kind, sort, pretty, very, quite, like
-Generic: code, file, app, stuff, thing, feature, issue, problem, way, part, bit, lot, something
-
-## Bad vs Good Examples
-
-BAD:  sure help refactor code cleanup          -> starts with filler, "code" is generic
-GOOD: refactor database queries connection pooling
-
-BAD:  want add feature authentication          -> "want" is filler, "feature" is noise
-GOOD: add authentication Express JWT middleware
-
-BAD:  looking fix issue login page             -> gerund opener, "issue" is generic
-GOOD: fix login redirect blank page session
-
-BAD:  improve things make better setup         -> vague nouns, no technical specificity
-GOOD: improve CI pipeline GitHub Actions caching
-
-BAD:  help update documentation readme stuff   -> "help" opener, "stuff" is noise
-GOOD: update README API endpoints documentation
-
-BAD:  thinking about maybe changing prompt     -> hedging words, no specificity
-GOOD: optimize context ID extraction prompting Opus
-
-## Output
-
-Output ONLY the keyword tags separated by spaces. Nothing else. No reasoning, no labels, no punctuation, no quotes, no hyphens, no markdown."""
+Respond with ONLY a JSON object: {"slug": "your 8-12 word phrase here"}"""
 
 
 def generate_context_id_slug(prompt: str, timeout: int = 3) -> Optional[str]:
     """
-    Generate a 3-12 word context ID slug from a user prompt using AI inference.
+    Generate a 5-12 word context ID slug from a user prompt using AI inference.
 
-    Uses Haiku (fast tier) for low-latency keyword extraction within hook timeout budgets.
-    Returns a cleaned, validated slug or None on failure.
+    Uses Haiku (fast tier) for low-latency summary generation within hook timeout budgets.
+    Prompts for JSON output {"slug": "..."} with fallback to raw text parsing.
 
     Args:
-        prompt: Raw user prompt to extract keywords from
+        prompt: Raw user prompt to summarize (may include STT filler words)
         timeout: Timeout in seconds (default 3, fits within 5-10s hook budget)
 
     Returns:
-        Space-separated keyword slug (3-12 words) or None if failed
+        Space-separated summary slug (5-12 words) or None if failed
     """
     # Truncate input to 500 chars to keep inference fast
     truncated = prompt[:500] if len(prompt) > 500 else prompt
@@ -291,7 +265,20 @@ def generate_context_id_slug(prompt: str, timeout: int = 3) -> Optional[str]:
         log_warn("inference", f"Context ID slug inference failed: {result.error}")
         return None
 
-    slug = result.output.strip()
+    raw = result.output.strip()
+
+    # Parse JSON response {"slug": "..."}, fall back to raw text
+    slug = None
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict) and "slug" in parsed:
+            slug = parsed["slug"]
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    if not slug:
+        # Fallback: treat entire output as raw text
+        slug = raw
 
     # Clean: strip quotes, punctuation, hyphens
     slug = slug.strip('"\'`')
@@ -306,10 +293,10 @@ def generate_context_id_slug(prompt: str, timeout: int = 3) -> Optional[str]:
 
     words = slug.split()
 
-    # Validate word count: truncate if over 12, reject if under 3
+    # Validate word count: truncate if over 12, reject if under 5
     if len(words) > 12:
         words = words[:12]
-    if len(words) < 3:
+    if len(words) < 5:
         log_debug("inference", f"Context ID slug too short ({len(words)} words): '{slug}'")
         return None
 

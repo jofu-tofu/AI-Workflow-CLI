@@ -39,7 +39,7 @@ from lib.base.hook_utils import load_hook_input, log_debug, log_info, log_warn, 
 from lib.base.utils import project_dir
 from lib.base.constants import get_context_dir
 from lib.context.context_store import get_context_by_session_id
-from lib.context.plan_manager import archive_plan, extract_plan_path_from_result
+from lib.context.plan_manager import archive_plan, extract_plan_path_from_result, find_plan_path_in_transcript
 
 # Import debug cleanup function from cc-native lib
 _cc_native_lib = SCRIPT_DIR.parent / "_cc-native" / "lib"
@@ -70,7 +70,15 @@ def _find_plan_path(hook_input: dict, project_root: Path) -> Optional[str]:
     if not plan_path:
         plan_path = tool_input.get("plan_path") or tool_input.get("planPath")
 
-    # Search standard locations
+    # Parse transcript for most recent Write to .claude/plans/
+    if not plan_path:
+        transcript_path = hook_input.get("transcript_path")
+        if transcript_path:
+            plan_path = find_plan_path_in_transcript(transcript_path)
+            if plan_path:
+                log_info("archive_plan", f"Found plan path via transcript: {plan_path}")
+
+    # Search standard locations (mtime-based fallback)
     if not plan_path:
         log_debug("archive_plan", "No plan_path found, searching standard locations...")
         claude_plans_dir = Path.home() / ".claude" / "plans"
