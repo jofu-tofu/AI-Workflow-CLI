@@ -74,7 +74,21 @@ def archive_plan(
 
     # Generate archive filename: YYYY-MM-DD-<slug>.md
     date_str = datetime.now().strftime("%Y-%m-%d-%H%M")
-    slug = sanitize_title(plan_file.stem, max_len=30)
+
+    # Try AI inference for a descriptive slug from plan content
+    slug = None
+    try:
+        from ..base.inference import generate_context_id_slug
+        ai_slug = generate_context_id_slug(content[:500], timeout=5)
+        if ai_slug:
+            slug = sanitize_title(ai_slug, max_len=60)
+    except Exception as e:
+        log_warn("plan_manager", f"Plan slug inference failed: {e}")
+
+    # Fallback: use plan filename
+    if not slug:
+        slug = sanitize_title(plan_file.stem, max_len=30)
+
     archive_name = f"{date_str}-{slug}.md"
     archive_path = plans_dir / archive_name
 

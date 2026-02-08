@@ -361,15 +361,16 @@ def worst_verdict(verdicts: List[str]) -> str:
 def compute_review_decision(
     all_verdicts: List[str],
     warn_threshold: float = 0.5,
-    high_issue_count: int = 0,
-    high_issue_threshold: int = 3,
 ) -> Tuple[bool, str, float]:
-    """Verdict aggregation: fail or high-severity issue count triggers a block.
+    """Verdict aggregation: fail veto triggers a block.
+
+    Per-agent high-severity override happens upstream (caller overrides
+    individual agent verdicts to "fail" when they exceed the threshold),
+    so this function only needs fail_veto logic.
 
     Priority order:
     1. Fail Veto: Any fail -> deny (ISO 61508 zero-tolerance).
-    2. High-Issue Count: high_issue_count >= high_issue_threshold -> deny.
-    3. Acceptable: warns are informational only.
+    2. Acceptable: warns are informational only.
 
     Error exclusion: Detectors that produce no signal (error/skip) are excluded
     from the denominator. They provide no information about plan quality.
@@ -377,13 +378,11 @@ def compute_review_decision(
     Args:
         all_verdicts: List of verdict strings from all reviewers.
         warn_threshold: Kept for backward compatibility. No longer used for blocking.
-        high_issue_count: Total high-severity issues across all reviewers.
-        high_issue_threshold: Block when high_issue_count >= this value (default: 3).
 
     Returns:
         Tuple of (should_deny, reason, score).
         - should_deny: True if the plan should be denied.
-        - reason: "fail_veto", "high_issue_count", "acceptable", or "no_signal".
+        - reason: "fail_veto", "acceptable", or "no_signal".
         - score: 1.0 for deny cases, warn_ratio for informational, 0.0 for no_signal.
     """
     # Exclude non-signal verdicts
@@ -392,14 +391,10 @@ def compute_review_decision(
     if not signal_verdicts:
         return False, "no_signal", 0.0
 
-    # Priority 1: fail blocks unconditionally
+    # Fail blocks unconditionally
     fail_count = signal_verdicts.count("fail")
     if fail_count > 0:
         return True, "fail_veto", 1.0
-
-    # Priority 2: high-severity issue count triggers block
-    if high_issue_count >= high_issue_threshold:
-        return True, "high_issue_count", 1.0
 
     # Warn ratio still computed for logging/visibility, but does NOT block
     warn_count = signal_verdicts.count("warn")

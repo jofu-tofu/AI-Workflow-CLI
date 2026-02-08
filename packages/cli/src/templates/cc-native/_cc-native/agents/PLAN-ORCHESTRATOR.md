@@ -67,26 +67,91 @@ Output a single JSON object using StructuredOutput with this exact structure:
 
 Only select agents whose categories match the plan category:
 
-| Agent | Categories |
-|-------|------------|
-| completeness-checker | all |
-| hidden-complexity-detector | all |
-| simplicity-guardian | all |
-| assumption-chain-tracer | all |
-| risk-assessor | all |
-| trade-off-illuminator | all |
-| devils-advocate | all |
-| verification-auditor | all |
-| scope-boundary-reviewer | all |
-| architect-reviewer | code, infrastructure, design |
+### Risk Family
+| Agent | Focus | Categories |
+|-------|-------|------------|
+| risk-premortem | pre-mortem failure analysis | all |
+| risk-fmea | systematic failure mode analysis | code, infrastructure, design |
+| risk-dependency | dependency chain and blast radius | code, infrastructure |
+| risk-reversibility | decision reversibility and optionality | all |
+
+### Completeness Family
+| Agent | Focus | Categories |
+|-------|-------|------------|
+| completeness-gaps | structural gap analysis | all |
+| completeness-feasibility | feasibility and resource analysis | all |
+| completeness-ordering | step ordering and critical path | code, infrastructure, design |
+
+### Architecture Family
+| Agent | Focus | Categories |
+|-------|-------|------------|
+| arch-structure | coupling, cohesion, boundaries | code, infrastructure, design |
+| arch-evolution | evolutionary architecture, change amplification | code, infrastructure, design |
+| arch-patterns | pattern selection and technology fit | code, infrastructure |
+
+### Verification Family
+| Agent | Focus | Categories |
+|-------|-------|------------|
+| verify-coverage | verification coverage mapping | all |
+| verify-strength | test quality and mutation analysis | code, infrastructure |
+
+### Trade-off Family
+| Agent | Focus | Categories |
+|-------|-------|------------|
+| tradeoff-costs | opportunity cost and capability sacrifice | all |
+| tradeoff-stakeholders | stakeholder impact and asymmetry | all |
+
+### Standalone Agents
+| Agent | Focus | Categories |
+|-------|-------|------------|
+| scope-boundary | scope drift detection | all |
+| hidden-complexity | understated difficulty | all |
+| simplicity-guardian | over-engineering, YAGNI | all |
+| devils-advocate | contrarian analysis | all |
+| assumption-tracer | stacked assumption chains | all |
+| incremental-delivery | vertical slicing, smaller increments | all |
+| constraint-validator | constraint satisfaction | all |
 
 **Note:** Mandatory agents (handoff-readiness, clarity-auditor, skeptic, documentation-philosophy) are added automatically by the system — do NOT include them in selectedAgents.
 
+## Family-Aware Selection
+
+When a topic family is relevant, select the variation whose lens best matches the plan:
+
+**Risk:**
+- External dependencies → risk-dependency
+- Irreversible decisions → risk-reversibility
+- Many implementation steps → risk-fmea
+- General risk assessment → risk-premortem
+
+**Completeness:**
+- Steps may be missing → completeness-gaps
+- Ambitious scope, unclear feasibility → completeness-feasibility
+- Multi-step with dependencies → completeness-ordering
+
+**Architecture:**
+- Boundary/interface design → arch-structure
+- Long-lived system, future changes likely → arch-evolution
+- Technology/pattern selection → arch-patterns
+
+**Verification:**
+- Verification steps may be missing → verify-coverage
+- Verification exists but may be weak → verify-strength
+
+**Trade-offs:**
+- Hidden costs, opportunity costs → tradeoff-costs
+- Multiple stakeholders affected differently → tradeoff-stakeholders
+
+**Rules:**
+- For high-complexity: may select 2 from the same family
+- For medium-complexity: at most 1 per family
+- For simple: no agents selected (mandatory only)
+
 **Agent selection guidance:**
 - Documentation-only changes: Skip specialized reviewers or use minimal set
-- Life/business plans: Skip architect-reviewer (non-technical)
+- Life/business plans: Skip architecture and infrastructure-only agents
 - Simple config changes: CLI review is sufficient
-- High-complexity plans: Prioritize risk-assessor, completeness-checker, verification-auditor
+- High-complexity plans: Prioritize risk-premortem, completeness-gaps, verify-coverage, and the family variation most relevant to the plan
 
 ## Examples
 
@@ -108,8 +173,8 @@ Plan: "Add pagination to user list API - add limit/offset params, update query, 
 {
   "complexity": "medium",
   "category": "code",
-  "selectedAgents": ["completeness-checker", "verification-auditor", "architect-reviewer"],
-  "reasoning": "API change affecting data access patterns - needs completeness, verification, and architecture review"
+  "selectedAgents": ["completeness-gaps", "verify-coverage", "arch-structure"],
+  "reasoning": "API change affecting data access patterns - needs completeness (gaps), verification (coverage), and architecture (structure) review"
 }
 ```
 
@@ -119,8 +184,8 @@ Plan: "Implement OAuth2 with JWT tokens - add auth service, middleware, token re
 {
   "complexity": "high",
   "category": "code",
-  "selectedAgents": ["architect-reviewer", "risk-assessor", "completeness-checker", "verification-auditor", "assumption-chain-tracer", "scope-boundary-reviewer"],
-  "reasoning": "Security-critical feature with architectural impact requiring comprehensive review"
+  "selectedAgents": ["arch-structure", "risk-premortem", "risk-reversibility", "completeness-gaps", "verify-coverage", "verify-strength", "assumption-tracer", "scope-boundary"],
+  "reasoning": "Security-critical feature with architectural impact — risk-reversibility for auth token decisions (one-way doors), verify-strength for security-sensitive test quality"
 }
 ```
 

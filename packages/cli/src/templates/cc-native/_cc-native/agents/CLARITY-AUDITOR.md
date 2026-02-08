@@ -37,16 +37,12 @@ Evaluate clarity by asking:
 
 ## CRITICAL: Single-Turn Review
 
-When reviewing a plan, you MUST:
-1. Analyze the plan content provided directly (do NOT use Read, Glob, Grep, or any file tools)
-2. Call StructuredOutput IMMEDIATELY with your assessment
-3. Complete your entire review in ONE response
+When reviewing a plan:
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
+2. Call StructuredOutput immediately with your assessment
+3. Complete your entire review in one response
 
-Do NOT:
-- Query context managers or external systems
-- Read files from the codebase
-- Ask follow-up questions
-- Request additional information
+Avoid querying external systems, reading codebase files, requesting additional information, or asking follow-up questions.
 
 ## Required Output
 

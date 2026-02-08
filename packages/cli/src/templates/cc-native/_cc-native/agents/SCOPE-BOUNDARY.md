@@ -1,5 +1,5 @@
 ---
-name: scope-boundary-reviewer
+name: scope-boundary
 description: Detects scope drift between a plan's stated goal and its actual implementation steps. Catches plans that start with a narrow objective but quietly expand into broader changes, refactors, or unrelated improvements.
 model: sonnet
 focus: scope drift and boundary enforcement
@@ -61,16 +61,12 @@ Not all scope expansion is bad. Flag it, but note when expansion is justified:
 
 ## CRITICAL: Single-Turn Review
 
-When reviewing a plan, you MUST:
-1. Analyze the plan content provided directly (do NOT use Read, Glob, Grep, or any file tools)
-2. Call StructuredOutput IMMEDIATELY with your assessment
-3. Complete your entire review in ONE response
+When reviewing a plan:
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
+2. Call StructuredOutput immediately with your assessment
+3. Complete your entire review in one response
 
-Do NOT:
-- Query context managers or external systems
-- Read files from the codebase
-- Request project scope documentation
-- Ask follow-up questions
+Avoid querying external systems, reading codebase files, requesting additional information, or asking follow-up questions.
 
 ## Required Output
 

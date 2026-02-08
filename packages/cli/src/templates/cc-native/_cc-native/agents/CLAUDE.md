@@ -1,6 +1,79 @@
 # CC-Native Plan Review Agents
 
-Agent persona definitions for single-turn plan review.
+Agent persona definitions for single-turn plan review. 31 agents total: 4 mandatory + 27 selectable (organized into 7 variation families + 7 standalone).
+
+## Agent Roster (31 agents)
+
+### Mandatory (4) — always run
+| Agent | Focus |
+|-------|-------|
+| `handoff-readiness` | Fresh context execution test |
+| `clarity-auditor` | Communication clarity |
+| `skeptic` | Problem-solution alignment, first-principles |
+| `documentation-philosophy` | Knowledge capture (medium+ only) |
+
+### Risk Family (4 variations)
+| Agent | Framework | Categories |
+|-------|-----------|------------|
+| `risk-premortem` | Pre-mortem (Klein 2007) — assumes failure, generates narratives | all |
+| `risk-fmea` | FMEA — per-step severity×likelihood×detectability | code, infra, design |
+| `risk-dependency` | Blast radius / dependency graph — maps cascading chains | code, infra |
+| `risk-reversibility` | One-way doors / optionality — classifies decision reversibility | all |
+
+### Completeness Family (3 variations)
+| Agent | Framework | Categories |
+|-------|-----------|------------|
+| `completeness-gaps` | Structural gap analysis — missing steps, error paths, pre/post-conditions | all |
+| `completeness-feasibility` | Feasibility — resource gaps, expertise, timeline realism | all |
+| `completeness-ordering` | Critical path / topological sort — step ordering, parallelization | code, infra, design |
+
+### Architecture Family (3 variations)
+| Agent | Framework | Categories |
+|-------|-----------|------------|
+| `arch-structure` | Coupling/cohesion — boundary placement, dependency direction | code, infra, design |
+| `arch-evolution` | Evolutionary architecture — change amplification, extension points | code, infra, design |
+| `arch-patterns` | Pattern selection — technology fit, pattern-forcing detection | code, infra |
+
+### Verification Family (2 variations)
+| Agent | Framework | Categories |
+|-------|-----------|------------|
+| `verify-coverage` | Coverage mapping — 1:1 implementation-to-verification | all |
+| `verify-strength` | Mutation testing — would tests catch subtle bugs? | code, infra |
+
+### Trade-off Family (2 variations)
+| Agent | Framework | Categories |
+|-------|-----------|------------|
+| `tradeoff-costs` | Opportunity cost — hidden costs, capability sacrifice | all |
+| `tradeoff-stakeholders` | Stakeholder impact — who wins, who loses, asymmetry | all |
+
+### Design Family (2 variations)
+| Agent | Framework | Categories |
+|-------|-----------|------------|
+| `design-adr-validator` | ADR structure — Context, Decision, Consequences, alternatives analysis | design, code, infra |
+| `design-scale-matcher` | Scale matching — design depth proportional to blast radius | design, code, infra |
+
+### TestDriven Family (4 variations)
+| Agent | Framework | Categories |
+|-------|-----------|------------|
+| `testdriven-first-validator` | FIRST principles — Fast, Independent, Repeatable, Self-validating, Thorough | code, infra |
+| `testdriven-behavior-auditor` | Behavior contracts — tests verify WHAT not HOW | code, infra |
+| `testdriven-pyramid-analyzer` | Test pyramid — balanced distribution, fast feedback at base | code, infra |
+| `testdriven-characterization` | Characterization tests — safety nets before code modification | code, infra |
+
+### Standalone Agents (7)
+| Agent | Focus | Categories |
+|-------|-------|------------|
+| `scope-boundary` | Scope drift detection | all |
+| `hidden-complexity` | Understated difficulty, "just" statements | all |
+| `simplicity-guardian` | Over-engineering, YAGNI | all |
+| `devils-advocate` | Contrarian, reductio ad absurdum | all |
+| `assumption-tracer` | Stacked assumption chains | all |
+| `incremental-delivery` | Vertical slicing, smaller increments | all |
+| `constraint-validator` | Constraint satisfaction | all |
+
+## Design: Variation Families
+
+Each family covers the same topic area but through different analytical lenses. Same output format, different analytical identity. This follows the RedTeam pattern (32 agents with unique personalities on the same concern). The orchestrator selects the most relevant variation(s) per family based on plan context.
 
 ## System Prompt vs Agent Flag
 

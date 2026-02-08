@@ -35,8 +35,8 @@
     },
     "fallbackByComplexity": {
       "simple": 0,
-      "medium": 3,
-      "high": 7
+      "medium": 4,
+      "high": 8
     },
     "reviewIterations": {
       "simple": 1,
@@ -53,8 +53,8 @@
   },
   "agentSelection": {
     "simple": { "min": 3, "max": 3 },
-    "medium": { "min": 6, "max": 6 },
-    "high": { "min": 10, "max": 10 },
+    "medium": { "min": 8, "max": 8 },
+    "high": { "min": 12, "max": 12 },
     "fallbackCount": 3
   },
   "agentDefaults": {

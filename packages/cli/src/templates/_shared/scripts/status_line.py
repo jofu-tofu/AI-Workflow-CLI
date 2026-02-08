@@ -508,6 +508,19 @@ def render_context_manager(
         )
 
 
+def render_no_context(mode: str) -> None:
+    """Render a prominent indicator when no context is active."""
+    warn = f"{ROSE}\u26A0 {RESET}"  # ⚠ (extra space after glyph)
+    if mode == "nano":
+        print(f"{warn} {ROSE}NO CONTEXT{RESET}")
+    elif mode == "micro":
+        print(f"{warn} {ROSE}NO CONTEXT{RESET}")
+    elif mode == "mini":
+        print(f"{warn} {ROSE}NO CONTEXT{RESET}")
+    else:  # normal
+        print(f"{warn} {ROSE}NO CONTEXT{RESET} {SLATE_500}\u2014 session not tracked{RESET}")
+
+
 # ---------------------------------------------------------------------------
 # Context persistence
 # ---------------------------------------------------------------------------
@@ -678,10 +691,12 @@ def main() -> None:
         render_git(mode, git, dir_name)
 
     # Render context manager line (line 3) with separator
+    print(SEPARATOR)
     if context_id:
-        print(SEPARATOR)
         context_state = _load_context_state(context_id)
         render_context_manager(mode, context_id, context_state)
+    else:
+        render_no_context(mode)
 
     # Persist context_window to state.json
     if context_id:

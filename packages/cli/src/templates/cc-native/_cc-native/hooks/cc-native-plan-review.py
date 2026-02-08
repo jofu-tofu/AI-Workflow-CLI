@@ -134,20 +134,38 @@ def skip_with_info(reason: str) -> int:
 # ---------------------------
 
 DEFAULT_AGENTS: List[Dict[str, Any]] = [
+    # Mandatory agents
     {"name": "handoff-readiness", "model": "sonnet", "focus": "fresh context execution readiness", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
     {"name": "clarity-auditor", "model": "sonnet", "focus": "communication clarity and execution readiness", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
     {"name": "skeptic", "model": "sonnet", "focus": "problem-solution alignment and assumption validation", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
     {"name": "documentation-philosophy", "model": "sonnet", "focus": "knowledge capture and documentation placement", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "completeness-checker", "model": "sonnet", "focus": "missing steps, edge cases, and feasibility gaps", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "hidden-complexity-detector", "model": "sonnet", "focus": "understated complexity and linguistic deception", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    # Risk family
+    {"name": "risk-premortem", "model": "sonnet", "focus": "pre-mortem failure analysis", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "risk-fmea", "model": "sonnet", "focus": "systematic failure mode analysis", "enabled": True, "categories": ["code", "infrastructure", "design"]},
+    {"name": "risk-dependency", "model": "sonnet", "focus": "dependency chain and blast radius analysis", "enabled": True, "categories": ["code", "infrastructure"]},
+    {"name": "risk-reversibility", "model": "sonnet", "focus": "decision reversibility and optionality", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    # Completeness family
+    {"name": "completeness-gaps", "model": "sonnet", "focus": "structural gap analysis", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "completeness-feasibility", "model": "sonnet", "focus": "feasibility and resource analysis", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "completeness-ordering", "model": "sonnet", "focus": "step ordering and critical path analysis", "enabled": True, "categories": ["code", "infrastructure", "design"]},
+    # Architecture family
+    {"name": "arch-structure", "model": "sonnet", "focus": "coupling, cohesion, and boundary analysis", "enabled": True, "categories": ["code", "infrastructure", "design"]},
+    {"name": "arch-evolution", "model": "sonnet", "focus": "evolutionary architecture and change amplification", "enabled": True, "categories": ["code", "infrastructure", "design"]},
+    {"name": "arch-patterns", "model": "sonnet", "focus": "pattern selection and technology fit", "enabled": True, "categories": ["code", "infrastructure"]},
+    # Verification family
+    {"name": "verify-coverage", "model": "sonnet", "focus": "verification coverage mapping", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "verify-strength", "model": "sonnet", "focus": "test quality and mutation analysis", "enabled": True, "categories": ["code", "infrastructure"]},
+    # Trade-off family
+    {"name": "tradeoff-costs", "model": "sonnet", "focus": "opportunity cost and capability sacrifice", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "tradeoff-stakeholders", "model": "sonnet", "focus": "stakeholder impact and cost-benefit asymmetry", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    # Standalone agents
+    {"name": "scope-boundary", "model": "sonnet", "focus": "scope drift and boundary enforcement", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "hidden-complexity", "model": "sonnet", "focus": "understated complexity and hidden difficulty", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
     {"name": "simplicity-guardian", "model": "sonnet", "focus": "over-engineering and unnecessary complexity", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "assumption-chain-tracer", "model": "sonnet", "focus": "dependency chains and foundational assumptions", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "architect-reviewer", "model": "sonnet", "focus": "plan-level architectural decisions and patterns", "enabled": True, "categories": ["code", "infrastructure", "design"]},
-    {"name": "risk-assessor", "model": "sonnet", "focus": "pre-mortem failure analysis and risk mitigation", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "trade-off-illuminator", "model": "sonnet", "focus": "hidden costs and sacrificed alternatives", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
     {"name": "devils-advocate", "model": "sonnet", "focus": "contrarian analysis and reductio ad absurdum", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "verification-auditor", "model": "sonnet", "focus": "verification step adequacy and test coverage", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "scope-boundary-reviewer", "model": "sonnet", "focus": "scope drift and boundary enforcement", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "assumption-tracer", "model": "sonnet", "focus": "dependency chains and foundational assumptions", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "incremental-delivery", "model": "sonnet", "focus": "incremental delivery and vertical slicing", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {"name": "constraint-validator", "model": "sonnet", "focus": "constraint identification and satisfaction", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
 ]
 
 DEFAULT_ORCHESTRATOR: Dict[str, Any] = {
@@ -645,12 +663,8 @@ def main() -> int:
     # Collect CLI results
     if "codex" in phase1_results and phase1_results["codex"]:
         cli_results["codex"] = phase1_results["codex"]
-        if phase1_results["codex"].verdict and phase1_results["codex"].verdict not in ("skip", "error"):
-            all_verdicts.append(phase1_results["codex"].verdict)
     if "gemini" in phase1_results and phase1_results["gemini"]:
         cli_results["gemini"] = phase1_results["gemini"]
-        if phase1_results["gemini"].verdict and phase1_results["gemini"].verdict not in ("skip", "error"):
-            all_verdicts.append(phase1_results["gemini"].verdict)
 
     # Get orchestrator result
     if "orchestrator" in phase1_results and phase1_results["orchestrator"]:
@@ -752,8 +766,6 @@ def main() -> int:
                     try:
                         result = future.result()
                         agent_results[agent.name] = result
-                        if result.verdict and result.verdict not in ("skip", "error"):
-                            all_verdicts.append(result.verdict)
                         log_info("cc-native-plan-review", f"{agent.name} completed with verdict: {result.verdict}")
                     except Exception as ex:
                         log_error("cc-native-plan-review", f"{agent.name} failed with exception: {ex}")
@@ -765,6 +777,25 @@ def main() -> int:
                             raw="",
                             err=str(ex),
                         )
+
+    # ============================================
+    # Per-agent high-severity threshold: override verdict to "fail" if threshold met
+    # ============================================
+    high_issue_threshold = agent_settings.get("highIssueThreshold", 3)
+    all_verdicts = []  # Recompute with overrides applied
+
+    for r in list(cli_results.values()) + list(agent_results.values()):
+        if not r.verdict or r.verdict in ("skip", "error"):
+            continue
+        agent_high = sum(
+            1 for issue in (r.data.get("issues", []) if r.data else [])
+            if issue.get("severity") == "high"
+        )
+        if agent_high >= high_issue_threshold:
+            log_info("cc-native-plan-review",
+                     f"{r.name}: verdict overridden to 'fail' ({agent_high} high issues >= {high_issue_threshold})")
+            r.verdict = "fail"
+        all_verdicts.append(r.verdict)
 
     # ============================================
     # PHASE 4: Generate Combined Output
@@ -811,31 +842,19 @@ def main() -> int:
 
     context_parts = [inline_summary, f"\nFull review: `{review_file}`\n"]
 
-    # Count high-severity issues across all reviewers
-    high_count = sum(
-        1 for r in list(combined_result.cli_reviewers.values()) + list(combined_result.agents.values())
-        if r.data
-        for issue in r.data.get("issues", [])
-        if issue.get("severity") == "high"
-    )
-
-    # Review decision — fail or high-issue count triggers a block
+    # Review decision — fail veto triggers a block (per-agent override already applied)
     warn_threshold = agent_settings.get("warnThreshold", 0.5)
-    high_issue_threshold = agent_settings.get("highIssueThreshold", 3)
     should_deny, deny_reason, review_score = compute_review_decision(
         all_verdicts, warn_threshold,
-        high_issue_count=high_count,
-        high_issue_threshold=high_issue_threshold,
     )
 
     # Structured log entries for review influence tracking
-    log_info("cc-native-plan-review", f"REVIEW_DECISION: verdict={combined_result.overall_verdict}, deny={should_deny}, reason={deny_reason}, score={review_score:.2f}, high_issues={high_count}/{high_issue_threshold}")
+    log_info("cc-native-plan-review", f"REVIEW_DECISION: verdict={combined_result.overall_verdict}, deny={should_deny}, reason={deny_reason}, score={review_score:.2f}")
     log_diagnostic("cc-native-plan-review", "result",
-                    f"verdict={combined_result.overall_verdict}, deny={should_deny}, reason={deny_reason}, high={high_count}/{high_issue_threshold}",
+                    f"verdict={combined_result.overall_verdict}, deny={should_deny}, reason={deny_reason}",
                     decision="deny" if should_deny else "allow",
-                    reasoning=f"reason={deny_reason}, score={review_score:.2f}, warn_threshold={warn_threshold}, high_threshold={high_issue_threshold}",
+                    reasoning=f"reason={deny_reason}, score={review_score:.2f}, warn_threshold={warn_threshold}",
                     inputs={"overall_verdict": combined_result.overall_verdict,
-                            "high_issue_count": high_count, "high_issue_threshold": high_issue_threshold,
                             "review_score": round(review_score, 2),
                             "cli_count": len(cli_results), "agent_count": len(agent_results)})
 
@@ -843,10 +862,7 @@ def main() -> int:
     verdict_emoji = "✅" if not should_deny else "❌"
     eprint(f"[plan-review] {verdict_emoji} {combined_result.overall_verdict.upper()} (score={review_score:.2f})")
     if should_deny:
-        if deny_reason == "high_issue_count":
-            eprint(f"[plan-review] Blocking ExitPlanMode — {high_count} high-severity issue(s) found (threshold: {high_issue_threshold})")
-        else:
-            eprint(f"[plan-review] Blocking ExitPlanMode — {deny_reason}")
+        eprint(f"[plan-review] Blocking ExitPlanMode — {deny_reason}")
 
     # Handle iteration logic
     needs_more_iterations = False
