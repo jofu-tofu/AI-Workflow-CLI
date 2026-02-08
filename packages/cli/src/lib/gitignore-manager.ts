@@ -1,6 +1,147 @@
 import {promises as fs} from 'node:fs'
 import {join} from 'node:path'
 
+import {pathExists} from './paths.js'
+
+/**
+ * AIW gitignore section header marker
+ */
+const AIW_GITIGNORE_HEADER = '# AIW Installation'
+
+/**
+ * Prune stale entries from the AIW Installation section in .gitignore.
+ * Checks each entry against disk existence and removes entries whose paths don't exist.
+ * Removes the entire section if no entries remain after pruning.
+ *
+ * @param targetDir - Directory containing .gitignore
+ * @returns True if any entries were pruned
+ */
+export async function pruneGitignoreStaleEntries(targetDir: string): Promise<boolean> {
+  const gitignorePath = join(targetDir, '.gitignore')
+
+  try {
+    const content = await fs.readFile(gitignorePath, 'utf8')
+
+    if (!content.includes(AIW_GITIGNORE_HEADER)) {
+      return false
+    }
+
+    const lines = content.split('\n')
+    const newLines: string[] = []
+    let inAiwSection = false
+    const aiwSectionLines: string[] = []
+    let pruned = false
+
+    for (const line of lines) {
+      if (line === AIW_GITIGNORE_HEADER) {
+        inAiwSection = true
+        aiwSectionLines.push(line)
+        continue
+      }
+
+      if (inAiwSection) {
+        // AIW section ends at empty line or another comment header
+        if (line === '' || (line.startsWith('#') && line !== AIW_GITIGNORE_HEADER)) {
+          inAiwSection = false
+          const {lines: filtered, pruned: sectionPruned} = await pruneSection(aiwSectionLines, targetDir)
+          if (sectionPruned) pruned = true
+          newLines.push(...filtered, line)
+        } else {
+          aiwSectionLines.push(line)
+        }
+      } else {
+        newLines.push(line)
+      }
+    }
+
+    // Handle case where AIW section is at end of file
+    if (inAiwSection) {
+      const {lines: filtered, pruned: sectionPruned} = await pruneSection(aiwSectionLines, targetDir)
+      if (sectionPruned) pruned = true
+      newLines.push(...filtered)
+    }
+
+    if (!pruned) {
+      return false
+    }
+
+    // Clean up: remove AIW section entirely if only header remains
+    let result = cleanupEmptySections(newLines.join('\n'))
+
+    // Ensure file ends properly
+    result = result.replace(/\n+$/, '\n')
+    if (result.trim() === '') {
+      result = ''
+    }
+
+    await fs.writeFile(gitignorePath, result, 'utf8')
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Prune stale entries from a parsed AIW section.
+ * Checks each gitignore pattern against disk existence.
+ */
+async function pruneSection(
+  sectionLines: string[],
+  targetDir: string,
+): Promise<{lines: string[]; pruned: boolean}> {
+  let pruned = false
+  const filtered: string[] = []
+
+  for (const line of sectionLines) {
+    // Always keep the header
+    if (line === AIW_GITIGNORE_HEADER) {
+      filtered.push(line)
+      continue
+    }
+
+    // Check if the path exists on disk
+    const cleanPath = line.replace(/^\//, '').replace(/\/$/, '')
+    const absPath = join(targetDir, cleanPath)
+    if (await pathExists(absPath)) {
+      filtered.push(line)
+    } else {
+      pruned = true
+    }
+  }
+
+  return {lines: filtered, pruned}
+}
+
+/**
+ * Remove empty AIW sections (header with no patterns following).
+ */
+function cleanupEmptySections(content: string): string {
+  const lines = content.split('\n')
+  const newLines: string[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] as string
+
+    if (line === AIW_GITIGNORE_HEADER) {
+      // Look ahead to see if there are any patterns
+      const nextLine = lines[i + 1]
+      if (nextLine === undefined || nextLine === '' || nextLine.startsWith('#')) {
+        // Skip the header — section is empty
+        // Also remove trailing empty lines before the header
+        while (newLines.length > 0 && newLines.at(-1) === '') {
+          newLines.pop()
+        }
+
+        continue
+      }
+    }
+
+    newLines.push(line)
+  }
+
+  return newLines.join('\n')
+}
+
 /**
  * Update .gitignore with patterns for installed folders.
  *

@@ -106,35 +106,43 @@ def main():
         }
         state.last_active = now_iso()
 
-        # Fallback: assign plan fields if PostToolUse:ExitPlanMode didn't fire.
-        # When ExitPlanMode triggers /clear, the session terminates before PostToolUse
-        # hooks can run, so plan_accepted.py never fires. Detect this by checking
-        # for an archived plan that hasn't been assigned yet.
-        if not state.plan_hash:
-            latest_plan_path = find_latest_plan(state.id, project_root)
-            if latest_plan_path:
-                try:
-                    content = Path(latest_plan_path).read_text(encoding="utf-8")
-                    normalized = normalize_plan_content(content)
-                    state.plan_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
-                    state.plan_path = latest_plan_path
-                    state.plan_signature = content[:200]
-                    state.plan_id = generate_plan_id()
-                    state.plan_anchors = extract_plan_anchors(content)
-                    state.plan_consumed = False
-                    log_info("session_end", f"Fallback: assigned archived plan for {state.id} (hash: {state.plan_hash})")
-                except Exception as e:
-                    log_warn("session_end", f"Fallback plan assignment failed: {e}")
+        # Only assign plan fields and stage if NOT in plan mode.
+        # If permission_mode == "plan", ExitPlanMode was rejected (user pressed Escape),
+        # so we should not stage the archived plan for the next session.
+        permission_mode = hook_input.get("permission_mode", "default")
 
-        # If a plan is assigned, not yet consumed, and mode is active, stage it for next session
-        if state.plan_hash and state.mode == "active" and not state.plan_consumed:
-            state.mode = "has_plan"
-            log_info("session_end", f"Staged plan for next session: {state.id} -> has_plan")
-        elif state.plan_hash and state.mode == "active" and state.plan_consumed:
-            log_debug("session_end", f"Plan already consumed for {state.id}, not re-staging")
-            log_diagnostic("session_end", "decide", f"Skipping re-stage for {state.id}",
-                            decision="skip_restage", reasoning="plan_hash exists but plan_consumed=True",
-                            inputs={"plan_hash": state.plan_hash, "plan_consumed": True})
+        if permission_mode != "plan":
+            # Fallback: assign plan fields if PostToolUse:ExitPlanMode didn't fire.
+            # When ExitPlanMode triggers /clear, the session terminates before PostToolUse
+            # hooks can run, so plan_accepted.py never fires. Detect this by checking
+            # for an archived plan that hasn't been assigned yet.
+            if not state.plan_hash:
+                latest_plan_path = find_latest_plan(state.id, project_root)
+                if latest_plan_path:
+                    try:
+                        content = Path(latest_plan_path).read_text(encoding="utf-8")
+                        normalized = normalize_plan_content(content)
+                        state.plan_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
+                        state.plan_path = latest_plan_path
+                        state.plan_signature = content[:200]
+                        state.plan_id = generate_plan_id()
+                        state.plan_anchors = extract_plan_anchors(content)
+                        state.plan_consumed = False
+                        log_info("session_end", f"Fallback: assigned archived plan for {state.id} (hash: {state.plan_hash})")
+                    except Exception as e:
+                        log_warn("session_end", f"Fallback plan assignment failed: {e}")
+
+            # If a plan is assigned, not yet consumed, and mode is active, stage it for next session
+            if state.plan_hash and state.mode == "active" and not state.plan_consumed:
+                state.mode = "has_plan"
+                log_info("session_end", f"Staged plan for next session: {state.id} -> has_plan")
+            elif state.plan_hash and state.mode == "active" and state.plan_consumed:
+                log_debug("session_end", f"Plan already consumed for {state.id}, not re-staging")
+                log_diagnostic("session_end", "decide", f"Skipping re-stage for {state.id}",
+                                decision="skip_restage", reasoning="plan_hash exists but plan_consumed=True",
+                                inputs={"plan_hash": state.plan_hash, "plan_consumed": True})
+        else:
+            log_info("session_end", f"Plan mode active (rejected), skipping plan staging for {state.id}")
 
         # Handoff staging (mirrors plan staging above)
         # Note: if plan already set has_plan, mode != "active" so handoff check skips (plan takes priority)

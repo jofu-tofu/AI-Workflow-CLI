@@ -50,6 +50,8 @@ export default class CleanCommand extends BaseCommand {
     const {flags} = await this.parse(CleanCommand)
     const targetDir = process.cwd()
 
+    this.logWarning("'aiw clean' is deprecated. Use 'aiw clear --output' instead.")
+
     // Validate: require either --method or --all
     if (!flags.method && !flags.all) {
       this.error('Either --method or --all is required.', {

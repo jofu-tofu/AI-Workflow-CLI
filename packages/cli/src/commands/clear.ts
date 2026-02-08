@@ -5,6 +5,8 @@ import {confirm} from '@inquirer/prompts'
 import {Flags} from '@oclif/core'
 
 import BaseCommand from '../lib/base-command.js'
+import {pruneGitignoreStaleEntries} from '../lib/gitignore-manager.js'
+import {pathExists} from '../lib/paths.js'
 import {EXIT_CODES} from '../types/exit-codes.js'
 
 /**
@@ -20,19 +22,60 @@ const AIWCLI_CONTAINER = '.aiwcli'
 const OUTPUT_FOLDER_NAME = '_output'
 
 /**
- * IDE configuration folder names and their method subfolder structure
+ * IDE configuration folder names and settings file locations.
+ * Method subfolders are discovered dynamically via disk scanning.
  */
 const IDE_FOLDERS = {
   claude: {
     root: '.claude',
-    methodSubfolders: ['commands', 'skills', 'agents'],
     settingsFile: 'settings.json',
   },
   windsurf: {
     root: '.windsurf',
-    methodSubfolders: ['workflows'],
     settingsFile: 'hooks.json',
   },
+}
+
+/**
+ * Get the set of installed method names by combining the settings.json registry
+ * with disk scan of .aiwcli/_* directories.
+ *
+ * @param targetDir - Directory containing the .aiwcli container
+ * @returns Set of method names (e.g., 'cc-native', 'bmad')
+ */
+async function getInstalledMethodNames(targetDir: string): Promise<Set<string>> {
+  const methods = new Set<string>()
+
+  // Source 1: settings.json methods registry
+  for (const ide of Object.values(IDE_FOLDERS)) {
+    const settingsPath = join(targetDir, ide.root, ide.settingsFile)
+    try {
+      const content = await fs.readFile(settingsPath, 'utf8')
+      const settings = JSON.parse(content)
+      if (settings.methods && typeof settings.methods === 'object') {
+        for (const method of Object.keys(settings.methods)) {
+          methods.add(method)
+        }
+      }
+    } catch {
+      // Settings file doesn't exist or can't be parsed
+    }
+  }
+
+  // Source 2: disk scan of .aiwcli/_* directories
+  const containerDir = join(targetDir, AIWCLI_CONTAINER)
+  try {
+    const entries = await fs.readdir(containerDir, {withFileTypes: true})
+    for (const entry of entries) {
+      if (entry.isDirectory() && entry.name.startsWith('_') && entry.name !== OUTPUT_FOLDER_NAME) {
+        methods.add(entry.name.slice(1)) // strip leading underscore
+      }
+    }
+  } catch {
+    // Container doesn't exist
+  }
+
+  return methods
 }
 
 /**
@@ -83,19 +126,18 @@ async function isSettingsFileEmpty(filePath: string): Promise<boolean> {
  * Check if an IDE folder should be fully deleted.
  * Returns true if:
  * 1. The settings file is empty (or doesn't exist)
- * 2. All method subfolders are empty (or don't exist)
+ * 2. All subdirectories are empty (or don't exist)
  * Backup files (e.g., settings.json.backup) are ignored.
  *
  * @param targetDir - Directory containing the IDE folder
  * @param ideFolder - IDE folder configuration
- * @param ideFolder.methodSubfolders - List of method subfolder names to check
  * @param ideFolder.root - Root folder name (e.g., '.claude')
  * @param ideFolder.settingsFile - Settings file name (e.g., 'settings.json')
  * @returns True if the IDE folder should be fully deleted
  */
 async function shouldDeleteIdeFolder(
   targetDir: string,
-  ideFolder: {methodSubfolders: string[]; root: string; settingsFile: string},
+  ideFolder: {root: string; settingsFile: string},
 ): Promise<boolean> {
   const ideFolderPath = join(targetDir, ideFolder.root)
 
@@ -117,25 +159,13 @@ async function shouldDeleteIdeFolder(
     return false
   }
 
-  // Check if all method subfolders are empty (in parallel)
-  const subfolderChecks = await Promise.all(
-    ideFolder.methodSubfolders.map(async (subfolder) => {
-      const subfolderPath = join(ideFolderPath, subfolder)
-      return isDirectoryEmpty(subfolderPath)
-    }),
-  )
-  if (subfolderChecks.some((isEmpty) => !isEmpty)) {
-    return false
-  }
-
   // Check the IDE folder itself - ignore backup files and check for other meaningful content
   try {
     const entries = await fs.readdir(ideFolderPath)
-    // Filter entries to check (skip backup files, settings file, and known subfolders)
+    // Filter entries to check (skip backup files and settings file)
     const entriesToCheck = entries.filter((entry) => {
       if (entry.endsWith('.backup')) return false
       if (entry === ideFolder.settingsFile) return false
-      if (ideFolder.methodSubfolders.includes(entry)) return false
       return true
     })
 
@@ -369,9 +399,7 @@ async function updateIdeSettings(
                 (innerHook: Record<string, unknown>) => {
                   if (typeof innerHook.command === 'string') {
                     return !methodsToRemove.some(
-                      (method) =>
-                        innerHook.command?.toString().includes(`_${method}/`) ||
-                        innerHook.command?.toString().includes(`/${method}-`),
+                      (method) => innerHook.command?.toString().includes(`_${method}/`),
                     )
                   }
 
@@ -440,6 +468,8 @@ export default class ClearCommand extends BaseCommand {
     '<%= config.bin %> <%= command.id %> -t cc-native',
     '<%= config.bin %> <%= command.id %> --dry-run',
     '<%= config.bin %> <%= command.id %> --force',
+    '<%= config.bin %> <%= command.id %> --output',
+    '<%= config.bin %> <%= command.id %> --output --dry-run',
   ]
   static override flags = {
     ...BaseCommand.baseFlags,
@@ -453,15 +483,28 @@ export default class ClearCommand extends BaseCommand {
       description: 'Skip confirmation prompt',
       default: false,
     }),
+    output: Flags.boolean({
+      char: 'o',
+      description: 'Clean runtime output artifacts (temp files, caches, log rotation, archives)',
+      default: false,
+      exclusive: ['template'],
+    }),
     template: Flags.string({
       char: 't',
       description: 'Clear only a specific template (e.g., cc-native)',
+      exclusive: ['output'],
     }),
   }
 
   async run(): Promise<void> {
     const {flags} = await this.parse(ClearCommand)
     const targetDir = process.cwd()
+
+    // Handle --output flag separately (mutually exclusive with --template)
+    if (flags.output) {
+      await this.cleanRuntimeOutput(targetDir, flags)
+      return
+    }
 
     try {
       // Find all folders to clear
@@ -545,27 +588,37 @@ export default class ClearCommand extends BaseCommand {
           return false
         }
 
-        // Count existing method folders vs folders being deleted (in parallel)
-        const subfolderResults = await Promise.all(
-          ideFolder.methodSubfolders.map(async (subfolder) => {
-            const subfolderPath = join(idePath, subfolder)
-            try {
-              const entries = await fs.readdir(subfolderPath, {withFileTypes: true})
-              const methodDirs = entries.filter((e) => e.isDirectory())
-              const beingDeleted = methodDirs.filter((entry) => {
-                const fullPath = join(subfolderPath, entry.name)
-                return ideMethodFolders.includes(fullPath)
-              }).length
-              return {beingDeleted, total: methodDirs.length}
-            } catch {
-              // Subfolder doesn't exist
-              return {beingDeleted: 0, total: 0}
-            }
-          }),
-        )
+        // Scan all subdirectories to count method folders vs folders being deleted
+        let totalMethodFolders = 0
+        let foldersBeingDeleted = 0
+        try {
+          const topEntries = await fs.readdir(idePath, {withFileTypes: true})
+          const subdirs = topEntries.filter((e) => e.isDirectory())
 
-        const totalMethodFolders = subfolderResults.reduce((sum, r) => sum + r.total, 0)
-        const foldersBeingDeleted = subfolderResults.reduce((sum, r) => sum + r.beingDeleted, 0)
+          // Check each subdirectory for method folders
+          const subResults = await Promise.all(
+            subdirs.map(async (subdir) => {
+              const subdirPath = join(idePath, subdir.name)
+              try {
+                const entries = await fs.readdir(subdirPath, {withFileTypes: true})
+                const methodDirs = entries.filter((e) => e.isDirectory())
+                const deleted = methodDirs.filter((entry) => {
+                  const fullPath = join(subdirPath, entry.name)
+                  return ideMethodFolders.includes(fullPath)
+                }).length
+                return {deleted, total: methodDirs.length}
+              } catch {
+                return {deleted: 0, total: 0}
+              }
+            }),
+          )
+          for (const r of subResults) {
+            totalMethodFolders += r.total
+            foldersBeingDeleted += r.deleted
+          }
+        } catch {
+          return false
+        }
 
         // If all method folders are being deleted, check if settings would be empty
         if (totalMethodFolders > 0 && totalMethodFolders === foldersBeingDeleted) {
@@ -697,6 +750,12 @@ export default class ClearCommand extends BaseCommand {
         this.logDebug('Updated .gitignore')
       }
 
+      // Prune stale gitignore entries (paths that no longer exist on disk)
+      const pruned = await pruneGitignoreStaleEntries(targetDir)
+      if (pruned) {
+        this.logDebug('Pruned stale .gitignore entries')
+      }
+
       // Update IDE settings files to remove method-specific entries
       let updatedClaudeSettings = false
       let updatedWindsurfSettings = false
@@ -777,7 +836,7 @@ export default class ClearCommand extends BaseCommand {
 
       this.logSuccess(`Cleared: ${parts.join(', ')}.`)
 
-      if (removedAiwcliContainer) {
+      if (removedAiwcliContainer || pruned) {
         this.logSuccess('Updated .gitignore.')
       }
 
@@ -822,45 +881,56 @@ export default class ClearCommand extends BaseCommand {
   }
 
   /**
-   * Find all IDE method folders (e.g., .claude/commands/{method}/, .claude/skills/{method}/).
-   * Searches within IDE configuration folders for method-specific subfolders.
+   * Find all IDE method folders by scanning subdirectories of each IDE root
+   * for children matching installed method names.
+   *
+   * For example, finds .claude/commands/cc-native/, .claude/skills/cc-native/,
+   * .windsurf/workflows/cc-native/ — without hardcoding which subdirectories exist.
    *
    * @param targetDir - Directory to search in
    * @param template - Optional template/method name to filter by
    * @returns Array of IDE method folder paths
    */
   private async findIdeMethodFolders(targetDir: string, template?: string): Promise<string[]> {
-    // Build list of all subfolder paths to check
-    const subfolderChecks: {ideRoot: string; subfolder: string}[] = []
+    // Build method set: from --template flag, or from installed methods
+    const methodNames = template ? new Set([template]) : await getInstalledMethodNames(targetDir)
 
-    for (const ide of Object.values(IDE_FOLDERS)) {
-      const ideRoot = join(targetDir, ide.root)
-      for (const subfolder of ide.methodSubfolders) {
-        subfolderChecks.push({ideRoot, subfolder})
-      }
+    if (methodNames.size === 0) {
+      return []
     }
 
-    // Check all subfolders in parallel
-    const subfolderResults = await Promise.all(
-      subfolderChecks.map(async ({ideRoot, subfolder}) => {
-        const subfolderPath = join(ideRoot, subfolder)
+    // For each IDE root, scan all subdirectories for children matching method names
+    const ideRoots = Object.values(IDE_FOLDERS).map((ide) => join(targetDir, ide.root))
 
+    const ideResults = await Promise.all(
+      ideRoots.map(async (ideRoot) => {
+        // Get all subdirectories of IDE root (e.g., .claude/commands/, .claude/skills/)
         try {
-          const stat = await fs.stat(subfolderPath)
-          if (!stat.isDirectory()) return []
+          const topEntries = await fs.readdir(ideRoot, {withFileTypes: true})
+          const subdirs = topEntries.filter((e) => e.isDirectory())
 
-          const entries = await fs.readdir(subfolderPath, {withFileTypes: true})
-          return entries
-            .filter((entry) => entry.isDirectory())
-            .filter((entry) => !template || entry.name === template)
-            .map((entry) => join(subfolderPath, entry.name))
+          // For each subdirectory, check for method-named children
+          const subResults = await Promise.all(
+            subdirs.map(async (subdir) => {
+              const subdirPath = join(ideRoot, subdir.name)
+              try {
+                const entries = await fs.readdir(subdirPath, {withFileTypes: true})
+                return entries
+                  .filter((entry) => entry.isDirectory() && methodNames.has(entry.name))
+                  .map((entry) => join(subdirPath, entry.name))
+              } catch {
+                return []
+              }
+            }),
+          )
+          return subResults.flat()
         } catch {
           return []
         }
       }),
     )
 
-    return subfolderResults.flat()
+    return ideResults.flat()
   }
 
   /**
@@ -951,5 +1021,200 @@ export default class ClearCommand extends BaseCommand {
     }
 
     return foundFolders
+  }
+
+  /**
+   * Clean runtime output artifacts from _output/ at project root.
+   * Handles temp files, cache files, log rotation, and archive cleanup.
+   *
+   * @param targetDir - Project root directory
+   * @param flags - Command flags (dry-run, force)
+   */
+  private async cleanRuntimeOutput(
+    targetDir: string,
+    flags: {'dry-run': boolean; force: boolean},
+  ): Promise<void> {
+    const outputDir = join(targetDir, '_output')
+
+    if (!(await pathExists(outputDir))) {
+      this.logInfo('No _output/ directory found.')
+      return
+    }
+
+    const toDelete: {path: string; reason: string}[] = []
+    let logAction: {path: string; sizeBytes: number} | null = null
+    let archiveDir: string | null = null
+    let archiveCount = 0
+
+    try {
+      const entries = await fs.readdir(outputDir, {withFileTypes: true})
+
+      for (const entry of entries) {
+        const entryPath = join(outputDir, entry.name)
+
+        // Temp files: .index_*.tmp (orphaned atomic write files)
+        if (entry.isFile() && entry.name.startsWith('.index_') && entry.name.endsWith('.tmp')) {
+          toDelete.push({path: entryPath, reason: 'temp file'})
+          continue
+        }
+
+        // Cache files: .*-cache.json
+        if (entry.isFile() && entry.name.startsWith('.') && entry.name.endsWith('-cache.json')) {
+          toDelete.push({path: entryPath, reason: 'cache file'})
+          continue
+        }
+
+        // Log rotation: hook-log.jsonl > 1MB
+        if (entry.isFile() && entry.name === 'hook-log.jsonl') {
+          try {
+            const stat = await fs.stat(entryPath)
+            if (stat.size > 1_048_576) {
+              logAction = {path: entryPath, sizeBytes: stat.size}
+            }
+          } catch {
+            // Can't stat log file
+          }
+
+          continue
+        }
+
+        // Archive cleanup: contexts/_archive/
+        if (entry.isDirectory() && entry.name === 'contexts') {
+          const archivePath = join(entryPath, '_archive')
+          try {
+            const archiveEntries = await fs.readdir(archivePath)
+            if (archiveEntries.length > 0) {
+              archiveDir = archivePath
+              archiveCount = archiveEntries.length
+            }
+          } catch {
+            // No archive directory
+          }
+        }
+      }
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException
+      this.error(`Cannot read _output/: ${err.message}`, {
+        exit: EXIT_CODES.GENERAL_ERROR,
+      })
+    }
+
+    // Nothing to clean
+    if (toDelete.length === 0 && !logAction && !archiveDir) {
+      this.logInfo('No runtime output artifacts to clean.')
+      return
+    }
+
+    // Show what will be cleaned
+    this.log('')
+    this.logInfo('Runtime output cleanup:')
+
+    if (toDelete.length > 0) {
+      for (const item of toDelete) {
+        const relativePath = item.path.replace(targetDir + '\\', '').replace(targetDir + '/', '')
+        this.log(`  ${relativePath} (${item.reason})`)
+      }
+    }
+
+    if (logAction) {
+      const sizeMB = (logAction.sizeBytes / 1_048_576).toFixed(1)
+      this.log(`  _output/hook-log.jsonl (${sizeMB}MB → truncate to ~512KB)`)
+    }
+
+    if (archiveDir) {
+      this.log(`  _output/contexts/_archive/ (${archiveCount} archived context(s))`)
+    }
+
+    this.log('')
+
+    // Dry run
+    if (flags['dry-run']) {
+      this.logInfo('Dry run complete. No files were modified.')
+      return
+    }
+
+    // Confirm archive deletion (unless --force)
+    if (archiveDir && !flags.force) {
+      const shouldDelete = await confirm({
+        message: `Delete ${archiveCount} archived context(s)?`,
+        default: false,
+      })
+
+      if (!shouldDelete) {
+        archiveDir = null
+        archiveCount = 0
+      }
+    }
+
+    // Execute deletions
+    let deletedCount = 0
+    for (const item of toDelete) {
+      try {
+        await fs.unlink(item.path)
+        deletedCount++
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException
+        this.logWarning(`Failed to delete ${item.path}: ${err.message}`)
+      }
+    }
+
+    // Log rotation
+    if (logAction) {
+      try {
+        const content = await fs.readFile(logAction.path, 'utf8')
+        // Keep the most recent 512KB
+        const truncated = content.slice(-524_288)
+        // Find the first complete line
+        const firstNewline = truncated.indexOf('\n')
+        const cleaned = firstNewline >= 0 ? truncated.slice(firstNewline + 1) : truncated
+        await fs.writeFile(logAction.path, cleaned, 'utf8')
+        this.logDebug('Rotated hook-log.jsonl')
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException
+        this.logWarning(`Failed to rotate log: ${err.message}`)
+      }
+    }
+
+    // Archive cleanup
+    let archivedCleaned = 0
+    if (archiveDir) {
+      try {
+        const archiveEntries = await fs.readdir(archiveDir)
+        await Promise.all(
+          archiveEntries.map(async (entry) => {
+            try {
+              await fs.rm(join(archiveDir!, entry), {force: true, recursive: true})
+              archivedCleaned++
+            } catch {
+              // Individual entry failed
+            }
+          }),
+        )
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException
+        this.logWarning(`Failed to clean archive: ${err.message}`)
+      }
+    }
+
+    // Summary
+    this.log('')
+    const parts: string[] = []
+    if (deletedCount > 0) {
+      parts.push(`${deletedCount} file(s) removed`)
+    }
+
+    if (logAction) {
+      parts.push('log rotated')
+    }
+
+    if (archivedCleaned > 0) {
+      parts.push(`${archivedCleaned} archived context(s) removed`)
+    }
+
+    if (parts.length > 0) {
+      this.logSuccess(`Output cleanup: ${parts.join(', ')}.`)
+    } else {
+      this.logInfo('No changes made.')
+    }
   }
 }

@@ -57,6 +57,12 @@ describe('clear command', () => {
       const hasTemplateExample = examples.some((ex: string) => ex.includes('--template'))
       expect(hasTemplateExample).to.be.true
     })
+
+    it('should include output example', () => {
+      const {examples} = ClearCommand
+      const hasOutputExample = examples.some((ex: string) => ex.includes('--output'))
+      expect(hasOutputExample).to.be.true
+    })
   })
 
   describe('command structure', () => {
@@ -81,6 +87,11 @@ describe('clear command', () => {
     it('should have template flag', () => {
       expect(ClearCommand.flags).to.have.property('template')
       expect(ClearCommand.flags['template']).to.have.property('char', 't')
+    })
+
+    it('should have output flag', () => {
+      expect(ClearCommand.flags).to.have.property('output')
+      expect(ClearCommand.flags['output']).to.have.property('char', 'o')
     })
   })
 
@@ -172,6 +183,16 @@ describe('clear command', () => {
       const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('willClaudeFolderBeEmpty')
       expect(source).to.include('willWindsurfFolderBeEmpty')
+    })
+
+    it('should handle --output flag for runtime output cleanup', () => {
+      const source = ClearCommand.prototype.run.toString()
+      expect(source).to.include('cleanRuntimeOutput')
+    })
+
+    it('should prune stale gitignore entries after clearing', () => {
+      const source = ClearCommand.prototype.run.toString()
+      expect(source).to.include('pruneGitignoreStaleEntries')
     })
   })
 })

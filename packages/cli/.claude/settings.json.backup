@@ -63,5 +63,9 @@
     "deny": []
   },
   "env": {},
-  "enabledPlugins": {}
+  "enabledPlugins": {},
+  "statusLine": {
+    "type": "command",
+    "command": "python .aiwcli/_shared/scripts/status_line.py"
+  }
 }
