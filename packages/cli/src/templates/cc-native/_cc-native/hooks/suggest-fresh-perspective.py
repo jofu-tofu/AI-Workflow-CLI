@@ -25,7 +25,6 @@ import json
 import os
 import re
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any, Dict
 
@@ -38,7 +37,7 @@ sys.path.insert(0, str(_shared_lib))
 
 from base.hook_utils import emit_context
 from base.logger import log_debug, log_info, log_warn, log_error
-from utils import sanitize_filename
+from lib.context.context_store import get_context_by_session_id, save_state
 
 
 # ---------------------------
@@ -97,63 +96,94 @@ def get_project_dir(payload: Dict[str, Any]) -> Path:
 # ---------------------------
 
 # Single combined pattern for error detection (case-insensitive)
-_ERROR_PATTERN = re.compile(
-    r'(error:|failed|exception)',
-    re.IGNORECASE
-)
+_ERROR_PATTERN = re.compile(r"(error:|failed|exception)", re.IGNORECASE)
 
 # Combined pattern for test failures
 _TEST_FAILURE_PATTERN = re.compile(
-    r'(\d+\s+failed|FAIL\s|✗|AssertionError|test.*failed|npm\s+ERR!.*test)',
-    re.IGNORECASE
+    r"(\d+\s+failed|FAIL\s|✗|AssertionError|test.*failed|npm\s+ERR!.*test)",
+    re.IGNORECASE,
 )
 
 # Pattern for normalizing error messages (line numbers)
-_LINE_NUMBER_PATTERN = re.compile(r':\d+')
-_MULTI_DIGIT_PATTERN = re.compile(r'\d{2,}')
-_PATH_PATTERN = re.compile(r'[/\\][^\s/\\]+[/\\]')
+_LINE_NUMBER_PATTERN = re.compile(r":\d+")
+_MULTI_DIGIT_PATTERN = re.compile(r"\d{2,}")
+_PATH_PATTERN = re.compile(r"[/\\][^\s/\\]+[/\\]")
 
 
 # ---------------------------
-# State management (session-scoped)
+# State management (state.json integration)
 # ---------------------------
 
-def get_state_path(session_id: str) -> Path:
-    """Get path to stuck-detection state file for this session."""
-    safe_id = sanitize_filename(str(session_id), max_len=32)
-    return Path(tempfile.gettempdir()) / f"cc-native-stuck-state-{safe_id}.json"
 
+def _get_cc_native_state(session_id: str, project_root: Path) -> Dict[str, Any]:
+    """Get cc_native state from context state.json.
 
-def load_state(session_id: str) -> Dict[str, Any]:
-    """Load stuck detection state for this session."""
-    state_path = get_state_path(session_id)
-    default_state = {
-        "error_hashes": {},  # hash -> count
-        "file_edits": {},     # file_path -> count
-        "test_failures": 0,
-        "tool_calls_since_suggestion": 0,
-        "suggestion_count": 0,
-    }
-    if not state_path.exists():
-        return default_state
+    Returns the cc_native dict or empty dict if not found.
+    """
     try:
-        return json.loads(state_path.read_text(encoding="utf-8"))
+        state = get_context_by_session_id(session_id, project_root)
+        if state and hasattr(state, "cc_native"):
+            return state.cc_native
     except Exception:
-        return default_state
+        pass
+    return {}
 
 
-def save_state(session_id: str, state: Dict[str, Any]) -> None:
-    """Save stuck detection state for this session."""
-    state_path = get_state_path(session_id)
+def _save_cc_native_state(
+    session_id: str, project_root: Path, cc_native_data: Dict[str, Any]
+) -> bool:
+    """Save cc_native state to context state.json.
+
+    Returns True on success, False on failure.
+    """
     try:
-        state_path.write_text(json.dumps(state), encoding="utf-8")
+        state = get_context_by_session_id(session_id, project_root)
+        if state:
+            state.cc_native = cc_native_data
+            save_state(state, project_root)
+            return True
     except Exception as e:
-        log_warn("suggest-fresh-perspective", f"Failed to save state: {e}")
+        log_warn("suggest-fresh-perspective", f"Failed to save cc_native state: {e}")
+    return False
+
+
+def load_stuck_state(session_id: str, project_root: Path) -> Dict[str, Any]:
+    """Load stuck detection state for this session from state.json."""
+    cc_native = _get_cc_native_state(session_id, project_root)
+    stuck_state = cc_native.get("stuck_detection", {})
+    return {
+        "error_hashes": stuck_state.get("error_hashes", {}),
+        "file_edits": stuck_state.get("file_edits", {}),
+        "test_failures": stuck_state.get("test_failures", 0),
+        "tool_calls_since_suggestion": stuck_state.get(
+            "tool_calls_since_suggestion", 0
+        ),
+        "suggestion_count": stuck_state.get("suggestion_count", 0),
+    }
+
+
+def save_stuck_state(
+    session_id: str, project_root: Path, stuck_state: Dict[str, Any]
+) -> None:
+    """Save stuck detection state for this session to state.json."""
+    try:
+        cc_native = _get_cc_native_state(session_id, project_root) or {}
+        cc_native["stuck_detection"] = stuck_state
+        if not _save_cc_native_state(session_id, project_root, cc_native):
+            log_warn(
+                "suggest-fresh-perspective",
+                f"Failed to save stuck detection state for session {session_id}",
+            )
+    except Exception as e:
+        log_warn(
+            "suggest-fresh-perspective", f"Failed to save stuck detection state: {e}"
+        )
 
 
 # ---------------------------
 # Detection logic
 # ---------------------------
+
 
 def hash_error(error_text: str) -> str:
     """Create a simple hash of an error message for deduplication.
@@ -162,15 +192,17 @@ def hash_error(error_text: str) -> str:
     but preserves enough context to distinguish different errors.
     """
     # Normalize: remove line numbers, preserve error type
-    normalized = _LINE_NUMBER_PATTERN.sub(':N', error_text)
-    normalized = _MULTI_DIGIT_PATTERN.sub('N', normalized)
+    normalized = _LINE_NUMBER_PATTERN.sub(":N", error_text)
+    normalized = _MULTI_DIGIT_PATTERN.sub("N", normalized)
     # Simplify paths but keep some structure
-    normalized = _PATH_PATTERN.sub('.../', normalized)
+    normalized = _PATH_PATTERN.sub(".../", normalized)
     # Take first 100 chars after normalization
     return normalized[:100]
 
 
-def detect_repeated_error(state: Dict[str, Any], tool_result: str, threshold: int) -> bool:
+def detect_repeated_error(
+    state: Dict[str, Any], tool_result: str, threshold: int
+) -> bool:
     """Check if we're seeing the same error repeatedly.
 
     Returns True if threshold reached, always updates state.
@@ -186,7 +218,9 @@ def detect_repeated_error(state: Dict[str, Any], tool_result: str, threshold: in
     return False
 
 
-def detect_repeated_file_edits(state: Dict[str, Any], tool_name: str, tool_input: Dict[str, Any], threshold: int) -> bool:
+def detect_repeated_file_edits(
+    state: Dict[str, Any], tool_name: str, tool_input: Dict[str, Any], threshold: int
+) -> bool:
     """Check if we're editing the same file repeatedly.
 
     Returns True if threshold reached, always updates state.
@@ -206,7 +240,9 @@ def detect_repeated_file_edits(state: Dict[str, Any], tool_name: str, tool_input
     return state["file_edits"][file_path] >= threshold
 
 
-def detect_test_failures(state: Dict[str, Any], tool_name: str, tool_result: str, threshold: int) -> bool:
+def detect_test_failures(
+    state: Dict[str, Any], tool_name: str, tool_result: str, threshold: int
+) -> bool:
     """Check for repeated test failures.
 
     Returns True if threshold reached, always updates state.
@@ -224,6 +260,7 @@ def detect_test_failures(state: Dict[str, Any], tool_name: str, tool_result: str
 # ---------------------------
 # Main hook logic
 # ---------------------------
+
 
 def should_suggest(state: Dict[str, Any], cooldown: int) -> bool:
     """Check if we're past the cooldown period."""
@@ -284,15 +321,19 @@ def main() -> int:
     # Extract result text
     result_text = ""
     if isinstance(tool_result, dict):
-        result_text = str(tool_result.get("output", "") or tool_result.get("content", ""))
+        result_text = str(
+            tool_result.get("output", "") or tool_result.get("content", "")
+        )
     elif isinstance(tool_result, str):
         result_text = tool_result
 
-    # Load state (file I/O)
-    state = load_state(session_id)
+    # Load state from state.json
+    state = load_stuck_state(session_id, project_dir)
 
     # Increment tool call counter
-    state["tool_calls_since_suggestion"] = state.get("tool_calls_since_suggestion", 0) + 1
+    state["tool_calls_since_suggestion"] = (
+        state.get("tool_calls_since_suggestion", 0) + 1
+    )
 
     # Get thresholds from config (with type coercion for safety)
     error_threshold = _int_or_default(config.get("errorThreshold"), 3)
@@ -303,11 +344,15 @@ def main() -> int:
 
     # Run ALL detections (don't short-circuit - each updates state)
     error_detected = detect_repeated_error(state, result_text, error_threshold)
-    file_edit_detected = detect_repeated_file_edits(state, tool_name, tool_input, file_edit_threshold)
-    test_failure_detected = detect_test_failures(state, tool_name, result_text, test_failure_threshold)
+    file_edit_detected = detect_repeated_file_edits(
+        state, tool_name, tool_input, file_edit_threshold
+    )
+    test_failure_detected = detect_test_failures(
+        state, tool_name, result_text, test_failure_threshold
+    )
 
     # Save state AFTER all detections have run
-    save_state(session_id, state)
+    save_stuck_state(session_id, project_dir, state)
 
     # Check if any detection triggered
     is_stuck = error_detected or file_edit_detected or test_failure_detected
@@ -325,11 +370,14 @@ def main() -> int:
         # Reset cooldown
         state["tool_calls_since_suggestion"] = 0
         state["suggestion_count"] = state.get("suggestion_count", 0) + 1
-        save_state(session_id, state)
+        save_stuck_state(session_id, project_dir, state)
 
         # Only suggest up to maxSuggestions times per session
         if state["suggestion_count"] <= max_suggestions:
-            log_info("suggest-fresh-perspective", f"Suggesting fresh perspective (suggestion #{state['suggestion_count']})")
+            log_info(
+                "suggest-fresh-perspective",
+                f"Suggesting fresh perspective (suggestion #{state['suggestion_count']})",
+            )
             create_suggestion()
 
     return 0
@@ -337,4 +385,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     from base.hook_utils import run_hook
+
     run_hook(main, "suggest_fresh_perspective")

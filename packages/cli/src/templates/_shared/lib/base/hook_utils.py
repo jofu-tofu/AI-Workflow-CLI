@@ -15,7 +15,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TypeVar
 
-from .logger import log_hook_error, hook_log, log_debug, log_info, log_warn, log_error, log_diagnostic, set_context_path, _get_context_path
+from .logger import log_hook_error, hook_log, log_debug, log_info, log_warn, log_error, log_diagnostic, set_context_path, set_session_id
 
 
 # Context window baseline: tokens not visible in hook data
@@ -91,6 +91,7 @@ F = TypeVar('F', bound=Callable[..., Any])
 # Event metadata stash — populated by load_hook_input(), read by run_hook()
 _last_hook_event: Optional[str] = None
 _last_tool_name: Optional[str] = None
+_last_session_id: Optional[str] = None
 
 
 def load_hook_input() -> Optional[Dict[str, Any]]:
@@ -100,7 +101,7 @@ def load_hook_input() -> Optional[Dict[str, Any]]:
     Returns:
         Parsed JSON dict, or None if stdin is empty or invalid JSON
     """
-    global _last_hook_event, _last_tool_name
+    global _last_hook_event, _last_tool_name, _last_session_id
     try:
         input_data = sys.stdin.read().strip()
         if not input_data:
@@ -109,6 +110,7 @@ def load_hook_input() -> Optional[Dict[str, Any]]:
         if isinstance(result, dict):
             _last_hook_event = result.get("hook_event_name")
             _last_tool_name = result.get("tool_name")
+            _last_session_id = result.get("session_id")
         return result
     except json.JSONDecodeError:
         return None
@@ -285,6 +287,10 @@ def run_hook(main_func: Callable[[], int], hook_name: str = "unknown") -> None:
     event = _last_hook_event or "unknown"
     tool = _last_tool_name
 
+    # Wire session_id into logger so all log entries carry it
+    if _last_session_id:
+        set_session_id(_last_session_id)
+
     # HOOK_START
     start_data: Dict[str, Any] = {"lifecycle": "start", "template": template, "event": event}
     if tool:
@@ -307,14 +313,6 @@ def run_hook(main_func: Callable[[], int], hook_name: str = "unknown") -> None:
         exit_code = 0  # Non-blocking
         status = "error"
         error_info = (e, traceback.format_exc())
-
-    # Retroactive HOOK_START: if main() set a context path, re-emit HOOK_START
-    # to the per-context log (original HOOK_START went to global log before
-    # context was resolved).
-    resolved_after = _get_context_path()
-    if resolved_after and resolved_after.exists():
-        hook_log("info", hook_name, "HOOK_START", data=start_data,
-                 context_path=resolved_after, stderr=False)
 
     # HOOK_END
     duration_ms = round((time.monotonic() - start_time) * 1000, 1)

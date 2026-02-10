@@ -1,0 +1,21 @@
+{
+  "name": "lib-ts-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "mocha",
+    "test:unit": "mocha '__tests__/base/**/*.test.ts' '__tests__/templates/**/*.test.ts'",
+    "test:contract": "mocha '__tests__/context/**/*.test.ts' '__tests__/handoff/**/*.test.ts'",
+    "test:integration": "mocha '__tests__/integration/**/*.test.ts'",
+    "test:parity": "mocha '__tests__/integration/python-parity.test.ts'",
+    "fixtures": "python __tests__/fixtures/generate_fixtures.py"
+  },
+  "devDependencies": {
+    "mocha": "^10.0.0",
+    "chai": "^5.0.0",
+    "@types/mocha": "^10.0.0",
+    "@types/sinon": "^17.0.0",
+    "sinon": "^17.0.0",
+    "typescript": "^5.0.0"
+  }
+}

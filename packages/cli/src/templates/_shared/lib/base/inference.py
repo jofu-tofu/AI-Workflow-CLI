@@ -69,7 +69,7 @@ def inference(
         "claude",
         "--model", model,
         "--print",
-        "--no-hooks",
+        "--setting-sources", "",
         "-p", full_prompt,
     ]
 
@@ -136,7 +136,9 @@ from .stop_words import STOP_WORDS
 
 def filter_stop_words(text: str) -> str:
     """Remove stop words from text, keeping only content keywords."""
-    words = text.lower().split()
+    from .utils import clean_text_for_slug
+    cleaned = clean_text_for_slug(text)
+    words = cleaned.split()
     filtered = [w for w in words if w not in STOP_WORDS and len(w) > 1]
     return ' '.join(filtered)
 
@@ -237,7 +239,7 @@ Input: "update the CI pipeline to cache node modules between runs"
 Respond with ONLY a JSON object: {"slug": "your 8-12 word phrase here"}"""
 
 
-def generate_context_id_slug(prompt: str, timeout: int = 3) -> Optional[str]:
+def generate_context_id_slug(prompt: str, timeout: int = 5) -> Optional[str]:
     """
     Generate a 5-12 word context ID slug from a user prompt using AI inference.
 

@@ -105,6 +105,14 @@ STOP_WORDS = {
     'apparently', 'obviously', 'clearly', 'literally', 'essentially',
 
     # ========================================================================
+    # SPEECH-TO-TEXT FILLERS (STT artifacts from voice input)
+    # ========================================================================
+    'um', 'uh', 'ah', 'oh', 'hmm', 'hm', 'er', 'eh', 'huh',
+    'hey', 'hi', 'hello', 'yeah', 'yep', 'yup', 'nah', 'nope',
+    'gonna', 'gotta', 'wanna', 'kinda', 'sorta',
+    'stuff', 'anyway', 'anyways', 'alright', 'right', 'well',
+
+    # ========================================================================
     # COMMON REQUEST PHRASES (from corpus: high frequency in prompts)
     # ========================================================================
     'want', 'need', 'help', 'please', 'like', 'let', 'get',

@@ -7,6 +7,7 @@ AskUserQuestion before exploring the codebase.
 
 Skips if questions were already asked this session.
 """
+
 import json
 import sys
 from pathlib import Path
@@ -61,7 +62,10 @@ def main() -> int:
             log_debug("plan_questions_early", "No session_id, skipping")
             return 0
 
-        if was_questions_asked(session_id):
+        # Get project root for context operations
+        project_root = Path(payload.get("cwd", ".")).resolve()
+
+        if was_questions_asked(session_id, project_root):
             log_debug("plan_questions_early", "Questions already asked, skipping")
             return 0
 
@@ -70,6 +74,7 @@ def main() -> int:
 
     except Exception as e:
         from base.hook_utils import log_hook_error
+
         log_hook_error("plan_questions_early", e, "UserPromptSubmit")
         log_error("plan_questions_early", str(e))
 
@@ -78,4 +83,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     from base.hook_utils import run_hook
+
     run_hook(main, "plan_questions_early")

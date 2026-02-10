@@ -213,7 +213,8 @@ describe('Epic 3: Scripting & Shell Integration - Integration Validation', () =>
         expect(output).to.include('COMMANDS')
       })
 
-      it('Task 5.2: FR31 - validates short and long flags', () => {
+      it('Task 5.2: FR31 - validates short and long flags', function () {
+        this.timeout(20_000) // 4 CLI spawns on Windows need headroom
         // Test --debug and -d
         const output1 = execSync(`${bin} --version --debug`, {encoding: 'utf8', stdio: 'pipe'})
         const output2 = execSync(`${bin} --version -d`, {encoding: 'utf8', stdio: 'pipe'})

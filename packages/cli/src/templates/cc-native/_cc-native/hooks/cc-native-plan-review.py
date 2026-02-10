@@ -85,24 +85,35 @@ try:
         DEFAULT_AGENT_SELECTION,
         DEFAULT_COMPLEXITY_CATEGORIES,
     )
+
     # Import shared context system
     from lib.context.context_store import (
         get_context_by_session_id,
         get_all_contexts,
     )
-    from lib.base.constants import get_context_reviews_dir, get_review_folder_path, get_context_dir
+    from lib.base.constants import (
+        get_context_reviews_dir,
+        get_review_folder_path,
+        get_context_dir,
+    )
     from debug import debug_log, debug_raw
 except ImportError as e:
     try:
         from lib.base.logger import log_error as _early_log_error
+
         _early_log_error("cc-native-plan-review", f"Failed to import lib: {e}")
     except Exception:
         print(f"[cc-native-plan-review] Failed to import lib: {e}", file=sys.stderr)
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "additionalContext": f"[Plan Review Error] Failed to import required module: {e}. The plan review hook could not load its dependencies.",
-        }
-    }, ensure_ascii=True))
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "additionalContext": f"[Plan Review Error] Failed to import required module: {e}. The plan review hook could not load its dependencies.",
+                }
+            },
+            ensure_ascii=True,
+        )
+    )
     sys.exit(0)  # Non-blocking failure
 
 # Add scripts directory to path for aggregate_agents import
@@ -113,6 +124,7 @@ if str(_scripts_dir) not in sys.path:
 try:
     from aggregate_agents import aggregate_agents
 except ImportError:
+
     def aggregate_agents(agents_dir: Path) -> List[Dict[str, Any]]:
         log_warn("cc-native-plan-review", "aggregate_agents not found")
         return []
@@ -135,37 +147,331 @@ def skip_with_info(reason: str) -> int:
 
 DEFAULT_AGENTS: List[Dict[str, Any]] = [
     # Mandatory agents
-    {"name": "handoff-readiness", "model": "sonnet", "focus": "fresh context execution readiness", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "clarity-auditor", "model": "sonnet", "focus": "communication clarity and execution readiness", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "skeptic", "model": "sonnet", "focus": "problem-solution alignment and assumption validation", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "documentation-philosophy", "model": "sonnet", "focus": "knowledge capture and documentation placement", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {
+        "name": "handoff-readiness",
+        "model": "sonnet",
+        "focus": "fresh context execution readiness",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
+    {
+        "name": "clarity-auditor",
+        "model": "sonnet",
+        "focus": "communication clarity and execution readiness",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
+    {
+        "name": "skeptic",
+        "model": "sonnet",
+        "focus": "problem-solution alignment and assumption validation",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
+    {
+        "name": "documentation-philosophy",
+        "model": "sonnet",
+        "focus": "knowledge capture and documentation placement",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
     # Risk family
-    {"name": "risk-premortem", "model": "sonnet", "focus": "pre-mortem failure analysis", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "risk-fmea", "model": "sonnet", "focus": "systematic failure mode analysis", "enabled": True, "categories": ["code", "infrastructure", "design"]},
-    {"name": "risk-dependency", "model": "sonnet", "focus": "dependency chain and blast radius analysis", "enabled": True, "categories": ["code", "infrastructure"]},
-    {"name": "risk-reversibility", "model": "sonnet", "focus": "decision reversibility and optionality", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {
+        "name": "risk-premortem",
+        "model": "sonnet",
+        "focus": "pre-mortem failure analysis",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
+    {
+        "name": "risk-fmea",
+        "model": "sonnet",
+        "focus": "systematic failure mode analysis",
+        "enabled": True,
+        "categories": ["code", "infrastructure", "design"],
+    },
+    {
+        "name": "risk-dependency",
+        "model": "sonnet",
+        "focus": "dependency chain and blast radius analysis",
+        "enabled": True,
+        "categories": ["code", "infrastructure"],
+    },
+    {
+        "name": "risk-reversibility",
+        "model": "sonnet",
+        "focus": "decision reversibility and optionality",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
     # Completeness family
-    {"name": "completeness-gaps", "model": "sonnet", "focus": "structural gap analysis", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "completeness-feasibility", "model": "sonnet", "focus": "feasibility and resource analysis", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "completeness-ordering", "model": "sonnet", "focus": "step ordering and critical path analysis", "enabled": True, "categories": ["code", "infrastructure", "design"]},
+    {
+        "name": "completeness-gaps",
+        "model": "sonnet",
+        "focus": "structural gap analysis",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
+    {
+        "name": "completeness-feasibility",
+        "model": "sonnet",
+        "focus": "feasibility and resource analysis",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
+    {
+        "name": "completeness-ordering",
+        "model": "sonnet",
+        "focus": "step ordering and critical path analysis",
+        "enabled": True,
+        "categories": ["code", "infrastructure", "design"],
+    },
     # Architecture family
-    {"name": "arch-structure", "model": "sonnet", "focus": "coupling, cohesion, and boundary analysis", "enabled": True, "categories": ["code", "infrastructure", "design"]},
-    {"name": "arch-evolution", "model": "sonnet", "focus": "evolutionary architecture and change amplification", "enabled": True, "categories": ["code", "infrastructure", "design"]},
-    {"name": "arch-patterns", "model": "sonnet", "focus": "pattern selection and technology fit", "enabled": True, "categories": ["code", "infrastructure"]},
+    {
+        "name": "arch-structure",
+        "model": "sonnet",
+        "focus": "coupling, cohesion, and boundary analysis",
+        "enabled": True,
+        "categories": ["code", "infrastructure", "design"],
+    },
+    {
+        "name": "arch-evolution",
+        "model": "sonnet",
+        "focus": "evolutionary architecture and change amplification",
+        "enabled": True,
+        "categories": ["code", "infrastructure", "design"],
+    },
+    {
+        "name": "arch-patterns",
+        "model": "sonnet",
+        "focus": "pattern selection and technology fit",
+        "enabled": True,
+        "categories": ["code", "infrastructure"],
+    },
     # Verification family
-    {"name": "verify-coverage", "model": "sonnet", "focus": "verification coverage mapping", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "verify-strength", "model": "sonnet", "focus": "test quality and mutation analysis", "enabled": True, "categories": ["code", "infrastructure"]},
+    {
+        "name": "verify-coverage",
+        "model": "sonnet",
+        "focus": "verification coverage mapping",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
+    {
+        "name": "verify-strength",
+        "model": "sonnet",
+        "focus": "test quality and mutation analysis",
+        "enabled": True,
+        "categories": ["code", "infrastructure"],
+    },
     # Trade-off family
-    {"name": "tradeoff-costs", "model": "sonnet", "focus": "opportunity cost and capability sacrifice", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "tradeoff-stakeholders", "model": "sonnet", "focus": "stakeholder impact and cost-benefit asymmetry", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {
+        "name": "tradeoff-costs",
+        "model": "sonnet",
+        "focus": "opportunity cost and capability sacrifice",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
+    {
+        "name": "tradeoff-stakeholders",
+        "model": "sonnet",
+        "focus": "stakeholder impact and cost-benefit asymmetry",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
     # Standalone agents
-    {"name": "scope-boundary", "model": "sonnet", "focus": "scope drift and boundary enforcement", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "hidden-complexity", "model": "sonnet", "focus": "understated complexity and hidden difficulty", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "simplicity-guardian", "model": "sonnet", "focus": "over-engineering and unnecessary complexity", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "devils-advocate", "model": "sonnet", "focus": "contrarian analysis and reductio ad absurdum", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "assumption-tracer", "model": "sonnet", "focus": "dependency chains and foundational assumptions", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "incremental-delivery", "model": "sonnet", "focus": "incremental delivery and vertical slicing", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
-    {"name": "constraint-validator", "model": "sonnet", "focus": "constraint identification and satisfaction", "enabled": True, "categories": ["code", "infrastructure", "documentation", "design", "research", "life", "business"]},
+    {
+        "name": "scope-boundary",
+        "model": "sonnet",
+        "focus": "scope drift and boundary enforcement",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
+    {
+        "name": "hidden-complexity",
+        "model": "sonnet",
+        "focus": "understated complexity and hidden difficulty",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
+    {
+        "name": "simplicity-guardian",
+        "model": "sonnet",
+        "focus": "over-engineering and unnecessary complexity",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
+    {
+        "name": "devils-advocate",
+        "model": "sonnet",
+        "focus": "contrarian analysis and reductio ad absurdum",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
+    {
+        "name": "assumption-tracer",
+        "model": "sonnet",
+        "focus": "dependency chains and foundational assumptions",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
+    {
+        "name": "incremental-delivery",
+        "model": "sonnet",
+        "focus": "incremental delivery and vertical slicing",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
+    {
+        "name": "constraint-validator",
+        "model": "sonnet",
+        "focus": "constraint identification and satisfaction",
+        "enabled": True,
+        "categories": [
+            "code",
+            "infrastructure",
+            "documentation",
+            "design",
+            "research",
+            "life",
+            "business",
+        ],
+    },
 ]
 
 DEFAULT_ORCHESTRATOR: Dict[str, Any] = {
@@ -211,6 +517,7 @@ def resolve_mandatory_agents(config_value, complexity: str) -> set:
 # Context-based State Management
 # ---------------------------
 
+
 def get_active_context_for_review(session_id: str, project_root: Path) -> Optional[Any]:
     """Find active context for plan review.
 
@@ -240,15 +547,24 @@ def get_active_context_for_review(session_id: str, project_root: Path) -> Option
     # Since this hook fires during ExitPlanMode, any active non-idle context is a candidate.
     planning_contexts = [c for c in all_active if c.mode in ("active", "has_plan")]
     if len(planning_contexts) == 1:
-        log_info("cc-native-plan-review", f"Found single planning context: {planning_contexts[0].id}")
+        log_info(
+            "cc-native-plan-review",
+            f"Found single planning context: {planning_contexts[0].id}",
+        )
         return planning_contexts[0]
 
     # Multiple or no planning contexts found
     if len(planning_contexts) > 1:
-        log_warn("cc-native-plan-review", f"Multiple planning contexts ({len(planning_contexts)}), cannot determine which to use")
+        log_warn(
+            "cc-native-plan-review",
+            f"Multiple planning contexts ({len(planning_contexts)}), cannot determine which to use",
+        )
     elif len(all_active) > 0:
         modes = [c.mode for c in all_active]
-        log_info("cc-native-plan-review", f"Found {len(all_active)} active context(s) with modes {modes}, but none in 'planning' mode")
+        log_info(
+            "cc-native-plan-review",
+            f"Found {len(all_active)} active context(s) with modes {modes}, but none in 'planning' mode",
+        )
     else:
         log_info("cc-native-plan-review", "No active contexts found")
     return None
@@ -347,11 +663,13 @@ def update_iteration_state_in_context(
     """
     from datetime import datetime
 
-    iteration["history"].append({
-        "hash": plan_hash,
-        "verdict": verdict,
-        "timestamp": datetime.now().isoformat(),
-    })
+    iteration["history"].append(
+        {
+            "hash": plan_hash,
+            "verdict": verdict,
+            "timestamp": datetime.now().isoformat(),
+        }
+    )
     return iteration
 
 
@@ -375,7 +693,10 @@ def should_continue_iterating_context(
 
     # At or past max iterations - no more iterations
     if current >= max_iter:
-        log_info("cc-native-plan-review", f"At max iterations ({current}/{max_iter}), no more iterations")
+        log_info(
+            "cc-native-plan-review",
+            f"At max iterations ({current}/{max_iter}), no more iterations",
+        )
         return False
 
     # Check early exit on all pass
@@ -383,17 +704,24 @@ def should_continue_iterating_context(
     if config:
         early_exit = config.get("earlyExitOnAllPass", False)
     if early_exit and review_score == 0.0:
-        log_info("cc-native-plan-review", "All reviewers passed (score=0.0) and earlyExitOnAllPass=true, exiting early")
+        log_info(
+            "cc-native-plan-review",
+            "All reviewers passed (score=0.0) and earlyExitOnAllPass=true, exiting early",
+        )
         return False
 
     # More iterations available and score is not zero (or early exit disabled)
-    log_info("cc-native-plan-review", f"Continuing to next iteration ({current + 1}/{max_iter}), score={review_score:.2f}")
+    log_info(
+        "cc-native-plan-review",
+        f"Continuing to next iteration ({current + 1}/{max_iter}), score={review_score:.2f}",
+    )
     return True
 
 
 # ---------------------------
 # Settings Loading
 # ---------------------------
+
 
 def load_settings(proj_dir: Path) -> Dict[str, Any]:
     """Load CC-Native settings from _cc-native/plan-review.config.json"""
@@ -440,7 +768,9 @@ def load_settings(proj_dir: Path) -> Dict[str, Any]:
     merged_agent.update(agent_review)
 
     # Handle orchestrator nested config
-    if "orchestrator" not in merged_agent or not isinstance(merged_agent["orchestrator"], dict):
+    if "orchestrator" not in merged_agent or not isinstance(
+        merged_agent["orchestrator"], dict
+    ):
         merged_agent["orchestrator"] = DEFAULT_ORCHESTRATOR.copy()
     else:
         orch = DEFAULT_ORCHESTRATOR.copy()
@@ -448,19 +778,35 @@ def load_settings(proj_dir: Path) -> Dict[str, Any]:
         merged_agent["orchestrator"] = orch
 
     merged_agent["display"] = get_display_settings(config, "agentReview")
-    merged_agent["agentSelection"] = {**DEFAULT_AGENT_SELECTION, **config.get("agentSelection", {})}
-    merged_agent["agentDefaults"] = {**{"model": DEFAULT_AGENT_MODEL}, **config.get("agentDefaults", {})}
-    merged_agent["complexityCategories"] = config.get("complexityCategories", DEFAULT_COMPLEXITY_CATEGORIES.copy())
-    merged_agent["sanitization"] = {**DEFAULT_SANITIZATION, **config.get("sanitization", {})}
+    merged_agent["agentSelection"] = {
+        **DEFAULT_AGENT_SELECTION,
+        **config.get("agentSelection", {}),
+    }
+    merged_agent["agentDefaults"] = {
+        **{"model": DEFAULT_AGENT_MODEL},
+        **config.get("agentDefaults", {}),
+    }
+    merged_agent["complexityCategories"] = config.get(
+        "complexityCategories", DEFAULT_COMPLEXITY_CATEGORIES.copy()
+    )
+    merged_agent["sanitization"] = {
+        **DEFAULT_SANITIZATION,
+        **config.get("sanitization", {}),
+    }
 
     # Merge reviewIterations settings
-    merged_agent["reviewIterations"] = {**DEFAULT_REVIEW_ITERATIONS, **agent_review.get("reviewIterations", {})}
+    merged_agent["reviewIterations"] = {
+        **DEFAULT_REVIEW_ITERATIONS,
+        **agent_review.get("reviewIterations", {}),
+    }
     merged_agent["earlyExitOnAllPass"] = agent_review.get("earlyExitOnAllPass", False)
 
     return {"planReview": merged_plan, "agentReview": merged_agent}
 
 
-def load_agent_library(proj_dir: Path, settings: Optional[Dict[str, Any]] = None) -> List[AgentConfig]:
+def load_agent_library(
+    proj_dir: Path, settings: Optional[Dict[str, Any]] = None
+) -> List[AgentConfig]:
     """Load agent library by auto-detecting from frontmatter.
 
     Agents are loaded from _cc-native/agents/ directory. The markdown body
@@ -471,10 +817,14 @@ def load_agent_library(proj_dir: Path, settings: Optional[Dict[str, Any]] = None
 
     default_model = DEFAULT_AGENT_MODEL
     if settings:
-        default_model = settings.get("agentDefaults", {}).get("model", DEFAULT_AGENT_MODEL)
+        default_model = settings.get("agentDefaults", {}).get(
+            "model", DEFAULT_AGENT_MODEL
+        )
 
     if not agents_data:
-        log_info("cc-native-plan-review", "No agents found in frontmatter, using defaults")
+        log_info(
+            "cc-native-plan-review", "No agents found in frontmatter, using defaults"
+        )
         return [
             AgentConfig(
                 name=a["name"],
@@ -490,15 +840,17 @@ def load_agent_library(proj_dir: Path, settings: Optional[Dict[str, Any]] = None
     for a in agents_data:
         if a.get("name") == "plan-orchestrator":
             continue
-        agents.append(AgentConfig(
-            name=a["name"],
-            model=a.get("model", default_model),
-            focus=a.get("focus", "general review"),
-            enabled=a.get("enabled", True),
-            categories=a.get("categories", ["code"]),
-            description=a.get("description", ""),
-            system_prompt=a.get("system_prompt", ""),
-        ))
+        agents.append(
+            AgentConfig(
+                name=a["name"],
+                model=a.get("model", default_model),
+                focus=a.get("focus", "general review"),
+                enabled=a.get("enabled", True),
+                categories=a.get("categories", ["code"]),
+                description=a.get("description", ""),
+                system_prompt=a.get("system_prompt", ""),
+            )
+        )
 
     return agents
 
@@ -506,6 +858,7 @@ def load_agent_library(proj_dir: Path, settings: Optional[Dict[str, Any]] = None
 # ---------------------------
 # Main Hook
 # ---------------------------
+
 
 def main() -> int:
     log_info("cc-native-plan-review", "Unified hook started (PreToolUse)")
@@ -539,13 +892,17 @@ def main() -> int:
     agent_review_enabled = agent_settings.get("enabled", True)
 
     if not plan_review_enabled and not agent_review_enabled:
-        log_info("cc-native-plan-review", "Skipping: both plan and agent review disabled")
+        log_info(
+            "cc-native-plan-review", "Skipping: both plan and agent review disabled"
+        )
         return 0
 
     # Find and read plan FIRST (state file is keyed by plan path)
     plan_path = find_plan_file()
     if not plan_path:
-        return skip_with_info("No plan file found in ~/.claude/plans/. The plan may not have been written yet.")
+        return skip_with_info(
+            "No plan file found in ~/.claude/plans/. The plan may not have been written yet."
+        )
 
     try:
         plan = Path(plan_path).read_text(encoding="utf-8").strip()
@@ -557,15 +914,24 @@ def main() -> int:
 
     log_info("cc-native-plan-review", f"Found plan at: {plan_path}")
     log_debug("cc-native-plan-review", f"Plan length: {len(plan)} chars")
-    log_diagnostic("cc-native-plan-review", "receive", f"plan_size={len(plan)}, session={session_id[:8]}",
-                    inputs={"plan_hash": compute_plan_hash(plan), "plan_size": len(plan),
-                            "session_id": session_id[:12]})
+    log_diagnostic(
+        "cc-native-plan-review",
+        "receive",
+        f"plan_size={len(plan)}, session={session_id[:8]}",
+        inputs={
+            "plan_hash": compute_plan_hash(plan),
+            "plan_size": len(plan),
+            "session_id": session_id[:12],
+        },
+    )
 
     # Find active context for this review (required)
     active_context = get_active_context_for_review(session_id, base)
 
     if not active_context:
-        return skip_with_info("No active planning context found for this session. The context system may not have a context in 'planning' mode.")
+        return skip_with_info(
+            "No active planning context found for this session. The context system may not have a context in 'planning' mode."
+        )
 
     # Get base reviews dir from shared lib, then add cc-native namespace
     reviews_dir = get_context_reviews_dir(active_context.id, base) / "cc-native"
@@ -578,8 +944,8 @@ def main() -> int:
     # Plan-hash deduplication (decision-aware)
     plan_hash = compute_plan_hash(plan)
     log_debug("cc-native-plan-review", f"Plan hash: {plan_hash}")
-    if is_plan_already_reviewed(session_id, plan_hash):
-        if was_plan_previously_denied(session_id, plan_hash):
+    if is_plan_already_reviewed(session_id, plan_hash, base):
+        if was_plan_previously_denied(session_id, plan_hash, base):
             # Plan was denied and hasn't changed — block, don't re-review
             emit_context_and_block(
                 "[Plan Review] Plan content unchanged since last review which found issues.",
@@ -604,10 +970,16 @@ def main() -> int:
     # ============================================
     # Run CLI reviewers and orchestrator concurrently for speed
     reviewers_config = plan_settings.get("reviewers", {}) if plan_review_enabled else {}
-    codex_enabled = plan_review_enabled and reviewers_config.get("codex", {}).get("enabled", True)
-    gemini_enabled = plan_review_enabled and reviewers_config.get("gemini", {}).get("enabled", False)
+    codex_enabled = plan_review_enabled and reviewers_config.get("codex", {}).get(
+        "enabled", True
+    )
+    gemini_enabled = plan_review_enabled and reviewers_config.get("gemini", {}).get(
+        "enabled", False
+    )
 
-    agent_library = load_agent_library(base, agent_settings) if agent_review_enabled else []
+    agent_library = (
+        load_agent_library(base, agent_settings) if agent_review_enabled else []
+    )
     # Load all agents regardless of enabled status - enabled:false only prevents
     # Claude Code auto-suggestion, not plan-review usage
     enabled_agents = agent_library
@@ -624,28 +996,55 @@ def main() -> int:
     # Two-phase mandatory resolution:
     # Phase 1 (pre-orchestrator): Only "always" mandatory agents excluded from orchestrator pool
     # Phase 2 (post-orchestrator): Full mandatory set including conditional agents
-    mandatory_config = agent_settings.get("mandatoryAgents", [
-        "handoff-readiness", "clarity-auditor", "skeptic"
-    ])
+    mandatory_config = agent_settings.get(
+        "mandatoryAgents", ["handoff-readiness", "clarity-auditor", "skeptic"]
+    )
     always_mandatory = resolve_mandatory_agents(mandatory_config, "simple")
     mandatory_names = always_mandatory
 
-    log_debug("cc-native-plan-review", f"Codex enabled: {codex_enabled}, Gemini enabled: {gemini_enabled}")
-    log_debug("cc-native-plan-review", f"Agent library: {[a.name for a in agent_library]}")
-    log_debug("cc-native-plan-review", f"Enabled agents: {[a.name for a in enabled_agents]}")
+    log_debug(
+        "cc-native-plan-review",
+        f"Codex enabled: {codex_enabled}, Gemini enabled: {gemini_enabled}",
+    )
+    log_debug(
+        "cc-native-plan-review", f"Agent library: {[a.name for a in agent_library]}"
+    )
+    log_debug(
+        "cc-native-plan-review", f"Enabled agents: {[a.name for a in enabled_agents]}"
+    )
     log_debug("cc-native-plan-review", f"Mandatory agents: {sorted(mandatory_names)}")
-    log_debug("cc-native-plan-review", f"Orchestrator enabled: {orchestrator_config.enabled}")
+    log_debug(
+        "cc-native-plan-review", f"Orchestrator enabled: {orchestrator_config.enabled}"
+    )
 
     # Run CLI reviewers + orchestrator in parallel
     phase1_tasks = []
     if codex_enabled:
-        phase1_tasks.append(("codex", lambda: run_codex_review(plan, REVIEW_SCHEMA, plan_settings)))
+        phase1_tasks.append(
+            ("codex", lambda: run_codex_review(plan, REVIEW_SCHEMA, plan_settings))
+        )
     if gemini_enabled:
-        phase1_tasks.append(("gemini", lambda: run_gemini_review(plan, REVIEW_SCHEMA, plan_settings)))
+        phase1_tasks.append(
+            ("gemini", lambda: run_gemini_review(plan, REVIEW_SCHEMA, plan_settings))
+        )
     if orchestrator_config.enabled and enabled_agents and not legacy_mode:
-        phase1_tasks.append(("orchestrator", lambda: run_orchestrator(plan, enabled_agents, orchestrator_config, agent_settings, mandatory_names=always_mandatory)))
+        phase1_tasks.append(
+            (
+                "orchestrator",
+                lambda: run_orchestrator(
+                    plan,
+                    enabled_agents,
+                    orchestrator_config,
+                    agent_settings,
+                    mandatory_names=always_mandatory,
+                ),
+            )
+        )
 
-    log_info("cc-native-plan-review", f"=== PHASE 1: Running {len(phase1_tasks)} tasks in parallel ===")
+    log_info(
+        "cc-native-plan-review",
+        f"=== PHASE 1: Running {len(phase1_tasks)} tasks in parallel ===",
+    )
 
     phase1_results: Dict[str, Any] = {}
     if phase1_tasks:
@@ -679,86 +1078,152 @@ def main() -> int:
         selected_agents: List[AgentConfig] = []
 
         # Load fallback config (mandatory_names already computed above)
-        fallback_by_complexity = agent_settings.get("fallbackByComplexity", {
-            "simple": 0, "medium": 5, "high": 9
-        })
+        fallback_by_complexity = agent_settings.get(
+            "fallbackByComplexity", {"simple": 0, "medium": 5, "high": 9}
+        )
 
         if enabled_agents:
             # Split into mandatory and non-mandatory pools
             mandatory_agents = [a for a in enabled_agents if a.name in mandatory_names]
             non_mandatory = [a for a in enabled_agents if a.name not in mandatory_names]
 
-            log_debug("cc-native-plan-review", f"Mandatory agents: {[a.name for a in mandatory_agents]}")
-            log_debug("cc-native-plan-review", f"Non-mandatory pool: {len(non_mandatory)} agents")
+            log_debug(
+                "cc-native-plan-review",
+                f"Mandatory agents: {[a.name for a in mandatory_agents]}",
+            )
+            log_debug(
+                "cc-native-plan-review",
+                f"Non-mandatory pool: {len(non_mandatory)} agents",
+            )
 
             if orch_result and not legacy_mode:
                 detected_complexity = orch_result.complexity
 
                 # Phase 2: Recompute mandatory set with actual complexity
-                mandatory_names = resolve_mandatory_agents(mandatory_config, detected_complexity)
-                mandatory_agents = [a for a in enabled_agents if a.name in mandatory_names]
-                non_mandatory = [a for a in enabled_agents if a.name not in mandatory_names]
+                mandatory_names = resolve_mandatory_agents(
+                    mandatory_config, detected_complexity
+                )
+                mandatory_agents = [
+                    a for a in enabled_agents if a.name in mandatory_names
+                ]
+                non_mandatory = [
+                    a for a in enabled_agents if a.name not in mandatory_names
+                ]
 
                 # Get orchestrator's additional selections (excluding mandatory since they always run)
                 orch_selected_names = set(orch_result.selected_agents) - mandatory_names
-                orch_selected = [a for a in non_mandatory if a.name in orch_selected_names]
+                orch_selected = [
+                    a for a in non_mandatory if a.name in orch_selected_names
+                ]
 
-                log_debug("cc-native-plan-review", f"Orchestrator selected (non-mandatory): {[a.name for a in orch_selected]}")
+                log_debug(
+                    "cc-native-plan-review",
+                    f"Orchestrator selected (non-mandatory): {[a.name for a in orch_selected]}",
+                )
 
                 # Diagnostic: warn if orchestrator returned names not in our agent pool
                 unmatched = orch_selected_names - {a.name for a in non_mandatory}
                 if unmatched:
-                    log_warn("cc-native-plan-review", f"Orchestrator selected unknown agents: {unmatched}")
+                    log_warn(
+                        "cc-native-plan-review",
+                        f"Orchestrator selected unknown agents: {unmatched}",
+                    )
 
                 # Enforce minimum agent count — top up with random agents if orchestrator selected too few
                 min_additional = fallback_by_complexity.get(detected_complexity, 5)
                 if len(orch_selected) < min_additional and non_mandatory:
                     remaining = [a for a in non_mandatory if a not in orch_selected]
-                    top_up_count = min(min_additional - len(orch_selected), len(remaining))
+                    top_up_count = min(
+                        min_additional - len(orch_selected), len(remaining)
+                    )
                     if top_up_count > 0:
                         top_up = random.sample(remaining, top_up_count)
                         orch_selected.extend(top_up)
-                        log_debug("cc-native-plan-review", f"Topped up {top_up_count} agents to meet {detected_complexity} minimum: {[a.name for a in top_up]}")
+                        log_debug(
+                            "cc-native-plan-review",
+                            f"Topped up {top_up_count} agents to meet {detected_complexity} minimum: {[a.name for a in top_up]}",
+                        )
 
                 # Combine: mandatory + orchestrator/fallback selection
                 selected_agents = mandatory_agents + orch_selected
-                log_info("cc-native-plan-review", f"Final selection: {len(selected_agents)} agents ({len(mandatory_agents)} mandatory + {len(orch_selected)} additional)")
+                log_info(
+                    "cc-native-plan-review",
+                    f"Final selection: {len(selected_agents)} agents ({len(mandatory_agents)} mandatory + {len(orch_selected)} additional)",
+                )
             else:
-                log_info("cc-native-plan-review", "Running in legacy mode (all enabled agents)")
+                log_info(
+                    "cc-native-plan-review",
+                    "Running in legacy mode (all enabled agents)",
+                )
                 detected_complexity = "medium"  # Default for legacy mode
-                mandatory_names = resolve_mandatory_agents(mandatory_config, detected_complexity)
+                mandatory_names = resolve_mandatory_agents(
+                    mandatory_config, detected_complexity
+                )
                 selected_agents = enabled_agents
 
-        log_diagnostic("cc-native-plan-review", "decide",
-                        f"Selected {len(selected_agents)} agents, complexity={detected_complexity}",
-                        decision="agents_selected",
-                        reasoning=f"orchestrator={orch_result is not None}, legacy={legacy_mode}",
-                        inputs={"agents": [a.name for a in selected_agents],
-                                "complexity": detected_complexity,
-                                "mandatory_count": len([a for a in selected_agents if a.name in mandatory_names])})
+        log_diagnostic(
+            "cc-native-plan-review",
+            "decide",
+            f"Selected {len(selected_agents)} agents, complexity={detected_complexity}",
+            decision="agents_selected",
+            reasoning=f"orchestrator={orch_result is not None}, legacy={legacy_mode}",
+            inputs={
+                "agents": [a.name for a in selected_agents],
+                "complexity": detected_complexity,
+                "mandatory_count": len(
+                    [a for a in selected_agents if a.name in mandatory_names]
+                ),
+            },
+        )
 
         # Initialize iteration state based on complexity (after orchestrator runs)
         if reviews_dir:
-            iteration_state = get_iteration_state_from_context(reviews_dir, detected_complexity, agent_settings)
-            log_debug("cc-native-plan-review", f"Iteration state: {iteration_state['current']}/{iteration_state['max']} ({detected_complexity})")
+            iteration_state = get_iteration_state_from_context(
+                reviews_dir, detected_complexity, agent_settings
+            )
+            log_debug(
+                "cc-native-plan-review",
+                f"Iteration state: {iteration_state['current']}/{iteration_state['max']} ({detected_complexity})",
+            )
 
         # PHASE 3: Run selected agents in parallel
         if selected_agents:
             log_info("cc-native-plan-review", "=== PHASE 3: Agent Reviews ===")
             max_parallel = agent_settings.get("maxParallelAgents", 0)  # 0 = unlimited
-            num_workers = len(selected_agents) if max_parallel <= 0 else min(max_parallel, len(selected_agents))
-            log_info("cc-native-plan-review", f"Launching {len(selected_agents)} agents in parallel (workers={num_workers})")
+            num_workers = (
+                len(selected_agents)
+                if max_parallel <= 0
+                else min(max_parallel, len(selected_agents))
+            )
+            log_info(
+                "cc-native-plan-review",
+                f"Launching {len(selected_agents)} agents in parallel (workers={num_workers})",
+            )
 
             # Debug log the agent review start
-            debug_log(context_path, session_id, "hook", "agent_review_start", {
-                "agents": [a.name for a in selected_agents],
-                "timeout": timeout,
-                "complexity": detected_complexity,
-            })
+            debug_log(
+                context_path,
+                session_id,
+                "hook",
+                "agent_review_start",
+                {
+                    "agents": [a.name for a in selected_agents],
+                    "timeout": timeout,
+                    "complexity": detected_complexity,
+                },
+            )
 
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 futures = {
-                    executor.submit(run_agent_review, plan, agent, REVIEW_SCHEMA, timeout, context_path, session_id): agent
+                    executor.submit(
+                        run_agent_review,
+                        plan,
+                        agent,
+                        REVIEW_SCHEMA,
+                        timeout,
+                        context_path,
+                        session_id,
+                    ): agent
                     for agent in selected_agents
                 }
                 for future in as_completed(futures):
@@ -766,9 +1231,15 @@ def main() -> int:
                     try:
                         result = future.result()
                         agent_results[agent.name] = result
-                        log_info("cc-native-plan-review", f"{agent.name} completed with verdict: {result.verdict}")
+                        log_info(
+                            "cc-native-plan-review",
+                            f"{agent.name} completed with verdict: {result.verdict}",
+                        )
                     except Exception as ex:
-                        log_error("cc-native-plan-review", f"{agent.name} failed with exception: {ex}")
+                        log_error(
+                            "cc-native-plan-review",
+                            f"{agent.name} failed with exception: {ex}",
+                        )
                         agent_results[agent.name] = ReviewerResult(
                             name=agent.name,
                             ok=False,
@@ -788,12 +1259,15 @@ def main() -> int:
         if not r.verdict or r.verdict in ("skip", "error"):
             continue
         agent_high = sum(
-            1 for issue in (r.data.get("issues", []) if r.data else [])
+            1
+            for issue in (r.data.get("issues", []) if r.data else [])
             if issue.get("severity") == "high"
         )
         if agent_high >= high_issue_threshold:
-            log_info("cc-native-plan-review",
-                     f"{r.name}: verdict overridden to 'fail' ({agent_high} high issues >= {high_issue_threshold})")
+            log_info(
+                "cc-native-plan-review",
+                f"{r.name}: verdict overridden to 'fail' ({agent_high} high issues >= {high_issue_threshold})",
+            )
             r.verdict = "fail"
         all_verdicts.append(r.verdict)
 
@@ -803,7 +1277,9 @@ def main() -> int:
     log_info("cc-native-plan-review", "=== PHASE 4: Generate Output ===")
 
     if not cli_results and not agent_results:
-        return skip_with_info("All reviewers failed to produce results. Check stderr logs for details.")
+        return skip_with_info(
+            "All reviewers failed to produce results. Check stderr logs for details."
+        )
 
     overall = worst_verdict(all_verdicts) if all_verdicts else "pass"
 
@@ -817,7 +1293,10 @@ def main() -> int:
     )
 
     # Merge display settings from both configs
-    display_settings = {**plan_settings.get("display", {}), **agent_settings.get("display", {})}
+    display_settings = {
+        **plan_settings.get("display", {}),
+        **agent_settings.get("display", {}),
+    }
     combined_settings = {"display": display_settings}
 
     # Get current iteration number for folder naming
@@ -831,7 +1310,11 @@ def main() -> int:
     log_info("cc-native-plan-review", f"Created review folder: {review_folder}")
 
     review_file = write_combined_artifacts(
-        base, plan, combined_result, payload, combined_settings,
+        base,
+        plan,
+        combined_result,
+        payload,
+        combined_settings,
         review_folder=review_folder,
         iteration=current_iteration,
     )
@@ -845,22 +1328,34 @@ def main() -> int:
     # Review decision — fail veto triggers a block (per-agent override already applied)
     warn_threshold = agent_settings.get("warnThreshold", 0.5)
     should_deny, deny_reason, review_score = compute_review_decision(
-        all_verdicts, warn_threshold,
+        all_verdicts,
+        warn_threshold,
     )
 
     # Structured log entries for review influence tracking
-    log_info("cc-native-plan-review", f"REVIEW_DECISION: verdict={combined_result.overall_verdict}, deny={should_deny}, reason={deny_reason}, score={review_score:.2f}")
-    log_diagnostic("cc-native-plan-review", "result",
-                    f"verdict={combined_result.overall_verdict}, deny={should_deny}, reason={deny_reason}",
-                    decision="deny" if should_deny else "allow",
-                    reasoning=f"reason={deny_reason}, score={review_score:.2f}, warn_threshold={warn_threshold}",
-                    inputs={"overall_verdict": combined_result.overall_verdict,
-                            "review_score": round(review_score, 2),
-                            "cli_count": len(cli_results), "agent_count": len(agent_results)})
+    log_info(
+        "cc-native-plan-review",
+        f"REVIEW_DECISION: verdict={combined_result.overall_verdict}, deny={should_deny}, reason={deny_reason}, score={review_score:.2f}",
+    )
+    log_diagnostic(
+        "cc-native-plan-review",
+        "result",
+        f"verdict={combined_result.overall_verdict}, deny={should_deny}, reason={deny_reason}",
+        decision="deny" if should_deny else "allow",
+        reasoning=f"reason={deny_reason}, score={review_score:.2f}, warn_threshold={warn_threshold}",
+        inputs={
+            "overall_verdict": combined_result.overall_verdict,
+            "review_score": round(review_score, 2),
+            "cli_count": len(cli_results),
+            "agent_count": len(agent_results),
+        },
+    )
 
     # Terminal progress indicator
     verdict_emoji = "✅" if not should_deny else "❌"
-    eprint(f"[plan-review] {verdict_emoji} {combined_result.overall_verdict.upper()} (score={review_score:.2f})")
+    eprint(
+        f"[plan-review] {verdict_emoji} {combined_result.overall_verdict.upper()} (score={review_score:.2f})"
+    )
     if should_deny:
         eprint(f"[plan-review] Blocking ExitPlanMode — {deny_reason}")
 
@@ -868,10 +1363,14 @@ def main() -> int:
     needs_more_iterations = False
     if iteration_state and reviews_dir:
         # Update iteration state with this review result
-        iteration_state = update_iteration_state_in_context(reviews_dir, iteration_state, plan_hash, overall)
+        iteration_state = update_iteration_state_in_context(
+            reviews_dir, iteration_state, plan_hash, overall
+        )
 
         # Check if more iterations needed
-        if should_continue_iterating_context(iteration_state, review_score, agent_settings):
+        if should_continue_iterating_context(
+            iteration_state, review_score, agent_settings
+        ):
             needs_more_iterations = True
             # Increment iteration counter for next round
             iteration_state["current"] = iteration_state.get("current", 1) + 1
@@ -880,17 +1379,22 @@ def main() -> int:
         else:
             # Final iteration - increment current and save state
             iteration_state["current"] = iteration_state.get("current", 1) + 1
-            # Also increment max by 1 to allow another review cycle if the user rejects
-            # the plan and requests changes. Without this, once iterations are exhausted,
-            # the hook would skip review entirely even if the user sent the
-            # planner back to revise. This ensures rejected plans can always be re-reviewed.
-            iteration_state["max"] = iteration_state.get("max", 1) + 1
+            # Extend max ONLY when the plan passes review (for user rejection recovery).
+            # When the hook denies (should_deny=True), don't extend — the hook will
+            # keep blocking on each resubmission via should_deny regardless of max.
+            # This prevents max from inflating on repeated hook rejections while still
+            # allowing re-review after a user rejects a plan that passed review.
+            if not should_deny:
+                iteration_state["max"] = iteration_state.get("max", 1) + 1
             save_iteration_state(reviews_dir, iteration_state)
 
     # Emit output with correct Claude Code hook format
     context_text = "".join(context_parts)
 
-    log_debug("cc-native-plan-review", f"REVIEW_CONTEXT_INJECTED: chars={len(context_text)}, inline_chars={len(inline_summary)}")
+    log_debug(
+        "cc-native-plan-review",
+        f"REVIEW_CONTEXT_INJECTED: chars={len(context_text)}, inline_chars={len(inline_summary)}",
+    )
 
     _REVIEWER_CAVEAT = (
         "Reviewers have limited context compared to your full session — "
@@ -903,11 +1407,20 @@ def main() -> int:
     )
 
     if needs_more_iterations:
-        mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review", iteration_state, decision="deny")
+        mark_plan_reviewed(
+            session_id,
+            plan_hash,
+            base,
+            "cc-native-plan-review",
+            iteration_state,
+            decision="hook_deny_iteration",
+        )
         current = iteration_state["current"] - 1  # Display the just-completed iteration
         max_iter = iteration_state["max"]
         remaining = max_iter - current
-        top_issues_text = extract_top_issues_text(combined_result, max_count=3, severity="high")
+        top_issues_text = extract_top_issues_text(
+            combined_result, max_count=3, severity="high"
+        )
         # Two-fold deny signal: inline issues (fallback) + high-issues.md (primary)
         high_issues_doc = build_high_issues_document(combined_result)
         high_issues_path = review_folder / "high-issues.md"
@@ -924,8 +1437,17 @@ def main() -> int:
             f"{_RESUBMIT_INSTRUCTION}",
         )
     elif should_deny:
-        mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review", iteration_state, decision="deny")
-        top_issues_text = extract_top_issues_text(combined_result, max_count=3, severity="high")
+        mark_plan_reviewed(
+            session_id,
+            plan_hash,
+            base,
+            "cc-native-plan-review",
+            iteration_state,
+            decision="hook_deny_final",
+        )
+        top_issues_text = extract_top_issues_text(
+            combined_result, max_count=3, severity="high"
+        )
         # Two-fold deny signal: inline issues (fallback) + high-issues.md (primary)
         high_issues_doc = build_high_issues_document(combined_result)
         high_issues_path = review_folder / "high-issues.md"
@@ -941,7 +1463,14 @@ def main() -> int:
             f"{_RESUBMIT_INSTRUCTION}",
         )
     else:
-        mark_plan_reviewed(session_id, plan_hash, "cc-native-plan-review", iteration_state, decision="allow")
+        mark_plan_reviewed(
+            session_id,
+            plan_hash,
+            base,
+            "cc-native-plan-review",
+            iteration_state,
+            decision="allow",
+        )
         emit_context(context_text, ensure_ascii=True)
 
     return 0
@@ -949,4 +1478,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     from base.hook_utils import run_hook
+
     run_hook(main, "cc_native_plan_review")

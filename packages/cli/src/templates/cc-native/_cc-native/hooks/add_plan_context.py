@@ -83,15 +83,25 @@ def main() -> int:
 
     tool_name = payload.get("tool_name")
     hook_event = payload.get("hook_event_name", "unknown")
-    log_diagnostic("add_plan_context", "receive", f"tool={tool_name}, event={hook_event}",
-                    inputs={"tool_name": tool_name, "hook_event": hook_event})
+    log_diagnostic(
+        "add_plan_context",
+        "receive",
+        f"tool={tool_name}, event={hook_event}",
+        inputs={"tool_name": tool_name, "hook_event": hook_event},
+    )
+
+    # Get project root for context operations
+    project_root = Path(payload.get("cwd", ".")).resolve()
 
     # PostToolUse: AskUserQuestion — mark that questions were asked
     if tool_name == "AskUserQuestion":
         session_id = str(payload.get("session_id", ""))
         if session_id:
-            mark_questions_asked(session_id)
-            log_info("add_plan_context", f"Marked questions asked for session {session_id[:8]}...")
+            mark_questions_asked(session_id, project_root)
+            log_info(
+                "add_plan_context",
+                f"Marked questions asked for session {session_id[:8]}...",
+            )
         return 0
 
     # PreToolUse: Task — nudge Plan subagent to ask questions first (advisory)
@@ -105,21 +115,38 @@ def main() -> int:
 
         session_id = payload.get("session_id")
         if not session_id:
-            log_debug("add_plan_context", "No session_id for Task gate, skipping enforcement")
+            log_debug(
+                "add_plan_context", "No session_id for Task gate, skipping enforcement"
+            )
             return 0
 
         session_id_str = str(session_id)
 
-        if was_questions_asked(session_id_str):
-            log_info("add_plan_context", "Questions asked, allowing Plan Task with eval context")
-            log_diagnostic("add_plan_context", "decide", "Questions asked, allowing Plan Task",
-                            decision="allow_with_context", reasoning="was_questions_asked=True")
+        if was_questions_asked(session_id_str, project_root):
+            log_info(
+                "add_plan_context",
+                "Questions asked, allowing Plan Task with eval context",
+            )
+            log_diagnostic(
+                "add_plan_context",
+                "decide",
+                "Questions asked, allowing Plan Task",
+                decision="allow_with_context",
+                reasoning="was_questions_asked=True",
+            )
             return inject_evaluation_context()
 
         # Questions NOT asked: nudge toward asking questions (advisory only)
-        log_info("add_plan_context", "Questions not asked - nudging Plan Task to ask first")
-        log_diagnostic("add_plan_context", "decide", "Questions not asked, nudging Plan Task",
-                        decision="nudge", reasoning="was_questions_asked=False, advisory context")
+        log_info(
+            "add_plan_context", "Questions not asked - nudging Plan Task to ask first"
+        )
+        log_diagnostic(
+            "add_plan_context",
+            "decide",
+            "Questions not asked, nudging Plan Task",
+            decision="nudge",
+            reasoning="was_questions_asked=False, advisory context",
+        )
         return nudge_task_questions()
 
     return 0
@@ -127,4 +154,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     from base.hook_utils import run_hook
+
     run_hook(main, "add_plan_context")

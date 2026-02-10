@@ -45,6 +45,7 @@ Hook JSON excludes system prompt, tools, MCP tokens. We add a baseline
 to compensate (~22.6k tokens typical). See:
 https://github.com/anthropics/claude-code/issues/13783
 """
+
 import sys
 from pathlib import Path
 from typing import Optional
@@ -54,7 +55,16 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SHARED_LIB = SCRIPT_DIR.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB.parent))
 
-from lib.base.hook_utils import emit_context, load_hook_input, get_context_percent_remaining, log_debug, log_info, log_warn, log_error, log_diagnostic
+from lib.base.hook_utils import (
+    emit_context,
+    load_hook_input,
+    get_context_percent_remaining,
+    log_debug,
+    log_info,
+    log_warn,
+    log_error,
+    log_diagnostic,
+)
 from lib.base.utils import now_iso, project_dir
 from lib.context.context_store import (
     get_all_contexts,
@@ -62,9 +72,6 @@ from lib.context.context_store import (
     maybe_activate,
     save_state,
 )
-
-# Module-level flag: only save auto-state once per process lifetime
-_PROGRESSIVE_SAVE_MARKER = ".progressive-save-done"
 
 # Configuration
 SAVE_STATE_THRESHOLD = 60  # Silently save auto-state at 60% remaining
@@ -86,7 +93,7 @@ def get_context_warning(
     tokens_used: Optional[int],
     max_tokens: Optional[int],
     context_id: Optional[str],
-    tool_name: str
+    tool_name: str,
 ) -> str:
     """Generate appropriate warning based on context level."""
     if tokens_used is not None and max_tokens is not None:
@@ -167,7 +174,9 @@ def check_and_transition_mode(hook_input: dict) -> None:
         return
 
     permission_mode = hook_input.get("permission_mode", "default")
-    maybe_activate(state.id, permission_mode, project_root=project_root, caller="context_monitor")
+    maybe_activate(
+        state.id, permission_mode, project_root=project_root, caller="context_monitor"
+    )
 
 
 def _try_progressive_save(hook_input: dict, percent_remaining: int) -> None:
@@ -182,26 +191,13 @@ def _try_progressive_save(hook_input: dict, percent_remaining: int) -> None:
         if not state:
             return
 
-        from lib.base.constants import get_context_dir
-        marker_path = get_context_dir(state.id, project_root) / _PROGRESSIVE_SAVE_MARKER
-        if marker_path.exists():
-            try:
-                saved_session = marker_path.read_text(encoding="utf-8").strip()
-                if saved_session == session_id:
-                    return
-            except OSError:
-                pass
-
-        log_info("context_monitor", f"Progressive save at {percent_remaining}% remaining")
+        log_info(
+            "context_monitor", f"Progressive save at {percent_remaining}% remaining"
+        )
 
         # Just update last_active and save state
         state.last_active = now_iso()
         save_state(state, project_root)
-
-        try:
-            marker_path.write_text(session_id, encoding="utf-8")
-        except OSError:
-            pass
 
     except Exception as e:
         log_warn("context_monitor", f"Progressive save error (non-fatal): {e}")
@@ -210,11 +206,21 @@ def _try_progressive_save(hook_input: dict, percent_remaining: int) -> None:
 def check_context_level(hook_input: dict) -> Optional[str]:
     """Check context level and return warning if low."""
     tool_name = hook_input.get("tool_name", "Unknown")
-    percent_remaining, tokens_used, max_tokens = get_context_percent_remaining(hook_input)
+    percent_remaining, tokens_used, max_tokens = get_context_percent_remaining(
+        hook_input
+    )
 
-    log_diagnostic("context_monitor", "receive", f"tool={tool_name}, pct_remaining={percent_remaining}",
-                    inputs={"tool_name": tool_name, "percent_remaining": percent_remaining,
-                            "tokens_used": tokens_used, "max_tokens": max_tokens})
+    log_diagnostic(
+        "context_monitor",
+        "receive",
+        f"tool={tool_name}, pct_remaining={percent_remaining}",
+        inputs={
+            "tool_name": tool_name,
+            "percent_remaining": percent_remaining,
+            "tokens_used": tokens_used,
+            "max_tokens": max_tokens,
+        },
+    )
 
     if percent_remaining is None:
         return None
@@ -227,22 +233,39 @@ def check_context_level(hook_input: dict) -> Optional[str]:
         return None
 
     if tokens_used is not None and max_tokens is not None:
-        log_info("context_monitor", f"Context: {percent_remaining}% remaining "
-                 f"(~{tokens_used//1000}k/{max_tokens//1000}k tokens)")
+        log_info(
+            "context_monitor",
+            f"Context: {percent_remaining}% remaining "
+            f"(~{tokens_used // 1000}k/{max_tokens // 1000}k tokens)",
+        )
     else:
-        log_info("context_monitor", f"Context: ~{percent_remaining}% remaining (from context.json)")
+        log_info(
+            "context_monitor",
+            f"Context: ~{percent_remaining}% remaining (from context.json)",
+        )
 
     project_root = project_dir(hook_input)
     context_id = get_current_context_id(project_root)
 
-    threshold = ("critical" if percent_remaining <= CRITICAL_CONTEXT_THRESHOLD
-                 else "prepare" if percent_remaining <= HANDOFF_PREPARE_THRESHOLD
-                 else "suggest")
-    log_diagnostic("context_monitor", "decide", f"Threshold={threshold} at {percent_remaining}%",
-                    decision=threshold, reasoning=f"{percent_remaining}% remaining",
-                    inputs={"context_id": context_id, "percent_remaining": percent_remaining})
+    threshold = (
+        "critical"
+        if percent_remaining <= CRITICAL_CONTEXT_THRESHOLD
+        else "prepare"
+        if percent_remaining <= HANDOFF_PREPARE_THRESHOLD
+        else "suggest"
+    )
+    log_diagnostic(
+        "context_monitor",
+        "decide",
+        f"Threshold={threshold} at {percent_remaining}%",
+        decision=threshold,
+        reasoning=f"{percent_remaining}% remaining",
+        inputs={"context_id": context_id, "percent_remaining": percent_remaining},
+    )
 
-    return get_context_warning(percent_remaining, tokens_used, max_tokens, context_id, tool_name)
+    return get_context_warning(
+        percent_remaining, tokens_used, max_tokens, context_id, tool_name
+    )
 
 
 def main():
@@ -260,11 +283,14 @@ def main():
 
     except Exception as e:
         import traceback
+
         tb = traceback.format_exc()
         from lib.base.hook_utils import log_hook_error
+
         log_hook_error("context_monitor", e, "PostToolUse", traceback_str=tb)
 
 
 if __name__ == "__main__":
     from lib.base.hook_utils import run_hook
+
     run_hook(main, "context_monitor")

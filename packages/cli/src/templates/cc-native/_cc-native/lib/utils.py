@@ -15,7 +15,6 @@ import json
 import os
 import re
 import sys
-import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -34,6 +33,7 @@ except ImportError:
     # Fallback for direct execution
     _shared_lib = Path(__file__).resolve().parent.parent.parent / "_shared" / "lib"
     import importlib.util
+
     _spec = importlib.util.spec_from_file_location(
         "atomic_write", str(_shared_lib / "base" / "atomic_write.py")
     )
@@ -42,6 +42,7 @@ except ImportError:
     atomic_write = _mod.atomic_write
 
 # Import canonical utilities from shared lib (with Windows bug fixes)
+# Import context store for state.json integration
 try:
     from ...lib.base.utils import (
         eprint,
@@ -51,10 +52,12 @@ try:
         sanitize_title,
     )
     from ...lib.base.logger import log_debug, log_info, log_warn, log_error
+    from ...lib.context.context_store import get_context_by_session_id, save_state
 except ImportError:
     # Fallback for direct execution
     import sys
     from pathlib import Path
+
     _shared_lib = Path(__file__).resolve().parent.parent.parent / "_shared" / "lib"
     sys.path.insert(0, str(_shared_lib))
     from base.utils import (
@@ -65,6 +68,7 @@ except ImportError:
         sanitize_title,
     )
     from base.logger import log_debug, log_info, log_warn, log_error
+    from context.context_store import get_context_by_session_id, save_state
 
 
 # ---------------------------
@@ -113,9 +117,11 @@ REVIEW_SCHEMA: Dict[str, Any] = {
 # Dataclasses
 # ---------------------------
 
+
 @dataclass
 class ReviewerResult:
     """Result from a plan reviewer (Codex, Gemini, or Claude agent)."""
+
     name: str
     ok: bool
     verdict: str  # pass|warn|fail|error|skip
@@ -128,61 +134,98 @@ class ReviewerResult:
 # Plan hash deduplication
 # ---------------------------
 
+
 def compute_plan_hash(plan_content: str) -> str:
     """Compute a hash of the plan content."""
     return hashlib.sha256(plan_content.encode("utf-8")).hexdigest()[:16]
 
 
-def get_review_marker_path(session_id: str) -> Path:
-    """Get path to review marker file for this session."""
-    safe_id = re.sub(r'[^a-zA-Z0-9_-]', '_', session_id)[:32]
-    return Path(tempfile.gettempdir()) / f"cc-native-plan-reviewed-{safe_id}.json"
+def _get_cc_native_state(
+    session_id: str, project_root: Path
+) -> Optional[Dict[str, Any]]:
+    """Get cc_native state from context state.json.
+
+    Returns the cc_native dict or None if not found.
+    """
+    try:
+        state = get_context_by_session_id(session_id, project_root)
+        if state and hasattr(state, "cc_native"):
+            return state.cc_native
+    except Exception:
+        pass
+    return None
 
 
-def is_plan_already_reviewed(session_id: str, plan_hash: str) -> bool:
+def _save_cc_native_state(
+    session_id: str, project_root: Path, cc_native_data: Dict[str, Any]
+) -> bool:
+    """Save cc_native state to context state.json.
+
+    Returns True on success, False on failure.
+    """
+    try:
+        state = get_context_by_session_id(session_id, project_root)
+        if state:
+            state.cc_native = cc_native_data
+            save_state(state, project_root)
+            return True
+    except Exception as e:
+        log_warn("utils", f"Failed to save cc_native state: {e}")
+    return False
+
+
+def is_plan_already_reviewed(
+    session_id: str, plan_hash: str, project_root: Path
+) -> bool:
     """Check if this exact plan has already been reviewed in this session."""
-    marker_path = get_review_marker_path(session_id)
-    if not marker_path.exists():
+    cc_native = _get_cc_native_state(session_id, project_root)
+    if not cc_native:
         return False
-    try:
-        data = json.loads(marker_path.read_text(encoding="utf-8"))
-        stored_hash = data.get("plan_hash", "")
-        return stored_hash == plan_hash
-    except Exception:
-        return False
+    review_state = cc_native.get("plan_review", {})
+    return review_state.get("plan_hash") == plan_hash
 
 
-def was_plan_previously_denied(session_id: str, plan_hash: str) -> bool:
-    """Check if this plan hash was previously reviewed and denied."""
-    marker_path = get_review_marker_path(session_id)
-    if not marker_path.exists():
+def was_plan_previously_denied(
+    session_id: str, plan_hash: str, project_root: Path
+) -> bool:
+    """Check if this plan hash was previously reviewed and denied.
+
+    Matches any deny variant: "deny", "hook_deny_iteration", "hook_deny_final".
+    """
+    cc_native = _get_cc_native_state(session_id, project_root)
+    if not cc_native:
         return False
-    try:
-        data = json.loads(marker_path.read_text(encoding="utf-8"))
-        return data.get("plan_hash") == plan_hash and data.get("decision") == "deny"
-    except Exception:
+    review_state = cc_native.get("plan_review", {})
+    if review_state.get("plan_hash") != plan_hash:
         return False
+    decision = review_state.get("decision", "")
+    return decision == "deny" or decision.startswith("hook_deny")
 
 
 def mark_plan_reviewed(
     session_id: str,
     plan_hash: str,
+    project_root: Path,
     hook_name: str = "cc-native",
     iteration_state: Optional[Dict[str, Any]] = None,
     decision: str = "allow",
 ) -> None:
-    """Mark this plan as reviewed (stores hash and decision in marker file).
+    """Mark this plan as reviewed (stores hash and decision in state.json).
 
     Args:
         session_id: The session identifier
         plan_hash: Hash of the plan content
+        project_root: Project root directory for context lookup
         hook_name: Name of the hook (for logging)
         iteration_state: Optional iteration state dict with current, max, verdict info
         decision: Review decision - "allow" or "deny"
     """
-    marker = get_review_marker_path(session_id)
     try:
-        data: Dict[str, Any] = {
+        # Get existing cc_native state or create new
+        cc_native = _get_cc_native_state(session_id, project_root) or {}
+
+        # Update plan review data
+        review_data: Dict[str, Any] = {
             "plan_hash": plan_hash,
             "reviewed_at": datetime.now().isoformat(),
             "decision": decision,
@@ -190,7 +233,7 @@ def mark_plan_reviewed(
 
         # Include iteration info if provided
         if iteration_state:
-            data["iteration"] = {
+            review_data["iteration"] = {
                 "current": iteration_state.get("current", 1),
                 "max": iteration_state.get("max", 1),
                 "complexity": iteration_state.get("complexity", "unknown"),
@@ -198,47 +241,66 @@ def mark_plan_reviewed(
             # Include latest verdict from history if available
             history = iteration_state.get("history", [])
             if history:
-                data["iteration"]["latest_verdict"] = history[-1].get("verdict", "unknown")
+                review_data["iteration"]["latest_verdict"] = history[-1].get(
+                    "verdict", "unknown"
+                )
 
-        marker.write_text(json.dumps(data), encoding="utf-8")
-        iter_info = f" (iteration {data.get('iteration', {}).get('current', '?')}/{data.get('iteration', {}).get('max', '?')})" if iteration_state else ""
-        log_info(hook_name, f"Created review marker: {marker} (hash: {plan_hash}){iter_info}")
+        cc_native["plan_review"] = review_data
+
+        # Save back to state
+        if _save_cc_native_state(session_id, project_root, cc_native):
+            iter_info = (
+                f" (iteration {review_data.get('iteration', {}).get('current', '?')}/{review_data.get('iteration', {}).get('max', '?')})"
+                if iteration_state
+                else ""
+            )
+            log_info(
+                hook_name, f"Saved plan review state (hash: {plan_hash}){iter_info}"
+            )
+        else:
+            log_warn(
+                hook_name, f"Failed to save plan review state for session {session_id}"
+            )
     except Exception as e:
-        log_warn(hook_name, f"Failed to create review marker: {e}")
+        log_warn(hook_name, f"Failed to mark plan reviewed: {e}")
 
 
 # ---------------------------
 # Questions asked state
 # ---------------------------
 
-def get_questions_asked_marker_path(session_id: str) -> Path:
-    """Get path to questions-asked marker file for this session."""
-    safe_id = re.sub(r'[^a-zA-Z0-9_-]', '_', session_id)[:32]
-    return Path(tempfile.gettempdir()) / f"cc-native-questions-asked-{safe_id}.json"
 
-
-def was_questions_asked(session_id: str) -> bool:
+def was_questions_asked(session_id: str, project_root: Path) -> bool:
     """Check if AskUserQuestion was called this session.
 
     Returns False on any error (fail-safe: allow feature to work).
     """
-    try:
-        return get_questions_asked_marker_path(session_id).exists()
-    except Exception:
+    cc_native = _get_cc_native_state(session_id, project_root)
+    if not cc_native:
         return False
+    questions_state = cc_native.get("questions_asked", {})
+    return questions_state.get("asked", False)
 
 
-def mark_questions_asked(session_id: str) -> bool:
+def mark_questions_asked(session_id: str, project_root: Path) -> bool:
     """Mark that AskUserQuestion was called. Returns True on success.
 
     Only stores timestamp, no user data. Returns False on error.
     """
     try:
-        marker = get_questions_asked_marker_path(session_id)
-        marker.write_text(json.dumps({"asked_at": datetime.now().isoformat()}), encoding="utf-8")
-        return True
+        # Get existing cc_native state or create new
+        cc_native = _get_cc_native_state(session_id, project_root) or {}
+
+        # Update questions asked data
+        cc_native["questions_asked"] = {
+            "asked": True,
+            "asked_at": datetime.now().isoformat(),
+        }
+
+        # Save back to state
+        return _save_cc_native_state(session_id, project_root, cc_native)
     except Exception as e:
-        log_warn("utils", f"Failed to write questions-asked marker: {e}")
+        log_warn("utils", f"Failed to mark questions asked: {e}")
         return False
 
 
@@ -246,7 +308,10 @@ def mark_questions_asked(session_id: str) -> bool:
 # JSON parsing
 # ---------------------------
 
-def parse_json_maybe(text: str, require_fields: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+
+def parse_json_maybe(
+    text: str, require_fields: Optional[List[str]] = None
+) -> Optional[Dict[str, Any]]:
     """Try strict JSON parse. If that fails, attempt to extract the first {...} block.
 
     Args:
@@ -284,22 +349,32 @@ def parse_json_maybe(text: str, require_fields: Optional[List[str]] = None) -> O
                 if isinstance(parsed, dict):
                     obj = parsed
                     parse_method = "heuristic"
-                    log_debug("parse", f"Used heuristic extraction (chars {start}-{end})")
+                    log_debug(
+                        "parse", f"Used heuristic extraction (chars {start}-{end})"
+                    )
             except Exception:
-                log_debug("parse", f"Heuristic extraction failed for candidate at chars {start}-{end}")
+                log_debug(
+                    "parse",
+                    f"Heuristic extraction failed for candidate at chars {start}-{end}",
+                )
                 return None
 
     # If we parsed something, validate required fields
     if obj and require_fields:
         missing = [f for f in require_fields if f not in obj or not obj[f]]
         if missing:
-            log_warn("parse", f"Parsed JSON ({parse_method}) missing/empty fields: {missing}")
+            log_warn(
+                "parse", f"Parsed JSON ({parse_method}) missing/empty fields: {missing}"
+            )
             log_debug("parse", f"Keys present: {list(obj.keys())}")
 
     return obj
 
 
-def coerce_to_review(obj: Optional[Dict[str, Any]], default_fix_msg: str = "Retry or check configuration.") -> Tuple[bool, str, Dict[str, Any]]:
+def coerce_to_review(
+    obj: Optional[Dict[str, Any]],
+    default_fix_msg: str = "Retry or check configuration.",
+) -> Tuple[bool, str, Dict[str, Any]]:
     """Validate/normalize to our expected structure.
 
     Returns:
@@ -309,18 +384,31 @@ def coerce_to_review(obj: Optional[Dict[str, Any]], default_fix_msg: str = "Retr
     """
     if not obj:
         log_warn("coerce", "No object provided to coerce_to_review")
-        return False, "error", {
-            "verdict": "fail",
-            "summary": "No structured output returned.",
-            "summary_source": "default",
-            "issues": [{"severity": "high", "category": "tooling", "issue": "Reviewer returned no JSON.", "suggested_fix": default_fix_msg}],
-            "missing_sections": [],
-            "questions": [],
-        }
+        return (
+            False,
+            "error",
+            {
+                "verdict": "fail",
+                "summary": "No structured output returned.",
+                "summary_source": "default",
+                "issues": [
+                    {
+                        "severity": "high",
+                        "category": "tooling",
+                        "issue": "Reviewer returned no JSON.",
+                        "suggested_fix": default_fix_msg,
+                    }
+                ],
+                "missing_sections": [],
+                "questions": [],
+            },
+        )
 
     verdict = obj.get("verdict")
     if verdict not in ("pass", "warn", "fail"):
-        log_warn("coerce", f"Invalid or missing verdict '{verdict}', defaulting to 'warn'")
+        log_warn(
+            "coerce", f"Invalid or missing verdict '{verdict}', defaulting to 'warn'"
+        )
         verdict = "warn"
 
     # Log when fields are being defaulted
@@ -330,7 +418,10 @@ def coerce_to_review(obj: Optional[Dict[str, Any]], default_fix_msg: str = "Retr
         # Add diagnostic output
         log_debug("coerce", f"Raw object keys: {list(obj.keys()) if obj else 'None'}")
         if obj:
-            log_debug("coerce", f"verdict={obj.get('verdict')}, issues_count={len(obj.get('issues', []))}")
+            log_debug(
+                "coerce",
+                f"verdict={obj.get('verdict')}, issues_count={len(obj.get('issues', []))}",
+            )
     if not obj.get("issues"):
         log_debug("coerce", "issues array empty or missing")
 
@@ -339,8 +430,12 @@ def coerce_to_review(obj: Optional[Dict[str, Any]], default_fix_msg: str = "Retr
         "summary": summary_raw or "No summary provided.",
         "summary_source": "reviewer" if summary_raw else "default",
         "issues": obj.get("issues") if isinstance(obj.get("issues"), list) else [],
-        "missing_sections": obj.get("missing_sections") if isinstance(obj.get("missing_sections"), list) else [],
-        "questions": obj.get("questions") if isinstance(obj.get("questions"), list) else [],
+        "missing_sections": obj.get("missing_sections")
+        if isinstance(obj.get("missing_sections"), list)
+        else [],
+        "questions": obj.get("questions")
+        if isinstance(obj.get("questions"), list)
+        else [],
     }
 
     return True, verdict, norm
@@ -406,6 +501,7 @@ def compute_review_decision(
 # Artifact writing
 # ---------------------------
 
+
 def find_plan_file() -> Optional[str]:
     """Find the most recent plan file in ~/.claude/plans/."""
     plans_dir = Path.home() / ".claude" / "plans"
@@ -427,7 +523,7 @@ def get_state_path_from_plan(plan_path: str) -> Path:
     Example: ~/.claude/plans/foo.md -> ~/.claude/plans/foo.state.json
     """
     plan_file = Path(plan_path)
-    return plan_file.with_suffix('.state.json')
+    return plan_file.with_suffix(".state.json")
 
 
 def format_review_markdown(
@@ -454,9 +550,11 @@ def format_review_markdown(
         lines.append(f"- ok: `{r.ok}`")
         lines.append(f"- verdict: `{r.verdict}`")
         if r.data:
-            summary = r.data.get('summary', '').strip()
-            if r.data.get('summary_source') == 'default':
-                lines.append(f"- summary: ⚠️ {summary} *(reviewer did not return summary)*")
+            summary = r.data.get("summary", "").strip()
+            if r.data.get("summary_source") == "default":
+                lines.append(
+                    f"- summary: ⚠️ {summary} *(reviewer did not return summary)*"
+                )
             else:
                 lines.append(f"- summary: {summary}")
             issues = r.data.get("issues", [])
@@ -521,8 +619,9 @@ def write_review_artifacts(
 @dataclass
 class OrchestratorResult:
     """Result from the plan orchestrator."""
+
     complexity: str  # simple | medium | high
-    category: str    # code | infrastructure | documentation | life | business | design | research
+    category: str  # code | infrastructure | documentation | life | business | design | research
     selected_agents: List[str]
     reasoning: str
     skip_reason: Optional[str] = None
@@ -532,6 +631,7 @@ class OrchestratorResult:
 @dataclass
 class CombinedReviewResult:
     """Combined result from all review phases."""
+
     plan_hash: str
     overall_verdict: str
     cli_reviewers: Dict[str, ReviewerResult]
@@ -566,12 +666,16 @@ def format_combined_markdown(
             lines.append(f"### {name.title()}\n")
             lines.append(f"- verdict: `{r.verdict}`")
             if r.data:
-                summary = r.data.get('summary', '').strip()
-                if r.data.get('summary_source') == 'default':
-                    lines.append(f"- summary: ⚠️ {summary} *(reviewer did not return summary)*")
+                summary = r.data.get("summary", "").strip()
+                if r.data.get("summary_source") == "default":
+                    lines.append(
+                        f"- summary: ⚠️ {summary} *(reviewer did not return summary)*"
+                    )
                 else:
                     lines.append(f"- summary: {summary}")
-                _append_review_details(lines, r.data, max_issues, max_missing, max_questions)
+                _append_review_details(
+                    lines, r.data, max_issues, max_missing, max_questions
+                )
             elif r.err:
                 lines.append(f"- error: {r.err}")
             lines.append("")
@@ -582,7 +686,11 @@ def format_combined_markdown(
         lines.append("## Orchestration\n")
         lines.append(f"- **Complexity:** `{result.orchestration.complexity}`")
         lines.append(f"- **Category:** `{result.orchestration.category}`")
-        agents_str = ", ".join(result.orchestration.selected_agents) if result.orchestration.selected_agents else "None"
+        agents_str = (
+            ", ".join(result.orchestration.selected_agents)
+            if result.orchestration.selected_agents
+            else "None"
+        )
         lines.append(f"- **Agents Selected:** {agents_str}")
         lines.append(f"- **Reasoning:** {result.orchestration.reasoning}")
         if result.orchestration.skip_reason:
@@ -599,12 +707,16 @@ def format_combined_markdown(
             lines.append(f"### {name}\n")
             lines.append(f"- verdict: `{r.verdict}`")
             if r.data:
-                summary = r.data.get('summary', '').strip()
-                if r.data.get('summary_source') == 'default':
-                    lines.append(f"- summary: ⚠️ {summary} *(reviewer did not return summary)*")
+                summary = r.data.get("summary", "").strip()
+                if r.data.get("summary_source") == "default":
+                    lines.append(
+                        f"- summary: ⚠️ {summary} *(reviewer did not return summary)*"
+                    )
                 else:
                     lines.append(f"- summary: {summary}")
-                _append_review_details(lines, r.data, max_issues, max_missing, max_questions)
+                _append_review_details(
+                    lines, r.data, max_issues, max_missing, max_questions
+                )
             elif r.err:
                 lines.append(f"- error: {r.err}")
             lines.append("")
@@ -647,9 +759,14 @@ def build_inline_review_summary(
     parts: List[str] = []
 
     # Overall verdict line
-    parts.append(f"**Plan Review: {combined.overall_verdict.upper()}**"
-                 + (f" ({len(high_issues)} high-severity issue{'s' if len(high_issues) != 1 else ''})"
-                    if high_issues else ""))
+    parts.append(
+        f"**Plan Review: {combined.overall_verdict.upper()}**"
+        + (
+            f" ({len(high_issues)} high-severity issue{'s' if len(high_issues) != 1 else ''})"
+            if high_issues
+            else ""
+        )
+    )
 
     # High-severity issue bullets (max 5)
     for issue in high_issues[:max_issues]:
@@ -668,7 +785,7 @@ def build_inline_review_summary(
 
     result = "\n".join(parts)
     if len(result) > max_chars:
-        result = result[:max_chars - 3] + "..."
+        result = result[: max_chars - 3] + "..."
     return result
 
 
@@ -721,13 +838,17 @@ def build_high_issues_document(combined: CombinedReviewResult) -> str:
     only, no noise from medium/low issues.
     """
     lines = ["# High-Severity Issues\n"]
-    all_reviewers = list(combined.cli_reviewers.values()) + list(combined.agents.values())
+    all_reviewers = list(combined.cli_reviewers.values()) + list(
+        combined.agents.values()
+    )
 
     found_any = False
     for r in all_reviewers:
         if not r.data:
             continue
-        high_issues = [i for i in r.data.get("issues", []) if i.get("severity") == "high"]
+        high_issues = [
+            i for i in r.data.get("issues", []) if i.get("severity") == "high"
+        ]
         if not high_issues:
             continue
         found_any = True
@@ -752,7 +873,7 @@ def _append_review_details(
     data: Dict[str, Any],
     max_issues: int,
     max_missing: int,
-    max_questions: int
+    max_questions: int,
 ) -> None:
     """Append issue details to markdown lines."""
     issues = [i for i in data.get("issues", []) if i.get("severity") != "low"]
@@ -800,7 +921,11 @@ def build_combined_json(result: CombinedReviewResult) -> Dict[str, Any]:
                 "verdict": r.verdict,
                 "summary": r.data.get("summary") if r.data else None,
                 "summarySource": r.data.get("summary_source") if r.data else None,
-                "issues": [i for i in r.data.get("issues", []) if i.get("severity") != "low"] if r.data else [],
+                "issues": [
+                    i for i in r.data.get("issues", []) if i.get("severity") != "low"
+                ]
+                if r.data
+                else [],
                 "ok": r.ok,
                 "error": r.err if r.err else None,
             }
@@ -824,8 +949,14 @@ def build_combined_json(result: CombinedReviewResult) -> Dict[str, Any]:
                 "verdict": r.verdict,
                 "summary": r.data.get("summary") if r.data else None,
                 "summarySource": r.data.get("summary_source") if r.data else None,
-                "issues": [i for i in r.data.get("issues", []) if i.get("severity") != "low"] if r.data else [],
-                "missing_sections": r.data.get("missing_sections", []) if r.data else [],
+                "issues": [
+                    i for i in r.data.get("issues", []) if i.get("severity") != "low"
+                ]
+                if r.data
+                else [],
+                "missing_sections": r.data.get("missing_sections", [])
+                if r.data
+                else [],
                 "questions": r.data.get("questions", []) if r.data else [],
                 "ok": r.ok,
                 "error": r.err if r.err else None,
@@ -850,6 +981,7 @@ def generate_review_index(
         Markdown content for index.md
     """
     from datetime import datetime
+
     now = datetime.now()
 
     lines = [
@@ -861,58 +993,72 @@ def generate_review_index(
     ]
     if iteration:
         lines.append(f"iteration: {iteration}")
-    lines.extend([
-        "---",
-        "",
-        f"# Plan Review - {now.strftime('%Y-%m-%d %H:%M')}",
-        "",
-        f"**Overall Verdict:** `{result.overall_verdict.upper()}`",
-    ])
+    lines.extend(
+        [
+            "---",
+            "",
+            f"# Plan Review - {now.strftime('%Y-%m-%d %H:%M')}",
+            "",
+            f"**Overall Verdict:** `{result.overall_verdict.upper()}`",
+        ]
+    )
 
     if iteration:
         lines.append(f"**Iteration:** {iteration}")
 
-    lines.extend([
-        f"**Plan Hash:** `{result.plan_hash}`",
-        "",
-    ])
+    lines.extend(
+        [
+            f"**Plan Hash:** `{result.plan_hash}`",
+            "",
+        ]
+    )
 
     # Summary from orchestrator
     if result.orchestration:
-        lines.extend([
-            "## Analysis",
-            f"- **Complexity:** `{result.orchestration.complexity}`",
-            f"- **Category:** `{result.orchestration.category}`",
-            f"- **Reasoning:** {result.orchestration.reasoning}",
-            "",
-        ])
+        lines.extend(
+            [
+                "## Analysis",
+                f"- **Complexity:** `{result.orchestration.complexity}`",
+                f"- **Category:** `{result.orchestration.category}`",
+                f"- **Reasoning:** {result.orchestration.reasoning}",
+                "",
+            ]
+        )
 
     # Navigation table
-    lines.extend([
-        "## Review Files",
-        "",
-        "| File | Description |",
-        "|------|-------------|",
-        "| [combined.md](./combined.md) | Full review details |",
-        "| [combined.json](./combined.json) | Structured review data |",
-    ])
+    lines.extend(
+        [
+            "## Review Files",
+            "",
+            "| File | Description |",
+            "|------|-------------|",
+            "| [combined.md](./combined.md) | Full review details |",
+            "| [combined.json](./combined.json) | Structured review data |",
+        ]
+    )
 
     # CLI reviewers
     for name in result.cli_reviewers.keys():
-        lines.append(f"| [{name}.json](./{name}.json) | {name.title()} reviewer output |")
+        lines.append(
+            f"| [{name}.json](./{name}.json) | {name.title()} reviewer output |"
+        )
 
     # Agent reviewers
     for name in result.agents.keys():
         safe_name = sanitize_filename(name)
-        lines.append(f"| [{safe_name}.json](./{safe_name}.json) | {name} agent output |")
+        lines.append(
+            f"| [{safe_name}.json](./{safe_name}.json) | {name} agent output |"
+        )
 
-    lines.extend([
-        "",
-        "## Verdicts Summary",
-        "",
-        "| Reviewer | Verdict |",
-        "|----------|---------|",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Verdicts Summary",
+            "",
+            "| Reviewer | Verdict |",
+            "|----------|---------|",
+        ]
+    )
 
     for name, r in result.cli_reviewers.items():
         lines.append(f"| {name.title()} | `{r.verdict}` |")
@@ -921,7 +1067,7 @@ def generate_review_index(
 
     lines.append("")
 
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 
 def write_combined_artifacts(
@@ -969,11 +1115,15 @@ def write_combined_artifacts(
     json_data = build_combined_json(result)
     try:
         if ENABLE_ROBUST_PLAN_WRITES:
-            success, error = atomic_write(json_path, json.dumps(json_data, indent=2, ensure_ascii=False))
+            success, error = atomic_write(
+                json_path, json.dumps(json_data, indent=2, ensure_ascii=False)
+            )
             if not success:
                 raise IOError(f"Atomic write failed: {error}")
         else:
-            json_path.write_text(json.dumps(json_data, indent=2, ensure_ascii=False), encoding="utf-8")
+            json_path.write_text(
+                json.dumps(json_data, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
     except Exception as e:
         log_error("utils", f"Failed to write {json_path.name}: {e}")
         raise
@@ -1002,7 +1152,9 @@ def write_combined_artifacts(
                 if ENABLE_ROBUST_PLAN_WRITES:
                     success, error = atomic_write(reviewer_path, content)
                     if not success:
-                        log_warn("utils", f"Failed to write {reviewer_path.name}: {error}")
+                        log_warn(
+                            "utils", f"Failed to write {reviewer_path.name}: {error}"
+                        )
                 else:
                     reviewer_path.write_text(content, encoding="utf-8")
             except Exception as e:
@@ -1016,7 +1168,9 @@ def write_combined_artifacts(
                 if ENABLE_ROBUST_PLAN_WRITES:
                     success, error = atomic_write(reviewer_path, content)
                     if not success:
-                        log_warn("utils", f"Failed to write {reviewer_path.name}: {error}")
+                        log_warn(
+                            "utils", f"Failed to write {reviewer_path.name}: {error}"
+                        )
                 else:
                     reviewer_path.write_text(content, encoding="utf-8")
             except Exception as e:
@@ -1045,6 +1199,7 @@ def write_combined_artifacts(
 # ---------------------------
 # Settings loading
 # ---------------------------
+
 
 def load_config(project_dir: Path) -> Dict[str, Any]:
     """Load full CC-Native config from _cc-native/plan-review.config.json."""

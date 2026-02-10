@@ -136,6 +136,22 @@ def sanitize_title(s: str, max_len: int = 50) -> str:
     return result or "unknown"
 
 
+def clean_text_for_slug(text: str) -> str:
+    """
+    Clean text for stop-word matching in slug generation.
+
+    Strips apostrophes (i'm -> im), removes punctuation, normalizes whitespace.
+    This ensures words like "generation," match their stop-word counterparts.
+    """
+    if not text:
+        return ""
+    text = text.lower()
+    text = re.sub(r"'", "", text)          # i'm -> im, you're -> youre
+    text = re.sub(r"[^a-z0-9\s]", " ", text)  # punctuation -> spaces
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
 def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str:
     """
     Generate a context ID from a summary string.
@@ -158,6 +174,8 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
             base_id = f"{timestamp}-context"
         else:
             slug = None
+            # Pre-clean for Tier 2/3: strip punctuation so stop words match
+            cleaned_summary = clean_text_for_slug(summary)
 
             # Tier 1: AI inference for high-quality keyword slugs
             try:
@@ -168,25 +186,28 @@ def generate_context_id(summary: str, existing_ids: Optional[set] = None) -> str
                     from .stop_words import STOP_WORDS
                     filtered_words = [w for w in ai_slug.split() if w.lower() not in STOP_WORDS and len(w) > 1]
                     if len(filtered_words) >= 5:
-                        slug = sanitize_title(' '.join(filtered_words), max_len=100)
+                        slug = sanitize_title(' '.join(filtered_words), max_len=150)
                     else:
                         log_debug("utils", f"AI slug too generic after stop-word filter ({len(filtered_words)} words remain), using fallback")
             except Exception as e:
                 log_warn("utils", f"AI context ID slug failed, using fallback: {e}")
 
-            # Tier 2: Stop-word filtering
+            # Tier 2: Stop-word filtering on cleaned text
             if not slug:
                 try:
                     from .stop_words import STOP_WORDS
-                    words = [w for w in summary.lower().split() if w not in STOP_WORDS and len(w) > 1][:12]
-                    slug = sanitize_title(' '.join(words), max_len=50)
+                    words = [w for w in cleaned_summary.split() if w not in STOP_WORDS and len(w) > 1][:12]
+                    if len(words) >= 3:
+                        slug = sanitize_title(' '.join(words), max_len=150)
+                    else:
+                        log_debug("utils", f"Tier 2 too few content words ({len(words)}), falling through to Tier 3")
                 except Exception as e:
                     log_warn("utils", f"Stop-word fallback failed: {e}")
 
-            # Tier 3: Simple word-length filter (no imports needed)
+            # Tier 3: Simple word-length filter on cleaned text (no imports needed)
             if not slug or slug == "unknown":
-                words = [w for w in summary.lower().split() if len(w) > 2][:6]
-                slug = sanitize_title(' '.join(words), max_len=50) if words else "context"
+                words = [w for w in cleaned_summary.split() if len(w) > 2][:6]
+                slug = sanitize_title(' '.join(words), max_len=150) if words else "context"
 
             base_id = f"{timestamp}-{slug}"
     except Exception as e:

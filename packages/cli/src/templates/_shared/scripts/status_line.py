@@ -8,6 +8,7 @@ Ported from PAI statusline.ts — context and git sections only.
 
 Usage: echo '{"session_id":"...","model":{"display_name":"Opus"},...}' | python status_line.py
 """
+
 import json
 import os
 import re
@@ -29,7 +30,8 @@ from lib.base.hook_utils import CONTEXT_BASELINE_TOKENS
 
 # Cache file for session_id → context_id mapping
 OUTPUT_DIR = Path(".") / "_output"
-STATUSLINE_CACHE = OUTPUT_DIR / ".statusline-cache.json"
+CACHE_DIR = OUTPUT_DIR / "cache"
+STATUSLINE_CACHE = CACHE_DIR / ".statusline-cache.json"
 
 # ---------------------------------------------------------------------------
 # NO_COLOR support (https://no-color.org)
@@ -72,6 +74,7 @@ GIT_AGE_OLD = "" if NO_COLOR else "\x1b[38;2;99;102;241m"
 # Display modes
 # ---------------------------------------------------------------------------
 
+
 def get_terminal_width() -> int:
     """Detect terminal width with fallbacks."""
     # Try COLUMNS env var first
@@ -108,6 +111,7 @@ def get_display_mode(width: int) -> str:
 # Color helpers
 # ---------------------------------------------------------------------------
 
+
 def get_bucket_color(pos: int, max_pos: int) -> str:
     """Get gradient color for context bar bucket at position."""
     if NO_COLOR:
@@ -136,6 +140,7 @@ def get_bucket_color(pos: int, max_pos: int) -> str:
 # Context bar rendering
 # ---------------------------------------------------------------------------
 
+
 def render_context_bar(width: int, pct: int) -> Tuple[str, str]:
     """Render the context usage bar with gradient colors.
 
@@ -150,9 +155,9 @@ def render_context_bar(width: int, pct: int) -> Tuple[str, str]:
         if i <= filled:
             color = get_bucket_color(i, width)
             last_color = color
-            parts.append(f"{color}\u26C1{RESET}")
+            parts.append(f"{color}\u26c1{RESET}")
         else:
-            parts.append(f"{CTX_BUCKET_EMPTY}\u26C1{RESET}")
+            parts.append(f"{CTX_BUCKET_EMPTY}\u26c1{RESET}")
         if width > 8:
             parts.append(" ")
 
@@ -169,6 +174,7 @@ SEPARATOR = f"{SLATE_600}" + "\u2500" * 72 + f"{RESET}"
 # ---------------------------------------------------------------------------
 # Context section
 # ---------------------------------------------------------------------------
+
 
 def shorten_model(name: str) -> str:
     """Shorten common model display names."""
@@ -207,36 +213,36 @@ def render_context(
     if mode == "nano":
         bar, _ = render_context_bar(5, context_pct)
         print(
-            f"{CTX_PRIMARY}\u25C9{RESET} {CTX_ACCENT}{short_model}{RESET} "
+            f"{CTX_PRIMARY}\u25c9{RESET} {CTX_ACCENT}{short_model}{RESET} "
             f"{bar} {pct_color}{context_pct}%{RESET} "
-            f"{CTX_ACCENT}\u23F1{RESET} {SLATE_300}{time_display}{RESET}"
+            f"{CTX_ACCENT}\u23f1{RESET} {SLATE_300}{time_display}{RESET}"
         )
     elif mode == "micro":
         bar, _ = render_context_bar(6, context_pct)
         print(
-            f"{CTX_PRIMARY}\u25C9{RESET} {CTX_ACCENT}{short_model}{RESET} "
+            f"{CTX_PRIMARY}\u25c9{RESET} {CTX_ACCENT}{short_model}{RESET} "
             f"{SLATE_600}\u2502{RESET} "
             f"{bar} {pct_color}{context_pct}%{RESET} {SLATE_500}({context_k}k){RESET} "
-            f"{CTX_ACCENT}\u23F1{RESET} {SLATE_300}{time_display}{RESET}"
+            f"{CTX_ACCENT}\u23f1{RESET} {SLATE_300}{time_display}{RESET}"
         )
     elif mode == "mini":
         bar, _ = render_context_bar(8, context_pct)
         print(
-            f"{CTX_PRIMARY}\u25C9{RESET} {CTX_ACCENT}{short_model}{RESET} "
+            f"{CTX_PRIMARY}\u25c9{RESET} {CTX_ACCENT}{short_model}{RESET} "
             f"{SLATE_600}\u2502{RESET} "
             f"{CTX_SECONDARY}CTX:{RESET} {bar} "
             f"{pct_color}{context_pct}%{RESET} {SLATE_500}({context_k}k/{max_k}k){RESET} "
-            f"{CTX_ACCENT}\u23F1{RESET} {SLATE_300}{time_display}{RESET}"
+            f"{CTX_ACCENT}\u23f1{RESET} {SLATE_300}{time_display}{RESET}"
         )
     else:  # normal
         bar, last_color = render_context_bar(16, context_pct)
         print(
-            f"{CTX_PRIMARY}\u25C9{RESET} {CTX_SECONDARY}Model:{RESET} {CTX_ACCENT}{short_model}{RESET} "
+            f"{CTX_PRIMARY}\u25c9{RESET} {CTX_SECONDARY}Model:{RESET} {CTX_ACCENT}{short_model}{RESET} "
             f"{SLATE_600}\u2502{RESET} "
             f"{CTX_SECONDARY}Context:{RESET} {bar} "
             f"{last_color}{context_pct}%{RESET} {SLATE_500}({context_k}k/{max_k}k){RESET} "
             f"{SLATE_600}\u2502{RESET} "
-            f"{CTX_ACCENT}\u23F1{RESET} {SLATE_300}{time_display}{RESET}"
+            f"{CTX_ACCENT}\u23f1{RESET} {SLATE_300}{time_display}{RESET}"
         )
 
     print(SEPARATOR)
@@ -245,6 +251,7 @@ def render_context(
 # ---------------------------------------------------------------------------
 # Git status
 # ---------------------------------------------------------------------------
+
 
 def _run_git(args: list, cwd: str, timeout: int = 2) -> Optional[str]:
     """Run a git command and return stdout, or None on failure."""
@@ -321,6 +328,7 @@ def get_git_status(cwd: str) -> Optional[Dict[str, Any]]:
     if log:
         try:
             import time
+
             last_epoch = int(log)
             now_epoch = int(time.time())
             age_sec = now_epoch - last_epoch
@@ -355,7 +363,7 @@ def render_git(mode: str, git: Dict[str, Any], dir_name: str) -> None:
     status_icon = "*" if (total_changed > 0 or git["untracked"] > 0) else "\u2713"
 
     if mode == "nano":
-        line = f"{GIT_PRIMARY}\u25C8{RESET} {GIT_DIR}{dir_name}{RESET} {GIT_VALUE}{git['branch']}{RESET} "
+        line = f"{GIT_PRIMARY}\u25c8{RESET} {GIT_DIR}{dir_name}{RESET} {GIT_VALUE}{git['branch']}{RESET} "
         if status_icon == "\u2713":
             line += f"{GIT_CLEAN}\u2713{RESET}"
         else:
@@ -363,7 +371,7 @@ def render_git(mode: str, git: Dict[str, Any], dir_name: str) -> None:
         print(line)
 
     elif mode == "micro":
-        line = f"{GIT_PRIMARY}\u25C8{RESET} {GIT_DIR}{dir_name}{RESET} {GIT_VALUE}{git['branch']}{RESET}"
+        line = f"{GIT_PRIMARY}\u25c8{RESET} {GIT_DIR}{dir_name}{RESET} {GIT_VALUE}{git['branch']}{RESET}"
         if git["age_display"]:
             line += f" {git['age_color']}{git['age_display']}{RESET}"
         line += " "
@@ -375,7 +383,7 @@ def render_git(mode: str, git: Dict[str, Any], dir_name: str) -> None:
 
     elif mode == "mini":
         line = (
-            f"{GIT_PRIMARY}\u25C8{RESET} {GIT_DIR}{dir_name}{RESET} "
+            f"{GIT_PRIMARY}\u25c8{RESET} {GIT_DIR}{dir_name}{RESET} "
             f"{SLATE_600}\u2502{RESET} {GIT_VALUE}{git['branch']}{RESET}"
         )
         if git["age_display"]:
@@ -391,7 +399,7 @@ def render_git(mode: str, git: Dict[str, Any], dir_name: str) -> None:
 
     else:  # normal
         line = (
-            f"{GIT_PRIMARY}\u25C8{RESET} {GIT_PRIMARY}PWD:{RESET} {GIT_DIR}{dir_name}{RESET} "
+            f"{GIT_PRIMARY}\u25c8{RESET} {GIT_PRIMARY}PWD:{RESET} {GIT_DIR}{dir_name}{RESET} "
             f"{SLATE_600}\u2502{RESET} "
             f"{GIT_PRIMARY}Branch:{RESET} {GIT_VALUE}{git['branch']}{RESET}"
         )
@@ -424,6 +432,7 @@ def render_git(mode: str, git: Dict[str, Any], dir_name: str) -> None:
 # Context manager line (line 3)
 # ---------------------------------------------------------------------------
 
+
 def render_context_manager(
     mode: str,
     context_id: str,
@@ -443,7 +452,9 @@ def render_context_manager(
 
     # Read state fields (ContextState object from context_store)
     state_mode = getattr(context_state, "mode", "idle") if context_state else "idle"
-    state_plan_path = getattr(context_state, "plan_path", None) if context_state else None
+    state_plan_path = (
+        getattr(context_state, "plan_path", None) if context_state else None
+    )
 
     # Detect plan mode heuristic: if state is idle but a recent plan file exists
     # in ~/.claude/plans/, we're likely in active planning (transient, not persisted)
@@ -472,6 +483,7 @@ def render_context_manager(
         # Fallback: check context's plans/ folder
         try:
             from lib.context.plan_manager import find_latest_plan
+
             plan_file_path = find_latest_plan(context_id)
         except Exception:
             pass
@@ -479,7 +491,9 @@ def render_context_manager(
     # Build plan name (mini/normal only)
     plan_part = ""
     if mode in ("mini", "normal") and plan_file_path:
-        plan_stem = re.sub(r"^\d{4}-\d{2}-\d{2}-", "", Path(plan_file_path).stem)
+        plan_stem = re.sub(
+            r"^\d{4}-\d{2}-\d{2}-(\d{4}-)?", "", Path(plan_file_path).stem
+        )
         max_plan_len = 20 if mode == "mini" else 30
         truncated_plan = plan_stem[:max_plan_len]
         if len(plan_stem) > max_plan_len:
@@ -487,30 +501,24 @@ def render_context_manager(
         plan_part = f" {SLATE_600}\u2502{RESET} {CTX_SECONDARY}Plan:{RESET} {SLATE_300}{truncated_plan}{RESET}"
 
     if mode == "nano":
-        print(
-            f"{CTX_ACCENT}\u25C6{RESET} {SLATE_400}{truncated_id}{RESET}"
-            f"{mode_badge}"
-        )
+        print(f"{CTX_ACCENT}\u25c6{RESET} {SLATE_400}{truncated_id}{RESET}{mode_badge}")
     elif mode == "micro":
-        print(
-            f"{CTX_ACCENT}\u25C6{RESET} {SLATE_400}{truncated_id}{RESET}"
-            f"{mode_badge}"
-        )
+        print(f"{CTX_ACCENT}\u25c6{RESET} {SLATE_400}{truncated_id}{RESET}{mode_badge}")
     elif mode == "mini":
         print(
-            f"{CTX_ACCENT}\u25C6{RESET} {SLATE_400}{truncated_id}{RESET}"
+            f"{CTX_ACCENT}\u25c6{RESET} {SLATE_400}{truncated_id}{RESET}"
             f"{mode_badge}{plan_part}"
         )
     else:  # normal
         print(
-            f"{CTX_ACCENT}\u25C6{RESET} {CTX_SECONDARY}Context:{RESET} {SLATE_300}{truncated_id}{RESET}"
+            f"{CTX_ACCENT}\u25c6{RESET} {CTX_SECONDARY}Context:{RESET} {SLATE_300}{truncated_id}{RESET}"
             f"{mode_badge}{plan_part}"
         )
 
 
 def render_no_context(mode: str) -> None:
     """Render a prominent indicator when no context is active."""
-    warn = f"{ROSE}\u26A0 {RESET}"  # ⚠ (extra space after glyph)
+    warn = f"{ROSE}\u26a0 {RESET}"  # ⚠ (extra space after glyph)
     if mode == "nano":
         print(f"{warn} {ROSE}NO CONTEXT{RESET}")
     elif mode == "micro":
@@ -518,12 +526,15 @@ def render_no_context(mode: str) -> None:
     elif mode == "mini":
         print(f"{warn} {ROSE}NO CONTEXT{RESET}")
     else:  # normal
-        print(f"{warn} {ROSE}NO CONTEXT{RESET} {SLATE_500}\u2014 session not tracked{RESET}")
+        print(
+            f"{warn} {ROSE}NO CONTEXT{RESET} {SLATE_500}\u2014 type ^ for context manager{RESET}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # Context persistence
 # ---------------------------------------------------------------------------
+
 
 def _load_cache() -> Dict[str, Any]:
     """Load the statusline cache file."""
@@ -560,6 +571,7 @@ def _resolve_context_id(session_id: str) -> Optional[str]:
     # Cache miss — look up via context manager
     try:
         from lib.context.context_store import get_context_by_session_id
+
         context = get_context_by_session_id(session_id)
         if context:
             # Update cache
@@ -583,6 +595,7 @@ def _load_context_state(context_id: str):
     """Load context state from state.json (with context.json fallback)."""
     try:
         from lib.context.context_store import load_state
+
         return load_state(context_id)
     except Exception:
         return None
@@ -607,11 +620,14 @@ def _write_context_window(context_id: str, context_window_data: Dict[str, Any]) 
     """Write context_window data to state.json last_session."""
     try:
         from lib.context.context_store import get_context as get_ctx, save_state
+
         state = get_ctx(context_id)
         if state:
             if state.last_session is None:
                 state.last_session = {}
-            state.last_session["context_remaining_pct"] = context_window_data.get("remaining_percentage")
+            state.last_session["context_remaining_pct"] = context_window_data.get(
+                "remaining_percentage"
+            )
             save_state(state)
     except Exception:
         pass
@@ -620,6 +636,7 @@ def _write_context_window(context_id: str, context_window_data: Dict[str, Any]) 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     """Read stdin JSON, render status line, optionally persist context data."""
@@ -700,16 +717,19 @@ def main() -> None:
 
     # Persist context_window to state.json
     if context_id:
-        _write_context_window(context_id, {
-            "used_percentage": context_pct,
-            "remaining_percentage": 100 - context_pct,
-            "context_window_size": context_max,
-            "tokens_used": context_used,
-            "total_input_tokens": total_input,
-            "total_output_tokens": output_tokens,
-            "model": model_name,
-            "last_updated": datetime.now().isoformat(timespec="seconds"),
-        })
+        _write_context_window(
+            context_id,
+            {
+                "used_percentage": context_pct,
+                "remaining_percentage": 100 - context_pct,
+                "context_window_size": context_max,
+                "tokens_used": context_used,
+                "total_input_tokens": total_input,
+                "total_output_tokens": output_tokens,
+                "model": model_name,
+                "last_updated": datetime.now().isoformat(timespec="seconds"),
+            },
+        )
 
 
 if __name__ == "__main__":

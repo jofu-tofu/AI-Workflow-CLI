@@ -6,9 +6,8 @@ Provides a single logging interface that replaces:
 - eprint() for diagnostic output (stderr-only, no persistence)
 
 Log format: JSONL (one JSON object per line)
-Log locations:
-- With context: _output/contexts/<context-id>/debug/hook-log.jsonl
-- Without context (fallback): _output/hook-log.jsonl
+Log location: _output/hook-log.jsonl (global, all sessions)
+Filter by session using the "sid" field.
 
 Environment variables:
 - HOOK_LOG_DISABLE=1: Disable all file logging
@@ -29,13 +28,27 @@ from typing import Any, Dict, Optional
 
 _LEVELS = {"debug": 0, "info": 1, "warn": 2, "error": 3}
 
-_MAX_LOG_SIZE = 1024 * 1024  # 1MB
-_TRUNCATE_TO = 512 * 1024    # 512KB
+_MAX_LOG_LINES = 10_000  # Max lines in global log before pruning
 
 # Module-level context path cache.
 # Set once per hook process via set_context_path() or auto-resolved on first use.
 _cached_context_path: Optional[Path] = None
 _context_resolved: bool = False
+
+# Module-level session ID cache.
+# Set once per hook process via set_session_id().
+_cached_session_id: Optional[str] = None
+
+
+def set_session_id(session_id: Optional[str]) -> None:
+    """Set the session ID for this process. All subsequent log calls include it.
+
+    Args:
+        session_id: Claude Code session ID (e.g., "a1b2c3d4")
+                    or None to clear.
+    """
+    global _cached_session_id
+    _cached_session_id = session_id
 
 
 def set_context_path(path: Optional[Path]) -> None:
@@ -114,10 +127,12 @@ def hook_log(
     component: str = "",
     data: Any = None,
     traceback_str: str = "",
-    context_path: Optional[Path] = None,
     stderr: bool = True,
 ) -> None:
-    """Write a structured log entry.
+    """Write a structured log entry to the global hook log.
+
+    All entries go to _output/hook-log.jsonl. Use the "sid" field
+    (set via set_session_id) to filter by session.
 
     Args:
         level: "debug" | "info" | "warn" | "error"
@@ -126,7 +141,6 @@ def hook_log(
         component: Sub-component (e.g., "git", "parse")
         data: Optional structured data (must be JSON-serializable)
         traceback_str: Optional traceback string
-        context_path: If provided, logs to context debug dir
         stderr: Also write to stderr (default: True)
     """
     try:
@@ -152,12 +166,14 @@ def hook_log(
 
         # Build JSONL entry
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
-        entry = {
+        entry: Dict[str, Any] = {
             "ts": ts,
             "level": level_lower,
             "hook": hook_name,
             "msg": message,
         }
+        if _cached_session_id:
+            entry["sid"] = _cached_session_id
         if component:
             entry["component"] = component
         if data is not None:
@@ -171,22 +187,20 @@ def hook_log(
 
         line = json.dumps(entry, ensure_ascii=True, default=str) + "\n"
 
-        # Determine log path: explicit > cached > global
-        resolved_ctx = context_path or _get_context_path()
-        if resolved_ctx and resolved_ctx.exists():
-            log_path = resolved_ctx / "debug" / "hook-log.jsonl"
-        else:
-            project_root = _get_project_root()
-            log_path = project_root / "_output" / "hook-log.jsonl"
+        # Always write to global log
+        project_root = _get_project_root()
+        log_path = project_root / "_output" / "hook-log.jsonl"
 
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Size guard (global log only, not per-context)
-        if not resolved_ctx and log_path.exists():
+        # Line-count guard: prune to last _MAX_LOG_LINES
+        if log_path.exists():
             try:
-                if log_path.stat().st_size > _MAX_LOG_SIZE:
-                    file_data = log_path.read_bytes()
-                    log_path.write_bytes(file_data[-_TRUNCATE_TO:])
+                with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                    existing = f.readlines()
+                if len(existing) > _MAX_LOG_LINES:
+                    with open(log_path, "w", encoding="utf-8") as f:
+                        f.writelines(existing[-_MAX_LOG_LINES:])
             except OSError:
                 pass
 
