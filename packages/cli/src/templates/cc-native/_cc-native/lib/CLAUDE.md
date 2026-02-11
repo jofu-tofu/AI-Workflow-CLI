@@ -4,7 +4,7 @@
 
 ---
 
-## Module Overview
+## Module Overview (Python — `lib/`)
 
 | Module | Purpose |
 |--------|---------|
@@ -25,6 +25,33 @@
 | `agent.py` | Claude Code agent-based reviewer (uses `--system-prompt`) |
 | `codex.py` | Codex CLI reviewer |
 | `gemini.py` | Google Gemini API reviewer |
+
+## TypeScript Port (`lib-ts/`)
+
+The TypeScript library is a direct port of the Python library, decomposed into focused modules per the spec (`cc-native-plan-review-spec.md`). The monolithic `utils.py` is split into `types.ts`, `verdict.ts`, `artifacts.ts`, `config.ts`, `cc-native-state.ts`, `json-parser.ts`, and `cli-output-parser.ts`.
+
+| Module | Purpose | Python Equivalent |
+|--------|---------|-------------------|
+| `types.ts` | All interfaces, schemas, prompt constants | `utils.py` dataclasses + `reviewers/base.py` |
+| `constants.ts` | Feature flags, security, `validatePlanPath()` | `constants.py` |
+| `verdict.ts` | `worstVerdict()`, `computeReviewDecision()` | `utils.py` verdict logic |
+| `json-parser.ts` | `parseJsonMaybe()`, `coerceToReview()` | `utils.py` JSON parsing |
+| `cli-output-parser.ts` | `parseCliOutput()` — unified Claude CLI output parser | `orchestrator.py` + `reviewers/agent.py` (`_parse_claude_output`) |
+| `config.ts` | `loadConfig()`, `getDisplaySettings()` | `utils.py` settings |
+| `debug.ts` | `debugLog()`, `debugRaw()`, `cleanupDebugFolder()` | `debug.py` |
+| `cc-native-state.ts` | Plan review/questions/stuck state accessors | `utils.py` state accessors |
+| `state.ts` | Iteration state management (plan-adjacent `.state.json`) | `state.py` |
+| `orchestrator.ts` | `runOrchestrator()`, `buildOrchestratorSchema()` | `orchestrator.py` |
+| `aggregate-agents.ts` | `aggregateAgents()`, frontmatter parsing | New (extracts from hook) |
+| `artifacts.ts` | All `format*()`, `write*()`, `build*()`, `extract*()` | `utils.py` artifact writing |
+| `reviewers/types.ts` | `Reviewer` interface | New (pluggable interface) |
+| `reviewers/agent.ts` | `AgentReviewer` class | `reviewers/agent.py` |
+| `reviewers/codex.ts` | `CodexReviewer` class | `reviewers/codex.py` |
+| `reviewers/gemini.ts` | `GeminiReviewer` class | `reviewers/gemini.py` |
+| `reviewers/index.ts` | Re-exports | `reviewers/__init__.py` |
+| `index.ts` | Package entry point | `__init__.py` |
+
+**Import direction:** Hooks --> `lib-ts/` --> `_shared/lib-ts/`. Same as Python. Never reverse.
 
 ---
 
@@ -251,6 +278,7 @@ These are reminders based on past issues. Not enforcement rules.
 
 | Date | Change |
 |------|--------|
+| 2026-02-10 | Added TypeScript port: `lib-ts/` with 17 TS files decomposing `utils.py` monolith into focused modules per spec |
 | 2026-02-10 | Fixed `debug.py`: removed `context_path=` keyword from `hook_log()` calls — Python logger doesn't accept it (was causing `TypeError` crash in plan review) |
 | 2026-02-07 | Unified logger: all diagnostic logging uses `_shared/lib/base/logger.py` instead of eprint/print-to-stderr |
 | 2026-02-06 | Remove duplicate `atomic_write.py` — consolidated to `_shared/lib/base/atomic_write.py` |

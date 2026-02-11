@@ -83,20 +83,75 @@ logBlocking("my_hook", "Critical: state corrupt"); // shows in UI
 
 ---
 
-## Hook Output
+## Hook Output — Three Communication Channels
 
-Hooks return structured data to Claude via stdout:
+Hooks have three channels back to the session. Pick the right one:
+
+| Want to... | Function | Who sees it |
+|------------|----------|-------------|
+| Block tool + return message | `emitContextAndBlock(context, reason)` | Claude + user (denial reason prominent) |
+| Return message, don't block | `emitContext(context)` | Claude + user (in transcript) |
+| Log only (diagnostics) | `logInfo()` / `logWarn()` / etc. | Nobody in session — file only |
+
+**There is no way to show something to the user but hide it from Claude, or vice versa.** Both `emitContext()` and `emitContextAndBlock()` produce output visible to both.
+
+### Channel 1: Block + Context (PreToolUse only)
 
 ```typescript
-import { emitContext, emitContextAndBlock } from "../lib-ts/base/hook-utils.js";
-
-emitContext("Information for Claude to see");
-
 emitContextAndBlock(
-  "Review feedback for Claude",
-  "Reason shown for the denial"
+  "Detailed feedback Claude sees",    // additionalContext
+  "Short reason for the block"        // permissionDecisionReason
 );
+throw new Error("SystemExit:1");
 ```
+
+The tool call is **prevented from executing**. Only works for PreToolUse hooks.
+
+### Channel 2: Non-blocking Context (any hook event)
+
+```typescript
+emitContext("Information added to Claude's context");
+```
+
+The tool call / session continues normally. Works for PreToolUse, PostToolUse, UserPromptSubmit, SessionStart, Notification, SubagentStart.
+
+### Channel 3: Log-only (diagnostics)
+
+```typescript
+logInfo("my_hook", "Processing started");     // File only
+logWarn("my_hook", `Fallback used: ${why}`);  // File only
+```
+
+Nobody in the session sees this. Written to `_output/hook-log.jsonl` for debugging.
+
+### Exit codes and JSON
+
+| Exit Code | JSON Parsed? | Effect |
+|-----------|-------------|--------|
+| **0** | Yes | Normal — `hookSpecificOutput` processed |
+| **2** | No | Blocking error — JSON ignored, stderr fed to Claude |
+| **Other** | No | Non-blocking error — stderr shown in verbose mode |
+
+You cannot mix exit 2 with JSON decisions. Pick one: exit 0 + JSON, or exit 2 + stderr.
+
+### hookSpecificOutput fields by event type
+
+| Event | `additionalContext` | `permissionDecision` | `permissionDecisionReason` | Other |
+|-------|:--:|:--:|:--:|-------|
+| **PreToolUse** | Y | Y (allow/deny/ask) | Y | `updatedInput` |
+| **PostToolUse** | Y | - | - | `updatedMCPToolOutput` (MCP only) |
+| **UserPromptSubmit** | Y | - | - | top-level `decision: "block"` |
+| **SessionStart** | Y | - | - | — |
+| **Notification** | Y | - | - | — |
+| **SubagentStart** | Y | - | - | — |
+| **Stop** | - | - | - | top-level `decision`, `reason` |
+| **SessionEnd** | - | - | - | — |
+
+**Invalid fields cause silent rejection of the entire output.** No error, no feedback.
+
+### Special case: fileSuggestion
+
+The `fileSuggestion` settings command is NOT a hook — it uses a different protocol. It outputs a plain JSON array to stdout (e.g., `console.log(JSON.stringify(paths))`). Do not use `emitContext()` for fileSuggestion.
 
 ---
 

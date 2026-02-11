@@ -3,12 +3,11 @@
  * UserPromptSubmit hook: Context enforcement — ensures every prompt belongs
  * to a tracked context. The most complex shared hook.
  *
- * Uses bare stdout for output — UserPromptSubmit hooks support plain text on stdout
- * (automatically added as context by Claude Code, no JSON envelope needed).
+ * Uses emitContext() for output — context text is passed via hookSpecificOutput JSON.
  * Catches BlockRequest and exits with code 2 to block the prompt.
  */
 import {
-  loadHookInput, runHookAsync, logDebug, logInfo, logWarn, logBlocking, logDiagnostic, hookLog,
+  loadHookInput, runHookAsync, logDebug, logInfo, logWarn, logBlocking, logDiagnostic, hookLog, emitContext,
 } from "../lib-ts/base/hook-utils.js";
 import { getProjectRoot } from "../lib-ts/base/constants.js";
 import {
@@ -74,9 +73,8 @@ async function asyncMain(): Promise<void> {
     }
   }
 
-  // Output via bare stdout (NOT emitContext — matches established pattern)
   if (outputs.length > 0) {
-    process.stdout.write(outputs.join("\n\n"));
+    emitContext(outputs.join("\n\n"));
   }
 }
 

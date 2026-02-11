@@ -26,7 +26,7 @@ export function loadConfig(projectDir: string): PlanReviewConfig {
   try {
     const raw = fs.readFileSync(settingsPath, "utf-8");
     return JSON.parse(raw) as PlanReviewConfig;
-  } catch (e: any) {
+  } catch (e: unknown) {
     logWarn("cc-native", `Failed to load config: ${e}`);
     return {};
   }
@@ -42,7 +42,7 @@ export function getDisplaySettings(
   const sectionConfig = config[section];
   const sectionDisplay =
     sectionConfig && typeof sectionConfig === "object"
-      ? ((sectionConfig as Record<string, any>).display as
+      ? ((sectionConfig as Record<string, unknown>).display as
           | Partial<DisplaySettings>
           | undefined) ?? {}
       : {};

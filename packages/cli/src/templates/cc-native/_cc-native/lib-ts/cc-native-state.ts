@@ -11,8 +11,17 @@ import type {
   CcNativeState,
   PlanReviewState,
   QuestionsAskedState,
+  IterationState,
   StuckDetectionState,
 } from "./types.js";
+import type { ContextState } from "../../../_shared/lib-ts/types.js";
+
+/**
+ * ContextState extended with the cc_native method-specific data.
+ * ContextState doesn't include cc_native in its type definition because it's
+ * a shared type. This local extension bridges the gap for cc-native code.
+ */
+type CcNativeContextState = ContextState & { cc_native?: CcNativeState };
 
 // ---------------------------------------------------------------------------
 // Core State Access
@@ -27,12 +36,9 @@ export function getCcNativeState(
   projectRoot: string,
 ): CcNativeState | null {
   try {
-    const state = getContextBySessionId(sessionId, projectRoot);
-    if (state) {
-      const raw = state as Record<string, any>;
-      if (raw.cc_native && typeof raw.cc_native === "object") {
-        return raw.cc_native as CcNativeState;
-      }
+    const state = getContextBySessionId(sessionId, projectRoot) as CcNativeContextState | null;
+    if (state?.cc_native && typeof state.cc_native === "object") {
+      return state.cc_native;
     }
   } catch {
     // Fail-safe: return null
@@ -50,13 +56,13 @@ export function saveCcNativeState(
   ccNativeData: CcNativeState,
 ): boolean {
   try {
-    const state = getContextBySessionId(sessionId, projectRoot);
+    const state = getContextBySessionId(sessionId, projectRoot) as CcNativeContextState | null;
     if (state) {
-      (state as Record<string, any>).cc_native = ccNativeData;
-      saveState(state, projectRoot);
+      state.cc_native = ccNativeData;
+      saveState(state.id, state, projectRoot);
       return true;
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     logWarn("utils", `Failed to save cc_native state: ${e}`);
   }
   return false;
@@ -105,7 +111,7 @@ export function markPlanReviewed(
   planHash: string,
   projectRoot: string,
   hookName = "cc-native",
-  iterationState?: Record<string, any>,
+  iterationState?: IterationState,
   decision = "allow",
 ): void {
   try {
@@ -119,16 +125,15 @@ export function markPlanReviewed(
 
     if (iterationState) {
       reviewData.iteration = {
-        current: (iterationState.current as number) ?? 1,
-        max: (iterationState.max as number) ?? 1,
-        complexity: (iterationState.complexity as string) ?? "unknown",
+        current: iterationState.current ?? 1,
+        max: iterationState.max ?? 1,
+        complexity: iterationState.complexity ?? "unknown",
       };
-      const history = iterationState.history as Array<Record<string, any>> | undefined;
+      const history = iterationState.history;
       if (history && history.length > 0) {
         const lastEntry = history[history.length - 1];
         if (lastEntry) {
-          reviewData.iteration.latest_verdict =
-            (lastEntry.verdict as string) ?? "unknown";
+          reviewData.iteration.latest_verdict = lastEntry.verdict ?? "unknown";
         }
       }
     }
@@ -146,7 +151,7 @@ export function markPlanReviewed(
         `Failed to save plan review state for session ${sessionId}`,
       );
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     logWarn(hookName, `Failed to mark plan reviewed: ${e}`);
   }
 }
@@ -185,7 +190,7 @@ export function markQuestionsAsked(
     };
 
     return saveCcNativeState(sessionId, projectRoot, ccNative);
-  } catch (e: any) {
+  } catch (e: unknown) {
     logWarn("utils", `Failed to mark questions asked: ${e}`);
     return false;
   }
@@ -218,7 +223,7 @@ export function updateStuckDetectionState(
     const ccNative = getCcNativeState(sessionId, projectRoot) ?? {};
     ccNative.stuck_detection = stuckState;
     return saveCcNativeState(sessionId, projectRoot, ccNative);
-  } catch (e: any) {
+  } catch (e: unknown) {
     logWarn("utils", `Failed to update stuck detection state: ${e}`);
     return false;
   }

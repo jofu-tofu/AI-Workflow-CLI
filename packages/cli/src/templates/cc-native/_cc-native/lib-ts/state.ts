@@ -43,7 +43,7 @@ export function getStateFilePath(planPath: string): string {
 /**
  * Load state file with schema validation and migration.
  */
-export function loadState(planPath: string): Record<string, any> | null {
+export function loadState(planPath: string): Record<string, unknown> | null {
   try {
     const stateFile = getStateFilePath(planPath);
 
@@ -53,7 +53,7 @@ export function loadState(planPath: string): Record<string, any> | null {
 
     const state = JSON.parse(
       fs.readFileSync(stateFile, "utf-8"),
-    ) as Record<string, any>;
+    ) as Record<string, unknown>;
 
     // Handle schema version (backward compatible)
     const schemaVersion = state.schema_version as string | undefined;
@@ -72,7 +72,7 @@ export function loadState(planPath: string): Record<string, any> | null {
     }
 
     return state;
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e instanceof Error && e.message.includes("Invalid plan path")) {
       logError("state", `SECURITY: Invalid plan path: ${e}`);
     } else {
@@ -88,7 +88,7 @@ export function loadState(planPath: string): Record<string, any> | null {
  */
 export function saveStateToPlan(
   planPath: string,
-  state: Record<string, any>,
+  state: Record<string, unknown>,
 ): boolean {
   try {
     const stateFile = getStateFilePath(planPath);
@@ -109,7 +109,7 @@ export function saveStateToPlan(
     }
 
     return true;
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e instanceof Error && e.message.includes("Invalid plan path")) {
       logError("state", `SECURITY: Invalid plan path: ${e}`);
     } else {
@@ -131,7 +131,7 @@ export function deleteState(planPath: string): boolean {
       logInfo("state", `Deleted state file: ${stateFile}`);
     }
     return true;
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e instanceof Error && e.message.includes("Invalid plan path")) {
       logError("state", `SECURITY: Invalid plan path in delete: ${e}`);
       return false;
@@ -149,9 +149,9 @@ export function deleteState(planPath: string): boolean {
  * Get or initialize iteration state based on complexity.
  */
 export function getIterationState(
-  state: Record<string, any>,
+  state: Record<string, unknown>,
   complexity: string,
-  config?: Record<string, any>,
+  config?: Record<string, unknown>,
 ): IterationState {
   if (state.iteration) {
     return state.iteration as IterationState;
@@ -180,11 +180,11 @@ export function getIterationState(
  * Record review result in iteration history and update state.
  */
 export function updateIterationState(
-  state: Record<string, any>,
+  state: Record<string, unknown>,
   iteration: IterationState,
   planHash: string,
   verdict: string,
-): Record<string, any> {
+): Record<string, unknown> {
   const entry: IterationEntry = {
     hash: planHash,
     verdict,
@@ -202,7 +202,7 @@ export function updateIterationState(
 export function shouldContinueIterating(
   iteration: IterationState,
   verdict: string,
-  config?: Record<string, any>,
+  config?: Record<string, unknown>,
 ): boolean {
   const current = iteration.current;
   const maxIter = iteration.max;

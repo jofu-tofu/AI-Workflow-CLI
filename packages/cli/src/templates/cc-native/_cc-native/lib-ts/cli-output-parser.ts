@@ -102,7 +102,7 @@ export function parseCliOutput(
         "No StructuredOutput found in any assistant message in event list",
       );
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e instanceof SyntaxError) {
       logWarn("cli_parser", `JSON decode error: ${e.message}`);
     } else {

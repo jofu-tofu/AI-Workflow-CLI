@@ -4,6 +4,7 @@
  */
 
 export type { Reviewer, ReviewerResult, ReviewOptions } from "./types.js";
+export { makeResult } from "./types.js";
 export { AgentReviewer, runAgentReview } from "./agent.js";
 export { CodexReviewer, runCodexReview } from "./codex.js";
 export { GeminiReviewer, runGeminiReview } from "./gemini.js";

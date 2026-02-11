@@ -8,37 +8,32 @@
 
 | Hook | Trigger | Purpose |
 |------|---------|---------|
-| `cc-native-plan-review.py` | PreToolUse: ExitPlanMode | Review plans before user approval |
-| `add_plan_context.py` | PostToolUse: AskUserQuestion, PreToolUse: Task | Mark questions asked; nudge Plan subagent to ask questions first |
-| `suggest-fresh-perspective.py` | PostToolUse | Suggest fresh perspective workflow |
+| `cc-native-plan-review.ts` | PreToolUse: ExitPlanMode | Review plans before user approval |
+| `add_plan_context.ts` | PostToolUse: AskUserQuestion, PreToolUse: Task | Mark questions asked; nudge Plan subagent to ask questions first |
+| `plan_questions_early.ts` | UserPromptSubmit | Inject Phase A clarification prompt in plan mode |
+| `suggest-fresh-perspective.ts` | PostToolUse | Suggest fresh perspective workflow |
 
 ---
 
 ## Import Pattern
 
-Hooks run from arbitrary working directories. Always set up sys.path explicitly.
+CC-native hooks are TypeScript, run via `bun`. Use relative imports from the hook file location.
 
-```python
-# CORRECT - works in hook context
-from pathlib import Path
-import sys
+```typescript
+// Shared library imports (via _shared/lib-ts/)
+import { loadHookInput, runHook, logInfo, emitContext } from "../../_shared/lib-ts/base/hook-utils.js";
+import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
+import { getProjectRoot } from "../../_shared/lib-ts/base/constants.js";
 
-_lib = Path(__file__).parent.parent / "lib"
-sys.path.insert(0, str(_lib))
-
-# For shared library access
-_shared = Path(__file__).parent.parent.parent / "_shared"
-sys.path.insert(0, str(_shared))
-
-from utils import eprint, ReviewerResult
-from lib.base.subprocess_utils import is_internal_call
-from debug import log_debug  # Context-folder debug logging
+// CC-native library imports (via ../lib-ts/)
+import { wasQuestionsAsked, markQuestionsAsked } from "../lib-ts/cc-native-state.js";
+import { loadConfig } from "../lib-ts/config.js";
+import type { AgentConfig } from "../lib-ts/types.js";
 ```
 
-```python
-# WRONG - relative imports fail in hook context
-from ..lib import utils  # ModuleNotFoundError
-```
+**Important:** Always use `.js` extensions in import paths — Bun resolves `.ts` files from `.js` imports.
+
+**Import direction:** Hooks → `_cc-native/lib-ts/` → `_shared/lib-ts/`. Never reverse.
 
 ---
 
@@ -46,13 +41,15 @@ from ..lib import utils  # ModuleNotFoundError
 
 Hooks can be invoked recursively when spawning subprocesses (agents, orchestrator). Always check and skip:
 
-```python
-def main() -> int:
-    # FIRST LINE of main - before any other logic
-    if is_internal_call():
-        return 0  # Skip for subprocess calls
+```typescript
+import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
 
-    # Rest of hook logic...
+function main(): void {
+  // FIRST LINE of main - before any other logic
+  if (isInternalCall()) return;
+
+  // Rest of hook logic...
+}
 ```
 
 Without this check, the hook runs multiple times per plan review, causing duplicate reviews and state corruption.
@@ -65,49 +62,22 @@ Claude Code hooks return JSON to stdout. The format is specific to each hook typ
 
 ### PreToolUse Output
 
-```python
-# CORRECT - current API format
-import json
+Use the shared hook utilities — never construct JSON manually:
 
-out = {
-    "hookSpecificOutput": {
-        "additionalContext": "Information for Claude to see...",
-    }
-}
+```typescript
+import { emitContext, emitContextAndBlock } from "../../_shared/lib-ts/base/hook-utils.js";
 
-# To block the tool call:
-out["hookSpecificOutput"]["permissionDecision"] = "deny"
-out["hookSpecificOutput"]["permissionDecisionReason"] = "Reason shown to Claude"
+// Inject context without blocking:
+emitContext("Information for Claude to see...");
 
-print(json.dumps(out, ensure_ascii=False))
+// Block the tool call with context and reason:
+emitContextAndBlock(
+  "Review feedback for Claude to see...",
+  "Reason shown to Claude for the denial",
+);
 ```
 
-```python
-# WRONG - old format, silently ignored
-{"decision": "block", "reason": "..."}  # Does nothing
-{"continue": False, "message": "..."}   # Does nothing
-```
-
-**Key insight:** The old `decision`/`reason` format fails silently. If your hook isn't affecting Claude's behavior, check the output format first.
-
-### Using Hook Utilities (Preferred)
-
-Instead of manually constructing hookSpecificOutput dicts, use the shared utilities from `base.hook_utils`:
-
-```python
-from base.hook_utils import emit_context, emit_context_and_block
-
-# Inject context without blocking:
-emit_context("Information for Claude to see...")
-
-# Block the tool call with context and reason:
-emit_context_and_block(
-    "Review feedback for Claude to see...",
-    "Reason shown to Claude for the denial"
-)
-```
-
-These handle the JSON serialization and stdout printing. `emit_context` defaults to `ensure_ascii=False`; `emit_context_and_block` defaults to `ensure_ascii=True` (safe for Windows cp1252).
+**Key insight:** The old `decision`/`reason` format fails silently. If your hook isn't affecting Claude's behavior, check the output format first. Only `hookSpecificOutput` with `additionalContext`, `permissionDecision`, and `permissionDecisionReason` fields are recognized.
 
 ---
 
@@ -120,14 +90,14 @@ For logging tiers, visibility rules, and stderr behavior, see **`_shared/lib-ts/
 - **`eprint()`** for terminal-only UX (not logged to JSONL)
 - **`print()` corrupts stdout** — never use for diagnostics
 
-Python hooks use the same logger via `base.hook_utils`:
+TypeScript hooks use re-exported logger functions from `hook-utils.ts`:
 
-```python
-from base.hook_utils import log_debug, log_info, log_warn, log_error
+```typescript
+import { logDebug, logInfo, logWarn, logError } from "../../_shared/lib-ts/base/hook-utils.js";
 
-log_debug("hook-name", f"Found {len(items)} items")  # file only
-log_info("hook-name", "Starting hook...")              # file only
-log_error("hook-name", f"Failed: {e}", traceback_str=tb)  # file only
+logDebug("hook-name", `Found ${items.length} items`);  // file only
+logInfo("hook-name", "Starting hook...");                // file only
+logError("hook-name", `Failed: ${e}`);                   // file only
 ```
 
 ---
@@ -136,59 +106,61 @@ log_error("hook-name", f"Failed: {e}", traceback_str=tb)  # file only
 
 Plan review hooks integrate with the shared context system for state management:
 
-```python
-from lib.context.context_manager import (
-    get_context_by_session_id,
-    get_all_in_flight_contexts,
-)
-from lib.base.constants import get_context_reviews_dir
+```typescript
+import { getContextBySessionId, getAllContexts } from "../../_shared/lib-ts/context/context-store.js";
+import { getContextReviewsDir } from "../../_shared/lib-ts/base/constants.js";
 
-# Find active context
-context = get_context_by_session_id(session_id, project_root)
-if not context:
-    # Fallback: find single planning context
-    in_flight = get_all_in_flight_contexts(project_root)
-    planning = [c for c in in_flight if c.in_flight and c.in_flight.mode == "planning"]
-    if len(planning) == 1:
-        context = planning[0]
+// Find active context
+const context = getContextBySessionId(sessionId, projectRoot);
+if (!context) {
+  // Fallback: find single planning context
+  const allActive = getAllContexts("active", projectRoot);
+  const planning = allActive.filter((c: any) => c.mode === "active" || c.mode === "has_plan");
+  if (planning.length === 1) {
+    context = planning[0];
+  }
+}
 
-# Get reviews directory for this context
-reviews_dir = get_context_reviews_dir(context.id, project_root)
+// Get reviews directory for this context
+const reviewsDir = getContextReviewsDir(context.id, projectRoot);
 ```
 
-If context isn't found, add diagnostic logging:
+CC-native specific state is accessed via `cc-native-state.ts`:
 
-```python
-log_debug("hook", f"Session ID: {session_id}")
-log_debug("hook", f"In-flight contexts: {len(in_flight)}")
-log_debug("hook", f"Modes: {[c.in_flight.mode for c in in_flight]}")
+```typescript
+import { isPlanAlreadyReviewed, markPlanReviewed, wasQuestionsAsked } from "../lib-ts/cc-native-state.js";
 ```
 
 ---
 
 ## Error Handling
 
-Hooks should fail gracefully - a broken hook shouldn't break the user's workflow:
+Hooks should fail gracefully — a broken hook shouldn't break the user's workflow. `runHook()` and `runHookAsync()` handle this automatically: uncaught errors log to file and exit 0 (non-blocking).
 
-```python
-from base.hook_utils import log_error, run_hook
+```typescript
+import { runHook, logInfo } from "../../_shared/lib-ts/base/hook-utils.js";
 
-def main() -> int:
-    try:
-        # Hook logic...
-        return 0
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        log_error("hook-name", str(e), traceback_str=tb)
-        # Return 0 to not block the user
-        return 0
+function main(): void {
+  // Hook logic — uncaught errors are handled by runHook
+  logInfo("hook-name", "Starting...");
+}
 
-if __name__ == "__main__":
-    run_hook(main, "hook-name")
+runHook(main, "hook_name");
 ```
 
-Use `sys.exit(1)` only for intentional blocking (e.g., two-stage review decision denies the plan).
+For async hooks (plan review with parallel agents):
+
+```typescript
+import { runHookAsync } from "../../_shared/lib-ts/base/hook-utils.js";
+
+async function main(): Promise<void> {
+  // Async hook logic with Promise.all() etc.
+}
+
+runHookAsync(main, "hook_name");
+```
+
+Use `process.exit(1)` only for intentional blocking (e.g., plan review denial).
 
 ---
 
@@ -207,32 +179,29 @@ Wrap non-critical shared library calls in try/catch to prevent false "hook error
 These are reminders based on past issues. Not enforcement rules.
 
 - **Don't modify hook output format** without verifying the current Claude Code hook API (it changes between versions)
-- **Don't use `sys.exit(1)`** for non-fatal errors - it blocks the user's workflow
+- **Don't use `process.exit(1)`** for non-fatal errors - it blocks the user's workflow
 - **Don't forget template sync** after modifying hooks in `.aiwcli/` - changes should also go to `packages/cli/src/templates/cc-native/`
-- **Don't use `print()`** for anything except the final JSON output
+- **Don't use `console.log()`** for anything — it corrupts stdout. Use `emitContext()` for hook output
 - **Don't assume session_id format** - it can be UUID, path-like, or other formats
 - **Don't skip `is_internal_call()` check** - recursive hook execution causes state corruption
-- **Don't hardcode paths** - use `Path(__file__)` and environment variables
+- **Don't hardcode paths** - use `getProjectRoot()` and relative imports
 - **Don't let non-critical operations bubble to `runHook`** - catch locally to prevent stderr "hook error" display
 
 ---
 
 ## Verification After Changes
 
-Always validate Python syntax after editing hooks:
+Validate TypeScript syntax after editing hooks:
 
 ```bash
-# Validate working copy
-python -m py_compile .aiwcli/_cc-native/hooks/cc-native-plan-review.py
+# Quick syntax check via bun
+bun --print "import('.aiwcli/_cc-native/hooks/cc-native-plan-review.ts')" 2>&1 | head -5
 
-# Validate template copy (after sync)
-python -m py_compile packages/cli/src/templates/cc-native/_cc-native/hooks/cc-native-plan-review.py
-
-# Validate all shared hooks (loop required — py_compile doesn't accept globs)
-for f in .aiwcli/_shared/hooks/*.py; do python -m py_compile "$f"; done
+# Or check imports resolve (dry run)
+bun build --no-bundle .aiwcli/_cc-native/hooks/add_plan_context.ts --outdir /dev/null 2>&1
 ```
 
-Hooks fail silently on syntax errors - this catches them before they reach production.
+Hooks fail silently on import errors — verify after any import path changes.
 
 ---
 
@@ -242,6 +211,7 @@ Hooks fail silently on syntax errors - this catches them before they reach produ
 
 | Date | Change |
 |------|--------|
+| 2026-02-10 | **Migrated all 4 cc-native hooks from Python to TypeScript.** `cc-native-plan-review.ts` (async, parallel agent reviews via `Promise.all()`), `add_plan_context.ts`, `plan_questions_early.ts`, `suggest-fresh-perspective.ts`. All hooks use `runHook()`/`runHookAsync()` entry points. Library code in `_cc-native/lib-ts/` (18 files). Settings.json updated to use `bun` runner. Python `.py` files kept as fallback until TS hooks verified. |
 | 2026-02-10 | Flipped TS logger stderr default to opt-in (`opts?.stderr === true`). Added `logBlocking()` for intentional stderr visibility. Removed redundant `{stderr: false}` from hook-utils.ts, user_prompt_submit.ts, context_monitor.ts. Added "Hook Error Visibility" section documenting visibility tiers and exit code behavior. |
 | 2026-02-10 | Fixed `debug.py` `context_path` crash. Added local try/catch around `maybeActivate` in `user_prompt_submit.ts` and `context_monitor.ts` to prevent stderr error display on non-critical I/O failures. Removed dead `context_path` from `_emitHookEnd` in `hook-utils.ts`. Added "Error Handling" section to CLAUDE.md. |
 | 2026-02-07 | Handoff staging lifecycle: `has_handoff` mode + `handoff_consumed` flag mirrors plan lifecycle. `save_handoff.py` no longer transitions to idle — stays active for session_end staging. `session_end.py` stages `active→has_handoff` when handoff_path set and not consumed. `session_start.py` restores `has_handoff→active` on /clear. `context_selector.py` has fallback Case 3b for has_handoff. PostToolUse context_monitor matcher simplified from specific tool list to `*`. |

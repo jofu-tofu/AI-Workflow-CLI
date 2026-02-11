@@ -3,14 +3,14 @@
  * See cc-native-plan-review-spec.md §4.2
  */
 
-import type { ReviewDecisionResult } from "./types.js";
+import type { ReviewDecisionResult, Verdict } from "./types.js";
 
 /**
  * Return the worst verdict from a list.
  * Order: pass < warn < fail. skip→pass, error→warn.
  */
-export function worstVerdict(verdicts: string[]): string {
-  const order: Record<string, number> = {
+export function worstVerdict(verdicts: Verdict[]): Verdict {
+  const order: Record<Verdict, number> = {
     pass: 0,
     warn: 1,
     fail: 2,
@@ -18,7 +18,7 @@ export function worstVerdict(verdicts: string[]): string {
     error: 1,
   };
 
-  let worst = "pass";
+  let worst: Verdict = "pass";
   for (const v of verdicts) {
     if ((order[v] ?? 1) > (order[worst] ?? 0)) {
       worst = v;
@@ -45,7 +45,7 @@ export function worstVerdict(verdicts: string[]): string {
  * @returns ReviewDecisionResult with should_deny, reason, and score
  */
 export function computeReviewDecision(
-  allVerdicts: string[],
+  allVerdicts: Verdict[],
   _warnThreshold = 0.5,
 ): ReviewDecisionResult {
   // Exclude non-signal verdicts

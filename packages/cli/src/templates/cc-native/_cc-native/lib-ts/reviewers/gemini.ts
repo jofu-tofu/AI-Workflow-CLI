@@ -6,23 +6,25 @@
 
 import { execSync } from "node:child_process";
 import { logDebug, logInfo, logWarn, logError } from "../../../../_shared/lib-ts/base/logger.js";
+import { findExecutable, isExecSyncError } from "../../../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseJsonMaybe, coerceToReview } from "../json-parser.js";
 import type { ReviewerResult, ReviewOptions } from "../types.js";
+import { makeResult } from "./types.js";
 import type { Reviewer } from "./types.js";
 
 /**
  * Gemini reviewer — runs gemini -y -p <instruction>.
  */
 export class GeminiReviewer implements Reviewer {
-  private settings: Record<string, any>;
+  private settings: Record<string, unknown>;
 
-  constructor(settings: Record<string, any>) {
+  constructor(settings: Record<string, unknown>) {
     this.settings = settings;
   }
 
   async review(
     plan: string,
-    schema: Record<string, any>,
+    schema: Record<string, unknown>,
     options: ReviewOptions,
   ): Promise<ReviewerResult> {
     return runGeminiReview(plan, schema, this.settings);
@@ -35,12 +37,12 @@ export class GeminiReviewer implements Reviewer {
  */
 export function runGeminiReview(
   plan: string,
-  schema: Record<string, any>,
-  settings: Record<string, any>,
+  schema: Record<string, unknown>,
+  settings: Record<string, unknown>,
 ): ReviewerResult {
   const geminiSettings =
-    ((settings.reviewers as Record<string, any> | undefined)?.gemini as
-      | Record<string, any>
+    ((settings.reviewers as Record<string, unknown> | undefined)?.gemini as
+      | Record<string, unknown>
       | undefined) ?? {};
   const timeout = (geminiSettings.timeout as number) ?? 120;
   const model = (geminiSettings.model as string) ?? "";
@@ -84,17 +86,23 @@ ${JSON.stringify(schema)}
       maxBuffer: 10 * 1024 * 1024,
       stdio: ["pipe", "pipe", "pipe"],
     }).toString();
-  } catch (e: any) {
-    if (e.killed || e.signal === "SIGTERM") {
-      logWarn("gemini", `TIMEOUT after ${timeout}s`);
-      return makeResult("gemini", false, "error", {}, "", `gemini timed out after ${timeout}s`);
-    }
-    stdout = (e.stdout ?? "").toString();
-    stderr = (e.stderr ?? "").toString();
+  } catch (e: unknown) {
+    if (isExecSyncError(e)) {
+      if (e.killed || e.signal === "SIGTERM") {
+        logWarn("gemini", `TIMEOUT after ${timeout}s`);
+        return makeResult("gemini", false, "error", {}, "", `gemini timed out after ${timeout}s`);
+      }
+      stdout = (e.stdout ?? "").toString();
+      stderr = (e.stderr ?? "").toString();
 
-    if (!stdout && !stderr) {
-      logError("gemini", `Exception: ${e.message ?? e}`);
-      return makeResult("gemini", false, "error", {}, "", `gemini failed to run: ${e.message ?? e}`);
+      if (!stdout && !stderr) {
+        logError("gemini", `Exception: ${e.message}`);
+        return makeResult("gemini", false, "error", {}, "", `gemini failed to run: ${e.message}`);
+      }
+    } else {
+      const msg = e instanceof Error ? e.message : String(e);
+      logError("gemini", `Exception: ${msg}`);
+      return makeResult("gemini", false, "error", {}, "", `gemini failed to run: ${msg}`);
     }
   }
 
@@ -112,28 +120,3 @@ ${JSON.stringify(schema)}
   return makeResult("gemini", ok, verdict, norm, raw, err);
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function findExecutable(name: string): string | null {
-  try {
-    const cmd = process.platform === "win32" ? `where ${name}` : `which ${name}`;
-    return execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] })
-      .trim()
-      .split("\n")[0]?.trim() ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function makeResult(
-  name: string,
-  ok: boolean,
-  verdict: string,
-  data: Record<string, any>,
-  raw: string,
-  err: string,
-): ReviewerResult {
-  return { name, ok, verdict, data, raw, err };
-}

@@ -34,7 +34,7 @@ export interface ReviewIssue {
 
 /** Normalized review data from any reviewer */
 export interface ReviewData {
-  verdict: string;
+  verdict: Verdict;
   summary: string;
   summary_source: "reviewer" | "default";
   issues: ReviewIssue[];
@@ -46,16 +46,16 @@ export interface ReviewData {
 export interface ReviewerResult {
   name: string;
   ok: boolean;
-  verdict: string; // pass|warn|fail|error|skip
-  data: Record<string, any>;
+  verdict: Verdict;
+  data: Record<string, unknown>;
   raw: string;
   err: string;
 }
 
 /** Result from the plan orchestrator */
 export interface OrchestratorResult {
-  complexity: string; // simple | medium | high
-  category: string; // code | infrastructure | documentation | life | business | design | research
+  complexity: ComplexityCategory;
+  category: string;
   selected_agents: string[];
   reasoning: string;
   skip_reason?: string;
@@ -65,7 +65,7 @@ export interface OrchestratorResult {
 /** Combined result from all review phases */
 export interface CombinedReviewResult {
   plan_hash: string;
-  overall_verdict: string;
+  overall_verdict: Verdict;
   cli_reviewers: Record<string, ReviewerResult>;
   orchestration: OrchestratorResult | null;
   agents: Record<string, ReviewerResult>;
@@ -125,7 +125,7 @@ export interface CcNativeState {
   plan_review?: PlanReviewState;
   questions_asked?: QuestionsAskedState;
   stuck_detection?: StuckDetectionState;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /** Plan review state within cc_native */
@@ -147,11 +147,13 @@ export interface QuestionsAskedState {
   asked_at: string;
 }
 
-/** Stuck detection state */
+/** Stuck detection state — tracks repeated errors, file edits, and test failures */
 export interface StuckDetectionState {
-  count: number;
-  last_hash: string;
-  last_timestamp: string;
+  error_hashes: Record<string, number>;
+  file_edits: Record<string, number>;
+  test_failures: number;
+  tool_calls_since_suggestion: number;
+  suggestion_count: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +179,7 @@ export interface PlanReviewConfig {
       enabled?: boolean;
       timeout?: number;
       orchestrator?: { enabled?: boolean; model?: string; timeout?: number };
-      agentSelection?: Record<string, any>;
+      agentSelection?: Record<string, unknown>;
       complexityCategories?: string[];
     };
     display?: Partial<DisplaySettings>;
@@ -185,7 +187,7 @@ export interface PlanReviewConfig {
     earlyExitOnAllPass?: boolean;
   };
   display?: Partial<DisplaySettings>;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +205,7 @@ export interface ReviewOptions {
 export interface Reviewer {
   review(
     plan: string,
-    schema: Record<string, any>,
+    schema: Record<string, unknown>,
     options: ReviewOptions,
   ): Promise<ReviewerResult>;
 }
@@ -213,7 +215,7 @@ export interface Reviewer {
 // ---------------------------------------------------------------------------
 
 /** JSON schema for review structured output */
-export const REVIEW_SCHEMA: Record<string, any> = {
+export const REVIEW_SCHEMA: Record<string, unknown> = {
   type: "object",
   properties: {
     verdict: { type: "string", enum: ["pass", "warn", "fail"] },
@@ -240,7 +242,7 @@ export const REVIEW_SCHEMA: Record<string, any> = {
 };
 
 /** JSON schema for orchestrator structured output */
-export const ORCHESTRATOR_SCHEMA: Record<string, any> = {
+export const ORCHESTRATOR_SCHEMA: Record<string, unknown> = {
   type: "object",
   properties: {
     complexity: { type: "string", enum: ["simple", "medium", "high"] },

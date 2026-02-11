@@ -9,24 +9,26 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { logDebug, logInfo, logWarn, logError } from "../../../../_shared/lib-ts/base/logger.js";
+import { findExecutable, isExecSyncError } from "../../../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseJsonMaybe, coerceToReview } from "../json-parser.js";
-import { REVIEW_PROMPT_PREFIX, REVIEW_SCHEMA } from "../types.js";
+import { REVIEW_PROMPT_PREFIX } from "../types.js";
 import type { ReviewerResult, ReviewOptions } from "../types.js";
+import { makeResult } from "./types.js";
 import type { Reviewer } from "./types.js";
 
 /**
  * Codex reviewer — runs codex exec --full-auto --sandbox read-only.
  */
 export class CodexReviewer implements Reviewer {
-  private settings: Record<string, any>;
+  private settings: Record<string, unknown>;
 
-  constructor(settings: Record<string, any>) {
+  constructor(settings: Record<string, unknown>) {
     this.settings = settings;
   }
 
   async review(
     plan: string,
-    schema: Record<string, any>,
+    schema: Record<string, unknown>,
     options: ReviewOptions,
   ): Promise<ReviewerResult> {
     return runCodexReview(plan, schema, this.settings);
@@ -39,12 +41,12 @@ export class CodexReviewer implements Reviewer {
  */
 export function runCodexReview(
   plan: string,
-  schema: Record<string, any>,
-  settings: Record<string, any>,
+  schema: Record<string, unknown>,
+  settings: Record<string, unknown>,
 ): ReviewerResult {
   const codexSettings =
-    ((settings.reviewers as Record<string, any> | undefined)?.codex as
-      | Record<string, any>
+    ((settings.reviewers as Record<string, unknown> | undefined)?.codex as
+      | Record<string, unknown>
       | undefined) ?? {};
   const timeout = (codexSettings.timeout as number) ?? 120;
   const model = (codexSettings.model as string) ?? "";
@@ -96,17 +98,23 @@ ${plan}
         maxBuffer: 10 * 1024 * 1024,
         stdio: ["pipe", "pipe", "pipe"],
       }).toString();
-    } catch (e: any) {
-      if (e.killed || e.signal === "SIGTERM") {
-        logWarn("codex", `TIMEOUT after ${timeout}s`);
-        return makeResult("codex", false, "error", {}, "", `codex timed out after ${timeout}s`);
-      }
-      stdout = (e.stdout ?? "").toString();
-      stderr = (e.stderr ?? "").toString();
+    } catch (e: unknown) {
+      if (isExecSyncError(e)) {
+        if (e.killed || e.signal === "SIGTERM") {
+          logWarn("codex", `TIMEOUT after ${timeout}s`);
+          return makeResult("codex", false, "error", {}, "", `codex timed out after ${timeout}s`);
+        }
+        stdout = (e.stdout ?? "").toString();
+        stderr = (e.stderr ?? "").toString();
 
-      if (!stdout && !stderr && !fs.existsSync(outPath)) {
-        logError("codex", `Exception: ${e.message ?? e}`);
-        return makeResult("codex", false, "error", {}, "", `codex failed to run: ${e.message ?? e}`);
+        if (!stdout && !stderr && !fs.existsSync(outPath)) {
+          logError("codex", `Exception: ${e.message}`);
+          return makeResult("codex", false, "error", {}, "", `codex failed to run: ${e.message}`);
+        }
+      } else {
+        const msg = e instanceof Error ? e.message : String(e);
+        logError("codex", `Exception: ${msg}`);
+        return makeResult("codex", false, "error", {}, "", `codex failed to run: ${msg}`);
       }
     }
 
@@ -135,28 +143,3 @@ ${plan}
   }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function findExecutable(name: string): string | null {
-  try {
-    const cmd = process.platform === "win32" ? `where ${name}` : `which ${name}`;
-    return execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] })
-      .trim()
-      .split("\n")[0]?.trim() ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function makeResult(
-  name: string,
-  ok: boolean,
-  verdict: string,
-  data: Record<string, any>,
-  raw: string,
-  err: string,
-): ReviewerResult {
-  return { name, ok, verdict, data, raw, err };
-}

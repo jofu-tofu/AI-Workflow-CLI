@@ -32,7 +32,7 @@ export function debugLog(
   sessionName: string,
   component: string,
   message: string,
-  data?: any,
+  data?: unknown,
 ): void {
   if (!DEBUG_ENABLED) return;
 

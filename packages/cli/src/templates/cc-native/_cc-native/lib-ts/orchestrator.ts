@@ -5,16 +5,16 @@
 
 import { execSync } from "node:child_process";
 import { logDebug, logInfo, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv } from "../../../_shared/lib-ts/base/subprocess-utils.js";
+import { getInternalSubprocessEnv, findExecutable, isExecSyncError } from "../../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseCliOutput } from "./cli-output-parser.js";
-import type { AgentConfig, OrchestratorConfig, OrchestratorResult } from "./types.js";
+import type { AgentConfig, OrchestratorConfig, OrchestratorResult, ComplexityCategory } from "./types.js";
 import { ORCHESTRATOR_SCHEMA } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const DEFAULT_AGENT_SELECTION: Record<string, any> = {
+const DEFAULT_AGENT_SELECTION: Record<string, unknown> = {
   simple: { min: 3, max: 3 },
   medium: { min: 8, max: 8 },
   high: { min: 12, max: 12 },
@@ -41,8 +41,8 @@ const DEFAULT_COMPLEXITY_CATEGORIES = [
 export function buildOrchestratorSchema(
   validAgentNames: string[],
   categories: string[],
-): Record<string, any> {
-  const itemsSchema: Record<string, any> = { type: "string" };
+): Record<string, unknown> {
+  const itemsSchema: Record<string, unknown> = { type: "string" };
   if (validAgentNames.length > 0) {
     itemsSchema.enum = validAgentNames;
   }
@@ -76,13 +76,13 @@ export function runOrchestrator(
   plan: string,
   agentLibrary: AgentConfig[],
   config: OrchestratorConfig,
-  settings: Record<string, any>,
+  settings: Record<string, unknown>,
   mandatoryNames?: Set<string>,
 ): OrchestratorResult {
   logInfo("orchestrator", "Starting plan analysis...");
 
   const mandatory = mandatoryNames ?? new Set<string>();
-  const selection = (settings.agentSelection as Record<string, any>) ?? DEFAULT_AGENT_SELECTION;
+  const selection = (settings.agentSelection as Record<string, unknown>) ?? DEFAULT_AGENT_SELECTION;
   const categories = (settings.complexityCategories as string[]) ?? DEFAULT_COMPLEXITY_CATEGORIES;
   const fallbackCount = (selection.fallbackCount as number) ?? 2;
 
@@ -184,17 +184,23 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning`
       maxBuffer: 10 * 1024 * 1024,
       stdio: ["pipe", "pipe", "pipe"],
     }).toString();
-  } catch (e: any) {
-    if (e.killed || e.signal === "SIGTERM") {
-      logWarn("orchestrator", `TIMEOUT after ${config.timeout}s, falling back to medium complexity`);
-      return makeFallback(nonMandatory, fallbackCount, "Orchestrator timed out - defaulting to medium complexity", `Orchestrator timed out after ${config.timeout}s`);
-    }
-    stdout = (e.stdout ?? "").toString();
-    stderr = (e.stderr ?? "").toString();
+  } catch (e: unknown) {
+    if (isExecSyncError(e)) {
+      if (e.killed || e.signal === "SIGTERM") {
+        logWarn("orchestrator", `TIMEOUT after ${config.timeout}s, falling back to medium complexity`);
+        return makeFallback(nonMandatory, fallbackCount, "Orchestrator timed out - defaulting to medium complexity", `Orchestrator timed out after ${config.timeout}s`);
+      }
+      stdout = (e.stdout ?? "").toString();
+      stderr = (e.stderr ?? "").toString();
 
-    if (!stdout && !stderr) {
-      logError("orchestrator", `Exception: ${e.message ?? e}, falling back to medium complexity`);
-      return makeFallback(nonMandatory, fallbackCount, `Orchestrator failed: ${e.message ?? e}`, String(e.message ?? e));
+      if (!stdout && !stderr) {
+        logError("orchestrator", `Exception: ${e.message}, falling back to medium complexity`);
+        return makeFallback(nonMandatory, fallbackCount, `Orchestrator failed: ${e.message}`, e.message);
+      }
+    } else {
+      const msg = e instanceof Error ? e.message : String(e);
+      logError("orchestrator", `Exception: ${msg}, falling back to medium complexity`);
+      return makeFallback(nonMandatory, fallbackCount, `Orchestrator failed: ${msg}`, msg);
     }
   }
 
@@ -213,8 +219,11 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning`
   }
 
   // Extract and validate fields
-  let complexity = (obj.complexity as string) ?? "medium";
-  if (!["simple", "medium", "high"].includes(complexity)) complexity = "medium";
+  const rawComplexity = String(obj.complexity ?? "medium");
+  const complexity: ComplexityCategory =
+    rawComplexity === "simple" || rawComplexity === "medium" || rawComplexity === "high"
+      ? rawComplexity
+      : "medium";
 
   let category = (obj.category as string) ?? "code";
   if (!categories.includes(category)) category = "code";
@@ -240,17 +249,6 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning`
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function findExecutable(name: string): string | null {
-  try {
-    const cmd = process.platform === "win32" ? `where ${name}` : `which ${name}`;
-    return execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] })
-      .trim()
-      .split("\n")[0]?.trim() ?? null;
-  } catch {
-    return null;
-  }
-}
 
 function makeFallback(
   nonMandatory: AgentConfig[],

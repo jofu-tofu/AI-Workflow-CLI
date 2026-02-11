@@ -4,7 +4,7 @@
  */
 
 import { logDebug, logWarn } from "../../../_shared/lib-ts/base/logger.js";
-import type { ReviewData } from "./types.js";
+import type { ReviewData, Verdict } from "./types.js";
 
 /**
  * Try strict JSON parse. If that fails, attempt to extract the first {...} block.
@@ -89,7 +89,7 @@ export function parseJsonMaybe(
 export function coerceToReview(
   obj: Record<string, unknown> | null,
   defaultFixMsg = "Retry or check configuration.",
-): [boolean, string, ReviewData] {
+): [boolean, Verdict, ReviewData] {
   if (!obj) {
     logWarn("coerce", "No object provided to coerceToReview");
     return [
@@ -113,11 +113,14 @@ export function coerceToReview(
     ];
   }
 
-  let verdict = obj.verdict as string | undefined;
-  if (verdict !== "pass" && verdict !== "warn" && verdict !== "fail") {
+  const rawVerdict = obj.verdict;
+  let verdict: Verdict;
+  if (rawVerdict === "pass" || rawVerdict === "warn" || rawVerdict === "fail") {
+    verdict = rawVerdict;
+  } else {
     logWarn(
       "coerce",
-      `Invalid or missing verdict '${verdict}', defaulting to 'warn'`,
+      `Invalid or missing verdict '${String(rawVerdict)}', defaulting to 'warn'`,
     );
     verdict = "warn";
   }

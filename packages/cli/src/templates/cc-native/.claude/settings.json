@@ -69,7 +69,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .aiwcli/_cc-native/hooks/plan_questions_early.py",
+            "command": "bun .aiwcli/_cc-native/hooks/plan_questions_early.ts",
             "timeout": 3000
           }
         ]
@@ -113,7 +113,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .aiwcli/_cc-native/hooks/suggest-fresh-perspective.py",
+            "command": "bun .aiwcli/_cc-native/hooks/suggest-fresh-perspective.ts",
             "timeout": 5000
           }
         ]
@@ -123,7 +123,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .aiwcli/_cc-native/hooks/add_plan_context.py",
+            "command": "bun .aiwcli/_cc-native/hooks/add_plan_context.ts",
             "timeout": 3000
           }
         ]
@@ -165,7 +165,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .aiwcli/_cc-native/hooks/add_plan_context.py",
+            "command": "bun .aiwcli/_cc-native/hooks/add_plan_context.ts",
             "timeout": 5000
           }
         ]
@@ -175,7 +175,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .aiwcli/_cc-native/hooks/cc-native-plan-review.py",
+            "command": "bun .aiwcli/_cc-native/hooks/cc-native-plan-review.ts",
             "timeout": 600000
           }
         ]

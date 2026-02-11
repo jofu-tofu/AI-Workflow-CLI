@@ -5,9 +5,11 @@
     "moduleResolution": "node16",
     "strict": true,
     "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
     "outDir": "dist",
-    "rootDir": ".",
-    "declaration": true
+    "rootDir": "../../../../..",
+    "declaration": true,
+    "noEmit": true
   },
-  "include": ["./**/*.ts"]
+  "include": ["./**/*.ts", "../../../_shared/lib-ts/**/*.ts"]
 }

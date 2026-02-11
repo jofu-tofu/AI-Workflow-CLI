@@ -68,7 +68,7 @@ export function validatePlanPath(planPath: string): string {
   let resolved: string;
   try {
     resolved = path.resolve(planPath);
-  } catch (e: any) {
+  } catch (e: unknown) {
     throw new Error(`Path resolution failed: ${e}`);
   }
 

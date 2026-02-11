@@ -114,7 +114,7 @@ export function aggregateAgents(agentsDir?: string): AgentConfig[] {
     let content: string;
     try {
       content = fs.readFileSync(filePath, "utf-8");
-    } catch (e: any) {
+    } catch (e: unknown) {
       logWarn("aggregate", `Failed to read ${file}: ${e}`);
       continue;
     }

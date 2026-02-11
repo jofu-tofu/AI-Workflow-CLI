@@ -7,12 +7,13 @@
 import { execSync } from "node:child_process";
 import * as path from "node:path";
 import { logDebug, logInfo, logWarn, logError } from "../../../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv } from "../../../../_shared/lib-ts/base/subprocess-utils.js";
+import { getInternalSubprocessEnv, findExecutable, isExecSyncError } from "../../../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseCliOutput } from "../cli-output-parser.js";
 import { coerceToReview } from "../json-parser.js";
 import { debugLog, debugRaw } from "../debug.js";
 import type { AgentConfig, ReviewerResult, ReviewOptions } from "../types.js";
 import { AGENT_REVIEW_PROMPT_PREFIX } from "../types.js";
+import { makeResult } from "./types.js";
 import type { Reviewer } from "./types.js";
 
 /**
@@ -23,7 +24,7 @@ export class AgentReviewer implements Reviewer {
 
   async review(
     plan: string,
-    schema: Record<string, any>,
+    schema: Record<string, unknown>,
     options: ReviewOptions,
   ): Promise<ReviewerResult> {
     return runAgentReview(
@@ -44,7 +45,7 @@ export class AgentReviewer implements Reviewer {
 export function runAgentReview(
   plan: string,
   agent: AgentConfig,
-  schema: Record<string, any>,
+  schema: Record<string, unknown>,
   timeout: number,
   contextPath?: string,
   sessionName = "unknown",
@@ -100,19 +101,25 @@ ${plan}
       stdio: ["pipe", "pipe", "pipe"],
       // Use shell=false by passing args properly
     }).toString();
-  } catch (e: any) {
-    if (e.killed || e.signal === "SIGTERM") {
-      logWarn(agent.name, `TIMEOUT after ${timeout}s`);
-      return makeResult(agent.name, false, "error", {}, "", `${agent.name} timed out after ${timeout}s`);
-    }
-    // execSync throws on non-zero exit, but we can still get stdout
-    stdout = (e.stdout ?? "").toString();
-    stderr = (e.stderr ?? "").toString();
-    exitCode = e.status ?? 1;
+  } catch (e: unknown) {
+    if (isExecSyncError(e)) {
+      if (e.killed || e.signal === "SIGTERM") {
+        logWarn(agent.name, `TIMEOUT after ${timeout}s`);
+        return makeResult(agent.name, false, "error", {}, "", `${agent.name} timed out after ${timeout}s`);
+      }
+      // execSync throws on non-zero exit, but we can still get stdout
+      stdout = (e.stdout ?? "").toString();
+      stderr = (e.stderr ?? "").toString();
+      exitCode = e.status ?? 1;
 
-    if (!stdout && !stderr) {
-      logError(agent.name, `Exception: ${e.message ?? e}`);
-      return makeResult(agent.name, false, "error", {}, "", `${agent.name} failed to run: ${e.message ?? e}`);
+      if (!stdout && !stderr) {
+        logError(agent.name, `Exception: ${e.message}`);
+        return makeResult(agent.name, false, "error", {}, "", `${agent.name} failed to run: ${e.message}`);
+      }
+    } else {
+      const msg = e instanceof Error ? e.message : String(e);
+      logError(agent.name, `Exception: ${msg}`);
+      return makeResult(agent.name, false, "error", {}, "", `${agent.name} failed to run: ${msg}`);
     }
   }
 
@@ -165,28 +172,3 @@ ${plan}
   return makeResult(agent.name, ok, verdict, norm, raw, err);
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function findExecutable(name: string): string | null {
-  try {
-    const cmd = process.platform === "win32" ? `where ${name}` : `which ${name}`;
-    return execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] })
-      .trim()
-      .split("\n")[0]?.trim() ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function makeResult(
-  name: string,
-  ok: boolean,
-  verdict: string,
-  data: Record<string, any>,
-  raw: string,
-  err: string,
-): ReviewerResult {
-  return { name, ok, verdict, data, raw, err };
-}
