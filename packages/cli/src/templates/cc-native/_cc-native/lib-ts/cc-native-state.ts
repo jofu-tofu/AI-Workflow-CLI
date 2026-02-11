@@ -4,9 +4,9 @@
  * See cc-native-plan-review-spec.md §4.5
  */
 
-import { getContextBySessionId, saveState } from "../../../_shared/lib-ts/context/context-store.js";
-import { logInfo, logWarn } from "../../../_shared/lib-ts/base/logger.js";
-import { nowIso } from "../../../_shared/lib-ts/base/utils.js";
+import { getContextBySessionId, saveState } from "../../_shared/lib-ts/context/context-store.js";
+import { logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
+import { nowIso } from "../../_shared/lib-ts/base/utils.js";
 import type {
   CcNativeState,
   PlanReviewState,
@@ -14,7 +14,7 @@ import type {
   IterationState,
   StuckDetectionState,
 } from "./types.js";
-import type { ContextState } from "../../../_shared/lib-ts/types.js";
+import type { ContextState } from "../../_shared/lib-ts/types.js";
 
 /**
  * ContextState extended with the cc_native method-specific data.

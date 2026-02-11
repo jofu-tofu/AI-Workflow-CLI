@@ -3,9 +3,9 @@
  * See cc-native-plan-review-spec.md §4.8
  */
 
-import { execSync } from "node:child_process";
-import { logDebug, logInfo, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv, findExecutable, isExecSyncError } from "../../../_shared/lib-ts/base/subprocess-utils.js";
+import { execFileSync } from "node:child_process";
+import { logDebug, logInfo, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
+import { getInternalSubprocessEnv, findExecutable, isExecSyncError } from "../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseCliOutput } from "./cli-output-parser.js";
 import type { AgentConfig, OrchestratorConfig, OrchestratorResult, ComplexityCategory } from "./types.js";
 import { ORCHESTRATOR_SCHEMA } from "./types.js";
@@ -176,7 +176,7 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning`
   let stderr = "";
 
   try {
-    stdout = execSync(cmdArgs.join("\x00"), {
+    stdout = execFileSync(cmdArgs[0]!, cmdArgs.slice(1), {
       input: prompt,
       encoding: "utf-8",
       timeout: config.timeout * 1000,

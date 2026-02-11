@@ -4,7 +4,7 @@
  * See cc-native-plan-review-spec.md §4.6
  */
 
-import { logDebug, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
+import { logDebug, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
 import { parseJsonMaybe } from "./json-parser.js";
 
 /**

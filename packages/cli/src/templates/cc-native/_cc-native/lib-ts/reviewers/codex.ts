@@ -4,12 +4,12 @@
  * See cc-native-plan-review-spec.md §4.11
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { logDebug, logInfo, logWarn, logError } from "../../../../_shared/lib-ts/base/logger.js";
-import { findExecutable, isExecSyncError } from "../../../../_shared/lib-ts/base/subprocess-utils.js";
+import { logDebug, logInfo, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
+import { findExecutable, isExecSyncError } from "../../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseJsonMaybe, coerceToReview } from "../json-parser.js";
 import { REVIEW_PROMPT_PREFIX } from "../types.js";
 import type { ReviewerResult, ReviewOptions } from "../types.js";
@@ -91,7 +91,7 @@ ${plan}
     let stderr = "";
 
     try {
-      stdout = execSync(cmdArgs.join("\x00"), {
+      stdout = execFileSync(cmdArgs[0]!, cmdArgs.slice(1), {
         input: prompt,
         encoding: "utf-8",
         timeout: timeout * 1000,

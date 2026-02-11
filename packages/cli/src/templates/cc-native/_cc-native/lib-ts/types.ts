@@ -5,7 +5,7 @@
  */
 
 // Re-export shared types used by cc-native consumers
-export type { ContextState, HookInput, HookOutput } from "../../../_shared/lib-ts/types.js";
+export type { ContextState, HookInput, HookOutput } from "../../_shared/lib-ts/types.js";
 
 // ---------------------------------------------------------------------------
 // Verdict & Decision Types

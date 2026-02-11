@@ -50,7 +50,7 @@ import type {
   IterationEntry,
   DisplaySettings,
 } from "../lib-ts/types.js";
-import type { ContextState } from "../../../_shared/lib-ts/types.js";
+import type { ContextState } from "../../_shared/lib-ts/types.js";
 import {
   REVIEW_SCHEMA,
   DEFAULT_DISPLAY,
@@ -563,9 +563,9 @@ async function main(): Promise<void> {
   }
 
   // Collect CLI results
-  if (phase1Results.codex) cliResults.codex = phase1Results.codex;
-  if (phase1Results.gemini) cliResults.gemini = phase1Results.gemini;
-  if (phase1Results.orchestrator) orchResult = phase1Results.orchestrator;
+  if (phase1Results.codex) cliResults.codex = phase1Results.codex as ReviewerResult;
+  if (phase1Results.gemini) cliResults.gemini = phase1Results.gemini as ReviewerResult;
+  if (phase1Results.orchestrator) orchResult = phase1Results.orchestrator as OrchestratorResult;
 
   // ============================================
   // PHASE 2: Agent Selection

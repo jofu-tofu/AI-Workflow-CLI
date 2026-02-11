@@ -5,13 +5,13 @@
  */
 
 import * as fs from "node:fs";
-import { logDebug, logInfo, logWarn, logError, logBlocking, logHookError, logDiagnostic, hookLog, setContextPath, getContextPath as _getContextPath } from "./logger.js";
+import { logDebug, logInfo, logWarn, logError, logBlocking, logHookError, logDiagnostic, hookLog, setSessionId, setContextPath, getContextPath as _getContextPath } from "./logger.js";
 import { getProjectRoot } from "./constants.js";
 import { getContextBySessionId } from "../context/context-store.js";
 import type { HookInput, HookOutput } from "../types.js";
 
 // Re-export logger functions for convenience (matches Python hook_utils re-exports)
-export { logDebug, logInfo, logWarn, logError, logBlocking, logHookError, logDiagnostic, hookLog, setContextPath };
+export { logDebug, logInfo, logWarn, logError, logBlocking, logHookError, logDiagnostic, hookLog, setSessionId, setContextPath };
 
 // Context window baseline: tokens not visible in hook data §5.9
 export const CONTEXT_BASELINE_TOKENS = 22_600;
@@ -207,6 +207,44 @@ export function getContextPercentRemaining(
 }
 
 /**
+ * Read stdin early and extract session_id + event metadata.
+ * Stashes parsed input for loadHookInput() to consume later.
+ */
+function _earlyReadInput(prefetchedInput?: Record<string, any>): void {
+  if (prefetchedInput !== undefined) {
+    _prefetchedInput = prefetchedInput;
+  }
+
+  // If we already have prefetched input, extract metadata from it
+  if (_prefetchedInput && typeof _prefetchedInput === "object") {
+    _lastHookEvent = _prefetchedInput.hook_event_name ?? null;
+    _lastToolName = _prefetchedInput.tool_name ?? null;
+    if (_prefetchedInput.session_id) {
+      setSessionId(_prefetchedInput.session_id);
+    }
+    return;
+  }
+
+  // Read stdin now so HOOK_START can include sid
+  try {
+    const inputData = fs.readFileSync(0, "utf-8").trim();
+    if (inputData) {
+      const parsed = JSON.parse(inputData);
+      if (parsed && typeof parsed === "object") {
+        _prefetchedInput = parsed;
+        _lastHookEvent = parsed.hook_event_name ?? null;
+        _lastToolName = parsed.tool_name ?? null;
+        if (parsed.session_id) {
+          setSessionId(parsed.session_id);
+        }
+      }
+    }
+  } catch {
+    // Non-fatal — loadHookInput will return null
+  }
+}
+
+/**
  * Standard hook entry point with lifecycle logging.
  * See SPEC.md §5.7
  */
@@ -215,9 +253,7 @@ export function runHook(
   hookName = "unknown",
   prefetchedInput?: Record<string, any>,
 ): never {
-  if (prefetchedInput !== undefined) {
-    _prefetchedInput = prefetchedInput;
-  }
+  _earlyReadInput(prefetchedInput);
 
   const startTime = performance.now();
   const template = detectTemplate();
@@ -267,9 +303,7 @@ export function runHookAsync(
   hookName = "unknown",
   prefetchedInput?: Record<string, any>,
 ): void {
-  if (prefetchedInput !== undefined) {
-    _prefetchedInput = prefetchedInput;
-  }
+  _earlyReadInput(prefetchedInput);
 
   const startTime = performance.now();
   const template = detectTemplate();

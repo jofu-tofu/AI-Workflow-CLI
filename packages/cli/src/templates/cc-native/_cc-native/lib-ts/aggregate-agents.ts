@@ -5,7 +5,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { logDebug, logInfo, logWarn } from "../../../_shared/lib-ts/base/logger.js";
+import { logDebug, logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
 import type { AgentConfig } from "./types.js";
 
 /**

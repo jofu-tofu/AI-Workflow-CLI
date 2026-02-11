@@ -4,10 +4,10 @@
  * See cc-native-plan-review-spec.md §4.10
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import * as path from "node:path";
-import { logDebug, logInfo, logWarn, logError } from "../../../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv, findExecutable, isExecSyncError } from "../../../../_shared/lib-ts/base/subprocess-utils.js";
+import { logDebug, logInfo, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
+import { getInternalSubprocessEnv, findExecutable, isExecSyncError } from "../../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseCliOutput } from "../cli-output-parser.js";
 import { coerceToReview } from "../json-parser.js";
 import { debugLog, debugRaw } from "../debug.js";
@@ -92,14 +92,13 @@ ${plan}
   let exitCode = 0;
 
   try {
-    stdout = execSync(cmdArgs.join("\x00"), {
+    stdout = execFileSync(cmdArgs[0]!, cmdArgs.slice(1), {
       input: prompt,
       encoding: "utf-8",
       timeout: timeout * 1000,
       env: env as Record<string, string>,
       maxBuffer: 10 * 1024 * 1024,
       stdio: ["pipe", "pipe", "pipe"],
-      // Use shell=false by passing args properly
     }).toString();
   } catch (e: unknown) {
     if (isExecSyncError(e)) {

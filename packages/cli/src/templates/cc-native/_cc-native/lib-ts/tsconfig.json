@@ -1,15 +1,18 @@
 {
   "compilerOptions": {
     "target": "es2022",
-    "module": "Node16",
-    "moduleResolution": "node16",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
     "outDir": "dist",
-    "rootDir": "../../../../..",
+    "rootDir": "../..",
     "declaration": true,
-    "noEmit": true
+    "noEmit": true,
+    "types": ["bun-types"],
+    "skipLibCheck": true
   },
-  "include": ["./**/*.ts", "../../../_shared/lib-ts/**/*.ts"]
+  "include": ["./**/*.ts", "../../_shared/lib-ts/**/*.ts"],
+  "exclude": ["../../_shared/lib-ts/__tests__/**"]
 }
