@@ -6,7 +6,7 @@ import {checkbox, confirm, input, select} from '@inquirer/prompts'
 import {Flags} from '@oclif/core'
 
 import BaseCommand from '../../lib/base-command.js'
-import {updateGitignore} from '../../lib/gitignore-manager.js'
+import {AIW_GITIGNORE_ENTRIES, updateGitignore} from '../../lib/gitignore-manager.js'
 import {IdePathResolver} from '../../lib/ide-path-resolver.js'
 import {pathExists} from '../../lib/paths.js'
 import {getTargetSettingsFile, readClaudeSettings, writeClaudeSettings} from '../../lib/settings-hierarchy.js'
@@ -138,7 +138,7 @@ export default class Init extends BaseCommand {
 
         // Update .gitignore if git repository exists
         if (hasGit) {
-          await updateGitignore(targetDir, ['.aiwcli'])
+          await updateGitignore(targetDir, [...AIW_GITIGNORE_ENTRIES])
           this.logSuccess('✓ .gitignore updated')
         }
 
@@ -216,7 +216,7 @@ export default class Init extends BaseCommand {
 
       // Collect all folders that need gitignore entries
       // The .aiwcli/ container holds all template infrastructure and runtime data
-      const foldersForGitignore: string[] = ['.aiwcli']
+      const foldersForGitignore: string[] = [...AIW_GITIGNORE_ENTRIES]
 
       // Report installation results
       if (result.installedFolders.length > 0) {

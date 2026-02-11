@@ -8,6 +8,12 @@ import {pathExists} from './paths.js'
  */
 const AIW_GITIGNORE_HEADER = '# AIW Installation'
 
+/** Standard gitignore entries managed by AIW */
+export const AIW_GITIGNORE_ENTRIES = ['.aiwcli', '_output', '.claude', '.windsurf']
+
+/** Entries that should NEVER be removed from gitignore, even on clear */
+export const AIW_PERMANENT_ENTRIES = ['_output']
+
 /**
  * Prune stale entries from the AIW Installation section in .gitignore.
  * Checks each entry against disk existence and removes entries whose paths don't exist.
@@ -203,5 +209,163 @@ export async function updateGitignore(targetDir: string, folders: string[]): Pro
     const patterns = folders.map((folder) => `${folder}/`).join('\n')
     const patternsBlock = `# AIW Installation\n${patterns}`
     await fs.writeFile(gitignorePath, patternsBlock + '\n', 'utf8')
+  }
+}
+
+/**
+ * Compute which AIW gitignore entries should be removed during clear.
+ * Returns a simulation result — the caller decides whether to apply.
+ *
+ * Logic per entry:
+ * - If in permanentEntries → keep (reason: "permanent")
+ * - If directory exists and is non-empty → keep (reason: "directory has content")
+ * - Otherwise → mark for removal
+ *
+ * @param targetDir - Directory containing .gitignore
+ * @param permanentEntries - Entries that should never be removed (defaults to AIW_PERMANENT_ENTRIES)
+ * @returns Lists of entries to remove and entries to keep with reasons
+ */
+export async function computeGitignoreRemovals(
+  targetDir: string,
+  permanentEntries: string[] = AIW_PERMANENT_ENTRIES,
+): Promise<{toKeep: Array<{entry: string; reason: string}>; toRemove: string[]}> {
+  const gitignorePath = join(targetDir, '.gitignore')
+  const toRemove: string[] = []
+  const toKeep: Array<{entry: string; reason: string}> = []
+
+  // Read AIW section entries from .gitignore
+  let content: string
+  try {
+    content = await fs.readFile(gitignorePath, 'utf8')
+  } catch {
+    return {toRemove, toKeep}
+  }
+
+  if (!content.includes(AIW_GITIGNORE_HEADER)) {
+    return {toRemove, toKeep}
+  }
+
+  // Parse entries from the AIW section
+  const lines = content.split('\n')
+  let inAiwSection = false
+  const aiwEntries: string[] = []
+
+  for (const line of lines) {
+    if (line === AIW_GITIGNORE_HEADER) {
+      inAiwSection = true
+      continue
+    }
+
+    if (inAiwSection) {
+      if (line === '' || (line.startsWith('#') && line !== AIW_GITIGNORE_HEADER)) {
+        inAiwSection = false
+      } else {
+        // Strip trailing slash to get the directory name
+        const entry = line.replace(/\/$/, '')
+        if (entry) {
+          aiwEntries.push(entry)
+        }
+      }
+    }
+  }
+
+  const permanentSet = new Set(permanentEntries)
+
+  // Evaluate each entry
+  await Promise.all(
+    aiwEntries.map(async (entry) => {
+      if (permanentSet.has(entry)) {
+        toKeep.push({entry, reason: 'permanent'})
+        return
+      }
+
+      const dirPath = join(targetDir, entry)
+      const exists = await pathExists(dirPath)
+      if (exists) {
+        // Check if non-empty
+        try {
+          const entries = await fs.readdir(dirPath)
+          if (entries.length > 0) {
+            toKeep.push({entry, reason: 'directory has content'})
+            return
+          }
+        } catch {
+          // Can't read — be safe, keep it
+          toKeep.push({entry, reason: 'directory has content'})
+          return
+        }
+      }
+
+      toRemove.push(entry)
+    }),
+  )
+
+  return {toRemove, toKeep}
+}
+
+/**
+ * Remove specific entries from the AIW section in .gitignore.
+ * Cleans up the section header if no entries remain.
+ *
+ * @param targetDir - Directory containing .gitignore
+ * @param entriesToRemove - Entry names to remove (without trailing slash)
+ */
+export async function removeGitignoreEntries(targetDir: string, entriesToRemove: string[]): Promise<void> {
+  const gitignorePath = join(targetDir, '.gitignore')
+
+  try {
+    const content = await fs.readFile(gitignorePath, 'utf8')
+
+    if (!content.includes(AIW_GITIGNORE_HEADER)) {
+      return
+    }
+
+    const patternsToRemove = new Set(entriesToRemove.map((e) => `${e}/`))
+    const lines = content.split('\n')
+    const newLines: string[] = []
+    let inAiwSection = false
+    const aiwSectionLines: string[] = []
+
+    for (const line of lines) {
+      if (line === AIW_GITIGNORE_HEADER) {
+        inAiwSection = true
+        aiwSectionLines.push(line)
+        continue
+      }
+
+      if (inAiwSection) {
+        if (line === '' || (line.startsWith('#') && line !== AIW_GITIGNORE_HEADER)) {
+          inAiwSection = false
+          // Filter the AIW section
+          const filtered = aiwSectionLines.filter(
+            (l) => l === AIW_GITIGNORE_HEADER || !patternsToRemove.has(l),
+          )
+          newLines.push(...filtered, line)
+        } else {
+          aiwSectionLines.push(line)
+        }
+      } else {
+        newLines.push(line)
+      }
+    }
+
+    // Handle AIW section at end of file
+    if (inAiwSection) {
+      const filtered = aiwSectionLines.filter(
+        (l) => l === AIW_GITIGNORE_HEADER || !patternsToRemove.has(l),
+      )
+      newLines.push(...filtered)
+    }
+
+    // Clean up empty AIW section
+    let result = cleanupEmptySections(newLines.join('\n'))
+    result = result.replace(/\n+$/, '\n')
+    if (result.trim() === '') {
+      result = ''
+    }
+
+    await fs.writeFile(gitignorePath, result, 'utf8')
+  } catch {
+    // .gitignore doesn't exist or can't be read
   }
 }

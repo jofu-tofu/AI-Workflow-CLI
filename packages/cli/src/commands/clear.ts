@@ -5,7 +5,7 @@ import {confirm} from '@inquirer/prompts'
 import {Flags} from '@oclif/core'
 
 import BaseCommand from '../lib/base-command.js'
-import {pruneGitignoreStaleEntries} from '../lib/gitignore-manager.js'
+import {computeGitignoreRemovals, pruneGitignoreStaleEntries, removeGitignoreEntries} from '../lib/gitignore-manager.js'
 import {pathExists} from '../lib/paths.js'
 import {reconstructIdeSettings} from '../lib/template-settings-reconstructor.js'
 import {EXIT_CODES} from '../types/exit-codes.js'
@@ -78,11 +78,6 @@ async function getInstalledMethodNames(targetDir: string): Promise<Set<string>> 
 
   return methods
 }
-
-/**
- * AIW gitignore section header marker
- */
-const AIW_GITIGNORE_HEADER = '# AIW Installation'
 
 /**
  * Check if a directory is empty.
@@ -207,141 +202,6 @@ async function shouldDeleteIdeFolder(
  */
 async function removeDirectory(dir: string): Promise<void> {
   await fs.rm(dir, {force: true, recursive: true})
-}
-
-/**
- * Update .gitignore to remove patterns for cleared folders.
- * Removes patterns from the AIW Installation section.
- *
- * @param targetDir - Directory containing .gitignore
- * @param foldersToRemove - Folder patterns to remove (without trailing slash)
- */
-async function updateGitignoreAfterClear(targetDir: string, foldersToRemove: string[]): Promise<void> {
-  const gitignorePath = join(targetDir, '.gitignore')
-
-  try {
-    const content = await fs.readFile(gitignorePath, 'utf8')
-
-    // Check if AIW Installation section exists
-    if (!content.includes(AIW_GITIGNORE_HEADER)) {
-      return
-    }
-
-    // Split content into lines
-    const lines = content.split('\n')
-    const newLines: string[] = []
-    let inAiwSection = false
-    const aiwSectionLines: string[] = []
-
-    // Parse lines and identify AIW section
-    for (const line of lines) {
-      if (line === AIW_GITIGNORE_HEADER) {
-        inAiwSection = true
-        aiwSectionLines.push(line)
-        continue
-      }
-
-      if (inAiwSection) {
-        // AIW section ends at empty line or another comment header
-        if (line === '' || (line.startsWith('#') && line !== AIW_GITIGNORE_HEADER)) {
-          inAiwSection = false
-          // Process AIW section lines now
-          const filteredAiwLines = filterAiwSection(aiwSectionLines, foldersToRemove)
-          newLines.push(...filteredAiwLines, line)
-        } else {
-          aiwSectionLines.push(line)
-        }
-      } else {
-        newLines.push(line)
-      }
-    }
-
-    // Handle case where AIW section is at end of file
-    if (inAiwSection) {
-      const filteredAiwLines = filterAiwSection(aiwSectionLines, foldersToRemove)
-      newLines.push(...filteredAiwLines)
-    }
-
-    // Clean up: remove AIW section entirely if only header remains
-    const finalContent = cleanupGitignoreContent(newLines.join('\n'))
-
-    await fs.writeFile(gitignorePath, finalContent, 'utf8')
-  } catch {
-    // .gitignore doesn't exist or can't be read
-  }
-}
-
-/**
- * Filter AIW section lines to remove specified folders.
- *
- * @param aiwLines - Lines from AIW section (including header)
- * @param foldersToRemove - Folder names to remove
- * @returns Filtered lines
- */
-function filterAiwSection(aiwLines: string[], foldersToRemove: string[]): string[] {
-  const patternsToRemove = new Set(foldersToRemove.map((f) => `${f}/`))
-
-  return aiwLines.filter((line) => {
-    // Always keep the header
-    if (line === AIW_GITIGNORE_HEADER) {
-      return true
-    }
-
-    // Remove matching patterns
-    return !patternsToRemove.has(line)
-  })
-}
-
-/**
- * Clean up gitignore content after filtering.
- * Removes AIW section if empty, cleans up extra newlines.
- *
- * @param content - Gitignore content
- * @returns Cleaned content
- */
-function cleanupGitignoreContent(content: string): string {
-  const lines = content.split('\n')
-  const newLines: string[] = []
-  let i = 0
-
-  while (i < lines.length) {
-    const line = lines[i] as string
-
-    // Check if this is an AIW header with nothing following
-    if (line === AIW_GITIGNORE_HEADER) {
-      // Look ahead to see if there are any patterns
-      let hasPatterns = false
-      const nextLine = lines[i + 1]
-      if (nextLine !== undefined && nextLine !== '' && !nextLine.startsWith('#')) {
-        hasPatterns = true
-      }
-
-      if (!hasPatterns) {
-        // Skip the AIW header since it has no patterns
-        i++
-        // Also skip any trailing empty lines that were before AIW section
-        while (newLines.length > 0 && newLines.at(-1) === '') {
-          newLines.pop()
-        }
-
-        continue
-      }
-    }
-
-    newLines.push(line)
-    i++
-  }
-
-  // Ensure file ends with newline but not multiple
-  let result = newLines.join('\n')
-  result = result.replace(/\n+$/, '\n')
-
-  // Handle empty file case
-  if (result.trim() === '') {
-    return ''
-  }
-
-  return result
 }
 
 /**
@@ -560,6 +420,21 @@ export default class ClearCommand extends BaseCommand {
         this.log('')
       }
 
+      // Compute gitignore changes for dry-run display
+      const gitignoreSimulation = await computeGitignoreRemovals(targetDir)
+      if (gitignoreSimulation.toRemove.length > 0 || gitignoreSimulation.toKeep.length > 0) {
+        this.logInfo('Gitignore changes:')
+        for (const {entry, reason} of gitignoreSimulation.toKeep) {
+          this.log(`  keep ${entry}/ (${reason})`)
+        }
+
+        for (const entry of gitignoreSimulation.toRemove) {
+          this.log(`  remove ${entry}/`)
+        }
+
+        this.log('')
+      }
+
       // Dry run - just show what would happen
       if (flags['dry-run']) {
         this.logInfo('Dry run complete. No files or folders were deleted.')
@@ -632,13 +507,19 @@ export default class ClearCommand extends BaseCommand {
         // .aiwcli doesn't exist or can't be accessed
       }
 
-      // Update .gitignore to remove .aiwcli if the container was deleted
-      if (removedAiwcliContainer) {
-        await updateGitignoreAfterClear(targetDir, [AIWCLI_CONTAINER])
-        this.logDebug('Updated .gitignore')
+      // Smart gitignore removal: compute what should be removed based on disk state
+      const {toRemove, toKeep} = await computeGitignoreRemovals(targetDir)
+
+      for (const {entry, reason} of toKeep) {
+        this.logDebug(`Keeping ${entry}/ in .gitignore (${reason})`)
       }
 
-      // Prune stale gitignore entries (paths that no longer exist on disk)
+      if (toRemove.length > 0) {
+        await removeGitignoreEntries(targetDir, toRemove)
+        this.logDebug(`Removed from .gitignore: ${toRemove.join(', ')}`)
+      }
+
+      // Prune stale gitignore entries as safety net
       const pruned = await pruneGitignoreStaleEntries(targetDir)
       if (pruned) {
         this.logDebug('Pruned stale .gitignore entries')
@@ -743,7 +624,7 @@ export default class ClearCommand extends BaseCommand {
 
       this.logSuccess(`Cleared: ${parts.join(', ')}.`)
 
-      if (removedAiwcliContainer || pruned) {
+      if (toRemove.length > 0 || pruned) {
         this.logSuccess('Updated .gitignore.')
       }
 
