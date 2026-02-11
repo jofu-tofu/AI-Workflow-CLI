@@ -84,7 +84,6 @@ def debug_log(
         message,
         component=component,
         data=data,
-        context_path=context_path,
         stderr=False,
     )
 
@@ -117,7 +116,6 @@ def debug_raw(
         session_name,
         f"{label}{suffix}: {truncated}",
         component=component,
-        context_path=context_path,
         stderr=False,
     )
 

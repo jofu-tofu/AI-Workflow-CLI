@@ -1,7 +1,7 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "python .aiwcli/_shared/scripts/status_line.py"
+    "command": "bun .aiwcli/_shared/scripts/status_line.ts"
   },
   "permissions": {
     "allow": [],
@@ -11,7 +11,7 @@
   "enabledPlugins": {},
   "fileSuggestion": {
     "type": "command",
-    "command": "python .aiwcli/_shared/hooks/file-suggestion.py"
+    "command": "bun .aiwcli/_shared/hooks-ts/file-suggestion.ts"
   },
   "methods": {
     "cc-native": {
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .aiwcli/_shared/hooks/session_start.py",
+            "command": "bun .aiwcli/_shared/hooks-ts/session_start.ts",
             "timeout": 5000
           }
         ]
@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .aiwcli/_shared/hooks/session_end.py",
+            "command": "bun .aiwcli/_shared/hooks-ts/session_end.ts",
             "timeout": 5000
           }
         ]
@@ -49,7 +49,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .aiwcli/_shared/hooks/pre_compact.py",
+            "command": "bun .aiwcli/_shared/hooks-ts/pre_compact.ts",
             "timeout": 5000
           }
         ]
@@ -60,7 +60,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .aiwcli/_shared/hooks/user_prompt_submit.py",
+            "command": "bun .aiwcli/_shared/hooks-ts/user_prompt_submit.ts",
             "timeout": 10000
           }
         ]
@@ -81,7 +81,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .aiwcli/_shared/hooks/context_monitor.py",
+            "command": "bun .aiwcli/_shared/hooks-ts/context_monitor.ts",
             "timeout": 5000
           }
         ]
@@ -91,7 +91,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .aiwcli/_shared/hooks/task_create_capture.py",
+            "command": "bun .aiwcli/_shared/hooks-ts/task_create_capture.ts",
             "timeout": 3000,
             "async": true
           }
@@ -102,7 +102,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .aiwcli/_shared/hooks/task_update_capture.py",
+            "command": "bun .aiwcli/_shared/hooks-ts/task_update_capture.ts",
             "timeout": 3000,
             "async": true
           }
@@ -135,7 +135,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .aiwcli/_shared/hooks/archive_plan.py",
+            "command": "bun .aiwcli/_shared/hooks-ts/archive_plan.ts",
             "timeout": 5000
           }
         ]

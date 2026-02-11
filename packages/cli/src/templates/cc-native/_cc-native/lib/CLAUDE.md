@@ -35,7 +35,6 @@ Hooks (cc-native-plan-review.py, etc.)
     │
     ├── lib/utils.py (core utilities)
     │       └── lib/constants.py
-    │       └── _shared/lib/base/atomic_write.py
     │
     ├── lib/state.py (state management)
     │       └── lib/utils.py (eprint)
@@ -51,13 +50,10 @@ Hooks (cc-native-plan-review.py, etc.)
     │
     ├── lib/debug.py (context-folder debug logging)
     │
-    └── _shared/lib/ (shared across all methods)
-            ├── lib/base/subprocess_utils.py
-            ├── lib/base/constants.py
-            └── lib/context/context_manager.py
+    └── _shared/lib-ts/ (shared TS infrastructure — see _shared/lib-ts/CLAUDE.md)
 ```
 
-**Import direction:** Hooks → cc-native lib → shared lib. Never the reverse.
+**Import direction:** Hooks --> cc-native lib --> `_shared/`. Never the reverse. See `_shared/lib-ts/CLAUDE.md` for the full shared library index.
 
 ---
 
@@ -131,24 +127,19 @@ This is a recurring issue. Any path string comparison must handle both separator
 
 ## Atomic Writes
 
-For critical files (state, reviews), use atomic writes to prevent corruption on crash:
+For critical files (state, reviews), use atomic writes. See `_shared/lib-ts/CLAUDE.md` for the TS version (`atomicWriteFileSync`).
+
+Python equivalent:
 
 ```python
-# Import from shared lib (canonical location)
 from _shared.lib.base.atomic_write import atomic_write
 
-# CORRECT - atomic write
 success, error = atomic_write(path, content)
 if not success:
     eprint(f"[module] Write failed: {error}")
 ```
 
-```python
-# RISKY - can leave partial file on crash
-path.write_text(content, encoding="utf-8")
-```
-
-Atomic writes use a temp file + rename pattern. The `constants.ENABLE_ROBUST_PLAN_WRITES` feature flag (env: `CC_NATIVE_ROBUST_WRITES`, default: `true`) controls whether atomic writes are used for plan state files.
+The `constants.ENABLE_ROBUST_PLAN_WRITES` feature flag (env: `CC_NATIVE_ROBUST_WRITES`, default: `true`) controls whether atomic writes are used for plan state files.
 
 ---
 
@@ -260,6 +251,7 @@ These are reminders based on past issues. Not enforcement rules.
 
 | Date | Change |
 |------|--------|
+| 2026-02-10 | Fixed `debug.py`: removed `context_path=` keyword from `hook_log()` calls — Python logger doesn't accept it (was causing `TypeError` crash in plan review) |
 | 2026-02-07 | Unified logger: all diagnostic logging uses `_shared/lib/base/logger.py` instead of eprint/print-to-stderr |
 | 2026-02-06 | Remove duplicate `atomic_write.py` — consolidated to `_shared/lib/base/atomic_write.py` |
 | 2026-02-03 | Initial creation |

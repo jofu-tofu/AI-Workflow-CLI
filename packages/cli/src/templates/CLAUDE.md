@@ -22,9 +22,9 @@ Each template installs into `.aiwcli/` (method files) and `.{ide}/` (IDE integra
 ```
 packages/cli/src/templates/
 ├── _shared/                          # Cross-method infrastructure (installed by all methods)
-│   ├── hooks/                        # Shared hook scripts (context, tasks, sessions)
-│   └── lib/                          # Shared Python libraries
-│       ├── base/                     #   Core: atomic_write, constants, inference, utils
+│   ├── hooks-ts/                     # Shared TypeScript hook scripts (context, tasks, sessions)
+│   └── lib-ts/                       # Shared TypeScript libraries
+│       ├── base/                     #   Core: atomic-write, constants, inference, utils
 │       ├── context/                  #   Context CRUD, selection, formatting, plans, tasks
 │       ├── handoff/                  #   Session handoff document generation
 │       └── templates/                #   Output formatters, plan context templates
@@ -85,7 +85,7 @@ When multiple templates install, settings.json files merge:
 
 ## Hooks
 
-**Location:** Hooks live in `.aiwcli/_shared/hooks/` (cross-method) and `.aiwcli/_{method}/hooks/` (method-specific). They are configured in `.{ide}/settings.json`, not placed in IDE directories.
+**Location:** Hooks live in `.aiwcli/_shared/hooks-ts/` (cross-method, TypeScript) and `.aiwcli/_{method}/hooks/` (method-specific). They are configured in `.{ide}/settings.json`, not placed in IDE directories.
 
 **Configuration:**
 ```json
@@ -202,4 +202,4 @@ Load and execute `_{method}/workflows/{name}.md`.
 - Full workflows in IDE command files
 - Hardcoded paths without method namespace
 - Putting hook scripts directly in IDE directories (`.claude/hooks/`)
-- Creating `_shared/` directories inside method templates (e.g., `cc-native/_shared/`). All shared code lives in `packages/cli/src/templates/_shared/`. Method templates reference shared code via sys.path at runtime, not by copying.
+- Creating `_shared/` directories inside method templates (e.g., `cc-native/_shared/`). All shared code lives in `packages/cli/src/templates/_shared/`. Method templates reference shared code via imports at runtime, not by copying.

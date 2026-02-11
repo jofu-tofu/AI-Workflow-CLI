@@ -21,18 +21,26 @@ Configuration (in _cc-native/plan-review.config.json):
   }
 """
 
+import sys
+
+# TODO: Remove this early exit when TypeScript implementation is complete.
+# The Python shared library (_shared/lib/) was deleted during the TS migration,
+# so all imports from base.hook_utils / base.logger / lib.context fail.
+sys.exit(0)
+
 import json
 import os
 import re
-import sys
 from pathlib import Path
 from typing import Any, Dict
 
 # Add lib directories to path for imports
 _hook_dir = Path(__file__).resolve().parent
 _lib_dir = _hook_dir.parent / "lib"
-_shared_lib = _hook_dir.parent.parent / "_shared" / "lib"
+_shared = _hook_dir.parent.parent / "_shared"
+_shared_lib = _shared / "lib"
 sys.path.insert(0, str(_lib_dir))
+sys.path.insert(0, str(_shared))
 sys.path.insert(0, str(_shared_lib))
 
 from base.hook_utils import emit_context

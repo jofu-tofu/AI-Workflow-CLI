@@ -5,6 +5,11 @@
  * Log location: _output/hook-log.jsonl (global, all sessions)
  * Filter by session using the "sid" field.
  *
+ * stderr is OPT-IN: convenience functions (logDebug, logInfo, logWarn, logError)
+ * write to file only by default. To also write to stderr (visible to Claude Code
+ * as "hook error"), pass { stderr: true } or use logBlocking().
+ * logHookError() always writes to stderr (unhandled errors must be visible).
+ *
  * Environment variables:
  * - HOOK_LOG_DISABLE=1: Disable all file logging
  * - HOOK_LOG_LEVEL=warn: Minimum level to log (default: debug)
@@ -94,7 +99,7 @@ export function hookLog(
     const levelNum = LEVELS[levelLower] ?? 0;
     const component = opts?.component ?? "";
     const tracebackStr = opts?.traceback_str ?? "";
-    const stderrEnabled = opts?.stderr !== false;
+    const stderrEnabled = opts?.stderr === true;
 
     // Write to stderr
     if (stderrEnabled) {
@@ -180,6 +185,14 @@ export function logWarn(hookName: string, message: string, opts?: Record<string,
 
 export function logError(hookName: string, message: string, opts?: Record<string, any>): void {
   hookLog("error", hookName, message, opts);
+}
+
+/**
+ * Log an error that SHOULD be visible to user/model via stderr.
+ * Use for real problems needing attention, not routine diagnostics.
+ */
+export function logBlocking(hookName: string, message: string, opts?: Record<string, any>): void {
+  hookLog("error", hookName, message, { ...opts, stderr: true });
 }
 
 /**

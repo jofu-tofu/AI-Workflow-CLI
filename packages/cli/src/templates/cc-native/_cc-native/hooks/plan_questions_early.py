@@ -8,8 +8,14 @@ AskUserQuestion before exploring the codebase.
 Skips if questions were already asked this session.
 """
 
-import json
 import sys
+
+# TODO: Remove this early exit when TypeScript implementation is complete.
+# The Python shared library (_shared/lib/) was deleted during the TS migration,
+# so all imports from base.hook_utils / base.logger fail.
+sys.exit(0)
+
+import json
 from pathlib import Path
 
 _hook_dir = Path(__file__).resolve().parent

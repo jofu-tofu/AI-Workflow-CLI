@@ -113,29 +113,21 @@ These handle the JSON serialization and stdout printing. `emit_context` defaults
 
 ## Debugging Output
 
-Hooks communicate via stdout (JSON) and stderr (logs). Use the unified logger for all diagnostic output:
+For logging tiers, visibility rules, and stderr behavior, see **`_shared/lib-ts/CLAUDE.md`** (the shared library guide). The key rules:
+
+- **stderr is opt-in.** `log_debug/log_info/log_warn/log_error` write to file only (no UI noise)
+- **`logBlocking()` / `log_hook_error()`** for problems that must be visible
+- **`eprint()`** for terminal-only UX (not logged to JSONL)
+- **`print()` corrupts stdout** — never use for diagnostics
+
+Python hooks use the same logger via `base.hook_utils`:
 
 ```python
 from base.hook_utils import log_debug, log_info, log_warn, log_error
 
-# CORRECT - unified logger: writes to stderr AND _output/hook-log.jsonl
-log_debug("hook-name", f"Found {len(items)} items")
-log_info("hook-name", "Starting hook...")
-log_warn("hook-name", f"Fallback used: {reason}")
-log_error("hook-name", f"Failed: {e}", traceback_str=tb)
-```
-
-```python
-# ACCEPTABLE - eprint() for terminal-only UX (usage help, progress)
-eprint("Usage: python hook.py <args>")
-```
-
-```python
-# WRONG - print() goes to stdout, corrupts JSON output
-print("Debug info")  # Breaks JSON parsing
-
-# WRONG - raw print to stderr instead of logger
-print(f"Error: {e}", file=sys.stderr)  # Use log_error() instead
+log_debug("hook-name", f"Found {len(items)} items")  # file only
+log_info("hook-name", "Starting hook...")              # file only
+log_error("hook-name", f"Failed: {e}", traceback_str=tb)  # file only
 ```
 
 ---
@@ -200,6 +192,16 @@ Use `sys.exit(1)` only for intentional blocking (e.g., two-stage review decision
 
 ---
 
+## Error Handling: Non-Critical Operations
+
+Wrap non-critical shared library calls in try/catch to prevent false "hook error" UI display. See **`_shared/lib-ts/CLAUDE.md`** > Context Store for the pattern and rationale.
+
+**When to catch locally vs let bubble:**
+- **Catch locally:** Side effects like mode transitions, state saves — the hook's primary purpose can still succeed without them
+- **Let bubble:** Core operations where failure means the hook genuinely can't do its job
+
+---
+
 ## DO NOT
 
 These are reminders based on past issues. Not enforcement rules.
@@ -211,6 +213,7 @@ These are reminders based on past issues. Not enforcement rules.
 - **Don't assume session_id format** - it can be UUID, path-like, or other formats
 - **Don't skip `is_internal_call()` check** - recursive hook execution causes state corruption
 - **Don't hardcode paths** - use `Path(__file__)` and environment variables
+- **Don't let non-critical operations bubble to `runHook`** - catch locally to prevent stderr "hook error" display
 
 ---
 
@@ -239,6 +242,8 @@ Hooks fail silently on syntax errors - this catches them before they reach produ
 
 | Date | Change |
 |------|--------|
+| 2026-02-10 | Flipped TS logger stderr default to opt-in (`opts?.stderr === true`). Added `logBlocking()` for intentional stderr visibility. Removed redundant `{stderr: false}` from hook-utils.ts, user_prompt_submit.ts, context_monitor.ts. Added "Hook Error Visibility" section documenting visibility tiers and exit code behavior. |
+| 2026-02-10 | Fixed `debug.py` `context_path` crash. Added local try/catch around `maybeActivate` in `user_prompt_submit.ts` and `context_monitor.ts` to prevent stderr error display on non-critical I/O failures. Removed dead `context_path` from `_emitHookEnd` in `hook-utils.ts`. Added "Error Handling" section to CLAUDE.md. |
 | 2026-02-07 | Handoff staging lifecycle: `has_handoff` mode + `handoff_consumed` flag mirrors plan lifecycle. `save_handoff.py` no longer transitions to idle — stays active for session_end staging. `session_end.py` stages `active→has_handoff` when handoff_path set and not consumed. `session_start.py` restores `has_handoff→active` on /clear. `context_selector.py` has fallback Case 3b for has_handoff. PostToolUse context_monitor matcher simplified from specific tool list to `*`. |
 | 2026-02-07 | Removed PreToolUse:Write matcher from `add_plan_context.py`. Write-time plan nudges were redundant after consolidating enforcement to PreToolUse:Task. Removed `is_plan_file_write()`, `load_plan_context_config()`, `PHASE_B_ENFORCEMENT`, `nudge_write_questions()`, and `project_dir` import. |
 | 2026-02-07 | Question enforcement is now advisory-only (never blocks). `add_plan_context.py` uses `emit_context()` for all question nudges — no `permissionDecision:deny` anywhere. Removed `emit_context_and_block` import and `TASK_ENFORCEMENT_REASON` constant. |

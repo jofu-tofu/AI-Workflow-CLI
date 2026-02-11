@@ -12,8 +12,14 @@ non-obvious questions, but never blocks the tool call. Claude can proceed regard
 Fail-safe: Any error allows the action silently.
 """
 
-import json
 import sys
+
+# TODO: Remove this early exit when TypeScript implementation is complete.
+# The Python shared library (_shared/lib/) was deleted during the TS migration,
+# so all imports from base.hook_utils / base.logger / base.subprocess_utils fail.
+sys.exit(0)
+
+import json
 from pathlib import Path
 from typing import Any, Dict
 

@@ -5,13 +5,13 @@
  */
 
 import * as fs from "node:fs";
-import { logDebug, logInfo, logWarn, logError, logHookError, logDiagnostic, hookLog, setContextPath, getContextPath as _getContextPath } from "./logger.js";
+import { logDebug, logInfo, logWarn, logError, logBlocking, logHookError, logDiagnostic, hookLog, setContextPath, getContextPath as _getContextPath } from "./logger.js";
 import { getProjectRoot } from "./constants.js";
 import { getContextBySessionId } from "../context/context-store.js";
 import type { HookInput, HookOutput } from "../types.js";
 
 // Re-export logger functions for convenience (matches Python hook_utils re-exports)
-export { logDebug, logInfo, logWarn, logError, logHookError, logDiagnostic, hookLog, setContextPath };
+export { logDebug, logInfo, logWarn, logError, logBlocking, logHookError, logDiagnostic, hookLog, setContextPath };
 
 // Context window baseline: tokens not visible in hook data §5.9
 export const CONTEXT_BASELINE_TOKENS = 22_600;
@@ -224,14 +224,13 @@ export function runHook(
   const event = _lastHookEvent ?? "unknown";
   const tool = _lastToolName;
 
-  // HOOK_START
   const startData: Record<string, any> = {
     lifecycle: "start",
     template,
     event,
   };
   if (tool) startData.tool = tool;
-  logInfo(hookName, "HOOK_START", { data: startData });
+  hookLog("info", hookName, "HOOK_START", { data: startData });
 
   let exitCode = 0;
   let status = "success";
@@ -277,14 +276,13 @@ export function runHookAsync(
   const event = _lastHookEvent ?? "unknown";
   const tool = _lastToolName;
 
-  // HOOK_START
   const startData: Record<string, any> = {
     lifecycle: "start",
     template,
     event,
   };
   if (tool) startData.tool = tool;
-  logInfo(hookName, "HOOK_START", { data: startData });
+  hookLog("info", hookName, "HOOK_START", { data: startData });
 
   mainFunc()
     .then((result) => {
@@ -324,14 +322,10 @@ function _emitHookEnd(
   tool: string | null,
   template: string,
 ): void {
-  // Retroactive HOOK_START to per-context log
+  // Retroactive HOOK_START to per-context log (context_path resolved after main runs)
   const resolvedAfter = _getContextPath();
   if (resolvedAfter && fs.existsSync(resolvedAfter)) {
-    hookLog("info", hookName, "HOOK_START", {
-      data: startData,
-      context_path: resolvedAfter,
-      stderr: false,
-    });
+    hookLog("info", hookName, "HOOK_START", { data: startData });
   }
 
   const durationMs = Math.round((performance.now() - startTime) * 10) / 10;
@@ -350,11 +344,11 @@ function _emitHookEnd(
   if (errorInfo) {
     const [err, tb] = errorInfo;
     endData.error_type = err.constructor.name;
-    logHookError(hookName, err, endEvent, tb);
-    logError(hookName, `HOOK_END: ${err}`, { data: endData, traceback_str: tb });
+    hookLog("error", hookName, `[${endEvent}] ${err.constructor.name}: ${String(err).replace(/[\n\r]/g, " ").slice(0, 200)}`, { traceback_str: tb });
+    hookLog("error", hookName, `HOOK_END: ${err}`, { data: endData, traceback_str: tb });
   } else if (status === "blocked") {
-    logWarn(hookName, "HOOK_END", { data: endData });
+    hookLog("warn", hookName, "HOOK_END", { data: endData });
   } else {
-    logInfo(hookName, "HOOK_END", { data: endData });
+    hookLog("info", hookName, "HOOK_END", { data: endData });
   }
 }
