@@ -38,6 +38,7 @@ export interface GitState {
 
 export interface LastSession {
   context_remaining_pct?: number;
+  context_warnings_fired?: number[];
   git_state?: GitState;
   save_reason?: string;
   saved_at?: string;
