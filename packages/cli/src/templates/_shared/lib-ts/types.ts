@@ -110,6 +110,7 @@ export interface HookInput {
 // §1.7
 export interface HookOutput {
   hookSpecificOutput?: {
+    hookEventName?: string;
     additionalContext?: string;
     permissionDecision?: "allow" | "deny";
     permissionDecisionReason?: string;
@@ -143,6 +144,17 @@ export interface HandoffDocument {
 }
 
 // §1.10
+export interface HandoffSections {
+  index: string | null;
+  deadEnds: string | null;
+  pending: string | null;
+  plan: string | null;
+  decisions: string | null;
+  completedWork: string | null;
+  context: string | null;
+}
+
+// §1.11
 export interface CaretCommand {
   ends: string[];
   select: string | null;

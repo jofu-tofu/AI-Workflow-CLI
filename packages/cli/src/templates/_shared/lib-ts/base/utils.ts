@@ -84,9 +84,65 @@ export function cleanTextForSlug(text: string): string {
 }
 
 /**
+ * Generate a slug from text using AI inference with stop-word fallbacks.
+ * Pipeline: AI inference → stop-word post-filter → stop-word fallback → word-length fallback.
+ * Reusable by both context ID generation and plan archival.
+ * See SPEC.md §14.2
+ */
+export function generateSlug(
+  text: string,
+  maxLen = 150,
+  fallbackSlug = "context",
+): string {
+  if (!text || !text.trim()) return fallbackSlug;
+
+  let slug: string | null = null;
+  const cleanedText = cleanTextForSlug(text);
+
+  // Tier 1: AI inference via generateContextIdSlug (sync — uses execFileSync)
+  try {
+    const { generateContextIdSlug } = require("./inference.js");
+    const aiSlug = generateContextIdSlug(text);
+    if (aiSlug) {
+      const filteredWords = aiSlug
+        .split(/\s+/)
+        .filter(
+          (w: string) => !STOP_WORDS.has(w.toLowerCase()) && w.length > 1,
+        );
+      if (filteredWords.length >= 5) {
+        slug = sanitizeTitle(filteredWords.join(" "), maxLen);
+      } else {
+        logDebug(
+          "utils",
+          `AI slug too generic after stop-word filter (${filteredWords.length} words remain), using fallback`,
+        );
+      }
+    }
+  } catch (e: any) {
+    logWarn("utils", `AI slug generation failed, using fallback: ${e}`);
+  }
+
+  // Tier 2: Stop-word filtering on cleaned text
+  if (!slug) {
+    const words = cleanedText
+      .split(/\s+/)
+      .filter((w) => !STOP_WORDS.has(w) && w.length > 1)
+      .slice(0, 12);
+    slug = words.length >= 3
+      ? sanitizeTitle(words.join(" "), maxLen)
+      : sanitizeTitle(
+          cleanedText.split(/\s+/).filter((w) => w.length > 2).slice(0, 6).join(" "),
+          maxLen,
+        ) || fallbackSlug;
+  }
+
+  return slug;
+}
+
+/**
  * Generate a context ID from a summary string.
  * Format: YYMMDD-HHMM-slug
- * 2-tier slug: AI inference → stop-word filter fallback
+ * Delegates slug generation to generateSlug().
  * See SPEC.md §14.2
  */
 export function generateContextId(
@@ -104,51 +160,8 @@ export function generateContextId(
   let baseId: string;
 
   try {
-    if (!summary || !summary.trim()) {
-      baseId = `${timestamp}-context`;
-    } else {
-      let slug: string | null = null;
-      const cleanedSummary = cleanTextForSlug(summary);
-
-      // Tier 1: AI inference via generateContextIdSlug (sync — uses execFileSync)
-      try {
-        const { generateContextIdSlug } = require("./inference.js");
-        const aiSlug = generateContextIdSlug(summary);
-        if (aiSlug) {
-          const filteredWords = aiSlug
-            .split(/\s+/)
-            .filter(
-              (w: string) => !STOP_WORDS.has(w.toLowerCase()) && w.length > 1,
-            );
-          if (filteredWords.length >= 5) {
-            slug = sanitizeTitle(filteredWords.join(" "), 150);
-          } else {
-            logDebug(
-              "utils",
-              `AI slug too generic after stop-word filter (${filteredWords.length} words remain), using fallback`,
-            );
-          }
-        }
-      } catch (e: any) {
-        logWarn("utils", `AI context ID slug failed, using fallback: ${e}`);
-      }
-
-      // Fallback: Stop-word filtering on cleaned text
-      if (!slug) {
-        const words = cleanedSummary
-          .split(/\s+/)
-          .filter((w) => !STOP_WORDS.has(w) && w.length > 1)
-          .slice(0, 12);
-        slug = words.length >= 3
-          ? sanitizeTitle(words.join(" "), 150)
-          : sanitizeTitle(
-              cleanedSummary.split(/\s+/).filter((w) => w.length > 2).slice(0, 6).join(" "),
-              150,
-            ) || "context";
-      }
-
-      baseId = `${timestamp}-${slug}`;
-    }
+    const slug = generateSlug(summary);
+    baseId = `${timestamp}-${slug}`;
   } catch (e: any) {
     logError(
       "utils",

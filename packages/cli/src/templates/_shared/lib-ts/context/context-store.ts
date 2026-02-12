@@ -579,6 +579,35 @@ export function createContextFromPrompt(
   );
 }
 
+/**
+ * Find the active context ID programmatically.
+ * Checks CONTEXT_ID env var first, then searches for the single active context.
+ * Returns null if no active context or multiple active contexts found.
+ */
+export function findActiveContextId(projectRoot?: string): string | null {
+  // Env var takes priority
+  const envId = process.env.CONTEXT_ID;
+  if (envId) {
+    const ctx = getContext(envId, projectRoot);
+    if (ctx) return ctx.id;
+  }
+
+  // Search for active contexts
+  const active = getAllContexts("active", projectRoot)
+    .filter(c => c.mode === "active" || c.mode === "has_plan" || c.mode === "has_handoff");
+
+  if (active.length === 1) return active[0]!.id;
+  if (active.length > 1) {
+    // Multiple active — try to find the most recently active
+    const sorted = active.sort((a, b) =>
+      (b.last_active ?? "").localeCompare(a.last_active ?? ""),
+    );
+    return sorted[0]!.id;
+  }
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Archive helpers
 // ---------------------------------------------------------------------------

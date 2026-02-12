@@ -15,6 +15,7 @@ import { getContextDir, getContextPlansDir, sanitizeTitle } from "../base/consta
 import { atomicWrite } from "../base/atomic-write.js";
 import { readStateJson } from "../base/state-io.js";
 import { logDebug, logInfo, logWarn, logError } from "../base/logger.js";
+import { generateSlug } from "../base/utils.js";
 import type { ContextState } from "../types.js";
 
 // ---------------------------------------------------------------------------
@@ -69,23 +70,12 @@ export async function archivePlan(
     String(now.getMinutes()).padStart(2, "0"),
   ].join("");
 
-  // Try AI inference for a descriptive slug
-  let slug: string | null = null;
-  try {
-    const { generateContextIdSlug } = await import("../base/inference.js");
-    const aiSlug = generateContextIdSlug(content.slice(0, 500), 5);
-    if (aiSlug) {
-      slug = sanitizeTitle(aiSlug, 60);
-    }
-  } catch {
-    // AI inference unavailable — use filename fallback
-  }
-
-  // Fallback: use plan filename
-  if (!slug) {
-    const stem = path.basename(planPath, path.extname(planPath));
-    slug = sanitizeTitle(stem, 30);
-  }
+  // Extract a clean summary from plan content for slug generation.
+  // Headings describe the plan's intent better than raw markdown body.
+  const summary = extractPlanSummary(content);
+  const slug = generateSlug(summary, 60, sanitizeTitle(
+    path.basename(planPath, path.extname(planPath)), 30,
+  ));
 
   let archiveName = `${dateStr}-${slug}.md`;
   let archivePath = path.join(plansDir, archiveName);
@@ -107,6 +97,35 @@ export async function archivePlan(
 
   logInfo("plan_manager", `Archived plan to: ${archivePath}`);
   return [archivePath, planHash, planSignature];
+}
+
+/**
+ * Extract a human-readable summary from plan markdown content.
+ * Pulls headings and the first substantial paragraph, producing
+ * text suitable for the AI slug generator (which expects conversational input).
+ */
+function extractPlanSummary(content: string): string {
+  const lines = content.split("\n");
+  const parts: string[] = [];
+  let firstParagraph = "";
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Collect markdown headings (strip # prefix)
+    if (trimmed.startsWith("#")) {
+      const heading = trimmed.replace(/^#+\s*/, "");
+      if (heading.length > 2) parts.push(heading);
+    }
+    // Grab first substantial non-heading line as context
+    if (!firstParagraph && !trimmed.startsWith("#") && trimmed.length > 20) {
+      firstParagraph = trimmed.slice(0, 120);
+    }
+    // Enough material for the AI
+    if (parts.length >= 5) break;
+  }
+
+  if (firstParagraph) parts.push(firstParagraph);
+  return parts.join(" ").slice(0, 500) || content.slice(0, 500);
 }
 
 // ---------------------------------------------------------------------------

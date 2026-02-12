@@ -20,6 +20,7 @@ export const DEFAULT_CONTEXT_WINDOW_SIZE = 200_000;
 // Event metadata stash — populated by loadHookInput(), read by runHook()
 let _lastHookEvent: string | null = null;
 let _lastToolName: string | null = null;
+let _cachedHookName: string | null = null;
 
 // Pre-fetched input stash
 let _prefetchedInput: Record<string, any> | null = null;
@@ -102,33 +103,54 @@ export function checkSkipPersistence(
 
 /**
  * Emit hookSpecificOutput with additionalContext to stdout.
+ * hookEventName is required by Claude Code's Zod validator (discriminated union).
+ * Auto-detected from stdin payload (set by loadHookInput/runHook).
  * See SPEC.md §5.5
  */
 export function emitContext(additionalContext: string): void {
+  const eventName = _lastHookEvent ?? undefined;
   const out: HookOutput = {
     hookSpecificOutput: {
+      ...(eventName ? { hookEventName: eventName } : {}),
       additionalContext,
     },
   };
-  process.stdout.write(JSON.stringify(out) + "\n");
+  const json = JSON.stringify(out);
+  _logEmit("context", additionalContext.length, { additionalContext });
+  process.stdout.write(json + "\n");
 }
 
 /**
  * Emit hookSpecificOutput that denies the tool call with context and reason.
+ * hookEventName is required by Claude Code's Zod validator (discriminated union).
+ * Auto-detected from stdin payload (set by loadHookInput/runHook).
  * See SPEC.md §5.6
  */
 export function emitContextAndBlock(
   additionalContext: string,
   reason: string,
 ): void {
+  const eventName = _lastHookEvent ?? undefined;
   const out: HookOutput = {
     hookSpecificOutput: {
+      ...(eventName ? { hookEventName: eventName } : {}),
       additionalContext,
       permissionDecision: "deny",
       permissionDecisionReason: reason,
     },
   };
-  process.stdout.write(JSON.stringify(out) + "\n");
+  const json = JSON.stringify(out);
+  _logEmit("block", additionalContext.length, { additionalContext, blockReason: reason });
+  process.stdout.write(json + "\n");
+}
+
+/** Log hook output (context or block) to hook-log.jsonl for visibility. */
+function _logEmit(type: "context" | "block", chars: number, payload: Record<string, any>): void {
+  const hook = _cachedHookName ?? "unknown";
+  const msg = type === "block"
+    ? `HOOK_OUTPUT [${type}] ${chars} chars, reason="${(payload.blockReason ?? "").slice(0, 80)}"`
+    : `HOOK_OUTPUT [${type}] ${chars} chars`;
+  hookLog("info", hook, msg, { data: payload });
 }
 
 /**
@@ -254,6 +276,7 @@ export function runHook(
   prefetchedInput?: Record<string, any>,
 ): never {
   _earlyReadInput(prefetchedInput);
+  _cachedHookName = hookName;
 
   const startTime = performance.now();
   const template = detectTemplate();
@@ -304,6 +327,7 @@ export function runHookAsync(
   prefetchedInput?: Record<string, any>,
 ): void {
   _earlyReadInput(prefetchedInput);
+  _cachedHookName = hookName;
 
   const startTime = performance.now();
   const template = detectTemplate();
@@ -322,7 +346,7 @@ export function runHookAsync(
     .then((result) => {
       const exitCode = typeof result === "number" ? result : 0;
       _emitHookEnd(hookName, startTime, exitCode, exitCode !== 0 ? "blocked" : "success", null, startData, event, tool, template);
-      process.exit(exitCode);
+      _drainAndExit(exitCode);
     })
     .catch((e: any) => {
       let exitCode = 0;
@@ -340,7 +364,7 @@ export function runHookAsync(
       }
 
       _emitHookEnd(hookName, startTime, exitCode, status, errorInfo, startData, event, tool, template);
-      process.exit(exitCode);
+      _drainAndExit(exitCode);
     });
 }
 
@@ -385,4 +409,23 @@ function _emitHookEnd(
   } else {
     hookLog("info", hookName, "HOOK_END", { data: endData });
   }
+}
+
+/**
+ * Drain stdout before exiting to ensure pipe consumers receive all data.
+ * On Windows, stdout to a pipe is fully buffered — process.exit() can
+ * discard unflushed data. This waits for the write buffer to drain.
+ */
+function _drainAndExit(code: number): void {
+  // If stdout is already finished or not writable, exit immediately
+  if (!process.stdout.writable || process.stdout.writableFinished) {
+    process.exit(code);
+  }
+
+  // Attempt to end stdout and wait for drain
+  const timeout = setTimeout(() => process.exit(code), 1000); // safety fallback
+  process.stdout.end(() => {
+    clearTimeout(timeout);
+    process.exit(code);
+  });
 }

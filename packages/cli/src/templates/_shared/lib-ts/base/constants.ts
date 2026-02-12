@@ -108,6 +108,10 @@ export function getProjectRoot(payloadCwd?: string): string {
 
 // §2.4 — Path functions
 
+export function getAiwcliDir(projectRoot?: string): string {
+  return path.join(projectRoot ?? getProjectRoot(), ".aiwcli");
+}
+
 export function getOutputDir(projectRoot?: string): string {
   return path.join(projectRoot ?? getProjectRoot(), OUTPUT_DIR);
 }

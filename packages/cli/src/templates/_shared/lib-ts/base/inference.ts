@@ -46,17 +46,25 @@ export function inference(
     const isWin = process.platform === "win32";
     let stdout: string;
 
-    // Use execFileSync with shell option on Windows for safe argument passing
-    // (no string interpolation — avoids command injection)
+    // On Windows with shell:true, Node.js sets windowsVerbatimArguments —
+    // args are joined with spaces, NOT individually quoted. We must manually
+    // wrap multi-word/special-char args in "..." for cmd.exe parsing.
+    // Inside double quotes: "" = literal ", and |&<> are safe.
+    const empty = isWin ? '""' : "";
+    let promptArg = fullPrompt;
+    if (isWin) {
+      promptArg = '"' + fullPrompt.replace(/\r?\n/g, " ").replace(/"/g, '""') + '"';
+    }
+
     stdout = execFileSync(
       "claude",
-      ["--model", model, "--print", "--setting-sources", "", "-p", fullPrompt],
+      ["--model", model, "--print", "--setting-sources", empty, "-p", promptArg],
       {
         timeout: timeoutSec * 1000,
         env,
         encoding: "utf-8",
         stdio: ["pipe", "pipe", "pipe"],
-        shell: isWin, // Windows needs shell for command resolution
+        shell: isWin, // Windows needs shell for .cmd resolution
       },
     );
 

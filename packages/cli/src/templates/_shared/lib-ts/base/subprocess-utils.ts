@@ -3,7 +3,7 @@
  * See SPEC.md §5.10
  */
 
-import { execSync } from "node:child_process";
+import { execSync, execFile } from "node:child_process";
 
 /**
  * Check if this is an internal subprocess call.
@@ -27,14 +27,30 @@ export function getInternalSubprocessEnv(): Record<string, string | undefined> {
 /**
  * Find an executable on the system PATH.
  * Uses `where` on Windows, `which` on Unix.
+ * On Windows, prefers .cmd/.exe over extensionless shims since
+ * execFileSync cannot spawn extensionless shell scripts.
  * Returns the first match or null if not found.
  */
 export function findExecutable(name: string): string | null {
   try {
     const cmd = process.platform === "win32" ? `where ${name}` : `which ${name}`;
-    return execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] })
+    const lines = execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] })
       .trim()
-      .split("\n")[0]?.trim() ?? null;
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    if (lines.length === 0) return null;
+
+    // On Windows, `where` may return an extensionless shim first (e.g. npm creates
+    // both `claude` and `claude.cmd`). execFileSync can't spawn the extensionless
+    // one, so prefer .cmd or .exe.
+    if (process.platform === "win32") {
+      const preferred = lines.find((l) => /\.(cmd|exe)$/i.test(l));
+      return preferred ?? lines[0] ?? null;
+    }
+
+    return lines[0] ?? null;
   } catch {
     return null;
   }
@@ -61,4 +77,86 @@ export function isExecSyncError(e: unknown): e is ExecSyncError {
     "killed" in e &&
     "signal" in e
   );
+}
+
+// ---------------------------------------------------------------------------
+// Async Subprocess Execution
+// ---------------------------------------------------------------------------
+
+/**
+ * Result from an async subprocess execution.
+ * Never throws — callers inspect fields to determine outcome.
+ */
+export interface ExecResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  killed: boolean;
+  signal: string | null;
+}
+
+/** Options for execFileAsync. */
+export interface ExecAsyncOptions {
+  /** Data piped to the child's stdin. */
+  input?: string;
+  /** Timeout in milliseconds (not seconds). */
+  timeout?: number;
+  /** Environment variables for the child process. */
+  env?: Record<string, string | undefined>;
+  /** Maximum bytes on stdout/stderr. Default: 10 MB. */
+  maxBuffer?: number;
+}
+
+/**
+ * Async subprocess execution that does NOT block the event loop.
+ * Drop-in replacement for execFileSync in Promise-based parallel patterns.
+ *
+ * Returns ExecResult on both success and non-zero exit.
+ * On timeout: result.killed = true, result.signal = "SIGTERM".
+ * On spawn failure: result.exitCode = -1, result.stderr contains error.
+ */
+export function execFileAsync(
+  file: string,
+  args: string[],
+  options?: ExecAsyncOptions,
+): Promise<ExecResult> {
+  return new Promise((resolve) => {
+    const child = execFile(
+      file,
+      args,
+      {
+        encoding: "utf-8",
+        timeout: options?.timeout ?? 0,
+        env: options?.env as NodeJS.ProcessEnv,
+        maxBuffer: options?.maxBuffer ?? 10 * 1024 * 1024,
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          // execFile callback error includes process exit info
+          const errObj = error as unknown as Record<string, unknown>;
+          resolve({
+            stdout: String(stdout ?? ""),
+            stderr: String(stderr ?? ""),
+            exitCode: typeof errObj.code === "number" ? errObj.code : (error as any).status ?? 1,
+            killed: Boolean(errObj.killed),
+            signal: typeof errObj.signal === "string" ? errObj.signal : null,
+          });
+        } else {
+          resolve({
+            stdout: String(stdout ?? ""),
+            stderr: String(stderr ?? ""),
+            exitCode: 0,
+            killed: false,
+            signal: null,
+          });
+        }
+      },
+    );
+
+    // Pipe input to stdin if provided
+    if (options?.input != null && child.stdin) {
+      child.stdin.write(options.input);
+      child.stdin.end();
+    }
+  });
 }
