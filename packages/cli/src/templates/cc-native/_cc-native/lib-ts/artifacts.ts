@@ -318,19 +318,20 @@ export function generateReviewIndex(
     "",
     "| File | Description |",
     "|------|-------------|",
-    "| [combined.md](./combined.md) | Full review details |",
-    "| [combined.json](./combined.json) | Structured review data |",
+    "| [review.md](./review.md) | Full review details |",
+    "| [review.json](./review.json) | Structured review data |",
+    "| [plan.md](./plan.md) | Plan snapshot at review time |",
   );
 
   for (const name of Object.keys(result.cli_reviewers)) {
     lines.push(
-      `| [${name}.json](./${name}.json) | ${titleCase(name)} reviewer output |`,
+      `| [${name}.json](./reviewer-output/${name}.json) | ${titleCase(name)} reviewer output |`,
     );
   }
   for (const name of Object.keys(result.agents)) {
     const safeName = sanitizeFilename(name);
     lines.push(
-      `| [${safeName}.json](./${safeName}.json) | ${name} agent output |`,
+      `| [${safeName}.json](./reviewer-output/${safeName}.json) | ${name} agent output |`,
     );
   }
 
@@ -464,22 +465,26 @@ export function writeCombinedArtifacts(
   }
 
   // JSON write
-  const jsonFilename = reviewFolder ? "combined.json" : "review.json";
-  const jsonPath = path.join(outDir, jsonFilename);
+  const jsonPath = path.join(outDir, "review.json");
   const jsonData = buildCombinedJson(result);
   writeFile(jsonPath, JSON.stringify(jsonData, null, 2));
 
   // Markdown write
-  const mdFilename = reviewFolder ? "combined.md" : "review.md";
-  const mdPath = path.join(outDir, mdFilename);
+  const mdPath = path.join(outDir, "review.md");
   const mdContent = formatCombinedMarkdown(result, settings);
   writeFile(mdPath, mdContent);
 
-  // Individual reviewer writes (non-critical)
+  // Individual reviewer writes (non-critical) — in reviewer-output/ subfolder
+  const reviewerOutputDir = path.join(outDir, "reviewer-output");
+  try {
+    fs.mkdirSync(reviewerOutputDir, { recursive: true });
+  } catch {
+    // Best-effort — non-critical
+  }
   for (const [name, r] of Object.entries(result.cli_reviewers)) {
     if (r.data) {
       writeFileNonCritical(
-        path.join(outDir, `${name}.json`),
+        path.join(reviewerOutputDir, `${name}.json`),
         JSON.stringify(r.data, null, 2),
       );
     }
@@ -487,7 +492,7 @@ export function writeCombinedArtifacts(
   for (const [name, r] of Object.entries(result.agents)) {
     if (r.data) {
       writeFileNonCritical(
-        path.join(outDir, `${sanitizeFilename(name)}.json`),
+        path.join(reviewerOutputDir, `${sanitizeFilename(name)}.json`),
         JSON.stringify(r.data, null, 2),
       );
     }
@@ -601,4 +606,103 @@ function formatDate(d: Date): string {
   const hours = String(d.getHours()).padStart(2, "0");
   const minutes = String(d.getMinutes()).padStart(2, "0");
   return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+// ---------------------------------------------------------------------------
+// Review Tracker
+// ---------------------------------------------------------------------------
+
+export interface ReviewTrackerEntry {
+  iteration: number;
+  timestamp: string;
+  planHash: string;
+  verdict: string;
+  decision: string;
+  score: number;
+  topIssues: string[];
+  reviewFolder: string;
+}
+
+/**
+ * Build or update the review-tracker.md in the cc-native reviews directory.
+ * This file provides a human-readable summary of all review iterations,
+ * making it easy to see whether feedback was acted on.
+ */
+export function writeReviewTracker(
+  ccNativeReviewsDir: string,
+  entry: ReviewTrackerEntry,
+): void {
+  const trackerPath = path.join(ccNativeReviewsDir, "review-tracker.md");
+
+  // Read existing tracker entries if present
+  let existingContent = "";
+  try {
+    if (fs.existsSync(trackerPath)) {
+      existingContent = fs.readFileSync(trackerPath, "utf-8");
+    }
+  } catch {
+    // Fresh start
+  }
+
+  // Parse existing entries to detect plan changes
+  const previousHashes = extractPreviousHashes(existingContent);
+  const hashChanged = previousHashes.length > 0 &&
+    previousHashes[previousHashes.length - 1] !== entry.planHash;
+
+  // Build the new entry section
+  const lines: string[] = [];
+  const verdictEmoji = entry.decision === "allow" ? "\u2705" : "\u274c";
+  const changeNote = previousHashes.length > 0
+    ? (hashChanged ? "\u2705 Plan was revised (hash changed)" : "\u26a0\ufe0f Plan unchanged since last review")
+    : "Initial review";
+
+  lines.push(`## Iteration ${entry.iteration} \u2014 ${entry.timestamp} \u2014 ${verdictEmoji} ${entry.verdict.toUpperCase()}`);
+  lines.push("");
+  lines.push(`- **Decision:** ${entry.decision}`);
+  lines.push(`- **Score:** ${entry.score.toFixed(2)}`);
+  lines.push(`- **Plan hash:** \`${entry.planHash}\``);
+  lines.push(`- **Status:** ${changeNote}`);
+  lines.push(`- **Full review:** [\`${path.basename(entry.reviewFolder)}/\`](${path.basename(entry.reviewFolder)}/index.md)`);
+
+  if (entry.topIssues.length > 0) {
+    lines.push("");
+    lines.push("**Top issues:**");
+    for (const issue of entry.topIssues) {
+      lines.push(`- ${issue}`);
+    }
+  }
+  lines.push("");
+
+  // Build full file
+  let output: string;
+  if (!existingContent || !existingContent.includes("# Plan Review Tracker")) {
+    // New file
+    output = [
+      "# Plan Review Tracker",
+      "",
+      "> Auto-generated by plan review hook. Shows review lifecycle across iterations.",
+      "> Check `plan.md` in each iteration folder to diff plan changes.",
+      "",
+      ...lines,
+    ].join("\n");
+  } else {
+    // Append to existing
+    output = existingContent.trimEnd() + "\n\n" + lines.join("\n");
+  }
+
+  try {
+    fs.writeFileSync(trackerPath, output, "utf-8");
+  } catch (e) {
+    logWarn("artifacts", `Failed to write review tracker: ${e}`);
+  }
+}
+
+function extractPreviousHashes(content: string): string[] {
+  const hashes: string[] = [];
+  const regex = /\*\*Plan hash:\*\* `([a-f0-9]+)`/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(content)) !== null) {
+    hashes.push(match[1]!);
+  }
+  return hashes;
 }

@@ -4,10 +4,9 @@
  * See cc-native-plan-review-spec.md §4.10
  */
 
-import { execFileSync } from "node:child_process";
 import * as path from "node:path";
 import { logDebug, logInfo, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv, findExecutable, isExecSyncError } from "../../../_shared/lib-ts/base/subprocess-utils.js";
+import { getInternalSubprocessEnv, findExecutable, execFileAsync } from "../../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseCliOutput } from "../cli-output-parser.js";
 import { coerceToReview } from "../json-parser.js";
 import { debugLog, debugRaw } from "../debug.js";
@@ -42,14 +41,14 @@ export class AgentReviewer implements Reviewer {
  * Run a single Claude Code agent to review the plan.
  * Never throws — returns error ReviewerResult on failure.
  */
-export function runAgentReview(
+export async function runAgentReview(
   plan: string,
   agent: AgentConfig,
   schema: Record<string, unknown>,
   timeout: number,
   contextPath?: string,
   sessionName = "unknown",
-): ReviewerResult {
+): Promise<ReviewerResult> {
   const claudePath = findExecutable("claude");
   if (!claudePath) {
     logWarn(agent.name, "Claude CLI not found on PATH");
@@ -69,13 +68,12 @@ ${plan}
 
   const schemaJson = JSON.stringify(schema);
   const cmdArgs = [
-    claudePath,
-    "-p",
     "--model", agent.model,
     "--output-format", "json",
     "--json-schema", schemaJson,
     "--max-turns", "3",
     "--setting-sources", "",
+    "-p",
   ];
 
   if (agent.system_prompt) {
@@ -87,45 +85,27 @@ ${plan}
 
   const env = getInternalSubprocessEnv();
 
-  let stdout = "";
-  let stderr = "";
-  let exitCode = 0;
+  const result = await execFileAsync(claudePath, cmdArgs, {
+    input: prompt,
+    timeout: timeout * 1000,
+    env: env as Record<string, string>,
+    maxBuffer: 10 * 1024 * 1024,
+  });
 
-  try {
-    stdout = execFileSync(cmdArgs[0]!, cmdArgs.slice(1), {
-      input: prompt,
-      encoding: "utf-8",
-      timeout: timeout * 1000,
-      env: env as Record<string, string>,
-      maxBuffer: 10 * 1024 * 1024,
-      stdio: ["pipe", "pipe", "pipe"],
-    }).toString();
-  } catch (e: unknown) {
-    if (isExecSyncError(e)) {
-      if (e.killed || e.signal === "SIGTERM") {
-        logWarn(agent.name, `TIMEOUT after ${timeout}s`);
-        return makeResult(agent.name, false, "error", {}, "", `${agent.name} timed out after ${timeout}s`);
-      }
-      // execSync throws on non-zero exit, but we can still get stdout
-      stdout = (e.stdout ?? "").toString();
-      stderr = (e.stderr ?? "").toString();
-      exitCode = e.status ?? 1;
-
-      if (!stdout && !stderr) {
-        logError(agent.name, `Exception: ${e.message}`);
-        return makeResult(agent.name, false, "error", {}, "", `${agent.name} failed to run: ${e.message}`);
-      }
-    } else {
-      const msg = e instanceof Error ? e.message : String(e);
-      logError(agent.name, `Exception: ${msg}`);
-      return makeResult(agent.name, false, "error", {}, "", `${agent.name} failed to run: ${msg}`);
-    }
+  if (result.killed || result.signal === "SIGTERM") {
+    logWarn(agent.name, `TIMEOUT after ${timeout}s`);
+    return makeResult(agent.name, false, "error", {}, "", `${agent.name} timed out after ${timeout}s`);
   }
 
-  const raw = stdout.trim();
-  const err = stderr.trim();
+  const raw = result.stdout.trim();
+  const err = result.stderr.trim();
 
-  logDebug(agent.name, `Exit code: ${exitCode}`);
+  if (!raw && !err && result.exitCode !== 0) {
+    logError(agent.name, `Process exited with code ${result.exitCode} and no output`);
+    return makeResult(agent.name, false, "error", {}, "", `${agent.name} failed to run (exit ${result.exitCode})`);
+  }
+
+  logDebug(agent.name, `Exit code: ${result.exitCode}`);
   logDebug(agent.name, `stdout length: ${raw.length} chars`);
   if (err) logDebug(agent.name, `stderr: ${err.slice(0, 500)}`);
 
@@ -136,7 +116,7 @@ ${plan}
       debugRaw(contextPath, sessionName, `agent:${agent.name}`, "stderr", err);
     }
     debugLog(contextPath, sessionName, `agent:${agent.name}`, "subprocess_info", {
-      exit_code: exitCode,
+      exit_code: result.exitCode,
       stdout_len: raw.length,
       stderr_len: err.length,
       model: agent.model,

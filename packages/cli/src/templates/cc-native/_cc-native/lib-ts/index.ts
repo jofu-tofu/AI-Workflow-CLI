@@ -21,7 +21,6 @@ export type {
   CcNativeState,
   PlanReviewState,
   QuestionsAskedState,
-  StuckDetectionState,
   PlanReviewConfig,
   DisplaySettings,
   ReviewOptions,
@@ -74,8 +73,6 @@ export {
   markPlanReviewed,
   wasQuestionsAsked,
   markQuestionsAsked,
-  getStuckDetectionState,
-  updateStuckDetectionState,
 } from "./cc-native-state.js";
 
 // Iteration state

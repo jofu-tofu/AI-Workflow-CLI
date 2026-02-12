@@ -11,7 +11,6 @@
 | `cc-native-plan-review.ts` | PreToolUse: ExitPlanMode | Review plans before user approval |
 | `add_plan_context.ts` | PostToolUse: AskUserQuestion, PreToolUse: Task | Mark questions asked; nudge Plan subagent to ask questions first |
 | `plan_questions_early.ts` | UserPromptSubmit | Inject Phase A clarification prompt in plan mode |
-| `suggest-fresh-perspective.ts` | PostToolUse | Suggest fresh perspective workflow |
 
 ---
 
@@ -160,7 +159,7 @@ async function main(): Promise<void> {
 runHookAsync(main, "hook_name");
 ```
 
-Use `process.exit(1)` only for intentional blocking (e.g., plan review denial).
+Use `emitContextAndBlock()` for intentional blocking (e.g., plan review denial). `hookEventName` is auto-detected.
 
 ---
 
@@ -179,7 +178,7 @@ Wrap non-critical shared library calls in try/catch to prevent false "hook error
 These are reminders based on past issues. Not enforcement rules.
 
 - **Don't modify hook output format** without verifying the current Claude Code hook API (it changes between versions)
-- **Don't use `process.exit(1)`** for non-fatal errors - it blocks the user's workflow
+- **Don't use `process.exit(1)` or `process.exit(2)`** for non-fatal errors - it blocks the user's workflow
 - **Don't forget template sync** after modifying hooks in `.aiwcli/` - changes should also go to `packages/cli/src/templates/cc-native/`
 - **Don't use `console.log()`** for anything — it corrupts stdout. Use `emitContext()` for hook output
 - **Don't assume session_id format** - it can be UUID, path-like, or other formats
@@ -211,7 +210,7 @@ Hooks fail silently on import errors — verify after any import path changes.
 
 | Date | Change |
 |------|--------|
-| 2026-02-10 | **Migrated all 4 cc-native hooks from Python to TypeScript.** `cc-native-plan-review.ts` (async, parallel agent reviews via `Promise.all()`), `add_plan_context.ts`, `plan_questions_early.ts`, `suggest-fresh-perspective.ts`. All hooks use `runHook()`/`runHookAsync()` entry points. Library code in `_cc-native/lib-ts/` (18 files). Settings.json updated to use `bun` runner. Python `.py` files kept as fallback until TS hooks verified. |
+| 2026-02-10 | **Migrated cc-native hooks from Python to TypeScript.** `cc-native-plan-review.ts` (async, parallel agent reviews via `Promise.all()`), `add_plan_context.ts`, `plan_questions_early.ts`. All hooks use `runHook()`/`runHookAsync()` entry points. Library code in `_cc-native/lib-ts/` (18 files). Settings.json updated to use `bun` runner. Python `.py` files kept as fallback until TS hooks verified. |
 | 2026-02-10 | Flipped TS logger stderr default to opt-in (`opts?.stderr === true`). Added `logBlocking()` for intentional stderr visibility. Removed redundant `{stderr: false}` from hook-utils.ts, user_prompt_submit.ts, context_monitor.ts. Added "Hook Error Visibility" section documenting visibility tiers and exit code behavior. |
 | 2026-02-10 | Fixed `debug.py` `context_path` crash. Added local try/catch around `maybeActivate` in `user_prompt_submit.ts` and `context_monitor.ts` to prevent stderr error display on non-critical I/O failures. Removed dead `context_path` from `_emitHookEnd` in `hook-utils.ts`. Added "Error Handling" section to CLAUDE.md. |
 | 2026-02-07 | Handoff staging lifecycle: `has_handoff` mode + `handoff_consumed` flag mirrors plan lifecycle. `save_handoff.py` no longer transitions to idle — stays active for session_end staging. `session_end.py` stages `active→has_handoff` when handoff_path set and not consumed. `session_start.py` restores `has_handoff→active` on /clear. `context_selector.py` has fallback Case 3b for has_handoff. PostToolUse context_monitor matcher simplified from specific tool list to `*`. |

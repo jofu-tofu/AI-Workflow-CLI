@@ -124,7 +124,6 @@ export interface IterationState {
 export interface CcNativeState {
   plan_review?: PlanReviewState;
   questions_asked?: QuestionsAskedState;
-  stuck_detection?: StuckDetectionState;
   [key: string]: unknown;
 }
 
@@ -145,15 +144,6 @@ export interface PlanReviewState {
 export interface QuestionsAskedState {
   asked: boolean;
   asked_at: string;
-}
-
-/** Stuck detection state — tracks repeated errors, file edits, and test failures */
-export interface StuckDetectionState {
-  error_hashes: Record<string, number>;
-  file_edits: Record<string, number>;
-  test_failures: number;
-  tool_calls_since_suggestion: number;
-  suggestion_count: number;
 }
 
 // ---------------------------------------------------------------------------

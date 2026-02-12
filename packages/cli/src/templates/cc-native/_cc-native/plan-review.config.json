@@ -4,7 +4,7 @@
     "reviewers": {
       "codex": {
         "enabled": true,
-        "model": "o4-mini",
+        "model": "gpt-5.1-codex-mini",
         "timeout": 120
       },
       "gemini": {
@@ -71,13 +71,5 @@
   "planContext": {
     "enabled": true,
     "offerClarifyingQuestions": true
-  },
-  "stuckDetection": {
-    "enabled": true,
-    "errorThreshold": 3,
-    "fileEditThreshold": 4,
-    "testFailureThreshold": 3,
-    "cooldown": 10,
-    "maxSuggestions": 3
   }
 }

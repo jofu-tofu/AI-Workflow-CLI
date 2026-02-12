@@ -15,7 +15,8 @@
  * Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}/reviews/
  *   - review.json (combined review data)
  *   - review.md (combined markdown)
- *   - {reviewer}.json (individual reviewer results)
+ *   - plan.md (plan snapshot at review time)
+ *   - reviewer-output/{reviewer}.json (individual reviewer results)
  */
 
 import * as fs from "node:fs";
@@ -35,7 +36,7 @@ import {
   emitContextAndBlock,
 } from "../../_shared/lib-ts/base/hook-utils.js";
 import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
-import { getProjectRoot, getContextReviewsDir, getContextDir, getReviewFolderPath } from "../../_shared/lib-ts/base/constants.js";
+import { getProjectRoot, getAiwcliDir, getContextReviewsDir, getContextDir, getReviewFolderPath } from "../../_shared/lib-ts/base/constants.js";
 import { eprint } from "../../_shared/lib-ts/base/utils.js";
 import { getContextBySessionId, getAllContexts } from "../../_shared/lib-ts/context/context-store.js";
 
@@ -74,7 +75,9 @@ import {
   buildInlineReviewSummary,
   extractTopIssuesText,
   buildHighIssuesDocument,
+  writeReviewTracker,
 } from "../lib-ts/artifacts.js";
+import type { ReviewTrackerEntry } from "../lib-ts/artifacts.js";
 import { runAgentReview, runCodexReview, runGeminiReview } from "../lib-ts/reviewers/index.js";
 
 // ---------------------------------------------------------------------------
@@ -107,6 +110,32 @@ function computePlanHash(content: string): string {
 function skipWithInfo(reason: string): void {
   logInfo(HOOK, `Skipping: ${reason}`);
   emitContext(`[Plan Review Skipped] ${reason}`);
+}
+
+function extractTopIssuesForTracker(
+  combined: CombinedReviewResult,
+  maxCount = 5,
+): string[] {
+  const allReviewers = [
+    ...Object.values(combined.cli_reviewers),
+    ...Object.values(combined.agents),
+  ];
+  const issues: string[] = [];
+  for (const r of allReviewers) {
+    if (!r.data) continue;
+    const issueList = r.data.issues as Array<Record<string, unknown>> | undefined;
+    if (!issueList) continue;
+    for (const issue of issueList) {
+      if (issue.severity === "high") {
+        const text = String(issue.issue ?? "").trim();
+        if (text) {
+          issues.push(`[${r.name}] ${text}`);
+        }
+      }
+    }
+    if (issues.length >= maxCount) break;
+  }
+  return issues.slice(0, maxCount);
 }
 
 // ---------------------------------------------------------------------------
@@ -364,7 +393,7 @@ function loadAgentLibrary(
   projDir: string,
   settings?: Record<string, any>,
 ): AgentConfig[] {
-  const agentsData = aggregateAgents();
+  const agentsData = aggregateAgents(path.join(projDir, "_cc-native", "agents"));
   const defaultModel = settings?.agentDefaults?.model ?? DEFAULT_AGENT_MODEL;
 
   if (!agentsData || agentsData.length === 0) {
@@ -411,7 +440,8 @@ async function main(): Promise<void> {
 
   const sessionId = String(payload.session_id ?? "unknown");
   const base = getProjectRoot(payload.cwd);
-  const settings = loadSettings(base);
+  const aiwcliDir = getAiwcliDir(base);
+  const settings = loadSettings(aiwcliDir);
 
   const planSettings = settings.planReview ?? {};
   const agentSettings = settings.agentReview ?? {};
@@ -496,7 +526,7 @@ async function main(): Promise<void> {
   const codexEnabled = planReviewEnabled && (reviewersConfig.codex?.enabled ?? true);
   const geminiEnabled = planReviewEnabled && (reviewersConfig.gemini?.enabled ?? false);
 
-  const agentLibrary = agentReviewEnabled ? loadAgentLibrary(base, agentSettings) : [];
+  const agentLibrary = agentReviewEnabled ? loadAgentLibrary(aiwcliDir, agentSettings) : [];
   const enabledAgents = agentLibrary;
   const timeout = typeof agentSettings.timeout === "number" ? agentSettings.timeout : 120;
   const legacyMode = agentSettings.legacyMode === true;
@@ -523,21 +553,19 @@ async function main(): Promise<void> {
   if (codexEnabled) {
     phase1Promises.push({
       name: "codex",
-      promise: Promise.resolve().then(() => runCodexReview(plan, REVIEW_SCHEMA, planSettings)),
+      promise: runCodexReview(plan, REVIEW_SCHEMA, planSettings),
     });
   }
   if (geminiEnabled) {
     phase1Promises.push({
       name: "gemini",
-      promise: Promise.resolve().then(() => runGeminiReview(plan, REVIEW_SCHEMA, planSettings)),
+      promise: runGeminiReview(plan, REVIEW_SCHEMA, planSettings),
     });
   }
   if (orchestratorConfig.enabled && enabledAgents.length > 0 && !legacyMode) {
     phase1Promises.push({
       name: "orchestrator",
-      promise: Promise.resolve().then(() =>
-        runOrchestrator(plan, enabledAgents, orchestratorConfig, agentSettings, alwaysMandatory),
-      ),
+      promise: runOrchestrator(plan, enabledAgents, orchestratorConfig, agentSettings, alwaysMandatory),
     });
   }
 
@@ -656,11 +684,10 @@ async function main(): Promise<void> {
         complexity: detectedComplexity,
       });
 
-      const agentPromises = selectedAgents.map(agent =>
-        Promise.resolve().then(() =>
-          runAgentReview(plan, agent, REVIEW_SCHEMA, timeout, contextPath, sessionId),
-        ).then(result => ({ agent, result })),
-      );
+      const agentPromises = selectedAgents.map(async agent => {
+        const result = await runAgentReview(plan, agent, REVIEW_SCHEMA, timeout, contextPath, sessionId);
+        return { agent, result };
+      });
 
       const agentSettled = await Promise.allSettled(agentPromises);
       for (const [i, r] of agentSettled.entries()) {
@@ -750,6 +777,14 @@ async function main(): Promise<void> {
   );
   logInfo(HOOK, `Saved review: ${reviewFile}`);
 
+  // Save plan snapshot for diffing between iterations
+  try {
+    fs.writeFileSync(path.join(reviewFolder, "plan.md"), plan, "utf-8");
+    logDebug(HOOK, `Saved plan snapshot: ${path.join(reviewFolder, "plan.md")}`);
+  } catch (e) {
+    logWarn(HOOK, `Failed to save plan snapshot: ${e}`);
+  }
+
   // Build inline summary
   const inlineSummary = buildInlineReviewSummary(combinedResult);
   const contextParts = [inlineSummary, `\nFull review: \`${reviewFile}\`\n`];
@@ -794,6 +829,24 @@ async function main(): Promise<void> {
       saveIterationState(reviewsDir, iterationState);
     }
   }
+
+  // Write review tracker (human-readable lifecycle summary)
+  const ccNativeReviewsDir = path.dirname(reviewFolder);
+  const trackerDecision = shouldDeny
+    ? (needsMoreIterations ? "blocked (iteration)" : "blocked (final)")
+    : "allow";
+  const trackerEntry: ReviewTrackerEntry = {
+    iteration: currentIteration,
+    timestamp: new Date().toISOString().replace("T", " ").slice(0, 16),
+    planHash,
+    verdict: combinedResult.overall_verdict,
+    decision: trackerDecision,
+    score: reviewScore,
+    topIssues: extractTopIssuesForTracker(combinedResult, 5),
+    reviewFolder,
+  };
+  writeReviewTracker(ccNativeReviewsDir, trackerEntry);
+  logInfo(HOOK, `Updated review tracker: ${path.join(ccNativeReviewsDir, "review-tracker.md")}`);
 
   // Emit output
   const contextText = contextParts.join("");

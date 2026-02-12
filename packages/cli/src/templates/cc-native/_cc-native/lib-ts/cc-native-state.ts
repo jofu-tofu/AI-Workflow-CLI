@@ -1,6 +1,6 @@
 /**
  * CC-native state accessor for context state.json.
- * Deduplicates state access patterns from utils.py and suggest-fresh-perspective.py.
+ * Deduplicates state access patterns for cc-native hooks.
  * See cc-native-plan-review-spec.md §4.5
  */
 
@@ -12,7 +12,6 @@ import type {
   PlanReviewState,
   QuestionsAskedState,
   IterationState,
-  StuckDetectionState,
 } from "./types.js";
 import type { ContextState } from "../../_shared/lib-ts/types.js";
 
@@ -196,35 +195,3 @@ export function markQuestionsAsked(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Stuck Detection State
-// ---------------------------------------------------------------------------
-
-/**
- * Get stuck detection state from cc_native.
- */
-export function getStuckDetectionState(
-  sessionId: string,
-  projectRoot: string,
-): StuckDetectionState | null {
-  const ccNative = getCcNativeState(sessionId, projectRoot);
-  return ccNative?.stuck_detection ?? null;
-}
-
-/**
- * Update stuck detection state.
- */
-export function updateStuckDetectionState(
-  sessionId: string,
-  projectRoot: string,
-  stuckState: StuckDetectionState,
-): boolean {
-  try {
-    const ccNative = getCcNativeState(sessionId, projectRoot) ?? {};
-    ccNative.stuck_detection = stuckState;
-    return saveCcNativeState(sessionId, projectRoot, ccNative);
-  } catch (e: unknown) {
-    logWarn("utils", `Failed to update stuck detection state: ${e}`);
-    return false;
-  }
-}

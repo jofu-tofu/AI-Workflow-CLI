@@ -1,15 +1,14 @@
 /**
  * Codex CLI plan reviewer.
- * Runs Codex in full-auto mode with read-only sandbox.
+ * Runs Codex in non-interactive mode with read-only sandbox.
  * See cc-native-plan-review-spec.md §4.11
  */
 
-import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { logDebug, logInfo, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
-import { findExecutable, isExecSyncError } from "../../../_shared/lib-ts/base/subprocess-utils.js";
+import { findExecutable, execFileAsync } from "../../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseJsonMaybe, coerceToReview } from "../json-parser.js";
 import { REVIEW_PROMPT_PREFIX } from "../types.js";
 import type { ReviewerResult, ReviewOptions } from "../types.js";
@@ -17,7 +16,7 @@ import { makeResult } from "./types.js";
 import type { Reviewer } from "./types.js";
 
 /**
- * Codex reviewer — runs codex exec --full-auto --sandbox read-only.
+ * Codex reviewer — runs codex exec --sandbox read-only.
  */
 export class CodexReviewer implements Reviewer {
   private settings: Record<string, unknown>;
@@ -39,11 +38,11 @@ export class CodexReviewer implements Reviewer {
  * Run Codex CLI to review the plan.
  * Never throws — returns error ReviewerResult on failure.
  */
-export function runCodexReview(
+export async function runCodexReview(
   plan: string,
   schema: Record<string, unknown>,
   settings: Record<string, unknown>,
-): ReviewerResult {
+): Promise<ReviewerResult> {
   const codexSettings =
     ((settings.reviewers as Record<string, unknown> | undefined)?.codex as
       | Record<string, unknown>
@@ -77,7 +76,7 @@ ${plan}
 
     fs.writeFileSync(schemaPath, JSON.stringify(schema, null, 2), "utf-8");
 
-    const cmdArgs = [codexPath, "exec", "--full-auto", "--sandbox", "read-only"];
+    const cmdArgs = ["exec", "--sandbox", "read-only"];
 
     if (model) {
       cmdArgs.push("--model", model);
@@ -85,54 +84,39 @@ ${plan}
 
     cmdArgs.push("--output-schema", schemaPath, "-o", outPath, "-");
 
-    logDebug("codex", `Running command: ${cmdArgs.join(" ")}`);
+    logDebug("codex", `Running command: codex ${cmdArgs.join(" ")}`);
 
-    let stdout = "";
-    let stderr = "";
+    const result = await execFileAsync(codexPath, cmdArgs, {
+      input: prompt,
+      timeout: timeout * 1000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
 
-    try {
-      stdout = execFileSync(cmdArgs[0]!, cmdArgs.slice(1), {
-        input: prompt,
-        encoding: "utf-8",
-        timeout: timeout * 1000,
-        maxBuffer: 10 * 1024 * 1024,
-        stdio: ["pipe", "pipe", "pipe"],
-      }).toString();
-    } catch (e: unknown) {
-      if (isExecSyncError(e)) {
-        if (e.killed || e.signal === "SIGTERM") {
-          logWarn("codex", `TIMEOUT after ${timeout}s`);
-          return makeResult("codex", false, "error", {}, "", `codex timed out after ${timeout}s`);
-        }
-        stdout = (e.stdout ?? "").toString();
-        stderr = (e.stderr ?? "").toString();
-
-        if (!stdout && !stderr && !fs.existsSync(outPath)) {
-          logError("codex", `Exception: ${e.message}`);
-          return makeResult("codex", false, "error", {}, "", `codex failed to run: ${e.message}`);
-        }
-      } else {
-        const msg = e instanceof Error ? e.message : String(e);
-        logError("codex", `Exception: ${msg}`);
-        return makeResult("codex", false, "error", {}, "", `codex failed to run: ${msg}`);
-      }
+    if (result.killed || result.signal === "SIGTERM") {
+      logWarn("codex", `TIMEOUT after ${timeout}s`);
+      return makeResult("codex", false, "error", {}, "", `codex timed out after ${timeout}s`);
     }
 
-    logDebug("codex", `Exit code: 0`);
+    if (!result.stdout && !result.stderr && !fs.existsSync(outPath) && result.exitCode !== 0) {
+      logError("codex", `Process exited with code ${result.exitCode} and no output`);
+      return makeResult("codex", false, "error", {}, "", `codex failed to run (exit ${result.exitCode})`);
+    }
+
+    logDebug("codex", `Exit code: ${result.exitCode}`);
 
     let raw = "";
     if (fs.existsSync(outPath)) {
       raw = fs.readFileSync(outPath, "utf-8");
     }
 
-    const obj = parseJsonMaybe(raw) ?? parseJsonMaybe(stdout);
+    const obj = parseJsonMaybe(raw) ?? parseJsonMaybe(result.stdout);
     const [ok, verdict, norm] = coerceToReview(
       obj,
       "Retry or check CLI auth/config.",
     );
 
-    const err = stderr.trim();
-    return makeResult("codex", ok, verdict, norm, raw || stdout, err);
+    const err = result.stderr.trim();
+    return makeResult("codex", ok, verdict, norm, raw || result.stdout, err);
   } finally {
     // Clean up temp directory
     try {

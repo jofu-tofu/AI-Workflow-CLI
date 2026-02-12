@@ -3,9 +3,8 @@
  * See cc-native-plan-review-spec.md §4.8
  */
 
-import { execFileSync } from "node:child_process";
 import { logDebug, logInfo, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv, findExecutable, isExecSyncError } from "../../_shared/lib-ts/base/subprocess-utils.js";
+import { getInternalSubprocessEnv, findExecutable, execFileAsync } from "../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseCliOutput } from "./cli-output-parser.js";
 import type { AgentConfig, OrchestratorConfig, OrchestratorResult, ComplexityCategory } from "./types.js";
 import { ORCHESTRATOR_SCHEMA } from "./types.js";
@@ -72,13 +71,13 @@ export function buildOrchestratorSchema(
  * Run the orchestrator agent to analyze plan complexity and select reviewers.
  * Never throws — returns fallback OrchestratorResult on failure.
  */
-export function runOrchestrator(
+export async function runOrchestrator(
   plan: string,
   agentLibrary: AgentConfig[],
   config: OrchestratorConfig,
   settings: Record<string, unknown>,
   mandatoryNames?: Set<string>,
-): OrchestratorResult {
+): Promise<OrchestratorResult> {
   logInfo("orchestrator", "Starting plan analysis...");
 
   const mandatory = mandatoryNames ?? new Set<string>();
@@ -158,54 +157,38 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning`
   const schemaJson = JSON.stringify(schema);
 
   const cmdArgs = [
-    claudePath,
-    "-p",
     "--model", config.model,
     "--output-format", "json",
     "--json-schema", schemaJson,
     "--max-turns", "3",
     "--setting-sources", "",
     "--system-prompt", systemPrompt,
+    "-p",
   ];
 
   logInfo("orchestrator", `Running with model: ${config.model}, timeout: ${config.timeout}s`);
 
   const env = getInternalSubprocessEnv();
 
-  let stdout = "";
-  let stderr = "";
+  const result = await execFileAsync(claudePath, cmdArgs, {
+    input: prompt,
+    timeout: config.timeout * 1000,
+    env: env as Record<string, string>,
+    maxBuffer: 10 * 1024 * 1024,
+  });
 
-  try {
-    stdout = execFileSync(cmdArgs[0]!, cmdArgs.slice(1), {
-      input: prompt,
-      encoding: "utf-8",
-      timeout: config.timeout * 1000,
-      env: env as Record<string, string>,
-      maxBuffer: 10 * 1024 * 1024,
-      stdio: ["pipe", "pipe", "pipe"],
-    }).toString();
-  } catch (e: unknown) {
-    if (isExecSyncError(e)) {
-      if (e.killed || e.signal === "SIGTERM") {
-        logWarn("orchestrator", `TIMEOUT after ${config.timeout}s, falling back to medium complexity`);
-        return makeFallback(nonMandatory, fallbackCount, "Orchestrator timed out - defaulting to medium complexity", `Orchestrator timed out after ${config.timeout}s`);
-      }
-      stdout = (e.stdout ?? "").toString();
-      stderr = (e.stderr ?? "").toString();
-
-      if (!stdout && !stderr) {
-        logError("orchestrator", `Exception: ${e.message}, falling back to medium complexity`);
-        return makeFallback(nonMandatory, fallbackCount, `Orchestrator failed: ${e.message}`, e.message);
-      }
-    } else {
-      const msg = e instanceof Error ? e.message : String(e);
-      logError("orchestrator", `Exception: ${msg}, falling back to medium complexity`);
-      return makeFallback(nonMandatory, fallbackCount, `Orchestrator failed: ${msg}`, msg);
-    }
+  if (result.killed || result.signal === "SIGTERM") {
+    logWarn("orchestrator", `TIMEOUT after ${config.timeout}s, falling back to medium complexity`);
+    return makeFallback(nonMandatory, fallbackCount, "Orchestrator timed out - defaulting to medium complexity", `Orchestrator timed out after ${config.timeout}s`);
   }
 
-  const raw = stdout.trim();
-  if (stderr) logDebug("orchestrator", `stderr: ${stderr.slice(0, 300)}`);
+  const raw = result.stdout.trim();
+  if (result.stderr) logDebug("orchestrator", `stderr: ${result.stderr.slice(0, 300)}`);
+
+  if (!raw && !result.stderr && result.exitCode !== 0) {
+    logError("orchestrator", `Process exited with code ${result.exitCode}, falling back to medium complexity`);
+    return makeFallback(nonMandatory, fallbackCount, `Orchestrator failed (exit ${result.exitCode})`, `Exit code ${result.exitCode}`);
+  }
 
   const obj = parseCliOutput(raw);
 
