@@ -12,16 +12,15 @@ CC-Native uses Claude Code's native tools with minimal workflow overhead. Plan r
 packages/cli/src/templates/cc-native/
 ├── _cc-native/               # METHOD-SPECIFIC: CC-Native template code
 │   ├── workflows/*.md        # Workflow definitions
-│   ├── hooks/                # Hook scripts
-│   │   ├── cc-native-plan-review.py   # Unified plan review (CLI + agents)
-│   │   └── archive_plan.py            # Archives approved plans
-│   ├── lib/                  # CC-Native specific utilities
-│   │   ├── utils.py          # Common functions for hooks
-│   │   ├── atomic_write.py   # Cross-platform atomic file writes
-│   │   ├── async_archive.py  # Non-blocking plan archival
-│   │   └── constants.py      # Security and configuration constants
-│   ├── scripts/              # Utility scripts
-│   │   └── aggregate_agents.py  # Auto-detect agents from frontmatter
+│   ├── hooks/                # Hook scripts (TypeScript, run via bun)
+│   │   ├── cc-native-plan-review.ts   # Unified plan review (CLI + agents)
+│   │   ├── add_plan_context.ts        # Clarifying questions offer
+│   │   └── plan_questions_early.ts    # Phase A clarification prompt
+│   ├── lib-ts/               # CC-Native specific TypeScript libraries
+│   │   ├── cc-native-state.ts # State management
+│   │   ├── config.ts          # Configuration loading
+│   │   └── reviewers/         # Plan review implementations
+│   │       └── codex.ts       # Codex CLI reviewer
 │   └── plan-review.config.json  # Plan review configuration
 ├── .claude/commands/cc-native/  # Claude Code slash commands
 ├── .claude/agents/cc-native/    # Agent definitions for plan review
@@ -222,7 +221,7 @@ Hook scripts live in `_cc-native/hooks/`. IDE-specific wiring in `.claude/settin
     "PreToolUse": [{
       "matcher": "ExitPlanMode",
       "hooks": [
-        { "type": "command", "command": "python _cc-native/hooks/cc-native-plan-review.py", "timeout": 600000 }
+        { "type": "command", "command": "bun run .aiwcli/_cc-native/hooks/cc-native-plan-review.ts", "timeout": 600000 }
       ]
     }]
   }
@@ -233,10 +232,9 @@ Hook scripts live in `_cc-native/hooks/`. IDE-specific wiring in `.claude/settin
 
 | Hook | Trigger | Purpose |
 |------|---------|---------|
-| `cc-native-plan-review.py` | ExitPlanMode | Unified review: CLI + orchestrator + agents |
-| `archive_plan.py` | PermissionRequest:ExitPlanMode | Archives plan content and stores hash/signature before user acceptance |
-| `plan_accepted.py` | PostToolUse:ExitPlanMode | Sets context mode to has_plan |
-| `plan_questions_early.py` | UserPromptSubmit | Injects Phase A clarification in plan mode |
+| `cc-native-plan-review.ts` | ExitPlanMode | Unified review: CLI + orchestrator + agents |
+| `add_plan_context.ts` | PostToolUse:AskUserQuestion, PreToolUse:Task | Mark questions asked; nudge Plan subagent |
+| `plan_questions_early.ts` | UserPromptSubmit | Injects Phase A clarification in plan mode |
 
 ### Claude Feedback Mechanism
 
@@ -256,7 +254,7 @@ When a plan fails review and `blockOnFail` is enabled, Claude is blocked from pr
 
 ### Unified Review Pipeline
 
-The `cc-native-plan-review.py` hook runs 4 phases:
+The `cc-native-plan-review.ts` hook runs 4 phases:
 
 1. **Phase 1: CLI Reviewers** - Sends plan to Codex/Gemini for external review
 2. **Phase 2: Orchestrator** - Analyzes plan complexity and selects appropriate agents
@@ -276,7 +274,7 @@ Simple plans skip agent review entirely. Medium/high complexity plans get 1-4 ag
 
 Each selected agent:
 1. Runs as a headless Claude Code instance with `--agent` flag
-2. Executes in parallel via ThreadPoolExecutor
+2. Executes in parallel via Promise.all()
 3. Uses `--permission-mode bypassPermissions` and `--max-turns 3`
 4. Returns structured JSON verdict (pass/warn/fail)
 

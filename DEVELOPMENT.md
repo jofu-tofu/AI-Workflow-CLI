@@ -61,9 +61,10 @@ This section explains the template system architecture. Understanding this preve
 
 | Source | Target |
 |--------|--------|
-| `.aiwcli/_shared/hooks/*.py` | `packages/cli/src/templates/cc-native/_shared/hooks/` |
-| `.aiwcli/_shared/lib/**/*.py` | `packages/cli/src/templates/cc-native/_shared/lib/` |
-| `.aiwcli/_cc-native/**/*.py` | `packages/cli/src/templates/cc-native/_cc-native/` |
+| `.aiwcli/_shared/hooks-ts/*.ts` | `packages/cli/src/templates/_shared/hooks-ts/` |
+| `.aiwcli/_shared/lib-ts/**/*.ts` | `packages/cli/src/templates/_shared/lib-ts/` |
+| `.aiwcli/_cc-native/hooks/*.ts` | `packages/cli/src/templates/cc-native/_cc-native/hooks/` |
+| `.aiwcli/_cc-native/lib-ts/**/*.ts` | `packages/cli/src/templates/cc-native/_cc-native/lib-ts/` |
 | `.claude/settings.json` | `packages/cli/src/templates/cc-native/.claude/settings.json` |
 
 ### Directory Structure
@@ -71,80 +72,85 @@ This section explains the template system architecture. Understanding this preve
 ```
 .aiwcli/
 ├── _shared/                    # Cross-method infrastructure
-│   ├── hooks/                  # Shared hook scripts
-│   │   ├── user_prompt_submit.py    # Context binding
-│   │   ├── context_monitor.py       # Context usage monitoring
-│   │   ├── context_enforcer.py      # Context enforcement
-│   │   ├── archive_plan.py          # Plan archival on ExitPlanMode
-│   │   ├── task_create_capture.py   # Task persistence
-│   │   └── task_update_capture.py   # Task status changes
-│   └── lib/
+│   ├── hooks-ts/               # Shared TypeScript hook scripts (run via bun)
+│   │   ├── user_prompt_submit.ts    # Context binding
+│   │   ├── context_monitor.ts       # Context usage monitoring
+│   │   ├── archive_plan.ts          # Plan archival on ExitPlanMode
+│   │   ├── session_start.ts         # Context restoration on session start
+│   │   ├── session_end.ts           # State save and mode staging
+│   │   ├── pre_compact.ts           # Pre-compaction state snapshot
+│   │   ├── file-suggestion.ts       # File organization suggestions
+│   │   ├── task_create_capture.ts   # Task persistence
+│   │   └── task_update_capture.ts   # Task status changes
+│   └── lib-ts/
 │       ├── base/               # Core utilities
-│       │   ├── atomic_write.py      # Cross-platform crash-safe writes
-│       │   ├── constants.py         # Security constants, paths
-│       │   ├── inference.py         # Inference model utilities
-│       │   └── utils.py             # Common functions
+│       │   ├── atomic-write.ts      # Cross-platform crash-safe writes
+│       │   ├── constants.ts         # Security constants, paths
+│       │   ├── hook-utils.ts        # Hook lifecycle, logging, emit helpers
+│       │   ├── inference.ts         # Inference model utilities
+│       │   ├── logger.ts            # Unified JSONL logger
+│       │   ├── subprocess-utils.ts  # Subprocess and internal call detection
+│       │   └── utils.ts             # Common functions
 │       ├── context/            # Context management
-│       │   ├── context_manager.py   # CRUD operations (1,169 lines)
-│       │   ├── event_log.py         # JSONL append/read
-│       │   ├── cache.py             # Cache rebuild
-│       │   ├── discovery.py         # Context discovery
-│       │   ├── task_sync.py         # Task persistence
-│       │   └── plan_archive.py      # Plan archival
+│       │   ├── context-store.ts     # CRUD operations, state persistence
+│       │   ├── context-selector.ts  # Context determination and matching
+│       │   ├── formatters.ts        # Mode displays, icons, task rendering
+│       │   ├── plan-archive.ts      # Plan archival
+│       │   └── task-sync.ts         # Task persistence
 │       ├── handoff/            # Session handoff
-│       │   └── document_generator.py
+│       │   └── document-generator.ts
 │       └── templates/          # Output formatters
-│           ├── formatters.py        # Mode displays, icons, task rendering
-│           └── plan_context.py      # Plan evaluation templates
+│           └── plan-context.ts      # Plan evaluation templates
 │
 └── _cc-native/                 # Method-specific code
     ├── hooks/
-    │   ├── cc-native-plan-review.py     # Multi-step plan review
-    │   ├── suggest-fresh-perspective.py # Stuck detection
-    │   └── add_plan_context.py          # Clarifying questions offer
-    ├── lib/
-    │   ├── orchestrator.py      # Multi-agent orchestration
-    │   ├── async_archive.py     # Non-blocking plan archive
+    │   ├── cc-native-plan-review.ts     # Multi-step plan review (async)
+    │   ├── add_plan_context.ts          # Clarifying questions offer
+    │   └── plan_questions_early.ts      # Phase A clarification prompt
+    ├── lib-ts/
+    │   ├── cc-native-state.ts   # CC-native state management
+    │   ├── config.ts            # Configuration loading
     │   └── reviewers/           # Plan review implementations
-    │       ├── base.py              # Abstract base reviewer
-    │       ├── agent.py             # Claude Code agent reviewer
-    │       ├── codex.py             # Codex CLI reviewer
-    │       └── gemini.py            # Google Gemini reviewer
+    │       ├── codex.ts             # Codex CLI reviewer
+    │       └── types.ts             # Reviewer types and schemas
     └── plan-review.config.json  # Plan review configuration
 
 _output/
 ├── index.json                   # Global context cache
-└── contexts/                    # Event-sourced context management
+├── hook-log.jsonl               # Diagnostic logs (JSONL format)
+└── contexts/                    # Context state management
     └── {context-id}/
-        ├── events.jsonl         # SOURCE OF TRUTH (append-only)
-        ├── context.json         # Derived cache
+        ├── state.json           # SOURCE OF TRUTH
         └── plans/               # Archived approved plans
 ```
 
 ### Hook System
 
-Hooks are Python scripts triggered by Claude Code lifecycle events. Configuration lives in `.claude/settings.json`.
+Hooks are TypeScript scripts run via Bun, triggered by Claude Code lifecycle events. Configuration lives in `.claude/settings.json`.
 
 **Hook Lifecycle Events:**
 
 | Event | When Triggered | Example Hooks |
 |-------|----------------|---------------|
-| `UserPromptSubmit` | User sends message | `user_prompt_submit.py` (context binding, task hydration) |
-| `PreToolUse` | Before tool executes | `cc-native-plan-review.py` (plan validation) |
-| `PostToolUse` | After tool completes | `context_monitor.py` (context tracking), `archive_plan.py` |
+| `UserPromptSubmit` | User sends message | `user_prompt_submit.ts` (context binding) |
+| `PreToolUse` | Before tool executes | `cc-native-plan-review.ts` (plan validation) |
+| `PostToolUse` | After tool completes | `context_monitor.ts` (context tracking) |
 
-**Shared Hooks** (`.aiwcli/_shared/hooks/`):
-- `user_prompt_submit.py` - Context enforcement, session binding
-- `context_monitor.py` - Context usage monitoring (40% warning, 25% urgent)
-- `context_enforcer.py` - Determines active context, blocks if needed
-- `archive_plan.py` - Archives approved plans on ExitPlanMode
-- `task_create_capture.py` - Captures task creation events
-- `task_update_capture.py` - Captures task status changes
+**Shared Hooks** (`.aiwcli/_shared/hooks-ts/`):
+- `user_prompt_submit.ts` - Context enforcement, session binding
+- `context_monitor.ts` - Context usage monitoring (30%/20%/10% warnings)
+- `session_start.ts` - Context restoration on session start
+- `session_end.ts` - State save and mode staging
+- `archive_plan.ts` - Archives approved plans on ExitPlanMode
+- `pre_compact.ts` - Pre-compaction state snapshot
+- `file-suggestion.ts` - File organization suggestions
+- `task_create_capture.ts` - Captures task creation events
+- `task_update_capture.ts` - Captures task status changes
 
 **Method-Specific Hooks** (`.aiwcli/_cc-native/hooks/`):
-- `cc-native-plan-review.py` - Multi-step plan review (CLI + agents)
-- `suggest-fresh-perspective.py` - Stuck detection (error/edit/test thresholds)
-- `add_plan_context.py` - Offers clarifying questions on first plan write
+- `cc-native-plan-review.ts` - Multi-step plan review (CLI + agents)
+- `add_plan_context.ts` - Clarifying questions offer
+- `plan_questions_early.ts` - Phase A clarification prompt in plan mode
 
 ### Event Sourcing Model
 
@@ -201,15 +207,16 @@ Tracks work status via `InFlightState` dataclass:
 
 ### Modifying Libraries
 
-1. Edit the library in `.aiwcli/_shared/lib/` or `.aiwcli/_cc-native/lib/`
+1. Edit the library in `.aiwcli/_shared/lib-ts/` or `.aiwcli/_cc-native/lib-ts/`
 2. Test dependent hooks manually
-3. Synchronize to `packages/cli/src/templates/cc-native/`
+3. Synchronize to `packages/cli/src/templates/`
 4. Run tests: `cd packages/cli && npm test`
 
 ### Adding New Hooks
 
-1. Create the hook script in the appropriate directory
-2. Add hook wiring to `.claude/settings.json`:
+1. Create the hook script in the appropriate directory (`.aiwcli/_shared/hooks-ts/` or `.aiwcli/_cc-native/hooks/`)
+2. Use `runHook()` or `runHookAsync()` as entry point
+3. Add hook wiring to `.claude/settings.json`:
    ```json
    {
      "hooks": {
@@ -217,15 +224,15 @@ Tracks work status via `InFlightState` dataclass:
          "matcher": "ToolName",
          "hooks": [{
            "type": "command",
-           "command": "python .aiwcli/_shared/hooks/your-hook.py",
+           "command": "bun run .aiwcli/_shared/hooks-ts/your-hook.ts",
            "timeout": 5000
          }]
        }]
      }
    }
    ```
-3. Synchronize both the hook and settings.json to the template directory
-4. Document the hook in TEMPLATE-SCHEMA.md
+4. Synchronize both the hook and settings.json to the template directory
+5. Document the hook in TEMPLATE-SCHEMA.md
 
 ---
 

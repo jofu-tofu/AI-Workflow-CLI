@@ -102,7 +102,8 @@ emitContextAndBlock(
   "Detailed feedback Claude sees",    // additionalContext
   "Short reason for the block"        // permissionDecisionReason
 );
-throw new Error("SystemExit:1");
+// No SystemExit needed — permissionDecision:"deny" with exit 0 is sufficient.
+// runHookAsync drains stdout before exit to ensure pipe consumers receive the JSON.
 ```
 
 The tool call is **prevented from executing**. Only works for PreToolUse hooks.
@@ -123,6 +124,16 @@ logWarn("my_hook", `Fallback used: ${why}`);  // File only
 ```
 
 Nobody in the session sees this. Written to `_output/hook-log.jsonl` for debugging.
+
+### Hook Output Logging
+
+Both `emitContext()` and `emitContextAndBlock()` automatically log their output to `_output/hook-log.jsonl` as `HOOK_OUTPUT` entries. This captures exactly what was sent to Claude via stdout, closing the visibility gap where the agent sees injected context the user doesn't.
+
+- **Log level:** `info` — visible unless `HOOK_LOG_LEVEL=warn`
+- **`msg` field:** Scannable summary: `HOOK_OUTPUT [context] 842 chars` or `HOOK_OUTPUT [block] 340 chars, reason="..."`
+- **`data` field:** Full payload including `additionalContext` and `blockReason` (for blocks)
+- **Controlled by:** Existing `HOOK_LOG_LEVEL` and `HOOK_LOG_DISABLE` env vars
+- **No hook changes needed:** Logging happens inside the emit functions themselves
 
 ### Exit codes and JSON
 
@@ -147,11 +158,65 @@ You cannot mix exit 2 with JSON decisions. Pick one: exit 0 + JSON, or exit 2 + 
 | **Stop** | - | - | - | top-level `decision`, `reason` |
 | **SessionEnd** | - | - | - | — |
 
-**Invalid fields cause silent rejection of the entire output.** No error, no feedback.
+**Invalid fields cause silent rejection of the entire output.** No error, no feedback. Conversely, **missing `hookEventName` also causes silent rejection** — see "Hook API: Critical Learnings" below.
 
 ### Special case: fileSuggestion
 
 The `fileSuggestion` settings command is NOT a hook — it uses a different protocol. It outputs a plain JSON array to stdout (e.g., `console.log(JSON.stringify(paths))`). Do not use `emitContext()` for fileSuggestion.
+
+---
+
+## Hook API: Critical Learnings (Verified 2026-02-11)
+
+These findings were verified through systematic testing. They document Claude Code's actual behavior, which sometimes differs from what the docs suggest.
+
+### hookEventName is REQUIRED (CC 2.1.39+)
+
+Claude Code validates `hookSpecificOutput` using a Zod discriminated union keyed on `hookEventName`. If this field is missing:
+
+- The entire hook output is silently rejected — no error, no feedback
+- `permissionDecision: "deny"` is never processed
+- The hook appears to "not work" even though it runs successfully
+
+**You don't need to handle this manually.** `emitContext()` and `emitContextAndBlock()` auto-detect `hookEventName` from the stdin payload (via `_lastHookEvent`, set by `loadHookInput()`/`runHook()`). This works because hooks are synchronous single-process executions — each `bun` process has its own memory, so there's no concurrency risk between sessions.
+
+**If auto-detection fails** (e.g., `loadHookInput()` wasn't called), `hookEventName` is omitted and the output will be silently rejected. This is why `runHook()`/`runHookAsync()` is mandatory — it calls `_earlyReadInput()` first, guaranteeing `_lastHookEvent` is populated.
+
+### Exit Code Behavior (Tested)
+
+| Exit Code | JSON Parsed? | Blocks Tool? | What Claude Sees | Tested? |
+|-----------|-------------|-------------|------------------|---------|
+| **0** + deny JSON | Yes | Yes (PreToolUse only) | `additionalContext` + denial reason | Yes |
+| **0** + context JSON | Yes | No | `additionalContext` in transcript | Yes |
+| **1** | No | No | stderr in verbose mode only | Yes |
+| **2** | No | Yes (any event) | stderr fed as system-reminder | Yes |
+
+**Key insight:** Exit 0 + `permissionDecision: "deny"` is the correct way to block a tool. Exit 2 is a blunt instrument — it ignores your JSON and feeds raw stderr to Claude. Use exit 0 + deny for clean blocking with structured feedback.
+
+### ExitPlanMode: Not Special-Cased
+
+Early testing suggested ExitPlanMode was "immune" to PreToolUse deny. **This was wrong.** The actual issue was missing `hookEventName` — the Zod validator silently rejected the deny output.
+
+**With `hookEventName` included:**
+- PreToolUse `permissionDecision: "deny"` (exit 0) → **blocks ExitPlanMode**, no dialog appears, session stays in plan mode
+- `emitContextAndBlock()` handles this automatically via auto-detection
+
+**Without `hookEventName` (the bug):**
+- Deny silently rejected → dialog appeared → looked like ExitPlanMode was special-cased
+- Exit 2 also appeared to "not work" for PreToolUse (JSON was ignored as expected, but the blocking was via stderr, not deny)
+- PostToolUse with exit 2 appeared to work because it used stderr (not JSON), bypassing the Zod issue
+
+**Lesson:** When a hook output seems to be "silently ignored," check the JSON schema first. The Zod validator rejects malformed output without any error message.
+
+### Debugging Checklist
+
+When a hook's deny/context isn't working:
+
+1. **Is `hookEventName` in the JSON output?** Check `_output/hook-log.jsonl` for `HOOK_OUTPUT` entries
+2. **Is the hook using `runHook()`/`runHookAsync()`?** Required for auto-detection
+3. **Is `loadHookInput()` called before `emitContext()`?** It populates `_lastHookEvent`
+4. **Is the exit code 0?** Exit 1/2 cause JSON to be ignored
+5. **Are there extra fields in `hookSpecificOutput`?** Invalid fields cause silent rejection of the entire output
 
 ---
 

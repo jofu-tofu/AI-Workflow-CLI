@@ -19,14 +19,15 @@ Generate a handoff document summarizing the current session's work, decisions, a
 
 ### Step 1: Get Context ID
 
-Extract the `context_id` from the system reminder injected by the context enforcer hook.
+Resolve the active context ID programmatically:
 
-Look for the pattern in the system reminder:
-```
-Active Context: {context_id}
+```bash
+bun .aiwcli/_shared/scripts/resolve_context.ts
 ```
 
-If no active context is found, inform the user and stop - handoffs require an active context.
+This prints the active context ID to stdout. Use its output as `{context_id}` in subsequent steps.
+
+If the script exits with an error (no active context found), inform the user and stop — handoffs require an active context.
 
 ### Step 2: Gather Information
 
@@ -150,7 +151,7 @@ If a plan document path was provided in `$ARGUMENTS`:
 Instead of writing the file directly, pipe your handoff content to the save script:
 
 ```bash
-python .aiwcli/_shared/scripts/save_handoff.py "{context_id}" <<'EOF'
+bun .aiwcli/_shared/scripts/save_handoff.ts "{context_id}" <<'EOF'
 {Your complete handoff markdown content from Step 3}
 EOF
 ```
@@ -159,9 +160,13 @@ This script:
 1. Creates a folder at `_output/contexts/{context_id}/handoffs/{YYYY-MM-DD-HHMM}/`
 2. Parses sections and writes sharded files (index.md, completed-work.md, dead-ends.md, etc.)
 3. Copies the current plan (if any) to plan.md
-4. Records the event in the context's event log (informational only)
+4. Sets `handoff_path` to the index.md path and `handoff_consumed = false` in state.json
+5. Mode stays `active` — staging happens later via session_end hook
 
-Use the handoff folder for context in the next session.
+When the session ends, `session_end.ts` stages `active → has_handoff` (if handoff_path
+exists and handoff_consumed is false). On next `/clear`, `session_start.ts` picks up the
+`has_handoff` state, binds the new session, transitions to `active`, and injects the
+handoff content via `formatHandoffContinuation()`.
 
 ## Dead Ends Section Guidelines
 
@@ -198,7 +203,8 @@ After creating file, output:
   - plan.md (copy of current plan, if any)
 
 To continue next session:
-  The index.md will be automatically suggested when you start a new session.
+  Automatic: Handoff restored on next /clear via session_start hook.
+  Manual: Use /handoff-resume to explicitly load handoff context at any time.
   Read dead-ends.md first to avoid repeating failed approaches.
 
 ⚠️  {N} dead ends documented — avoid re-attempting these approaches
@@ -223,4 +229,4 @@ If plan was updated:
 - [ ] Git status included in index.md
 - [ ] If plan provided: checkboxes updated to reflect completion status
 - [ ] If plan provided: Session Progress Log appended
-- [ ] Context state updated to indicate handoff pending
+- [ ] State has handoff_path set and handoff_consumed = false

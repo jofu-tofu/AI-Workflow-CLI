@@ -25,7 +25,7 @@ This document provides a visual and conceptual overview of the AIW CLI shared co
 │  _bmad/                              _output/bmad/                          │
 │                                                                             │
 │  Contains:                           Contains:                              │
-│  • Python libraries                  • Context data (events.jsonl)         │
+│  • TypeScript libraries              • Context data (state.json)           │
 │  • Hook scripts                      • Cache files (context.json)          │
 │  • Workflow definitions              • Plan outputs                         │
 │  • Schemas                           • Reviews                              │
@@ -168,28 +168,26 @@ NO "in_progress" or "paused" states = NO orphan problem!
 │  │       └── contexts/                                                      │
 │  │                                                                          │
 │  ├── _shared/ ◀─────────────────────── READ-ONLY: Shared infrastructure   │
-│  │   ├── lib/                                                              │
+│  │   ├── lib-ts/                                                           │
 │  │   │   ├── base/                                                         │
-│  │   │   │   ├── atomic_write.py ◀── Cross-platform crash-safe writes     │
-│  │   │   │   ├── constants.py                                              │
-│  │   │   │   └── utils.py                                                  │
+│  │   │   │   ├── atomic-write.ts ◀── Cross-platform crash-safe writes     │
+│  │   │   │   ├── constants.ts                                              │
+│  │   │   │   ├── hook-utils.ts ◀──── Hook lifecycle, logging, emit        │
+│  │   │   │   └── utils.ts                                                  │
 │  │   │   └── context/                                                      │
-│  │   │       ├── context_manager.py ◀─ Context CRUD                        │
-│  │   │       ├── event_log.py ◀────── JSONL operations                     │
-│  │   │       ├── discovery.py ◀────── SessionStart logic                   │
-│  │   │       ├── cache.py ◀────────── Cache rebuild                        │
-│  │   │       └── task_sync.py ◀───── Claude task integration (NEW)         │
-│  │   ├── hooks/                                                            │
-│  │   │   └── session_start.py ◀───── Auto-discover contexts                │
-│  │   └── schemas/                                                          │
-│  │       ├── context.json.schema                                           │
-│  │       └── events.jsonl.schema                                           │
+│  │   │       ├── context-store.ts ◀── Context CRUD, state persistence     │
+│  │   │       ├── context-selector.ts ◀ Context determination              │
+│  │   │       └── task-sync.ts ◀───── Claude task integration              │
+│  │   └── hooks-ts/                                                         │
+│  │       ├── session_start.ts ◀───── Auto-discover contexts                │
+│  │       ├── session_end.ts ◀─────── State save and mode staging           │
+│  │       └── user_prompt_submit.ts ◀─ Context binding                      │
 │  │                                                                          │
 │  ├── _cc-native/ ◀───────────────────── READ-ONLY: CC-Native template code│
-│  │   ├── lib/                                                              │
-│  │   │   └── orchestrator.py ◀────── Template-specific                     │
+│  │   ├── lib-ts/                                                           │
+│  │   │   └── reviewers/codex.ts ◀── Template-specific                     │
 │  │   └── hooks/                                                            │
-│  │       └── cc-native-plan-review.py                                      │
+│  │       └── cc-native-plan-review.ts                                      │
 │  │                                                                          │
 │  └── .claude/                                                               │
 │      └── settings.json ◀──────────── Hook wiring                           │
@@ -741,270 +739,12 @@ IF USER TRIES THIS:
 - User should /clear and pick different context in second session
 ```
 
-## API Surface
+## API Reference
 
-### Context Manager
-
-```python
-from _shared.lib.context.context_manager import (
-    get_all_contexts,
-    get_context,
-    create_context,
-    update_context,
-    complete_context,
-    reopen_context
-)
-
-# Discovery
-contexts = get_all_contexts(status="active")  # Returns recent-first
-context = get_context("feature-auth")
-
-# Lifecycle
-ctx = create_context(
-    context_id="auth-system",
-    method="cc-native",
-    summary="JWT authentication",
-    parent_plan="_output/cc-native/plans/2026-01-20/auth/plan.md",
-    tags=["auth", "security"]
-)
-
-update_context("auth-system", summary="Updated summary")
-complete_context("auth-system")  # User-driven
-reopen_context("auth-system")    # Rare, manual operation
-```
-
-### Event Log
-
-```python
-from _shared.lib.context.event_log import (
-    append_event,
-    read_events,
-    get_current_state,
-    are_all_tasks_completed
-)
-
-# Append events (source of truth) with rich context
-append_event("auth-system", {
-    "event": "task_completed",
-    "task_id": "aiw-1",
-    "evidence": "All tests passing",
-    "work_summary": "Created auth middleware with bearer validation...",
-    "files_changed": ["src/auth.ts", "test/auth.test.ts"],
-    "commit_ref": "a1b2c3d"
-})
-
-# Read full history
-events = read_events("auth-system")
-
-# Compute current state (from events)
-state = get_current_state("auth-system")
-# state.tasks, state.notes, state.task_count, etc.
-
-# Suggest completion (don't auto-complete!)
-if are_all_tasks_completed("auth-system"):
-    print("All tasks done. Wrap up?")
-```
-
-### Task Sync
-
-```python
-from _shared.lib.context.task_sync import (
-    generate_task_summary,
-    record_task_created,
-    record_task_completed,
-)
-
-# Generate summary of all tasks in a context
-summary = generate_task_summary("auth-system")
-# Returns formatted task summary
-
-# Record task events (usually called by capture hooks)
-record_task_created(context_id, task_id, subject, description)
-record_task_completed(context_id, task_id, evidence, work_summary)
-```
-
-### Discovery (SessionStart)
-
-```python
-from _shared.lib.context.discovery import (
-    discover_contexts_for_session,
-    format_context_list
-)
-
-# Called by SessionStart hook
-contexts = discover_contexts_for_session()
-message = format_context_list(contexts)
-# "You have 2 active contexts: feature-auth (2h ago), research-db (3d ago)"
-```
-
-### Cache Rebuild
-
-```python
-from _shared.lib.context.cache import (
-    rebuild_context_cache,
-    rebuild_index_cache,
-    rebuild_all
-)
-
-# Disaster recovery
-rebuild_context_cache("auth-system")  # events.jsonl → context.json
-rebuild_index_cache()                 # all context.json → index.json
-rebuild_all()                         # Full rebuild from events
-```
-
-## Data Schemas
-
-### events.jsonl (Source of Truth)
-
-```jsonl
-{"event":"context_created","timestamp":"2026-01-20T10:00:00Z","summary":"JWT auth"}
-{"event":"task_added","task_id":"aiw-1","title":"Add JWT middleware","timestamp":"2026-01-20T10:05:00Z"}
-{"event":"task_started","task_id":"aiw-1","timestamp":"2026-01-20T10:10:00Z"}
-{"event":"task_completed","task_id":"aiw-1","evidence":"tests pass","work_summary":"Created middleware with bearer validation","files_changed":["src/auth.ts","test/auth.test.ts"],"commit_ref":"a1b2c3d","timestamp":"2026-01-20T11:00:00Z"}
-{"event":"note_added","content":"Need refresh tokens too","timestamp":"2026-01-20T11:05:00Z"}
-{"event":"session_started","timestamp":"2026-01-21T09:00:00Z","tasks_hydrated":["aiw-2"]}
-{"event":"context_completed","timestamp":"2026-01-25T17:00:00Z"}
-```
-
-**Event Types:**
-
-| Event | Fields | Purpose |
-|-------|--------|---------|
-| `context_created` | `summary` | Initial context creation |
-| `context_completed` | - | User explicitly completed |
-| `context_reopened` | - | User reopened completed context |
-| `task_added` | `task_id`, `title`, `description?` | New task |
-| `task_started` | `task_id` | Work began |
-| `task_completed` | `task_id`, `evidence?`, `work_summary?`, `files_changed?`, `commit_ref?` | Task finished with rich context (NEW) |
-| `task_blocked` | `task_id`, `reason` | Task blocked |
-| `note_added` | `content` | Freeform note |
-| `session_started` | `tasks_hydrated?` | User resumed in new session (NEW field) |
-| `metadata_updated` | `summary?`, `tags?` | Context metadata changed |
-
-**Note:** `session_ended` removed - unreliable (crashes don't trigger it) and unnecessary with orphan-proof design.
-
-### context.json (Cache)
-
-```json
-{
-  "id": "feature-auth",
-  "method": "cc-native",
-  "status": "active",
-  "summary": "JWT authentication system",
-  "created_at": "2026-01-20T10:00:00Z",
-  "last_active": "2026-01-25T09:00:00Z",
-  "parent_plan": "_output/cc-native/plans/2026-01-20/auth/plan.md",
-  "tags": ["auth", "security"]
-}
-```
-
-**Note:** `task_count` and `completed_task_count` are NOT stored. These are computed on-demand by replaying events.jsonl.
-
-### index.json (Global Cache)
-
-```json
-{
-  "version": "2.0",
-  "updated_at": "2026-01-25T10:00:00Z",
-  "methods": {
-    "cc-native": {
-      "context_dir": "_output/cc-native/contexts"
-    },
-    "gsd": {
-      "context_dir": "_output/gsd/contexts"
-    }
-  },
-  "contexts": {
-    "feature-auth": {
-      "id": "feature-auth",
-      "status": "active",
-      "method": "cc-native",
-      "created_at": "2026-01-20T10:00:00Z",
-      "last_active": "2026-01-25T09:00:00Z",
-      "folder": "_output/cc-native/contexts/feature-auth",
-      "summary": "JWT authentication system"
-    }
-  }
-}
-```
-
-## Implementation Phases
-
-### Phase 1: Core Infrastructure
-
-**Create:**
-- `_shared/lib/base/atomic_write.py` (from cc-native)
-- `_shared/lib/base/utils.py` (from cc-native)
-- `_shared/lib/context/context_manager.py`
-- `_shared/lib/context/event_log.py`
-- `_shared/lib/context/cache.py`
-
-**Verification:**
-```bash
-python -c "
-from _shared.lib.context.context_manager import create_context
-ctx = create_context('test', 'cc-native', 'Test')
-print(f'Created: {ctx.folder}')
-"
-
-ls _output/cc-native/contexts/test/
-# Should show: context.json, events.jsonl
-
-cat _output/cc-native/contexts/test/events.jsonl
-# Should show: {"event":"context_created",...}
-```
-
-### Phase 2: SessionStart Discovery + Task Hydration
-
-**Create:**
-- `_shared/lib/context/discovery.py`
-- `_shared/lib/context/task_sync.py` (NEW)
-- `_shared/hooks/session_start.py`
-
-**Hook Registration** (`.claude/settings.json`):
-```json
-{
-  "hooks": {
-    "SessionStart": [{
-      "hooks": [{
-        "type": "command",
-        "command": "python _shared/hooks/session_start.py"
-      }]
-    }]
-  }
-}
-```
-
-**Verification:**
-Create a context with tasks, close session, reopen. Should see:
-- "You have active context..."
-- Task hydration instructions
-- Claude recreates tasks via TaskCreate
-
-### Phase 3: Event Logging Integration + Rich Task Events
-
-**Update:**
-- CC-Native uses `event_log.append_event()` for task tracking
-- Plan completion appends `task_completed` events with `work_summary`, `files_changed`, `commit_ref`
-- Session resume appends `session_started` event with `tasks_hydrated` list
-- CLAUDE.md documents task persistence requirements
-
-**Verification:**
-```bash
-cat _output/cc-native/contexts/test/events.jsonl
-# Should show task events with work_summary and files_changed
-# Should show session_started events with tasks_hydrated
-```
-
-### Phase 4: Completion Flow
-
-**Integration:**
-- Detect "wrap up" / "done" / "finish" intent
-- Call `complete_context()`
-- Context marked as completed (git operations are user's responsibility)
-
-**Verification:**
-Say "wrap up" → context marked completed → next session: not in active list
+For implementation details, see the source-proximate documentation:
+- **TypeScript library API:** `_shared/lib-ts/CLAUDE.md`
+- **CC-Native hooks:** `.aiwcli/_cc-native/hooks/CLAUDE.md`
+- **CC-Native hook spec:** `.aiwcli/_cc-native/hooks/CC-NATIVE-HOOKS-SPEC.md`
 
 ## Key Design Decisions
 

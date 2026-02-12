@@ -9,8 +9,8 @@ Quick reference for terminal-based workflow operations.
 | **Workflows** | `_cc-native/workflows/*.md` |
 | **Config** | `_cc-native/plan-review.config.json` |
 | **Output** | `_output/cc-native/plans/{date}/{slug}/` |
-| **Hooks** | `_cc-native/hooks/*.py` |
-| **Lib** | `_cc-native/lib/*.py` |
+| **Hooks** | `_cc-native/hooks/*.ts` |
+| **Lib** | `_cc-native/lib-ts/*.ts` |
 
 ## When Modifying the Template (for distribution)
 

@@ -93,14 +93,14 @@ When multiple templates install, settings.json files merge:
   "hooks": {
     "PostToolUse": [{
       "matcher": "Write",
-      "hooks": [{ "type": "command", "command": "python .aiwcli/_cc-native/hooks/cc-native-plan-review.py", "timeout": 300000 }]
+      "hooks": [{ "type": "command", "command": "bun run .aiwcli/_cc-native/hooks/cc-native-plan-review.ts", "timeout": 300000 }]
     }]
   }
 }
 ```
 
 **Requirements:**
-- Prefix method-specific hooks with method name (e.g., `cc-native-plan-review.py`)
+- Prefix method-specific hooks with method name (e.g., `cc-native-plan-review.ts`)
 - Use relative paths from project root
 - Write outputs to `_output/{method}/`
 - Specify timeouts
@@ -161,7 +161,7 @@ Load and execute `_{method}/workflows/{name}.md`.
 | Template file | `UPPERCASE.md.template` | `PROJECT.md.template` |
 | Workflow file | `kebab-case.md` | `new-project.md` |
 | Output file | `UPPERCASE.md` | `PROJECT.md` |
-| Hook file | `{method}-{name}.{ext}` | `gsd-plan-review.py` |
+| Hook file | `{method}-{name}.{ext}` | `gsd-plan-review.ts` |
 | Settings key | `{method}` | `"gsd": {}` |
 | Readme | `{METHOD}-README.md` | `GSD-README.md` |
 

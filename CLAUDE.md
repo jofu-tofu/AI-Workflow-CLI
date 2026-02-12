@@ -11,9 +11,10 @@
 Changes to the working directory (`.aiwcli/`) should also be applied to the template at `packages/cli/src/templates/cc-native/`. This ensures new project initializations receive the updates.
 
 **Files that need synchronization:**
-- `.aiwcli/_shared/hooks/*.py` → `packages/cli/src/templates/cc-native/_shared/hooks/`
-- `.aiwcli/_shared/lib/**/*.py` → `packages/cli/src/templates/cc-native/_shared/lib/`
-- `.aiwcli/_cc-native/**/*.py` → `packages/cli/src/templates/cc-native/_cc-native/`
+- `.aiwcli/_shared/hooks-ts/*.ts` → `packages/cli/src/templates/_shared/hooks-ts/`
+- `.aiwcli/_shared/lib-ts/**/*.ts` → `packages/cli/src/templates/_shared/lib-ts/`
+- `.aiwcli/_cc-native/hooks/*.ts` → `packages/cli/src/templates/cc-native/_cc-native/hooks/`
+- `.aiwcli/_cc-native/lib-ts/**/*.ts` → `packages/cli/src/templates/cc-native/_cc-native/lib-ts/`
 - `.claude/settings.json` → `packages/cli/src/templates/cc-native/.claude/settings.json`
 
 **When to sync:**
@@ -26,37 +27,52 @@ Changes to the working directory (`.aiwcli/`) should also be applied to the temp
 
 ## Hook Development
 
-See `.aiwcli/_cc-native/hooks/CLAUDE.md` for hook development patterns, API format, debugging, and the py_compile verification workflow.
+See `.aiwcli/_cc-native/hooks/CLAUDE.md` for hook development patterns, API format, debugging, and the TypeScript verification workflow.
 
 ### Hook Entry Point Standard
 
-**All hooks MUST use `run_hook()` as their entry point.** This provides automatic lifecycle logging (HOOK_START/HOOK_END with template origin, duration, status) and standardized error handling.
+**All hooks MUST use `runHook()` or `runHookAsync()` as their entry point.** This provides automatic lifecycle logging (HOOK_START/HOOK_END with template origin, duration, status) and standardized error handling.
 
-```python
-if __name__ == "__main__":
-    from lib.base.hook_utils import run_hook  # shared hooks
-    # or: from base.hook_utils import run_hook  # cc-native hooks
-    run_hook(main, "hook_name")
+```typescript
+import { runHook, logInfo } from "../../_shared/lib-ts/base/hook-utils.js";
+
+function main(): void {
+  logInfo("hook-name", "Starting...");
+  // Hook logic here
+}
+
+runHook(main, "hook_name");
 ```
 
-**Do NOT** use bare `main()`, `sys.exit(main())`, `raise SystemExit(main())`, or manual try/except blocks in `__main__`. These patterns bypass lifecycle logging and produce inconsistent error handling. `run_hook()` handles all of this automatically.
+For async hooks (e.g., plan review with parallel agents):
+
+```typescript
+import { runHookAsync } from "../../_shared/lib-ts/base/hook-utils.js";
+
+async function main(): Promise<void> {
+  // Async hook logic
+}
+
+runHookAsync(main, "hook_name");
+```
+
+**Do NOT** use bare `process.exit()`, manual try/catch at the top level, or `console.log()` for diagnostics. These patterns bypass lifecycle logging and corrupt stdout. `runHook()`/`runHookAsync()` handles all of this automatically.
 
 ## Logging Standard
 
-All hook and library code must use the unified logger at `_shared/lib/base/logger.py`:
+All hook and library code must use the unified logger at `_shared/lib-ts/base/logger.ts`:
 
-```python
-from lib.base.logger import log_debug, log_info, log_warn, log_error
+```typescript
+import { logDebug, logInfo, logWarn, logError } from "../../_shared/lib-ts/base/hook-utils.js";
 
-log_debug("hook_name", "checking value")
-log_info("hook_name", "session started")
-log_warn("hook_name", f"fallback used: {reason}")
-log_error("hook_name", f"failed: {e}", traceback_str=tb)
+logDebug("hook_name", "checking value");
+logInfo("hook_name", "session started");
+logWarn("hook_name", `fallback used: ${reason}`);
+logError("hook_name", `failed: ${e}`);
 ```
 
-- **Never use** `print(..., file=sys.stderr)` for diagnostic logging
-- **`eprint()`** is only for terminal-only UX messages (usage help, progress indicators)
-- Logs go to `_output/hook-log.jsonl` (JSONL format) and stderr
+- **Never use** `console.log()` or `console.error()` for diagnostic logging (corrupts stdout)
+- Logs go to `_output/hook-log.jsonl` (JSONL format)
 - Control via `HOOK_LOG_LEVEL=warn` (minimum level) or `HOOK_LOG_DISABLE=1`
 
 ## Plan & Handoff Lifecycle (Separation of Concerns)
@@ -65,12 +81,12 @@ Plan and handoff assignment is decoupled from mode transitions. Each hook has a 
 
 | Hook | Event | Responsibility |
 |------|-------|---------------|
-| `archive_plan.py` | PermissionRequest:ExitPlanMode | Archives plan file to `plans/` folder only. No state.json changes. |
-| `save_handoff.py` | /handoff command (script) | Creates handoff folder, sets `handoff_path` and `handoff_consumed=False`. Mode stays `active`. |
-| `session_end.py` | SessionEnd | **Fallback:** assigns plan fields from archived plan if plan_hash missing. Stages `active` → `has_plan` (plan) or `active` → `has_handoff` (handoff) when not consumed. Plan takes priority. |
-| `session_start.py` | SessionStart(clear) | Finds `has_plan` or `has_handoff` context, binds new session, transitions to `active`, sets consumed flag. Injects restoration context. |
-| `session_start.py` | SessionStart(compact) | Restores context after compaction. Inlines plan content (not auto-pasted in compact). |
-| `context_selector.py` | UserPromptSubmit (via determine_context) | Fallback: plan matching via hash/signature, handoff matching via `has_handoff` mode. Sets consumed flags. |
+| `archive_plan.ts` | PermissionRequest:ExitPlanMode | Archives plan file to `plans/` folder only. No state.json changes. |
+| `save_handoff.ts` | /handoff command (script) | Creates handoff folder, sets `handoff_path` and `handoff_consumed=False`. Mode stays `active`. |
+| `session_end.ts` | SessionEnd | **Fallback:** assigns plan fields from archived plan if plan_hash missing. Stages `active` → `has_plan` (plan) or `active` → `has_handoff` (handoff) when not consumed. Plan takes priority. |
+| `session_start.ts` | SessionStart(clear) | Finds `has_plan` or `has_handoff` context, binds new session, transitions to `active`, sets consumed flag. Injects restoration context. |
+| `session_start.ts` | SessionStart(compact) | Restores context after compaction. Inlines plan content (not auto-pasted in compact). |
+| `user_prompt_submit.ts` | UserPromptSubmit (via determineContext) | Fallback: plan matching via hash/signature, handoff matching via `has_handoff` mode. Sets consumed flags. |
 
 **Plan mode lifecycle:**
 ```
@@ -92,11 +108,11 @@ Next /clear         → fresh context (no staged handoff)
 
 **Priority: plan > handoff.** If both plan and handoff are staged (rare), plan check runs first in session_end and sets `has_plan`. The handoff check then sees `mode != "active"` and skips.
 
-**Critical: Auto-paste bypasses hooks.** After ExitPlanMode "clear context", Claude Code runs `/clear` and auto-pastes the plan content. This auto-paste is an internal mechanism that does NOT trigger UserPromptSubmit. The `session_start.py` handler for `source=clear` bridges this gap.
+**Critical: Auto-paste bypasses hooks.** After ExitPlanMode "clear context", Claude Code runs `/clear` and auto-pastes the plan content. This auto-paste is an internal mechanism that does NOT trigger UserPromptSubmit. The `session_start.ts` handler for `source=clear` bridges this gap.
 
 **Consumed flags are one-shot latches.** `plan_consumed` and `handoff_consumed` are set to `True` when their respective mode transitions from staged (`has_plan`/`has_handoff`) → `active`. Prevents `session_end` from re-staging the same artifact. Reset to `False` when a new artifact is created or when mode returns to idle.
 
-**Staged modes are transient.** `has_plan` and `has_handoff` exist only between SessionEnd (which sets them) and SessionStart(clear) (which consumes them). They should not persist across multiple sessions. If not consumed, `context_selector.py` provides fallback matching.
+**Staged modes are transient.** `has_plan` and `has_handoff` exist only between SessionEnd (which sets them) and SessionStart(clear) (which consumes them). They should not persist across multiple sessions. If not consumed, `user_prompt_submit.ts` (via `determineContext`) provides fallback matching.
 
 **Rejection handling:** `archive_plan` archives the file on PermissionRequest (before accept/reject decision). If rejected, the archive exists but `session_end`'s fallback may assign plan_hash. This is acceptable — rejected plans with hash set don't cause harm because has_plan matching in context_selector requires content match.
 

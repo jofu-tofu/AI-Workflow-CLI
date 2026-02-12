@@ -109,16 +109,6 @@
         ]
       },
       {
-        "matcher": "Bash|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun .aiwcli/_cc-native/hooks/suggest-fresh-perspective.ts",
-            "timeout": 5000
-          }
-        ]
-      },
-      {
         "matcher": "AskUserQuestion",
         "hooks": [
           {

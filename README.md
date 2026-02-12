@@ -12,7 +12,7 @@
 AIW wraps Claude Code with infrastructure that it doesn't have natively: **persistent context across sessions**, **automated lifecycle hooks**, and **pluggable workflow templates**. You install it once into a project, and every Claude Code session from that point forward gets:
 
 - **Context that survives `/clear` and compaction** — AIW tracks what you're working on, which plan you approved, what tasks remain, and restores all of it when a new session starts. No more re-explaining.
-- **A hook system that automates the boring parts** — 13 Python hooks fire on Claude Code lifecycle events (session start, prompt submit, tool use, plan exit, session end). They archive plans, track tasks, monitor context window usage, suggest relevant files, and manage state transitions — automatically.
+- **A hook system that automates the boring parts** — 13 TypeScript hooks (run via Bun) fire on Claude Code lifecycle events (session start, prompt submit, tool use, plan exit, session end). They archive plans, track tasks, monitor context window usage, suggest relevant files, and manage state transitions — automatically.
 - **Workflow templates you can swap** — Four template methods (cc-native, bmad, gsd, planning-with-files) provide different development philosophies. Each brings its own hooks, workflows, agents, and libraries. Install one, switch later, or build your own.
 - **Parallel workstreams via git worktrees** — Branch into isolated worktrees with their own Claude Code sessions. Work on three features simultaneously without stashing.
 
@@ -84,11 +84,11 @@ aiw init --method cc-native --ide claude --ide windsurf
 ```
 .aiwcli/
 ├── _shared/                     # Always installed (context, hooks, libraries)
-│   ├── hooks/                   # Session lifecycle, context binding, task capture
-│   └── lib/                     # base/, context/, handoff/, templates/
+│   ├── hooks-ts/                # TypeScript hooks (session lifecycle, context, tasks)
+│   └── lib-ts/                  # base/, context/, handoff/, templates/
 └── _cc-native/                  # Method-specific (varies by method)
     ├── hooks/                   # Plan review, stuck detection, etc.
-    ├── lib/                     # Method utilities
+    ├── lib-ts/                  # Method utilities
     └── workflows/               # Canonical procedures
 
 .claude/
@@ -100,30 +100,29 @@ aiw init --method cc-native --ide claude --ide windsurf
 
 ## Hook System
 
-Hooks are Python scripts that fire on Claude Code lifecycle events. They're configured in `.claude/settings.json` and run automatically — no manual intervention.
+Hooks are TypeScript scripts (run via Bun) that fire on Claude Code lifecycle events. They're configured in `.claude/settings.json` and run automatically — no manual intervention.
 
 ### Shared Hooks (all methods)
 
 | Hook | Event | What It Does |
 |------|-------|-------------|
-| `session_start.py` | SessionStart | Restores context, plan, tasks, and git state when a session begins |
-| `session_end.py` | SessionEnd | Saves session state, stages plan/handoff for next session |
-| `user_prompt_submit.py` | UserPromptSubmit | Binds session to context, enforces context tracking |
-| `archive_plan.py` | PermissionRequest:ExitPlanMode | Archives approved plan files for persistence |
-| `task_create_capture.py` | PostToolUse:TaskCreate | Persists task creation to context state |
-| `task_update_capture.py` | PostToolUse:TaskUpdate | Persists task status changes to context state |
-| `context_monitor.py` | PostToolUse | Monitors context window usage, warns when running low |
-| `file-suggestion.py` | UserPromptSubmit | Suggests relevant files based on active context |
-| `pre_compact.py` | PreCompact | Saves state before Claude Code compacts token history |
+| `session_start.ts` | SessionStart | Restores context, plan, tasks, and git state when a session begins |
+| `session_end.ts` | SessionEnd | Saves session state, stages plan/handoff for next session |
+| `user_prompt_submit.ts` | UserPromptSubmit | Binds session to context, enforces context tracking |
+| `archive_plan.ts` | PermissionRequest:ExitPlanMode | Archives approved plan files for persistence |
+| `task_create_capture.ts` | PostToolUse:TaskCreate | Persists task creation to context state |
+| `task_update_capture.ts` | PostToolUse:TaskUpdate | Persists task status changes to context state |
+| `context_monitor.ts` | PostToolUse | Monitors context window usage, warns when running low |
+| `file-suggestion.ts` | UserPromptSubmit | Suggests relevant files based on active context |
+| `pre_compact.ts` | PreCompact | Saves state before Claude Code compacts token history |
 
 ### CC-Native Hooks (cc-native method)
 
 | Hook | Event | What It Does |
 |------|-------|-------------|
-| `cc-native-plan-review.py` | PreToolUse:ExitPlanMode | Multi-reviewer plan analysis before approval |
-| `plan_questions_early.py` | UserPromptSubmit (plan mode) | Prompts clarification questions before code exploration |
-| `suggest-fresh-perspective.py` | PostToolUse | Detects stuck patterns, suggests `/fresh-perspective` |
-| `add_plan_context.py` | PostToolUse:AskUserQuestion | Tracks questions asked, nudges planning agents |
+| `cc-native-plan-review.ts` | PreToolUse:ExitPlanMode | Multi-reviewer plan analysis before approval |
+| `plan_questions_early.ts` | UserPromptSubmit (plan mode) | Prompts clarification questions before code exploration |
+| `add_plan_context.ts` | PostToolUse:AskUserQuestion | Tracks questions asked, nudges planning agents |
 
 All hooks use `run_hook()` for standardized lifecycle logging and error handling. Diagnostic logs go to `_output/hook-log.jsonl` (JSONL format).
 
@@ -197,7 +196,7 @@ Templates live in `packages/cli/src/templates/`. At `aiw init`, the CLI:
 
 ### Hook Execution
 
-Hooks run as Python subprocesses, triggered by Claude Code's native hook system. They receive context via stdin (JSON) and return instructions via stdout (JSON). The `run_hook()` wrapper provides:
+Hooks run as Bun subprocesses (TypeScript), triggered by Claude Code's native hook system. They receive context via stdin (JSON) and return instructions via stdout (JSON). The `runHook()` wrapper provides:
 
 - Automatic `HOOK_START` / `HOOK_END` lifecycle logging
 - Error capture with traceback
@@ -232,7 +231,7 @@ npm install -g aiwcli
 **Requirements:**
 - Node.js 18+
 - Git (for worktree features)
-- Python 3.8+ (for hooks)
+- Bun (for TypeScript hooks)
 - Claude Code (primary), Windsurf, or GitHub Copilot
 
 ---
