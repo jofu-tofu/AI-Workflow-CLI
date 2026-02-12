@@ -116,6 +116,7 @@ export interface IterationEntry {
 export interface IterationState {
   complexity: string;
   current: number;
+  graduated: string[];
   history: IterationEntry[];
   max: number;
 }

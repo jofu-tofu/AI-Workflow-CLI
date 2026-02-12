@@ -19,63 +19,63 @@
  *   - reviewer-output/{reviewer}.json (individual reviewer results)
  */
 
-import * as crypto from "node:crypto";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
+import * as os from "node:os";
+import * as crypto from "node:crypto";
 
-import { getAiwcliDir, getContextDir, getContextReviewsDir, getProjectRoot, getReviewFolderPath } from "../../_shared/lib-ts/base/constants.js";
 import {
-  emitContext,
-  emitContextAndBlock,
   loadHookInput,
+  runHookAsync,
   logDebug,
-  logDiagnostic,
-  logError,
   logInfo,
   logWarn,
-  runHookAsync,
+  logError,
+  logDiagnostic,
+  emitContext,
+  emitContextAndBlock,
 } from "../../_shared/lib-ts/base/hook-utils.js";
 import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
+import { getProjectRoot, getAiwcliDir, getContextReviewsDir, getContextDir, getReviewFolderPath } from "../../_shared/lib-ts/base/constants.js";
 import { eprint } from "../../_shared/lib-ts/base/utils.js";
-import { getAllContexts, getContextBySessionId } from "../../_shared/lib-ts/context/context-store.js";
+import { getContextBySessionId, getAllContexts } from "../../_shared/lib-ts/context/context-store.js";
+
+import type {
+  AgentConfig,
+  OrchestratorConfig,
+  ReviewerResult,
+  CombinedReviewResult,
+  OrchestratorResult,
+  Verdict,
+  IterationState,
+} from "../lib-ts/types.js";
 import type { ContextState } from "../../_shared/lib-ts/types.js";
-import { aggregateAgents } from "../lib-ts/aggregate-agents.js";
 import {
-  buildHighIssuesDocument,
+  REVIEW_SCHEMA,
+  DEFAULT_DISPLAY,
+  DEFAULT_SANITIZATION,
+} from "../lib-ts/types.js";
+
+import {
+  isPlanAlreadyReviewed,
+  wasPlanPreviouslyDenied,
+  markPlanReviewed,
+} from "../lib-ts/cc-native-state.js";
+
+import { worstVerdict, computeReviewDecision } from "../lib-ts/verdict.js";
+import { loadConfig, getDisplaySettings } from "../lib-ts/config.js";
+import { runOrchestrator } from "../lib-ts/orchestrator.js";
+import { aggregateAgents } from "../lib-ts/aggregate-agents.js";
+import { debugLog } from "../lib-ts/debug.js";
+import {
+  writeCombinedArtifacts,
   buildInlineReviewSummary,
   extractTopIssuesText,
-  formatCombinedMarkdown as _formatCombinedMarkdown,
-  writeCombinedArtifacts,
+  buildHighIssuesDocument,
   writeReviewTracker,
 } from "../lib-ts/artifacts.js";
 import type { ReviewTrackerEntry } from "../lib-ts/artifacts.js";
-import {
-  isPlanAlreadyReviewed,
-  markPlanReviewed,
-  wasPlanPreviouslyDenied,
-} from "../lib-ts/cc-native-state.js";
-import { getDisplaySettings, loadConfig } from "../lib-ts/config.js";
-import { debugLog, debugRaw as _debugRaw } from "../lib-ts/debug.js";
-import { runOrchestrator } from "../lib-ts/orchestrator.js";
 import { runAgentReview, runCodexReview, runGeminiReview } from "../lib-ts/reviewers/index.js";
-import {
-  DEFAULT_DISPLAY,
-  DEFAULT_SANITIZATION,
-  REVIEW_SCHEMA,
-} from "../lib-ts/types.js";
-import type {
-  AgentConfig,
-  CombinedReviewResult,
-  DisplaySettings as _DisplaySettings,
-  IterationEntry,
-  IterationState,
-  OrchestratorConfig,
-  OrchestratorResult,
-  ReviewerResult,
-  Verdict,
-} from "../lib-ts/types.js";
-import { computeReviewDecision, worstVerdict } from "../lib-ts/verdict.js";
 
 // ---------------------------------------------------------------------------
 // Hook Name
@@ -87,7 +87,7 @@ const HOOK = "cc-native-plan-review";
 // Inline Utilities (no TS export for these yet)
 // ---------------------------------------------------------------------------
 
-function findPlanFile(): null | string {
+function findPlanFile(): string | null {
   const plansDir = path.join(os.homedir(), ".claude", "plans");
   if (!fs.existsSync(plansDir)) return null;
   const files = fs.readdirSync(plansDir)
@@ -130,18 +130,48 @@ function extractTopIssuesForTracker(
         }
       }
     }
-
     if (issues.length >= maxCount) break;
   }
-
   return issues.slice(0, maxCount);
+}
+
+// ---------------------------------------------------------------------------
+// Graduation Logic
+// ---------------------------------------------------------------------------
+
+/**
+ * Determine which agents should graduate based on their review results.
+ * Graduation criteria: verdict === "pass" OR zero high-severity issues.
+ * Agents with "skip"/"error" do NOT graduate (no signal).
+ */
+function computeGraduated(agentResults: Record<string, ReviewerResult>): string[] {
+  const graduated: string[] = [];
+  for (const [name, result] of Object.entries(agentResults)) {
+    if (result.verdict === "skip" || result.verdict === "error") continue;
+    if (result.verdict === "pass") { graduated.push(name); continue; }
+    const issues = Array.isArray(result.data?.issues)
+      ? (result.data.issues as Array<{ severity?: string }>) : [];
+    if (issues.filter(i => i.severity === "high").length === 0) {
+      graduated.push(name);
+    }
+  }
+  return graduated;
+}
+
+/**
+ * Load the set of graduated agent names from previous iterations.
+ * Returns empty set on iteration 1 (no iteration.json exists).
+ */
+function loadGraduatedSet(reviewsDir: string): Set<string> {
+  const existing = loadIterationState(reviewsDir);
+  return new Set(existing?.graduated ?? []);
 }
 
 // ---------------------------------------------------------------------------
 // Default Configuration
 // ---------------------------------------------------------------------------
 
-const DEFAULT_AGENTS: Array<{ categories: string[]; enabled: boolean; focus: string; model: string; name: string; }> = [
+const DEFAULT_AGENTS: Array<{ name: string; model: string; focus: string; enabled: boolean; categories: string[] }> = [
   { name: "handoff-readiness", model: "sonnet", focus: "fresh context execution readiness", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
   { name: "clarity-auditor", model: "sonnet", focus: "communication clarity and execution readiness", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
   { name: "skeptic", model: "sonnet", focus: "problem-solution alignment and assumption validation", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
@@ -198,21 +228,17 @@ function resolveMandatoryAgents(
   if (Array.isArray(configValue)) {
     return new Set(configValue as string[]);
   }
-
   if (!configValue || typeof configValue !== "object") {
-    return new Set(["clarity-auditor", "handoff-readiness", "skeptic"]);
+    return new Set(["handoff-readiness", "clarity-auditor", "skeptic"]);
   }
-
   const cfg = configValue as Record<string, string[]>;
   const names = new Set(cfg.always ?? []);
   if (complexity === "medium" || complexity === "high") {
     for (const n of cfg["medium+"] ?? []) names.add(n);
   }
-
   if (complexity === "high") {
     for (const n of cfg.high ?? []) names.add(n);
   }
-
   return names;
 }
 
@@ -227,7 +253,6 @@ function getActiveContextForReview(sessionId: string, projectRoot: string): Cont
     logInfo(HOOK, `Found context by session_id: ${ctx.id}`);
     return ctx;
   }
-
   // Strategy 2: Single planning context
   const allActive = getAllContexts("active", projectRoot);
   const planning = allActive.filter(c => c.mode === "active" || c.mode === "has_plan");
@@ -235,7 +260,6 @@ function getActiveContextForReview(sessionId: string, projectRoot: string): Cont
     logInfo(HOOK, `Found single planning context: ${planning[0]!.id}`);
     return planning[0]!;
   }
-
   if (planning.length > 1) {
     logWarn(HOOK, `Multiple planning contexts (${planning.length}), cannot determine which to use`);
   } else if (allActive.length > 0) {
@@ -243,7 +267,6 @@ function getActiveContextForReview(sessionId: string, projectRoot: string): Cont
   } else {
     logInfo(HOOK, "No active contexts found");
   }
-
   return null;
 }
 
@@ -255,9 +278,9 @@ function loadIterationState(reviewsDir: string): IterationState | null {
   const iterationFile = path.join(reviewsDir, "iteration.json");
   if (!fs.existsSync(iterationFile)) return null;
   try {
-    return JSON.parse(fs.readFileSync(iterationFile, "utf8")) as IterationState;
-  } catch (error) {
-    logError(HOOK, `Failed to load iteration state: ${error}`);
+    return JSON.parse(fs.readFileSync(iterationFile, "utf-8")) as IterationState;
+  } catch (e) {
+    logError(HOOK, `Failed to load iteration state: ${e}`);
     return null;
   }
 }
@@ -269,8 +292,8 @@ function saveIterationState(reviewsDir: string, state: IterationState & { schema
     state.schema_version = "1.0.0";
     fs.writeFileSync(iterationFile, JSON.stringify(state, null, 2), "utf-8");
     return true;
-  } catch (error) {
-    logError(HOOK, `Failed to save iteration state: ${error}`);
+  } catch (e) {
+    logError(HOOK, `Failed to save iteration state: ${e}`);
     return false;
   }
 }
@@ -289,54 +312,13 @@ function getIterationStateFromContext(
       Object.assign(reviewIterations, overrides);
     }
   }
-
   return {
     current: 1,
     max: reviewIterations[complexity] ?? 1,
     complexity,
     history: [],
+    graduated: [],
   };
-}
-
-function updateIterationStateInContext(
-  _reviewsDir: string,
-  iteration: IterationState,
-  planHash: string,
-  verdict: string,
-): IterationState {
-  const entry: IterationEntry = {
-    hash: planHash,
-    verdict,
-    timestamp: new Date().toISOString(),
-  };
-  iteration.history.push(entry);
-  return iteration;
-}
-
-function shouldContinueIteratingContext(
-  iteration: IterationState,
-  reviewScore: number,
-  config?: Record<string, unknown>,
-): boolean {
-  const current = iteration.current ?? 1;
-  const maxIter = iteration.max ?? 1;
-  if (current >= maxIter) {
-    logInfo(HOOK, `At max iterations (${current}/${maxIter}), no more iterations`);
-    return false;
-  }
-
-  let earlyExit = false;
-  if (config) {
-    earlyExit = config.earlyExitOnAllPass === true;
-  }
-
-  if (earlyExit && reviewScore === 0) {
-    logInfo(HOOK, "All reviewers passed (score=0.0) and earlyExitOnAllPass=true, exiting early");
-    return false;
-  }
-
-  logInfo(HOOK, `Continuing to next iteration (${current + 1}/${maxIter}), score=${reviewScore.toFixed(2)}`);
-  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -357,7 +339,6 @@ function loadSettings(projDir: string): Record<string, any> {
       enabled: true,
       orchestrator: { ...DEFAULT_ORCHESTRATOR },
       timeout: 180,
-      warnThreshold: 0.5,
       highIssueThreshold: 3,
       legacyMode: false,
       display: { ...DEFAULT_DISPLAY },
@@ -377,21 +358,23 @@ function loadSettings(projDir: string): Record<string, any> {
   if (planReview.reviewers) {
     mergedPlan.reviewers = { ...defaults.planReview.reviewers, ...planReview.reviewers };
   }
-
   mergedPlan.display = getDisplaySettings(config, "planReview");
 
   // Merge agentReview
   const agentReview = (config as Record<string, unknown>).agentReview ?? {};
   const mergedAgent = { ...defaults.agentReview, ...agentReview };
-  mergedAgent.orchestrator = !mergedAgent.orchestrator || typeof mergedAgent.orchestrator !== "object" ? { ...DEFAULT_ORCHESTRATOR } : { ...DEFAULT_ORCHESTRATOR, ...mergedAgent.orchestrator };
+  if (!mergedAgent.orchestrator || typeof mergedAgent.orchestrator !== "object") {
+    mergedAgent.orchestrator = { ...DEFAULT_ORCHESTRATOR };
+  } else {
+    mergedAgent.orchestrator = { ...DEFAULT_ORCHESTRATOR, ...mergedAgent.orchestrator };
+  }
   mergedAgent.display = getDisplaySettings(config, "agentReview");
   const configRecord = config as Record<string, unknown>;
-  mergedAgent.agentSelection = { ...DEFAULT_AGENT_SELECTION, ...(configRecord.agentSelection as Record<string, unknown>) };
-  mergedAgent.agentDefaults = { model: DEFAULT_AGENT_MODEL, ...(configRecord.agentDefaults as Record<string, unknown>) };
+  mergedAgent.agentSelection = { ...DEFAULT_AGENT_SELECTION, ...((configRecord.agentSelection as Record<string, unknown>) ?? {}) };
+  mergedAgent.agentDefaults = { model: DEFAULT_AGENT_MODEL, ...((configRecord.agentDefaults as Record<string, unknown>) ?? {}) };
   mergedAgent.complexityCategories = (configRecord.complexityCategories as string[]) ?? [...DEFAULT_COMPLEXITY_CATEGORIES];
-  mergedAgent.sanitization = { ...DEFAULT_SANITIZATION, ...(configRecord.sanitization as Record<string, unknown>) };
-  mergedAgent.reviewIterations = { ...DEFAULT_REVIEW_ITERATIONS, ...agentReview.reviewIterations };
-  mergedAgent.earlyExitOnAllPass = agentReview.earlyExitOnAllPass ?? false;
+  mergedAgent.sanitization = { ...DEFAULT_SANITIZATION, ...((configRecord.sanitization as Record<string, unknown>) ?? {}) };
+  mergedAgent.reviewIterations = { ...DEFAULT_REVIEW_ITERATIONS, ...agentReview.reviewIterations ?? {} };
 
   return { planReview: mergedPlan, agentReview: mergedAgent };
 }
@@ -470,9 +453,9 @@ async function main(): Promise<void> {
 
   let plan: string;
   try {
-    plan = fs.readFileSync(planPath, "utf8").trim();
-  } catch (error) {
-    skipWithInfo(`Failed to read plan file: ${error}`);
+    plan = fs.readFileSync(planPath, "utf-8").trim();
+  } catch (e) {
+    skipWithInfo(`Failed to read plan file: ${e}`);
     return;
   }
 
@@ -512,16 +495,22 @@ async function main(): Promise<void> {
         "Plan unchanged since denial. Modify the plan to address review findings, then attempt ExitPlanMode again.",
       );
       return;
-    }
- 
+    } else {
       skipWithInfo("Plan already reviewed and approved (same hash).");
       return;
-    
+    }
+  }
+
+  // Early iteration check: if we've exhausted max iterations, allow plan through
+  const earlyIterState = loadIterationState(reviewsDir);
+  if (earlyIterState && earlyIterState.current > earlyIterState.max) {
+    skipWithInfo(`Max review iterations reached (${earlyIterState.current - 1}/${earlyIterState.max}), allowing plan through.`);
+    return;
   }
 
   // Initialize result containers
   const cliResults: Record<string, ReviewerResult> = {};
-  let orchResult: null | OrchestratorResult = null;
+  let orchResult: OrchestratorResult | null = null;
   const agentResults: Record<string, ReviewerResult> = {};
   let allVerdicts: Verdict[] = [];
   let iterationState: IterationState | null = null;
@@ -534,8 +523,15 @@ async function main(): Promise<void> {
   const codexEnabled = planReviewEnabled && (reviewersConfig.codex?.enabled ?? true);
   const geminiEnabled = planReviewEnabled && (reviewersConfig.gemini?.enabled ?? false);
 
+  // Load graduated agents from previous iterations (empty on iteration 1)
+  const graduatedSet = loadGraduatedSet(reviewsDir);
+  if (graduatedSet.size > 0) {
+    logInfo(HOOK, `Graduated agents from previous iterations: ${[...graduatedSet].sort().join(", ")}`);
+  }
+
   const agentLibrary = agentReviewEnabled ? loadAgentLibrary(aiwcliDir, agentSettings) : [];
-  const enabledAgents = agentLibrary;
+  const originalAgentCount = agentLibrary.length;
+  const enabledAgents = agentLibrary.filter(a => !graduatedSet.has(a.name));
   const timeout = typeof agentSettings.timeout === "number" ? agentSettings.timeout : 120;
   const legacyMode = agentSettings.legacyMode === true;
 
@@ -556,7 +552,7 @@ async function main(): Promise<void> {
   logDebug(HOOK, `Orchestrator enabled: ${orchestratorConfig.enabled}`);
 
   // Build phase 1 tasks as promises
-  const phase1Promises: Array<{ name: string; promise: Promise<OrchestratorResult | ReviewerResult> }> = [];
+  const phase1Promises: Array<{ name: string; promise: Promise<ReviewerResult | OrchestratorResult> }> = [];
 
   if (codexEnabled) {
     phase1Promises.push({
@@ -564,14 +560,12 @@ async function main(): Promise<void> {
       promise: runCodexReview(plan, REVIEW_SCHEMA, planSettings),
     });
   }
-
   if (geminiEnabled) {
     phase1Promises.push({
       name: "gemini",
       promise: runGeminiReview(plan, REVIEW_SCHEMA, planSettings),
     });
   }
-
   if (orchestratorConfig.enabled && enabledAgents.length > 0 && !legacyMode) {
     phase1Promises.push({
       name: "orchestrator",
@@ -581,7 +575,7 @@ async function main(): Promise<void> {
 
   logInfo(HOOK, `=== PHASE 1: Running ${phase1Promises.length} tasks in parallel ===`);
 
-  const phase1Results: Record<string, OrchestratorResult | ReviewerResult> = {};
+  const phase1Results: Record<string, ReviewerResult | OrchestratorResult> = {};
   if (phase1Promises.length > 0) {
     const results = await Promise.allSettled(
       phase1Promises.map(async ({ name, promise }) => {
@@ -722,6 +716,14 @@ async function main(): Promise<void> {
   }
 
   // ============================================
+  // Persist newly graduated agents (before verdict overrides)
+  // ============================================
+  const newlyGraduated = computeGraduated(agentResults);
+  if (newlyGraduated.length > 0) {
+    logInfo(HOOK, `Newly graduated agents: ${newlyGraduated.join(", ")}`);
+  }
+
+  // ============================================
   // Per-agent high-severity threshold: override verdict to "fail"
   // ============================================
   const highIssueThreshold = typeof agentSettings.highIssueThreshold === "number" ? agentSettings.highIssueThreshold : 3;
@@ -731,13 +733,12 @@ async function main(): Promise<void> {
     if (!r.verdict || r.verdict === "skip" || r.verdict === "error") continue;
     const issues = Array.isArray(r.data?.issues) ? r.data.issues as Array<{ severity?: string }> : [];
     const agentHigh = issues.filter(i => i.severity === "high").length;
-    let {verdict} = r;
+    let verdict = r.verdict;
     if (agentHigh >= highIssueThreshold) {
       logInfo(HOOK, `${r.name}: verdict overridden to 'fail' (${agentHigh} high issues >= ${highIssueThreshold})`);
       verdict = "fail";
       r.verdict = verdict;
     }
-
     allVerdicts.push(verdict);
   }
 
@@ -747,7 +748,11 @@ async function main(): Promise<void> {
   logInfo(HOOK, "=== PHASE 4: Generate Output ===");
 
   if (Object.keys(cliResults).length === 0 && Object.keys(agentResults).length === 0) {
-    skipWithInfo("All reviewers failed to produce results. Check stderr logs for details.");
+    if (graduatedSet.size > 0 && originalAgentCount > 0) {
+      skipWithInfo("All agent reviewers graduated from previous iterations — no review needed.");
+    } else {
+      skipWithInfo("All reviewers failed to produce results. Check stderr logs for details.");
+    }
     return;
   }
 
@@ -763,8 +768,8 @@ async function main(): Promise<void> {
   };
 
   const displaySettings = {
-    ...planSettings.display,
-    ...agentSettings.display,
+    ...(planSettings.display ?? {}),
+    ...(agentSettings.display ?? {}),
   };
   const combinedSettings = { display: displaySettings };
 
@@ -792,22 +797,26 @@ async function main(): Promise<void> {
   try {
     fs.writeFileSync(path.join(reviewFolder, "plan.md"), plan, "utf-8");
     logDebug(HOOK, `Saved plan snapshot: ${path.join(reviewFolder, "plan.md")}`);
-  } catch (error) {
-    logWarn(HOOK, `Failed to save plan snapshot: ${error}`);
+  } catch (e) {
+    logWarn(HOOK, `Failed to save plan snapshot: ${e}`);
   }
 
-  // Build inline summary
+  // Build inline summary with top issues (always emitted, even on pass)
   const inlineSummary = buildInlineReviewSummary(combinedResult);
-  const contextParts = [inlineSummary, `\nFull review: \`${reviewFile}\`\n`];
+  const topIssuesList = extractTopIssuesForTracker(combinedResult, 5);
+  const contextParts = [inlineSummary];
+  if (topIssuesList.length > 0) {
+    contextParts.push(`\nTop high-severity issues:\n${topIssuesList.map(i => `- ${i}`).join("\n")}`);
+  }
+  contextParts.push(`\nFull review: \`${reviewFile}\`\n`);
 
   // Review decision
-  const warnThreshold = typeof agentSettings.warnThreshold === "number" ? agentSettings.warnThreshold : 0.5;
-  const { should_deny: shouldDeny, reason: denyReason, score: reviewScore } = computeReviewDecision(allVerdicts, warnThreshold);
+  const { should_deny: shouldDeny, reason: denyReason, score: reviewScore } = computeReviewDecision(allVerdicts);
 
   logInfo(HOOK, `REVIEW_DECISION: verdict=${combinedResult.overall_verdict}, deny=${shouldDeny}, reason=${denyReason}, score=${reviewScore.toFixed(2)}`);
   logDiagnostic(HOOK, "result", `verdict=${combinedResult.overall_verdict}, deny=${shouldDeny}, reason=${denyReason}`, {
     decision: shouldDeny ? "deny" : "allow",
-    reasoning: `reason=${denyReason}, score=${reviewScore.toFixed(2)}, warn_threshold=${warnThreshold}`,
+    reasoning: `reason=${denyReason}, score=${reviewScore.toFixed(2)}`,
     inputs: {
       overall_verdict: combinedResult.overall_verdict,
       review_score: Math.round(reviewScore * 100) / 100,
@@ -823,30 +832,41 @@ async function main(): Promise<void> {
     eprint(`[plan-review] Blocking ExitPlanMode — ${denyReason}`);
   }
 
-  // Iteration logic
-  let needsMoreIterations = false;
+  // Iteration logic:
+  // - On FAIL at max: extend max by 1 (grant one more revision chance)
+  // - On WARN: block but do NOT extend max (warns don't earn extra iterations)
+  // - On PASS: jump current to max so next call triggers early exit (no more reviews)
+  const isFail = overall === "fail";
   if (iterationState && reviewsDir) {
-    iterationState = updateIterationStateInContext(reviewsDir, iterationState, planHash, overall);
+    iterationState.history.push({ hash: planHash, verdict: overall, timestamp: new Date().toISOString() });
 
-    if (shouldContinueIteratingContext(iterationState, reviewScore, agentSettings)) {
-      needsMoreIterations = true;
-      iterationState.current = (iterationState.current ?? 1) + 1;
-      saveIterationState(reviewsDir, iterationState);
-    } else {
-      iterationState.current = (iterationState.current ?? 1) + 1;
-      if (!shouldDeny) {
-        iterationState.max = (iterationState.max ?? 1) + 1;
-      }
-
-      saveIterationState(reviewsDir, iterationState);
+    if (isFail && iterationState.current >= iterationState.max) {
+      iterationState.max += 1;
+      logInfo(HOOK, `Extending max iterations to ${iterationState.max} due to fail at boundary (${iterationState.current}/${iterationState.max})`);
     }
+
+    if (!shouldDeny) {
+      // Pass: set current to max so next call (current+1 > max) triggers early exit
+      iterationState.current = iterationState.max;
+      logInfo(HOOK, `Pass: setting current to max (${iterationState.max}) to exhaust iterations`);
+    }
+
+    // Merge newly graduated agents into persistent state
+    if (newlyGraduated.length > 0) {
+      const allGraduated = new Set([
+        ...(iterationState.graduated ?? []),
+        ...newlyGraduated,
+      ]);
+      iterationState.graduated = [...allGraduated];
+    }
+
+    iterationState.current += 1;
+    saveIterationState(reviewsDir, iterationState);
   }
 
   // Write review tracker (human-readable lifecycle summary)
   const ccNativeReviewsDir = path.dirname(reviewFolder);
-  const trackerDecision = shouldDeny
-    ? (needsMoreIterations ? "blocked (iteration)" : "blocked (final)")
-    : "allow";
+  const trackerDecision = shouldDeny ? "blocked" : "allow";
   const trackerEntry: ReviewTrackerEntry = {
     iteration: currentIteration,
     timestamp: new Date().toISOString().replace("T", " ").slice(0, 16),
@@ -860,43 +880,31 @@ async function main(): Promise<void> {
   writeReviewTracker(ccNativeReviewsDir, trackerEntry);
   logInfo(HOOK, `Updated review tracker: ${path.join(ccNativeReviewsDir, "review-tracker.md")}`);
 
-  // Emit output
+  // Emit output — always emit context with top issues + link; block only on fail
   const contextText = contextParts.join("");
 
   logDebug(HOOK, `REVIEW_CONTEXT_INJECTED: chars=${contextText.length}, inline_chars=${inlineSummary.length}`);
 
-  const REVIEWER_CAVEAT = "Reviewers have limited context compared to your full session — adopt valid points, use your judgment where they lack context.";
+  const REVIEWER_CAVEAT = "Reviewers have limited context compared to your full session — use your judgment to adopt valid points and dismiss genuine false positives. However, treat false positives as a clarity signal: if a reviewer misunderstood your plan, an agent executing it will likely hit the same confusion. Revise those sections to be unambiguous so no future reader — human or AI — makes the same mistake.";
   const RESUBMIT_INSTRUCTION = "IMPORTANT: After revising the plan file, you MUST call ExitPlanMode again to trigger re-review. Do not end your turn or ask the user without calling ExitPlanMode.";
 
-  if (needsMoreIterations) {
-    markPlanReviewed(sessionId, planHash, base, HOOK, iterationState ?? undefined, "hook_deny_iteration");
-    const current = iterationState!.current - 1;
-    const maxIter = iterationState!.max;
-    const remaining = maxIter - current;
+  if (shouldDeny) {
+    const disposition = iterationState
+      ? `hook_deny_iter_${iterationState.current - 1}`
+      : "hook_deny";
+    markPlanReviewed(sessionId, planHash, base, HOOK, iterationState ?? undefined, disposition);
     const topIssuesText = extractTopIssuesText(combinedResult, 3, "high");
     const highIssuesDoc = buildHighIssuesDocument(combinedResult);
     const highIssuesPath = path.join(reviewFolder, "high-issues.md");
     fs.writeFileSync(highIssuesPath, highIssuesDoc, "utf-8");
+
+    const iterInfo = iterationState
+      ? ` (iteration ${iterationState.current - 1}/${iterationState.max}, score=${reviewScore.toFixed(2)})`
+      : ` (score=${reviewScore.toFixed(2)})`;
+
     emitContextAndBlock(
       contextText,
-      `Plan review iteration ${current}/${maxIter} FAILED (${denyReason}, score=${reviewScore.toFixed(2)}). ` +
-      `Critical issues: ${topIssuesText}. ` +
-      `IMPORTANT: Read \`${highIssuesPath}\` for ALL high-severity issues — ` +
-      `this file contains only the most critical findings, no noise. ` +
-      `${REVIEWER_CAVEAT} ` +
-      `Revise the plan to address these issues, then call ExitPlanMode again. ` +
-      `(${remaining} revision${remaining === 1 ? "" : "s"} remaining) ` +
-      RESUBMIT_INSTRUCTION,
-    );
-  } else if (shouldDeny) {
-    markPlanReviewed(sessionId, planHash, base, HOOK, iterationState ?? undefined, "hook_deny_final");
-    const topIssuesText = extractTopIssuesText(combinedResult, 3, "high");
-    const highIssuesDoc = buildHighIssuesDocument(combinedResult);
-    const highIssuesPath = path.join(reviewFolder, "high-issues.md");
-    fs.writeFileSync(highIssuesPath, highIssuesDoc, "utf-8");
-    emitContextAndBlock(
-      contextText,
-      `Plan review FAILED (${denyReason}, score=${reviewScore.toFixed(2)}). ` +
+      `Plan review FAILED${iterInfo}. ` +
       `Critical issues: ${topIssuesText}. ` +
       `IMPORTANT: Read \`${highIssuesPath}\` for ALL high-severity issues — ` +
       `this file contains only the most critical findings, no noise. ` +

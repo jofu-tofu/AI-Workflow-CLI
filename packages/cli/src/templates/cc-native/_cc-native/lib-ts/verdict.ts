@@ -41,12 +41,10 @@ export function worstVerdict(verdicts: Verdict[]): Verdict {
  * from the denominator.
  *
  * @param allVerdicts - List of verdict strings from all reviewers
- * @param warnThreshold - Kept for backward compatibility. No longer used for blocking.
  * @returns ReviewDecisionResult with should_deny, reason, and score
  */
 export function computeReviewDecision(
   allVerdicts: Verdict[],
-  _warnThreshold = 0.5,
 ): ReviewDecisionResult {
   // Exclude non-signal verdicts
   const signalVerdicts = allVerdicts.filter(
@@ -54,17 +52,21 @@ export function computeReviewDecision(
   );
 
   if (signalVerdicts.length === 0) {
-    return { should_deny: false, reason: "no_signal", score: 0 };
+    return { should_deny: false, reason: "no_signal", score: 0.0 };
   }
 
   // Fail blocks unconditionally
   const failCount = signalVerdicts.filter((v) => v === "fail").length;
   if (failCount > 0) {
-    return { should_deny: true, reason: "fail_veto", score: 1 };
+    return { should_deny: true, reason: "fail_veto", score: 1.0 };
   }
 
-  // Warn ratio still computed for logging/visibility, but does NOT block
+  // Warn also blocks — reviewers flagged concerns worth addressing
   const warnCount = signalVerdicts.filter((v) => v === "warn").length;
   const warnRatio = warnCount / signalVerdicts.length;
-  return { should_deny: false, reason: "acceptable", score: warnRatio };
+  if (warnCount > 0) {
+    return { should_deny: true, reason: "warn_block", score: warnRatio };
+  }
+
+  return { should_deny: false, reason: "acceptable", score: 0.0 };
 }
