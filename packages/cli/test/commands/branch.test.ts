@@ -15,9 +15,10 @@ import {join} from 'node:path'
 import {expect} from 'chai'
 
 import BranchCommand from '../../src/commands/branch.js'
+import {runCommand} from '../helpers/run-command.js'
 import {cleanupTestDir, createTestGitRepo, getAbsoluteBinPath} from '../helpers/test-utils.js'
 
-// Platform-specific bin path for CLI invocation
+// Platform-specific bin path for CLI invocation (only for tests requiring real subprocess)
 const isWindows = platform() === 'win32'
 const bin = isWindows ? String.raw`.\bin\dev.cmd` : './bin/dev.js'
 
@@ -118,39 +119,44 @@ describe('branch command', () => {
     })
   })
 
-  describe('flag validation via CLI', () => {
-    it('should error when no flag is provided', () => {
-      try {
-        execSync(`${bin} branch`, {
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        expect.fail('Should have thrown')
-      } catch (error) {
-        const err = error as {stderr: string}
-        expect(err.stderr).to.match(/--main|--launch|--delete.*required/i)
-      }
+  describe('flag validation (in-process)', () => {
+    it('should error when no flag is provided', async () => {
+      const {error} = await runCommand('branch')
+      expect(error).to.exist
+      expect(error!.message).to.match(/--main|--launch|--delete.*required/i)
     })
 
-    it('should show help output when requested', () => {
-      const result = execSync(`${bin} branch --help`, {
-        encoding: 'utf8',
-      })
-      expect(result).to.include('USAGE')
-      expect(result).to.include('--main')
-      expect(result).to.include('--launch')
-      expect(result).to.include('--delete')
-      expect(result).to.include('--all')
+    it('should show help output when requested', async () => {
+      const {stdout} = await runCommand('branch --help')
+      expect(stdout).to.include('USAGE')
+      expect(stdout).to.include('--main')
+      expect(stdout).to.include('--launch')
+      expect(stdout).to.include('--delete')
+      expect(stdout).to.include('--all')
+      expect(stdout).to.include('-m')
+      expect(stdout).to.include('-l')
+      expect(stdout).to.include('-d')
+      expect(stdout).to.include('-a')
     })
 
-    it('should show short flags in help', () => {
-      const result = execSync(`${bin} branch --help`, {
-        encoding: 'utf8',
-      })
-      expect(result).to.include('-m')
-      expect(result).to.include('-l')
-      expect(result).to.include('-d')
-      expect(result).to.include('-a')
+    it('should error when --launch provided without branch name', async () => {
+      const {error} = await runCommand('branch --launch')
+      expect(error).to.exist
+      expect(error!.message).to.match(/branch name.*required/i)
+    })
+
+    it('should reject invalid branch names with spaces for --launch', async () => {
+      const {error} = await runCommand(['branch', '--launch', 'branch with spaces'])
+      expect(error).to.exist
+      expect(error!.message).to.match(/invalid characters/i)
+    })
+
+    it('should exit with code 2 for invalid usage (no flags)', async () => {
+      const {error} = await runCommand('branch')
+      expect(error).to.exist
+      // oclif sets exitCode on errors
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((error as any).oclif?.exit).to.equal(2)
     })
   })
 
@@ -158,7 +164,6 @@ describe('branch command', () => {
     let testDir: string
 
     beforeEach(async function() {
-      // Increase timeout for git operations
       this.timeout(5000)
       testDir = await createTestGitRepo()
     })
@@ -191,7 +196,6 @@ describe('branch command', () => {
         expect.fail('Should have thrown')
       } catch (error) {
         const err = error as {stderr: string}
-        // Error format: "Failed to delete branch: Cannot delete main branch. This is a protected branch."
         expect(err.stderr).to.match(/cannot delete.*main|main.*protected/i)
       }
     })
@@ -207,7 +211,6 @@ describe('branch command', () => {
         expect.fail('Should have thrown')
       } catch (error) {
         const err = error as {stderr: string}
-        // Error format: "Failed to delete branch: Cannot delete master branch. This is a protected branch."
         expect(err.stderr).to.match(/cannot delete.*master|master.*protected/i)
       }
     })
@@ -223,15 +226,12 @@ describe('branch command', () => {
         expect.fail('Should have thrown')
       } catch (error) {
         const err = error as {stderr: string}
-        // Error format spans multiple lines with fancy bullet chars: "does not\n » exist."
-        // Remove all non-alphanumeric chars except spaces for matching
         const normalizedError = err.stderr.replaceAll(/[^a-zA-Z0-9\s]/g, ' ').replaceAll(/\s+/g, ' ')
         expect(normalizedError).to.match(/does not exist|not found|no such branch/i)
       }
     })
 
     it('should error when trying to delete current branch', async () => {
-      // Create and switch to a new branch
       execSync('git checkout -b feature-branch', {cwd: testDir, stdio: 'ignore'})
       const absoluteBin = getAbsoluteBinPath()
 
@@ -252,20 +252,17 @@ describe('branch command', () => {
       this.timeout(5000)
       const absoluteBin = getAbsoluteBinPath()
 
-      // Create a feature branch
       execSync('git checkout -b feature-to-delete', {cwd: testDir, stdio: 'ignore'})
       await fs.writeFile(join(testDir, 'feature.txt'), 'feature\n')
       execSync('git add .', {cwd: testDir, stdio: 'ignore'})
       execSync('git commit -m "Feature commit"', {cwd: testDir, stdio: 'ignore'})
 
-      // Switch back to master/main
       try {
         execSync('git checkout main', {cwd: testDir, stdio: 'ignore'})
       } catch {
         execSync('git checkout master', {cwd: testDir, stdio: 'ignore'})
       }
 
-      // Delete the feature branch
       const result = execSync(`node "${absoluteBin}" branch --delete feature-to-delete`, {
         cwd: testDir,
         encoding: 'utf8',
@@ -273,39 +270,9 @@ describe('branch command', () => {
 
       expect(result).to.match(/deleted/i)
 
-      // Verify branch is gone
       const branches = execSync('git branch', {cwd: testDir, encoding: 'utf8'})
       expect(branches).to.not.include('feature-to-delete')
     })
-  })
-
-  describe('--launch flag behavior', () => {
-    it('should error when branch name is not provided', () => {
-      try {
-        execSync(`${bin} branch --launch`, {
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        expect.fail('Should have thrown')
-      } catch (error) {
-        const err = error as {stderr: string}
-        expect(err.stderr).to.match(/branch name.*required/i)
-      }
-    })
-
-    it('should reject invalid branch names with spaces', () => {
-      try {
-        execSync(`${bin} branch --launch "branch with spaces"`, {
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        expect.fail('Should have thrown')
-      } catch (error) {
-        const err = error as {stderr: string}
-        expect(err.stderr).to.match(/invalid characters/i)
-      }
-    })
-
   })
 
   describe('--main flag behavior', () => {
@@ -324,11 +291,9 @@ describe('branch command', () => {
       this.timeout(5000)
       const absoluteBin = getAbsoluteBinPath()
 
-      // Ensure we're on main
       try {
         execSync('git checkout -b main', {cwd: testDir, stdio: 'ignore'})
       } catch {
-        // Branch might already exist, try to switch to it
         try {
           execSync('git checkout main', {cwd: testDir, stdio: 'ignore'})
         } catch {
@@ -345,7 +310,6 @@ describe('branch command', () => {
         expect.fail('Should have thrown')
       } catch (error) {
         const err = error as {stderr: string}
-        // Should error because we're already on main/master OR because neither exists as worktree
         expect(err.stderr).to.match(/already on|neither.*exists|worktree/i)
       }
     })
@@ -384,25 +348,11 @@ describe('branch command', () => {
         encoding: 'utf8',
       })
 
-      // Main/master should be listed as preserved with "protected" reason
       expect(result).to.match(/preserved/i)
     })
   })
 
-  describe('exit codes', () => {
-    it('should exit with code 2 for invalid usage (no flags)', () => {
-      try {
-        execSync(`${bin} branch`, {
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        expect.fail('Should have thrown')
-      } catch (error) {
-        const err = error as {status: number}
-        expect(err.status).to.equal(2)
-      }
-    })
-
+  describe('exit codes (subprocess)', () => {
     it('should exit with non-zero code for environment error (not a git repo)', async () => {
       const nonGitDir = join(tmpdir(), `aiw-non-git-test-${randomUUID()}`)
       await fs.mkdir(nonGitDir, {recursive: true})
@@ -417,7 +367,6 @@ describe('branch command', () => {
         expect.fail('Should have thrown')
       } catch (error) {
         const err = error as {status: number; stderr: string}
-        // Verify error occurred (exit code > 0) and message is correct
         expect(err.status).to.be.greaterThan(0)
         expect(err.stderr).to.match(/not a git repository/i)
       } finally {
@@ -438,7 +387,6 @@ describe('branch command', () => {
         expect.fail('Should have thrown')
       } catch (error) {
         const err = error as {status: number; stderr: string}
-        // Verify error occurred (exit code > 0) and message mentions protection
         expect(err.status).to.be.greaterThan(0)
         expect(err.stderr).to.match(/cannot delete.*main|main.*protected/i)
       } finally {
@@ -482,12 +430,11 @@ describe('branch command', () => {
     const validPattern = /^[a-zA-Z0-9._/-]+$/
 
     it('should accept valid branch names', () => {
-      // Valid names include dots, dashes, underscores, and slashes
       const validNames = [
-        'feature-v1.0', 'release.1.2.3', 'fix.bug',           // dots
-        'feature-branch', 'my-new-feature', 'bug-fix-123',    // dashes
-        'feature_branch', 'my_new_feature', 'bug_fix_123',    // underscores
-        'feature/my-branch', 'bugfix/issue-123', 'release/v1.0', // slashes
+        'feature-v1.0', 'release.1.2.3', 'fix.bug',
+        'feature-branch', 'my-new-feature', 'bug-fix-123',
+        'feature_branch', 'my_new_feature', 'bug_fix_123',
+        'feature/my-branch', 'bugfix/issue-123', 'release/v1.0',
       ]
       for (const name of validNames) {
         expect(validPattern.test(name), `Expected "${name}" to be valid`).to.be.true
@@ -495,10 +442,9 @@ describe('branch command', () => {
     })
 
     it('should reject invalid branch names', () => {
-      // Invalid names include spaces and special characters
       const invalidNames = [
-        'my branch', 'feature branch', 'bug fix',              // spaces
-        'branch@name', 'feature#123', 'bug$fix', 'test!branch', // special chars
+        'my branch', 'feature branch', 'bug fix',
+        'branch@name', 'feature#123', 'bug$fix', 'test!branch',
       ]
       for (const name of invalidNames) {
         expect(validPattern.test(name), `Expected "${name}" to be invalid`).to.be.false

@@ -8,74 +8,42 @@ describe('Quiet Mode Integration', () => {
   const binPath = platform() === 'win32' ? String.raw`.\bin\dev.cmd` : './bin/dev.js'
   const skipOnWindows = platform() === 'win32' ? it.skip : it
 
-  describe('AC1: --quiet Flag Suppresses Informational Output', () => {
-    it('recognizes --quiet flag', () => {
-      const result = execSync(`${binPath} launch --help --quiet`, {
-        encoding: 'utf8',
-      })
-      expect(result).to.include('Launch')
-    })
+  // Cache the help outputs to avoid redundant subprocess calls
+  let launchHelpOutput: string
+  let quietLaunchHelpOutput: string
 
-    it('recognizes -q short form', () => {
-      const result = execSync(`${binPath} launch --help -q`, {
-        encoding: 'utf8',
-      })
-      expect(result).to.include('Launch')
-    })
-
-    it('quiet flag appears in global help', () => {
-      const result = execSync(`${binPath} launch --help`, {
-        encoding: 'utf8',
-      })
-      expect(result).to.include('--quiet')
-      expect(result).to.include('-q')
-    })
+  before(() => {
+    launchHelpOutput = execSync(`${binPath} launch --help`, {encoding: 'utf8'})
+    quietLaunchHelpOutput = execSync(`${binPath} launch --help --quiet`, {encoding: 'utf8'})
   })
 
-  describe('AC2: Errors Still Output to stderr in Quiet Mode', () => {
-    it('exit codes unchanged in quiet mode (invalid command)', () => {
+  describe('--quiet flag behavior', () => {
+    it('recognizes --quiet and -q flags and appears in help text', () => {
+      // Quiet mode works
+      expect(quietLaunchHelpOutput).to.include('Launch')
+
+      // Short form works too
+      const shortResult = execSync(`${binPath} launch --help -q`, {encoding: 'utf8'})
+      expect(shortResult).to.include('Launch')
+
+      // Flag appears in help
+      expect(launchHelpOutput).to.include('--quiet')
+      expect(launchHelpOutput).to.include('-q')
+      expect(launchHelpOutput).to.include('Suppress informational output')
+    })
+
+    it('exit codes unchanged in quiet mode', () => {
       try {
-        execSync(`${binPath} unknown-command --quiet`, {
-          encoding: 'utf8',
-        })
+        execSync(`${binPath} unknown-command --quiet`, {encoding: 'utf8'})
         expect.fail('Should have thrown')
       } catch (error) {
         const err = error as {status: number}
-        expect(err.status).to.equal(2) // Invalid usage (Oclif automatic)
+        expect(err.status).to.equal(2)
       }
     })
-
-    it('--quiet flag does not suppress error output', () => {
-      // Test that --quiet is recognized but doesn't suppress errors
-      // Using a simpler test - verify the flag is recognized
-      const result = execSync(`${binPath} launch --help --quiet`, {
-        encoding: 'utf8',
-      })
-      // Help still shows even with --quiet (--help takes precedence)
-      expect(result).to.include('Launch')
-    })
   })
 
-  describe('AC4: Quiet Mode Works with All Commands', () => {
-    it('launch command respects quiet mode', () => {
-      const result = execSync(`${binPath} launch --help --quiet`, {
-        encoding: 'utf8',
-      })
-      expect(result).to.include('Launch')
-    })
-  })
-
-  describe('AC5: Quiet Mode Documented in Help Text', () => {
-    it('--quiet flag documented in launch help', () => {
-      const result = execSync(`${binPath} launch --help`, {
-        encoding: 'utf8',
-      })
-      expect(result).to.include('--quiet')
-      expect(result).to.include('Suppress informational output')
-    })
-  })
-
-  describe('AC6: Quiet Mode Compatible with Piping', () => {
+  describe('quiet mode with piping', () => {
     skipOnWindows('quiet mode works when output is piped', () => {
       const result = execSync('./bin/dev.js launch --help --quiet | grep "Launch"', {
         encoding: 'utf8',
@@ -85,11 +53,9 @@ describe('Quiet Mode Integration', () => {
     })
   })
 
-  describe('Cross-Platform Quiet Mode Validation', () => {
-    it('quiet mode works on current platform', () => {
-      const result = execSync(`${binPath} --help --quiet`, {
-        encoding: 'utf8',
-      })
+  describe('quiet mode across commands', () => {
+    it('works with global help', () => {
+      const result = execSync(`${binPath} --help --quiet`, {encoding: 'utf8'})
       expect(result).to.include('AI Workflow CLI')
     })
   })
