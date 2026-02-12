@@ -4,8 +4,8 @@
  * See cc-native-plan-review-spec.md §4.6
  */
 
-import { logDebug, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
 import { parseJsonMaybe } from "./json-parser.js";
+import { logDebug, logError, logWarn } from "../../_shared/lib-ts/base/logger.js";
 
 /**
  * Parse Claude CLI JSON output, handling various formats.
@@ -23,7 +23,7 @@ import { parseJsonMaybe } from "./json-parser.js";
 export function parseCliOutput(
   raw: string,
   requireFields?: string[],
-): Record<string, unknown> | null {
+): null | Record<string, unknown> {
   try {
     const result: unknown = JSON.parse(raw);
 
@@ -58,6 +58,7 @@ export function parseCliOutput(
             }
           }
         }
+
         logDebug(
           "cli_parser",
           "Assistant message found but no StructuredOutput tool use in content",
@@ -97,18 +98,19 @@ export function parseCliOutput(
           }
         }
       }
+
       logDebug(
         "cli_parser",
         "No StructuredOutput found in any assistant message in event list",
       );
     }
-  } catch (e: unknown) {
-    if (e instanceof SyntaxError) {
-      logWarn("cli_parser", `JSON decode error: ${e.message}`);
+  } catch (error: unknown) {
+    if (error instanceof SyntaxError) {
+      logWarn("cli_parser", `JSON decode error: ${error.message}`);
     } else {
       logError(
         "cli_parser",
-        `Unexpected error during structured parsing: ${e}`,
+        `Unexpected error during structured parsing: ${error}`,
       );
     }
   }

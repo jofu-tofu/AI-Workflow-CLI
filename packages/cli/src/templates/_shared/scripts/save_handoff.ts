@@ -22,12 +22,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { getContext, saveState } from "../lib-ts/context/context-store.js";
-import { getHandoffFolderPath, getProjectRoot } from "../lib-ts/base/constants.js";
 import { atomicWrite } from "../lib-ts/base/atomic-write.js";
-import { logInfo, logWarn, logError } from "../lib-ts/base/logger.js";
+import { getHandoffFolderPath, getProjectRoot } from "../lib-ts/base/constants.js";
 import { getGitStatusShort } from "../lib-ts/base/git-state.js";
+import { logError, logInfo, logWarn } from "../lib-ts/base/logger.js";
 import { eprint } from "../lib-ts/base/utils.js";
+import { getContext, saveState } from "../lib-ts/context/context-store.js";
 
 // ---------------------------------------------------------------------------
 // Parsing helpers
@@ -48,6 +48,7 @@ function parseFrontmatter(content: string): [Record<string, string>, string] {
           frontmatter[key] = value;
         }
       }
+
       remaining = parts[2]!.trim();
     }
   }
@@ -57,7 +58,7 @@ function parseFrontmatter(content: string): [Record<string, string>, string] {
 
 function parseHandoffSections(content: string): Record<string, string> {
   const sections: Record<string, string> = {};
-  let currentSection: string | null = null;
+  let currentSection: null | string = null;
   const currentContent: string[] = [];
 
   for (const line of content.split("\n")) {
@@ -66,6 +67,7 @@ function parseHandoffSections(content: string): Record<string, string> {
       if (currentSection) {
         sections[currentSection] = currentContent.join("\n").trim();
       }
+
       currentSection = marker[1]!;
       currentContent.length = 0;
     } else if (currentSection) {
@@ -84,12 +86,13 @@ function parseHandoffSections(content: string): Record<string, string> {
 // Plan helper
 // ---------------------------------------------------------------------------
 
-function getPlanPathFromContext(contextId: string, projectRoot: string): string | null {
+function getPlanPathFromContext(contextId: string, projectRoot: string): null | string {
   const context = getContext(contextId, projectRoot);
   if (!context?.plan_path) return null;
   try {
     if (fs.existsSync(context.plan_path)) return context.plan_path;
   } catch { /* ignore */ }
+
   return null;
 }
 
@@ -177,6 +180,7 @@ function writeSectionFile(folder: string, filename: string, title: string, conte
     logWarn("save_handoff", `Failed to write ${filename}: ${error}`);
     return false;
   }
+
   return true;
 }
 
@@ -200,7 +204,7 @@ function main(): void {
   // Read content from stdin
   let content: string;
   try {
-    content = fs.readFileSync(0, "utf-8");
+    content = fs.readFileSync(0, "utf8");
   } catch {
     logError("save_handoff", "Failed to read from stdin");
     process.exit(1);
@@ -243,15 +247,15 @@ function main(): void {
   // Copy plan if exists
   if (planPath) {
     try {
-      const planContent = fs.readFileSync(planPath, "utf-8");
+      const planContent = fs.readFileSync(planPath, "utf8");
       const [success, error] = atomicWrite(path.join(handoffFolder, "plan.md"), planContent);
       if (success) {
         logInfo("save_handoff", `Copied plan from ${planPath}`);
       } else {
         logWarn("save_handoff", `Failed to copy plan: ${error}`);
       }
-    } catch (e) {
-      logWarn("save_handoff", `Failed to read plan: ${e}`);
+    } catch (error) {
+      logWarn("save_handoff", `Failed to read plan: ${error}`);
     }
   }
 
@@ -267,7 +271,7 @@ function main(): void {
   }
 
   // Write section files
-  const sectionMapping: Record<string, [string, string | null]> = {
+  const sectionMapping: Record<string, [string, null | string]> = {
     completed: ["completed-work.md", "Work Completed"],
     "dead-ends": ["dead-ends.md", "Dead Ends - Do Not Retry"],
     decisions: ["decisions.md", "Key Decisions"],
@@ -290,11 +294,7 @@ function main(): void {
       fileContents[filename]!.push(sectionContent);
     } else {
       // Write mode with title
-      if (!fileContents[filename]) {
-        fileContents[filename] = [`# ${title}`, "", sectionContent];
-      } else {
-        fileContents[filename] = [`# ${title}`, "", ...fileContents[filename]!, "", sectionContent];
-      }
+      fileContents[filename] = fileContents[filename] ? [`# ${title}`, "", ...fileContents[filename]!, "", sectionContent] : [`# ${title}`, "", sectionContent];
     }
   }
 
@@ -339,8 +339,8 @@ function main(): void {
     } else {
       logWarn("save_handoff", `Could not load context state for ${contextId}`);
     }
-  } catch (e) {
-    logWarn("save_handoff", `Handoff saved but auto-resume won't work (context update failed): ${e}`);
+  } catch (error) {
+    logWarn("save_handoff", `Handoff saved but auto-resume won't work (context update failed): ${error}`);
   }
 
   // Output success message

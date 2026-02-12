@@ -5,10 +5,10 @@
  * See SPEC.md §4
  */
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-import * as os from "node:os";
 import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as _os from "node:os";
+import * as path from "node:path";
 
 /**
  * Write file atomically with retry logic.
@@ -21,7 +21,7 @@ export function atomicWrite(
   content: string,
   maxAttempts = 2,
   backoffMs: number[] = [500, 1000],
-): [boolean, string | null] {
+): [boolean, null | string] {
   // Ensure parent directory exists
   const dir = path.dirname(filePath);
   fs.mkdirSync(dir, { recursive: true });
@@ -53,7 +53,7 @@ export function atomicWrite(
       fs.renameSync(tmpPath, filePath);
 
       return [true, null];
-    } catch (e: any) {
+    } catch (error: any) {
       // Clean up temp file
       try {
         fs.unlinkSync(tmpPath);
@@ -62,11 +62,11 @@ export function atomicWrite(
       }
 
       if (attempt < maxAttempts - 1) {
-        const waitMs = backoffMs[Math.min(attempt, backoffMs.length - 1)] ?? backoffMs[backoffMs.length - 1] ?? 500;
+        const waitMs = backoffMs[Math.min(attempt, backoffMs.length - 1)] ?? backoffMs.at(-1) ?? 500;
         sleepSync(waitMs);
       } else {
-        const errType = e?.constructor?.name ?? "Error";
-        const errMsg = String(e).split("\n")[0]?.slice(0, 200) ?? "";
+        const errType = error?.constructor?.name ?? "Error";
+        const errMsg = String(error).split("\n")[0]?.slice(0, 200) ?? "";
         return [false, `${errType}: ${errMsg}`];
       }
     }
@@ -85,7 +85,7 @@ export function atomicAppend(
   content: string,
   maxAttempts = 2,
   backoffMs: number[] = [500, 1000],
-): [boolean, string | null] {
+): [boolean, null | string] {
   // Ensure parent directory exists
   const dir = path.dirname(filePath);
   fs.mkdirSync(dir, { recursive: true });
@@ -112,13 +112,13 @@ export function atomicAppend(
       }
 
       return [true, null];
-    } catch (e: any) {
+    } catch (error: any) {
       if (attempt < maxAttempts - 1) {
-        const waitMs = backoffMs[Math.min(attempt, backoffMs.length - 1)] ?? backoffMs[backoffMs.length - 1] ?? 500;
+        const waitMs = backoffMs[Math.min(attempt, backoffMs.length - 1)] ?? backoffMs.at(-1) ?? 500;
         sleepSync(waitMs);
       } else {
-        const errType = e?.constructor?.name ?? "Error";
-        const errMsg = String(e).split("\n")[0]?.slice(0, 200) ?? "";
+        const errType = error?.constructor?.name ?? "Error";
+        const errMsg = String(error).split("\n")[0]?.slice(0, 200) ?? "";
         return [false, `${errType}: ${errMsg}`];
       }
     }

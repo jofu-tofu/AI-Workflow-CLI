@@ -15,16 +15,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import {
-  findLatestHandoff,
-  readHandoffSections,
-  getHandoffTimestamp,
-  getHandoffPlanReference,
-} from "../lib-ts/handoff/handoff-reader.js";
 import { getProjectRoot } from "../lib-ts/base/constants.js";
-import { findActiveContextId } from "../lib-ts/context/context-store.js";
 import { getGitStatusShort } from "../lib-ts/base/git-state.js";
 import { eprint } from "../lib-ts/base/utils.js";
+import { findActiveContextId } from "../lib-ts/context/context-store.js";
+import {
+  findLatestHandoff,
+  getHandoffPlanReference,
+  getHandoffTimestamp,
+  readHandoffSections,
+} from "../lib-ts/handoff/handoff-reader.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,8 +41,10 @@ function formatRelativeAge(date: Date): string {
     if (diffHours === 0) {
       return diffMin <= 1 ? "just now" : `${diffMin} minutes ago`;
     }
+
     return diffHours === 1 ? "1 hour ago" : `${diffHours} hours ago`;
   }
+
   if (diffDays === 1) return "yesterday";
   return `${diffDays} days ago`;
 }
@@ -71,6 +73,7 @@ function stripTitle(content: string): string {
     while (i < lines.length && lines[i]!.trim() === "") i++;
     return lines.slice(i).join("\n").trim();
   }
+
   return content.trim();
 }
 
@@ -78,7 +81,7 @@ function stripTitle(content: string): string {
 // Resolution
 // ---------------------------------------------------------------------------
 
-function resolveHandoffFolder(args: string[]): [string, string | null] {
+function resolveHandoffFolder(args: string[]): [string, null | string] {
   const projectRoot = getProjectRoot(process.cwd());
 
   // --context <id>
@@ -90,6 +93,7 @@ function resolveHandoffFolder(args: string[]): [string, string | null] {
       eprint(`No handoff folders found for context: ${contextId}`);
       process.exit(1);
     }
+
     return [folder, contextId];
   }
 
@@ -125,6 +129,7 @@ function resolveHandoffFolder(args: string[]): [string, string | null] {
       eprint(`No handoff folders found for context: ${discoveredId} (auto-discovered)`);
       process.exit(1);
     }
+
     return [folder, discoveredId];
   }
 
@@ -178,7 +183,7 @@ function main(): void {
     const planRef = getHandoffPlanReference(handoffFolder, resolvedContextId, projectRoot);
     if (planRef) {
       try {
-        const planContent = fs.readFileSync(planRef, "utf-8");
+        const planContent = fs.readFileSync(planRef, "utf8");
         const progress = countPlanProgress(planContent);
         if (progress) {
           const [done, total] = progress;
@@ -199,19 +204,12 @@ function main(): void {
   // Build output
   const out: string[] = [];
 
-  out.push(`## Session Resumed from Handoff`);
-  out.push("");
+  out.push(`## Session Resumed from Handoff`, "");
   out.push(`**Source:** \`${path.basename(handoffFolder)}\` (${ageStr})`);
   if (resolvedContextId) out.push(`**Context:** ${resolvedContextId}`);
   out.push(`**Plan Status:** ${planStatus}`);
   if (staleWarning) out.push(staleWarning);
-  out.push("");
-  out.push("---");
-  out.push("");
-
-  // Priority 1: Dead Ends
-  out.push("### Dead Ends — Do Not Retry");
-  out.push("");
+  out.push("", "---", "", "### Dead Ends — Do Not Retry", "");
   if (sections.deadEnds) {
     const content = stripTitle(sections.deadEnds);
     if (content && content !== "(No content for this section)") {
@@ -222,11 +220,8 @@ function main(): void {
   } else {
     out.push("(No dead-ends.md found)");
   }
-  out.push("");
 
-  // Priority 2: Pending
-  out.push("### Pending Items");
-  out.push("");
+  out.push("", "### Pending Items", "");
   if (sections.pending) {
     const content = stripTitle(sections.pending);
     if (content && content !== "(No content for this section)") {
@@ -237,6 +232,7 @@ function main(): void {
   } else {
     out.push("(No pending.md found)");
   }
+
   out.push("");
 
   // Priority 3: Plan remaining items (from plan.md in handoff)
@@ -248,18 +244,17 @@ function main(): void {
       .filter(line => /\[ \]/.test(line))
       .map(line => line.trim());
     if (remaining.length > 0) {
-      out.push("### Plan — Remaining Items");
-      out.push("");
+      out.push("### Plan — Remaining Items", "");
       for (const item of remaining) {
         out.push(item);
       }
+
       out.push("");
     }
   }
 
   // Priority 4: Decisions
-  out.push("### Settled Decisions");
-  out.push("");
+  out.push("### Settled Decisions", "");
   if (sections.decisions) {
     const content = stripTitle(sections.decisions);
     if (content && content !== "(No content for this section)") {
@@ -270,20 +265,8 @@ function main(): void {
   } else {
     out.push("(No decisions.md found)");
   }
-  out.push("");
 
-  // Priority 5: Git Delta
-  out.push("### Git Delta Since Handoff");
-  out.push("");
-  out.push("**Current git status:**");
-  out.push("```");
-  out.push(currentGit);
-  out.push("```");
-  out.push("");
-
-  // Priority 6: Completed Work
-  out.push("### Completed Work");
-  out.push("");
+  out.push("", "### Git Delta Since Handoff", "", "**Current git status:**", "```", currentGit, "```", "", "### Completed Work", "");
   if (sections.completedWork) {
     const content = stripTitle(sections.completedWork);
     if (content && content !== "(No content for this section)") {
@@ -294,11 +277,8 @@ function main(): void {
   } else {
     out.push("(No completed-work.md found)");
   }
-  out.push("");
 
-  // Priority 7: Context
-  out.push("### Context Notes");
-  out.push("");
+  out.push("", "### Context Notes", "");
   if (sections.context) {
     const content = stripTitle(sections.context);
     if (content && content !== "(No content for this section)") {
@@ -309,12 +289,8 @@ function main(): void {
   } else {
     out.push("None");
   }
-  out.push("");
 
-  // Footer
-  out.push("---");
-  out.push("");
-  out.push("**Create ISC tasks** from the pending items and remaining plan items above using TaskCreate. Each task should be ~8 words, state a desired end-state (not an action), and be binary testable.");
+  out.push("", "---", "", "**Create ISC tasks** from the pending items and remaining plan items above using TaskCreate. Each task should be ~8 words, state a desired end-state (not an action), and be binary testable.");
 
   console.log(out.join("\n"));
 }
@@ -322,7 +298,7 @@ function main(): void {
 /**
  * Try to extract context_id from index.md frontmatter.
  */
-function extractContextIdFromIndex(indexContent: string | null): string | null {
+function extractContextIdFromIndex(indexContent: null | string): null | string {
   if (!indexContent) return null;
   if (!indexContent.startsWith("---")) return null;
 

@@ -49,7 +49,7 @@ export async function pruneGitignoreStaleEntries(targetDir: string): Promise<boo
         // AIW section ends at empty line or another comment header
         if (line === '' || (line.startsWith('#') && line !== AIW_GITIGNORE_HEADER)) {
           inAiwSection = false
-          const {lines: filtered, pruned: sectionPruned} = await pruneSection(aiwSectionLines, targetDir)
+          const {lines: filtered, pruned: sectionPruned} = await pruneSection(aiwSectionLines, targetDir) // eslint-disable-line no-await-in-loop
           if (sectionPruned) pruned = true
           newLines.push(...filtered, line)
         } else {
@@ -108,7 +108,7 @@ async function pruneSection(
     // Check if the path exists on disk
     const cleanPath = line.replace(/^\//, '').replace(/\/$/, '')
     const absPath = join(targetDir, cleanPath)
-    if (await pathExists(absPath)) {
+    if (await pathExists(absPath)) { // eslint-disable-line no-await-in-loop
       filtered.push(line)
     } else {
       pruned = true

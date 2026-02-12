@@ -5,9 +5,10 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadHookInput, runHook, logDebug, logError } from "../lib-ts/base/hook-utils.js";
-import { getProjectRoot, getContextFilePath, getContextPlansDir, getContextHandoffsDir, getContextReviewsDir } from "../lib-ts/base/constants.js";
-import { getContextBySessionId, getAllContexts } from "../lib-ts/context/context-store.js";
+
+import { getContextFilePath, getContextHandoffsDir, getContextPlansDir, getContextReviewsDir, getProjectRoot } from "../lib-ts/base/constants.js";
+import { loadHookInput, logDebug, logError, runHook } from "../lib-ts/base/hook-utils.js";
+import { getAllContexts, getContextBySessionId } from "../lib-ts/context/context-store.js";
 import type { ContextState } from "../lib-ts/types.js";
 
 /** Get .md files sorted by mtime descending */
@@ -30,7 +31,7 @@ function getMdFilesByMtime(dir: string): string[] {
 }
 
 /** Find latest folder-based document (subdirectory with index.md) */
-function getLatestFolderDoc(dir: string): string | null {
+function getLatestFolderDoc(dir: string): null | string {
   try {
     if (!fs.existsSync(dir)) return null;
     const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -42,6 +43,7 @@ function getLatestFolderDoc(dir: string): string | null {
           const stat = fs.statSync(indexPath);
           return { path: indexPath, mtime: stat.mtimeMs };
         }
+
         return null;
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)
@@ -118,9 +120,9 @@ function main(): void {
     // Limit to 10
     const limited = suggestions.slice(0, 10);
     console.log(JSON.stringify(limited));
-  } catch (e) {
+  } catch (error) {
     // Must output valid JSON array even on error — Claude Code expects it
-    logError("file-suggestion", `Error: ${e}`);
+    logError("file-suggestion", `Error: ${error}`);
     console.log("[]");
   }
 }

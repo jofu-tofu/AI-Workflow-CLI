@@ -46,4 +46,47 @@ const paiCliRules = {
   },
 }
 
-export default [includeIgnoreFile(gitignorePath), ...oclif, paiCliRules, prettier]
+// Template files are runtime code (executed via bun, not compiled by CLI).
+// They have different conventions: snake_case for JSON fields, process.exit()
+// in hooks, explicit any for dynamic hook I/O, and relative imports that
+// resolve at runtime in a different directory structure.
+const templateOverrides = {
+  files: ['src/templates/**/*.ts'],
+  rules: {
+    'camelcase': 'off',
+    '@typescript-eslint/no-explicit-any': 'off',
+    '@typescript-eslint/no-unused-vars': ['error', {argsIgnorePattern: '^_', varsIgnorePattern: '^_'}],
+    'import/no-unresolved': 'off',
+    'unicorn/import-style': 'off',
+    'unicorn/filename-case': 'off',
+    'unicorn/text-encoding-identifier-case': 'off',
+    'unicorn/no-process-exit': 'off',
+    'n/no-process-exit': 'off',
+    'unicorn/prefer-number-properties': 'off',
+    'unicorn/no-array-push-push': 'off',
+    'unicorn/no-negated-condition': 'off',
+    'unicorn/prefer-ternary': 'off',
+    'unicorn/prefer-module': 'off',
+    'no-await-in-loop': 'off',
+    'max-params': 'off',
+    'max-depth': 'off',
+    'complexity': 'off',
+    'jsdoc/check-param-names': 'off',
+    'perfectionist/sort-interfaces': 'off',
+    'perfectionist/sort-named-imports': 'off',
+    'perfectionist/sort-union-types': 'off',
+    'perfectionist/sort-object-types': 'off',
+    '@stylistic/padding-line-between-statements': 'off',
+  },
+}
+
+// bin/ scripts import from dist/ which doesn't exist until after build.
+// Suppress import/no-unresolved for bin files since they only run post-build.
+const binOverrides = {
+  files: ['bin/**/*.js'],
+  rules: {
+    'import/no-unresolved': 'off',
+  },
+}
+
+export default [includeIgnoreFile(gitignorePath), ...oclif, paiCliRules, templateOverrides, binOverrides, prettier]

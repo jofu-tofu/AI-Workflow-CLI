@@ -4,12 +4,13 @@
  * See cc-native-plan-review-spec.md §4.10
  */
 
-import * as path from "node:path";
-import { logDebug, logInfo, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv, findExecutable, execFileAsync } from "../../../_shared/lib-ts/base/subprocess-utils.js";
+import * as _path from "node:path";
+
+import { logDebug, logError, logInfo, logWarn } from "../../../_shared/lib-ts/base/logger.js";
+import { execFileAsync, findExecutable, getInternalSubprocessEnv } from "../../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseCliOutput } from "../cli-output-parser.js";
-import { coerceToReview } from "../json-parser.js";
 import { debugLog, debugRaw } from "../debug.js";
+import { coerceToReview } from "../json-parser.js";
 import type { AgentConfig, ReviewerResult, ReviewOptions } from "../types.js";
 import { AGENT_REVIEW_PROMPT_PREFIX } from "../types.js";
 import { makeResult } from "./types.js";
@@ -115,6 +116,7 @@ ${plan}
     if (err) {
       debugRaw(contextPath, sessionName, `agent:${agent.name}`, "stderr", err);
     }
+
     debugLog(contextPath, sessionName, `agent:${agent.name}`, "subprocess_info", {
       exit_code: result.exitCode,
       stdout_len: raw.length,
@@ -144,7 +146,7 @@ ${plan}
   }
 
   const [ok, verdict, norm] = coerceToReview(
-    obj as Record<string, unknown> | null,
+    obj as null | Record<string, unknown>,
     "Retry or check agent configuration.",
   );
 

@@ -12,18 +12,18 @@
  * Fail-safe: Any error allows the action silently.
  */
 
+import { getProjectRoot } from "../../_shared/lib-ts/base/constants.js";
 import {
-  loadHookInput,
-  runHook,
-  logDebug,
-  logInfo,
-  logDiagnostic,
   emitContext,
+  loadHookInput,
+  logDebug,
+  logDiagnostic,
+  logInfo,
+  runHook,
 } from "../../_shared/lib-ts/base/hook-utils.js";
 import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
-import { getProjectRoot } from "../../_shared/lib-ts/base/constants.js";
-import { wasQuestionsAsked, markQuestionsAsked } from "../lib-ts/cc-native-state.js";
 import { getEvaluationContextReminder } from "../../_shared/lib-ts/templates/plan-context.js";
+import { markQuestionsAsked, wasQuestionsAsked } from "../lib-ts/cc-native-state.js";
 
 const CONTEXT_REMINDER = getEvaluationContextReminder();
 
@@ -72,6 +72,7 @@ function main(): void {
       markQuestionsAsked(sessionId, projectRoot);
       logInfo("add_plan_context", `Marked questions asked for session ${sessionId.slice(0, 8)}...`);
     }
+
     return;
   }
 
@@ -111,7 +112,7 @@ function main(): void {
       { decision: "nudge", reasoning: "was_questions_asked=False, advisory context" },
     );
     emitContext(TASK_ENFORCEMENT_CONTEXT);
-    return;
+    
   }
 }
 

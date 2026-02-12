@@ -3,17 +3,17 @@
  * PostToolUse:* hook: Monitor context window usage, trigger mode transitions,
  * and progressive-save state when context runs low.
  */
-import {
-  loadHookInput, runHook,
-  getContextPercentRemaining,
-  logDebug, logInfo, logWarn, logDiagnostic, hookLog,
-} from "../lib-ts/base/hook-utils.js";
 import { getProjectRoot } from "../lib-ts/base/constants.js";
+import {
+  getContextPercentRemaining, hookLog,
+  loadHookInput,
+  logDebug, logDiagnostic, logInfo, logWarn, runHook,
+} from "../lib-ts/base/hook-utils.js";
 import { nowIso } from "../lib-ts/base/utils.js";
 import { getContextBySessionId, maybeActivate, saveState } from "../lib-ts/context/context-store.js";
 import type { ContextState } from "../lib-ts/types.js";
 
-const WRITE_TOOLS = new Set(["Edit", "Write", "Bash", "NotebookEdit"]);
+const WRITE_TOOLS = new Set(["Bash", "Edit", "NotebookEdit", "Write"]);
 
 const SAVE_STATE_THRESHOLD = 60;
 
@@ -27,8 +27,8 @@ function checkAndTransitionMode(
   if (!toolName || !WRITE_TOOLS.has(toolName)) return;
   try {
     maybeActivate(state.id, permissionMode, projectRoot, "context_monitor");
-  } catch (e) {
-    logWarn("context_monitor", `maybeActivate failed (non-critical): ${e}`);
+  } catch (error) {
+    logWarn("context_monitor", `maybeActivate failed (non-critical): ${error}`);
   }
 }
 
@@ -39,7 +39,7 @@ function progressiveSave(
   projectRoot: string,
 ): void {
   state.last_session = {
-    ...(state.last_session ?? {}),
+    ...state.last_session,
     session_id: sessionId,
     saved_at: nowIso(),
     save_reason: "progressive_save",

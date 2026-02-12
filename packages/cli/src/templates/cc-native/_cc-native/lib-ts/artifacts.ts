@@ -5,17 +5,18 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { atomicWrite } from "../../_shared/lib-ts/base/atomic-write.js";
-import { logDebug, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
-import { nowIso } from "../../_shared/lib-ts/base/utils.js";
-import { sanitizeFilename } from "../../_shared/lib-ts/base/constants.js";
+
 import { ENABLE_ROBUST_PLAN_WRITES } from "./constants.js";
 import type {
   CombinedReviewResult,
-  ReviewerResult,
   DisplaySettings,
+  ReviewerResult,
 } from "./types.js";
 import { DEFAULT_DISPLAY } from "./types.js";
+import { atomicWrite } from "../../_shared/lib-ts/base/atomic-write.js";
+import { sanitizeFilename } from "../../_shared/lib-ts/base/constants.js";
+import { logDebug, logError, logWarn } from "../../_shared/lib-ts/base/logger.js";
+import { nowIso as _nowIso } from "../../_shared/lib-ts/base/utils.js";
 
 // ---------------------------------------------------------------------------
 // Markdown Formatting
@@ -38,9 +39,7 @@ export function formatReviewMarkdown(
 
   for (const r of results) {
     const displayName = r.name === r.name.toLowerCase() ? titleCase(r.name) : r.name;
-    lines.push(`## ${displayName}\n`);
-    lines.push(`- ok: \`${r.ok}\``);
-    lines.push(`- verdict: \`${r.verdict}\``);
+    lines.push(`## ${displayName}\n`, `- ok: \`${r.ok}\``, `- verdict: \`${r.verdict}\``);
 
     if (r.data && Object.keys(r.data).length > 0) {
       const summary = String(r.data.summary ?? "").trim();
@@ -49,10 +48,12 @@ export function formatReviewMarkdown(
       } else {
         lines.push(`- summary: ${summary}`);
       }
+
       appendReviewDetails(lines, r.data, display);
     } else {
       lines.push(`- note: ${r.err || "no structured output"}`);
     }
+
     lines.push("");
   }
 
@@ -70,60 +71,55 @@ export function formatCombinedMarkdown(
 
   const lines: string[] = [];
   lines.push("# CC-Native Plan Review\n");
-  lines.push(`**Overall Verdict:** \`${result.overall_verdict.toUpperCase()}\``);
-  lines.push(`**Plan Hash:** \`${result.plan_hash}\`\n`);
-  lines.push("---\n");
+  lines.push(`**Overall Verdict:** \`${result.overall_verdict.toUpperCase()}\``, `**Plan Hash:** \`${result.plan_hash}\`\n`, "---\n");
 
   // CLI Reviewers section
   if (Object.keys(result.cli_reviewers).length > 0) {
     lines.push("## CLI Reviewers\n");
     for (const [name, r] of Object.entries(result.cli_reviewers)) {
-      lines.push(`### ${titleCase(name)}\n`);
-      lines.push(`- verdict: \`${r.verdict}\``);
+      lines.push(`### ${titleCase(name)}\n`, `- verdict: \`${r.verdict}\``);
       if (r.data && Object.keys(r.data).length > 0) {
         appendSummaryLine(lines, r.data);
         appendReviewDetails(lines, r.data, display);
       } else if (r.err) {
         lines.push(`- error: ${r.err}`);
       }
+
       lines.push("");
     }
   }
 
   // Orchestration section
   if (result.orchestration) {
-    lines.push("---\n");
-    lines.push("## Orchestration\n");
-    lines.push(`- **Complexity:** \`${result.orchestration.complexity}\``);
-    lines.push(`- **Category:** \`${result.orchestration.category}\``);
+    lines.push("---\n", "## Orchestration\n", `- **Complexity:** \`${result.orchestration.complexity}\``, `- **Category:** \`${result.orchestration.category}\``);
     const agentsStr =
       result.orchestration.selected_agents.length > 0
         ? result.orchestration.selected_agents.join(", ")
         : "None";
-    lines.push(`- **Agents Selected:** ${agentsStr}`);
-    lines.push(`- **Reasoning:** ${result.orchestration.reasoning}`);
+    lines.push(`- **Agents Selected:** ${agentsStr}`, `- **Reasoning:** ${result.orchestration.reasoning}`);
     if (result.orchestration.skip_reason) {
       lines.push(`- **Skip Reason:** ${result.orchestration.skip_reason}`);
     }
+
     if (result.orchestration.error) {
       lines.push(`- **Error:** ${result.orchestration.error}`);
     }
+
     lines.push("");
   }
 
   // Agent Reviews section
   if (Object.keys(result.agents).length > 0) {
-    lines.push("---\n");
-    lines.push("## Agent Reviews\n");
+    lines.push("---\n", "## Agent Reviews\n");
     for (const [name, r] of Object.entries(result.agents)) {
-      lines.push(`### ${name}\n`);
-      lines.push(`- verdict: \`${r.verdict}\``);
+      lines.push(`### ${name}\n`, `- verdict: \`${r.verdict}\``);
       if (r.data && Object.keys(r.data).length > 0) {
         appendSummaryLine(lines, r.data);
         appendReviewDetails(lines, r.data, display);
       } else if (r.err) {
         lines.push(`- error: ${r.err}`);
       }
+
       lines.push("");
     }
   }
@@ -166,7 +162,7 @@ export function buildInlineReviewSummary(
   const issueCount = highIssues.length;
   const countSuffix =
     issueCount > 0
-      ? ` (${issueCount} high-severity issue${issueCount !== 1 ? "s" : ""})`
+      ? ` (${issueCount} high-severity issue${issueCount === 1 ? "" : "s"})`
       : "";
   parts.push(`**Plan Review: ${combined.overall_verdict.toUpperCase()}**${countSuffix}`);
 
@@ -191,6 +187,7 @@ export function buildInlineReviewSummary(
   if (result.length > maxChars) {
     result = result.slice(0, maxChars - 3) + "...";
   }
+
   return result;
 }
 
@@ -221,6 +218,7 @@ export function extractTopIssuesText(
         }
       }
     }
+
     if (issues.length >= maxCount) break;
   }
 
@@ -258,6 +256,7 @@ export function buildHighIssuesDocument(
       lines.push(`- **[${cat}]** ${text}`);
       if (fix) lines.push(`  - Fix: ${fix}`);
     }
+
     lines.push(""); // blank line between agents
   }
 
@@ -328,6 +327,7 @@ export function generateReviewIndex(
       `| [${name}.json](./reviewer-output/${name}.json) | ${titleCase(name)} reviewer output |`,
     );
   }
+
   for (const name of Object.keys(result.agents)) {
     const safeName = sanitizeFilename(name);
     lines.push(
@@ -346,9 +346,11 @@ export function generateReviewIndex(
   for (const [name, r] of Object.entries(result.cli_reviewers)) {
     lines.push(`| ${titleCase(name)} | \`${r.verdict}\` |`);
   }
+
   for (const [name, r] of Object.entries(result.agents)) {
     lines.push(`| ${name} | \`${r.verdict}\` |`);
   }
+
   lines.push("");
 
   return lines.join("\n");
@@ -459,9 +461,9 @@ export function writeCombinedArtifacts(
   // Create directory
   try {
     fs.mkdirSync(outDir, { recursive: true });
-  } catch (e: unknown) {
-    logError("utils", `Cannot create directory ${outDir}: ${e}`);
-    throw e;
+  } catch (error: unknown) {
+    logError("utils", `Cannot create directory ${outDir}: ${error}`);
+    throw error;
   }
 
   // JSON write
@@ -481,6 +483,7 @@ export function writeCombinedArtifacts(
   } catch {
     // Best-effort — non-critical
   }
+
   for (const [name, r] of Object.entries(result.cli_reviewers)) {
     if (r.data) {
       writeFileNonCritical(
@@ -489,6 +492,7 @@ export function writeCombinedArtifacts(
       );
     }
   }
+
   for (const [name, r] of Object.entries(result.agents)) {
     if (r.data) {
       writeFileNonCritical(
@@ -574,9 +578,9 @@ function writeFile(filePath: string, content: string): void {
     } else {
       fs.writeFileSync(filePath, content, "utf-8");
     }
-  } catch (e: unknown) {
-    logError("utils", `Failed to write ${path.basename(filePath)}: ${e}`);
-    throw e;
+  } catch (error: unknown) {
+    logError("utils", `Failed to write ${path.basename(filePath)}: ${error}`);
+    throw error;
   }
 }
 
@@ -590,8 +594,8 @@ function writeFileNonCritical(filePath: string, content: string): void {
     } else {
       fs.writeFileSync(filePath, content, "utf-8");
     }
-  } catch (e: unknown) {
-    logWarn("utils", `Failed to write ${path.basename(filePath)}: ${e}`);
+  } catch (error: unknown) {
+    logWarn("utils", `Failed to write ${path.basename(filePath)}: ${error}`);
   }
 }
 
@@ -613,14 +617,14 @@ function formatDate(d: Date): string {
 // ---------------------------------------------------------------------------
 
 export interface ReviewTrackerEntry {
-  iteration: number;
-  timestamp: string;
-  planHash: string;
-  verdict: string;
   decision: string;
-  score: number;
-  topIssues: string[];
+  iteration: number;
+  planHash: string;
   reviewFolder: string;
+  score: number;
+  timestamp: string;
+  topIssues: string[];
+  verdict: string;
 }
 
 /**
@@ -638,7 +642,7 @@ export function writeReviewTracker(
   let existingContent = "";
   try {
     if (fs.existsSync(trackerPath)) {
-      existingContent = fs.readFileSync(trackerPath, "utf-8");
+      existingContent = fs.readFileSync(trackerPath, "utf8");
     }
   } catch {
     // Fresh start
@@ -647,30 +651,26 @@ export function writeReviewTracker(
   // Parse existing entries to detect plan changes
   const previousHashes = extractPreviousHashes(existingContent);
   const hashChanged = previousHashes.length > 0 &&
-    previousHashes[previousHashes.length - 1] !== entry.planHash;
+    previousHashes.at(-1) !== entry.planHash;
 
   // Build the new entry section
   const lines: string[] = [];
-  const verdictEmoji = entry.decision === "allow" ? "\u2705" : "\u274c";
+  const verdictEmoji = entry.decision === "allow" ? "\u2705" : "\u274C";
   const changeNote = previousHashes.length > 0
-    ? (hashChanged ? "\u2705 Plan was revised (hash changed)" : "\u26a0\ufe0f Plan unchanged since last review")
+    ? (hashChanged ? "\u2705 Plan was revised (hash changed)" : "\u26A0\uFE0F Plan unchanged since last review")
     : "Initial review";
 
-  lines.push(`## Iteration ${entry.iteration} \u2014 ${entry.timestamp} \u2014 ${verdictEmoji} ${entry.verdict.toUpperCase()}`);
-  lines.push("");
-  lines.push(`- **Decision:** ${entry.decision}`);
-  lines.push(`- **Score:** ${entry.score.toFixed(2)}`);
-  lines.push(`- **Plan hash:** \`${entry.planHash}\``);
-  lines.push(`- **Status:** ${changeNote}`);
+  lines.push(`## Iteration ${entry.iteration} \u2014 ${entry.timestamp} \u2014 ${verdictEmoji} ${entry.verdict.toUpperCase()}`, "", `- **Decision:** ${entry.decision}`);
+  lines.push(`- **Score:** ${entry.score.toFixed(2)}`, `- **Plan hash:** \`${entry.planHash}\``, `- **Status:** ${changeNote}`);
   lines.push(`- **Full review:** [\`${path.basename(entry.reviewFolder)}/\`](${path.basename(entry.reviewFolder)}/index.md)`);
 
   if (entry.topIssues.length > 0) {
-    lines.push("");
-    lines.push("**Top issues:**");
+    lines.push("", "**Top issues:**");
     for (const issue of entry.topIssues) {
       lines.push(`- ${issue}`);
     }
   }
+
   lines.push("");
 
   // Build full file
@@ -692,17 +692,18 @@ export function writeReviewTracker(
 
   try {
     fs.writeFileSync(trackerPath, output, "utf-8");
-  } catch (e) {
-    logWarn("artifacts", `Failed to write review tracker: ${e}`);
+  } catch (error) {
+    logWarn("artifacts", `Failed to write review tracker: ${error}`);
   }
 }
 
 function extractPreviousHashes(content: string): string[] {
   const hashes: string[] = [];
   const regex = /\*\*Plan hash:\*\* `([a-f0-9]+)`/g;
-  let match: RegExpExecArray | null;
+  let match: null | RegExpExecArray;
   while ((match = regex.exec(content)) !== null) {
     hashes.push(match[1]!);
   }
+
   return hashes;
 }

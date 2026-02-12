@@ -5,6 +5,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+
 import { logDebug, logWarn } from "./logger.js";
 import { STOP_WORDS } from "./stop-words.js";
 import { cleanTextForSlug } from "./utils.js";
@@ -44,8 +45,6 @@ export function inference(
 
   try {
     const isWin = process.platform === "win32";
-    let stdout: string;
-
     // On Windows with shell:true, Node.js sets windowsVerbatimArguments —
     // args are joined with spaces, NOT individually quoted. We must manually
     // wrap multi-word/special-char args in "..." for cmd.exe parsing.
@@ -53,10 +52,10 @@ export function inference(
     const empty = isWin ? '""' : "";
     let promptArg = fullPrompt;
     if (isWin) {
-      promptArg = '"' + fullPrompt.replace(/\r?\n/g, " ").replace(/"/g, '""') + '"';
+      promptArg = '"' + fullPrompt.replaceAll(/\r?\n/g, " ").replaceAll('"', '""') + '"';
     }
 
-    stdout = execFileSync(
+    const stdout = execFileSync(
       "claude",
       ["--model", model, "--print", "--setting-sources", empty, "-p", promptArg],
       {
@@ -74,10 +73,10 @@ export function inference(
       output: stdout.trim(),
       latency_ms: latencyMs,
     };
-  } catch (e: any) {
+  } catch (error: any) {
     const latencyMs = Date.now() - startTime;
 
-    if (e.code === "ETIMEDOUT" || e.killed) {
+    if (error.code === "ETIMEDOUT" || error.killed) {
       return {
         success: false,
         output: "",
@@ -86,7 +85,7 @@ export function inference(
       };
     }
 
-    if (e.code === "ENOENT") {
+    if (error.code === "ENOENT") {
       return {
         success: false,
         output: "",
@@ -96,11 +95,11 @@ export function inference(
     }
 
     // Non-zero exit code
-    if (e.status !== undefined && e.status !== 0) {
+    if (error.status !== undefined && error.status !== 0) {
       return {
         success: false,
-        output: (e.stdout ?? "").toString().trim(),
-        error: (e.stderr ?? "").toString().trim() || `Exit code: ${e.status}`,
+        output: (error.stdout ?? "").toString().trim(),
+        error: (error.stderr ?? "").toString().trim() || `Exit code: ${error.status}`,
         latency_ms: latencyMs,
       };
     }
@@ -108,7 +107,7 @@ export function inference(
     return {
       success: false,
       output: "",
-      error: String(e),
+      error: String(error),
       latency_ms: latencyMs,
     };
   }
@@ -134,13 +133,13 @@ Output ONLY the keywords separated by spaces, nothing else.`;
 export function generateSemanticSummary(
   prompt: string,
   timeout = 15,
-): string | null {
+): null | string {
   const result = inference(CONTEXT_ID_SYSTEM_PROMPT, prompt, "standard", timeout);
 
   if (!result.success || !result.output) return null;
 
   let summary = result.output.trim();
-  summary = summary.replace(/^["']+|["']+$/g, "");
+  summary = summary.replaceAll(/^["']+|["']+$/g, "");
   summary = summary.replace(/[.!?]+$/, "");
 
   // Filter stop words
@@ -195,7 +194,7 @@ Respond with ONLY a JSON object: {"slug": "your 8-12 word phrase here"}`;
 export function generateContextIdSlug(
   prompt: string,
   timeout = 3,
-): string | null {
+): null | string {
   const truncated = prompt.slice(0, 500);
 
   const result = inference(CONTEXT_ID_SLUG_PROMPT, truncated, "fast", timeout);
@@ -208,7 +207,7 @@ export function generateContextIdSlug(
   const raw = result.output.trim();
 
   // Parse JSON response, fall back to raw text
-  let slug: string | null = null;
+  let slug: null | string = null;
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object" && "slug" in parsed) {
@@ -221,11 +220,11 @@ export function generateContextIdSlug(
   if (!slug) slug = raw;
 
   // Clean up
-  slug = slug.replace(/^["'`]+|["'`]+$/g, "");
+  slug = slug.replaceAll(/^["'`]+|["'`]+$/g, "");
   slug = slug.replace(/[.!?]+$/, "");
-  slug = slug.replace(/-/g, " ");
-  slug = slug.replace(/[^a-zA-Z0-9 ]/g, "");
-  slug = slug.replace(/\s+/g, " ").trim();
+  slug = slug.replaceAll('-', " ");
+  slug = slug.replaceAll(/[^a-zA-Z0-9 ]/g, "");
+  slug = slug.replaceAll(/\s+/g, " ").trim();
 
   const words = slug.split(" ");
 

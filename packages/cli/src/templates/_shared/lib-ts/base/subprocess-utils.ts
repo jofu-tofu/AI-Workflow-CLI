@@ -3,7 +3,7 @@
  * See SPEC.md §5.10
  */
 
-import { execSync, execFile } from "node:child_process";
+import { execFile, execSync } from "node:child_process";
 
 /**
  * Check if this is an internal subprocess call.
@@ -31,7 +31,7 @@ export function getInternalSubprocessEnv(): Record<string, string | undefined> {
  * execFileSync cannot spawn extensionless shell scripts.
  * Returns the first match or null if not found.
  */
-export function findExecutable(name: string): string | null {
+export function findExecutable(name: string): null | string {
   try {
     const cmd = process.platform === "win32" ? `where ${name}` : `which ${name}`;
     const lines = execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] })
@@ -62,11 +62,11 @@ export function findExecutable(name: string): string | null {
  */
 export interface ExecSyncError {
   killed: boolean;
-  signal: string | null;
-  stdout: Buffer | string;
-  stderr: Buffer | string;
-  status: number | null;
   message: string;
+  signal: null | string;
+  status: null | number;
+  stderr: Buffer | string;
+  stdout: Buffer | string;
 }
 
 /** Check if an unknown error is an ExecSync error with process info. */
@@ -88,23 +88,23 @@ export function isExecSyncError(e: unknown): e is ExecSyncError {
  * Never throws — callers inspect fields to determine outcome.
  */
 export interface ExecResult {
-  stdout: string;
-  stderr: string;
   exitCode: number;
   killed: boolean;
-  signal: string | null;
+  signal: null | string;
+  stderr: string;
+  stdout: string;
 }
 
 /** Options for execFileAsync. */
 export interface ExecAsyncOptions {
-  /** Data piped to the child's stdin. */
-  input?: string;
-  /** Timeout in milliseconds (not seconds). */
-  timeout?: number;
   /** Environment variables for the child process. */
   env?: Record<string, string | undefined>;
+  /** Data piped to the child's stdin. */
+  input?: string;
   /** Maximum bytes on stdout/stderr. Default: 10 MB. */
   maxBuffer?: number;
+  /** Timeout in milliseconds (not seconds). */
+  timeout?: number;
 }
 
 /**
@@ -154,7 +154,7 @@ export function execFileAsync(
     );
 
     // Pipe input to stdin if provided
-    if (options?.input != null && child.stdin) {
+    if (options?.input !== null && options?.input !== undefined && child.stdin) {
       child.stdin.write(options.input);
       child.stdin.end();
     }

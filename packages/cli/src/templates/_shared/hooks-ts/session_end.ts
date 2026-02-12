@@ -3,18 +3,19 @@
  * SessionEnd hook: Save session state, assign plan fields (fallback),
  * stage has_plan/has_handoff for next session.
  */
-import * as fs from "node:fs";
 import * as crypto from "node:crypto";
-import {
-  loadHookInput, runHook, logDebug, logInfo, logWarn, logError, logDiagnostic,
-} from "../lib-ts/base/hook-utils.js";
+import * as fs from "node:fs";
+
 import { getProjectRoot } from "../lib-ts/base/constants.js";
+import { getGitState } from "../lib-ts/base/git-state.js";
+import {
+  loadHookInput, logDebug, logDiagnostic, logError, logInfo, logWarn as _logWarn, runHook,
+} from "../lib-ts/base/hook-utils.js";
 import { nowIso } from "../lib-ts/base/utils.js";
 import { getContextBySessionId, saveState } from "../lib-ts/context/context-store.js";
 import {
-  findLatestPlan, normalizePlanContent, generatePlanId, extractPlanAnchors,
+  extractPlanAnchors, findLatestPlan, generatePlanId, normalizePlanContent,
 } from "../lib-ts/context/plan-manager.js";
-import { getGitState } from "../lib-ts/base/git-state.js";
 
 function main(): void {
   const payload = loadHookInput();
@@ -56,7 +57,7 @@ function main(): void {
       const latestPlanPath = findLatestPlan(state.id, projectRoot);
       if (latestPlanPath) {
         try {
-          const content = fs.readFileSync(latestPlanPath, "utf-8");
+          const content = fs.readFileSync(latestPlanPath, "utf8");
           const normalized = normalizePlanContent(content);
           const planHash = crypto.createHash("sha256")
             .update(normalized, "utf-8")
@@ -71,8 +72,8 @@ function main(): void {
           state.plan_consumed = false;
 
           logInfo("session_end", `Assigned plan fallback: hash=${planHash}, path=${latestPlanPath}`);
-        } catch (e) {
-          logError("session_end", `Failed to read plan: ${e}`);
+        } catch (error) {
+          logError("session_end", `Failed to read plan: ${error}`);
         }
       }
     }

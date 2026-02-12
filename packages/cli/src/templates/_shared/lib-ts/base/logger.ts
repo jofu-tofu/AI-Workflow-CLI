@@ -32,31 +32,32 @@ const LEVELS: Record<string, number> = {
 const MAX_LOG_LINES = 10_000; // Max lines in global log before pruning
 
 // Module-level session ID cache
-let _cachedSessionId: string | null = null;
+let _cachedSessionId: null | string = null;
 
 // Module-level context path cache (kept for external callers)
-let _cachedContextPath: string | null = null;
+let _cachedContextPath: null | string = null;
 let _contextResolved = false;
 
 /**
  * Set the session ID for this process. All subsequent log calls include it.
  */
-export function setSessionId(sessionId: string | null): void {
+export function setSessionId(sessionId: null | string): void {
   _cachedSessionId = sessionId;
 }
 
 /**
  * Set the context path for this process. Kept for external callers.
  */
-export function setContextPath(contextPath: string | null): void {
+export function setContextPath(contextPath: null | string): void {
   _cachedContextPath = contextPath;
   _contextResolved = true;
 }
 
-export function getContextPath(): string | null {
+export function getContextPath(): null | string {
   if (!_contextResolved) {
     _contextResolved = true; // Don't retry
   }
+
   return _cachedContextPath;
 }
 
@@ -90,8 +91,8 @@ export function hookLog(
   opts?: {
     component?: string;
     data?: any;
-    traceback_str?: string;
     stderr?: boolean;
+    traceback_str?: string;
   },
 ): void {
   try {
@@ -137,6 +138,7 @@ export function hookLog(
         entry.data = String(opts.data);
       }
     }
+
     if (tracebackStr) entry.tb = tracebackStr.trimEnd();
 
     const line = JSON.stringify(entry) + "\n";
@@ -151,7 +153,7 @@ export function hookLog(
     // Line-count guard: prune to last MAX_LOG_LINES
     try {
       if (fs.existsSync(logPath)) {
-        const content = fs.readFileSync(logPath, "utf-8");
+        const content = fs.readFileSync(logPath, "utf8");
         const lines = content.split("\n");
         if (lines.length > MAX_LOG_LINES) {
           fs.writeFileSync(
@@ -204,11 +206,11 @@ export function logDiagnostic(
   phase: string,
   summary: string,
   opts?: {
-    inputs?: any;
-    decision?: any;
-    reasoning?: any;
     component?: string;
     data?: any;
+    decision?: any;
+    inputs?: any;
+    reasoning?: any;
   },
 ): void {
   const diagData: Record<string, any> = { phase };
@@ -218,6 +220,7 @@ export function logDiagnostic(
   if (opts?.data && typeof opts.data === "object") {
     Object.assign(diagData, opts.data);
   }
+
   hookLog("debug", hookName, `[DIAG:${phase}] ${summary}`, {
     component: opts?.component ?? "diag",
     data: diagData,
@@ -235,7 +238,7 @@ export function logHookError(
   tracebackStr = "",
 ): void {
   const errStr = typeof error === "string" ? error : String(error);
-  const msg = errStr.replace(/[\n\r]/g, " ").slice(0, 200);
+  const msg = errStr.replaceAll(/[\n\r]/g, " ").slice(0, 200);
   const errType =
     typeof error === "object" && error !== null
       ? error.constructor.name

@@ -8,7 +8,8 @@
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
+import * as _path from "node:path";
+
 import { parseIsoTimestamp } from "../base/utils.js";
 import type { ContextState, Task } from "../types.js";
 
@@ -41,10 +42,10 @@ export function getModeDisplay(mode: string): string {
  * Format ISO timestamp as '2 hours ago', 'yesterday', etc.
  * See SPEC.md §11.3
  */
-export function formatRelativeTime(isoTimestamp: string | null): string {
+export function formatRelativeTime(isoTimestamp: null | string): string {
   if (!isoTimestamp) return "unknown";
 
-  let dt = parseIsoTimestamp(isoTimestamp);
+  const dt = parseIsoTimestamp(isoTimestamp);
   if (!dt) return isoTimestamp.slice(0, 16);
 
   const now = new Date();
@@ -61,8 +62,10 @@ export function formatRelativeTime(isoTimestamp: string | null): string {
       if (diffMin === 0) return "just now";
       return diffMin === 1 ? "1 minute ago" : `${diffMin} minutes ago`;
     }
+
     return diffHours === 1 ? "1 hour ago" : `${diffHours} hours ago`;
   }
+
   if (diffDays === 1) return "yesterday";
   if (diffDays < 7) return `${diffDays} days ago`;
 
@@ -77,21 +80,23 @@ export function formatRelativeTime(isoTimestamp: string | null): string {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function taskAttr(task: Task | Record<string, any>, key: string, defaultVal = ""): string {
+function taskAttr(task: Record<string, any> | Task, key: string, defaultVal = ""): string {
   if (typeof task === "object" && task !== null) {
     return (task as any)[key] ?? defaultVal;
   }
+
   return defaultVal;
 }
 
-function readPlanContent(planPath: string): [string | null, boolean, number] {
+function readPlanContent(planPath: string): [null | string, boolean, number] {
   try {
     if (!fs.existsSync(planPath)) return [null, false, 0];
-    const content = fs.readFileSync(planPath, "utf-8");
+    const content = fs.readFileSync(planPath, "utf8");
     const total = content.length;
     if (total > MAX_PLAN_INLINE_CHARS) {
       return [content.slice(0, MAX_PLAN_INLINE_CHARS), true, total];
     }
+
     return [content, false, total];
   } catch {
     return [null, false, 0];
@@ -100,7 +105,7 @@ function readPlanContent(planPath: string): [string | null, boolean, number] {
 
 function modeLabel(ctx: ContextState): string {
   const d = getModeDisplay(ctx.mode ?? "idle");
-  return d ? d.replace(/^\[|\]$/g, "") : "Active";
+  return d ? d.replaceAll(/^\[|\]$/g, "") : "Active";
 }
 
 /**
@@ -119,7 +124,7 @@ export function buildRestoreSections(
     const savedAt = lastSession.saved_at ?? "";
     if (savedAt) {
       const reason = lastSession.save_reason ?? "";
-      const reasonDisplay = reason ? reason.replace(/_/g, " ") : "unknown";
+      const reasonDisplay = reason ? reason.replaceAll('_', " ") : "unknown";
       sections.push(`**Last session ended:** ${formatRelativeTime(savedAt)} (${reasonDisplay})`);
     }
   }
@@ -138,6 +143,7 @@ export function buildRestoreSections(
         buckets[s]!.push(taskAttr(t, "subject"));
       }
     }
+
     if (Object.values(buckets).some(b => b.length > 0)) {
       sections.push("", `### Previous Work (${tasks.length} tasks)`, "");
       const marks: Record<string, string> = {
@@ -195,8 +201,7 @@ function resumeBlock(ctx: ContextState, projectRoot: string | undefined, modeTex
   ];
   const restore = buildRestoreSections(ctx, projectRoot, true);
   if (restore) lines.push(restore);
-  lines.push("", "---", "", "**Instructions:**");
-  lines.push(...instructions);
+  lines.push("", "---", "", "**Instructions:**", ...instructions);
   return lines.join("\n");
 }
 
@@ -218,12 +223,12 @@ export function formatHandoffContinuation(ctx: ContextState, projectRoot?: strin
 
   try {
     if (handoffPath && fs.existsSync(handoffPath)) {
-      lines.push("### Previous Session Handoff", "", fs.readFileSync(handoffPath, "utf-8"), "");
+      lines.push("### Previous Session Handoff", "", fs.readFileSync(handoffPath, "utf8"), "");
     } else {
       lines.push(`*Handoff document not found at \`${handoffPath}\`*`, "");
     }
-  } catch (e: any) {
-    lines.push(`*Handoff document at \`${handoffPath}\` could not be read: ${e}*`, "");
+  } catch (error: any) {
+    lines.push(`*Handoff document at \`${handoffPath}\` could not be read: ${error}*`, "");
   }
 
   const restore = buildRestoreSections(ctx, projectRoot, true);
@@ -266,20 +271,21 @@ export function formatContextList(contexts: ContextState[]): string {
   if (contexts.length === 0) return "No active contexts found.";
 
   const lines = ["## Active Contexts\n"];
-  for (let i = 0; i < contexts.length; i++) {
-    const ctx = contexts[i]!;
+  for (const [i, context_] of contexts.entries()) {
+    const ctx = context_!;
     const timeStr = formatRelativeTime(ctx.last_active);
     const md = getModeDisplay(ctx.mode ?? "idle");
     const si = md ? ` ${md}` : "";
-    lines.push(`**${i + 1}. ${ctx.id}**${si}`);
-    lines.push(`   ${ctx.summary}`);
+    lines.push(`**${i + 1}. ${ctx.id}**${si}`, `   ${ctx.summary}`);
     if (ctx.method) {
       lines.push(`   Method: ${ctx.method} | Last active: ${timeStr}`);
     } else {
       lines.push(`   Last active: ${timeStr}`);
     }
+
     lines.push("");
   }
+
   return lines.join("\n");
 }
 
@@ -349,11 +355,11 @@ export function formatContextPickerStderr(contexts: ContextState[]): string {
   ];
 
   let selectableCount = 0;
-  for (let i = 0; i < contexts.length; i++) {
-    const ctx = contexts[i]!;
+  for (const [i, context_] of contexts.entries()) {
+    const ctx = context_!;
     const timeStr = formatRelativeTime(ctx.last_active);
     const mode = ctx.mode ?? "idle";
-    const isSelectable = mode === "active" || !!ctx.handoff_path;
+    const isSelectable = mode === "active" || Boolean(ctx.handoff_path);
     if (isSelectable) selectableCount++;
 
     let status = "";
@@ -366,10 +372,7 @@ export function formatContextPickerStderr(contexts: ContextState[]): string {
     const summary = ctx.summary.length > 48 ? ctx.summary.slice(0, 45) + "..." : ctx.summary;
     const selTag = isSelectable ? " [selectable]" : " [end only]";
 
-    lines.push(`|  ^${i + 1}  ${ctx.id}${status}${selTag}`);
-    lines.push(`|       ${summary}`);
-    lines.push(`|       [${timeStr}]`);
-    lines.push("|");
+    lines.push(`|  ^${i + 1}  ${ctx.id}${status}${selTag}`, `|       ${summary}`, `|       [${timeStr}]`, "|");
   }
 
   lines.push(
@@ -394,6 +397,7 @@ export function formatContextPickerStderr(contexts: ContextState[]): string {
       "+----------------------------------------------------------------+",
     );
   }
+
   lines.push("");
   return lines.join("\n");
 }
@@ -413,6 +417,7 @@ export function formatCommandFeedback(
       const s = ctx.summary.length > 50 ? ctx.summary.slice(0, 50) + "..." : ctx.summary;
       lines.push(`- **${ctx.id}**: ${s}`);
     }
+
     lines.push("");
   }
 
@@ -428,5 +433,6 @@ export function formatCommandFeedback(
       "Tasks created with TaskCreate will be persisted to this context.",
     );
   }
+
   return lines.join("\n");
 }

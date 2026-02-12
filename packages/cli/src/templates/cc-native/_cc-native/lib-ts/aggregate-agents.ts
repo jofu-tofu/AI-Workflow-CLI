@@ -5,8 +5,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { logDebug, logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
+
 import type { AgentConfig } from "./types.js";
+import { logDebug, logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
 
 /**
  * Extract simple YAML frontmatter from markdown content.
@@ -14,7 +15,7 @@ import type { AgentConfig } from "./types.js";
  */
 export function extractFrontmatter(
   content: string,
-): Record<string, unknown> | null {
+): null | Record<string, unknown> {
   const lines = content.split("\n");
   if (lines[0]?.trim() !== "---") return null;
 
@@ -26,6 +27,7 @@ export function extractFrontmatter(
       endIndex = i;
       break;
     }
+
     const line = lines[i];
     if (line !== undefined) {
       frontmatterLines.push(line);
@@ -47,7 +49,7 @@ export function extractFrontmatter(
       value = value
         .slice(1, -1)
         .split(",")
-        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+        .map((s) => s.trim().replaceAll(/^["']|["']$/g, ""))
         .filter(Boolean);
     }
     // Handle booleans
@@ -113,9 +115,9 @@ export function aggregateAgents(agentsDir?: string): AgentConfig[] {
     const filePath = path.join(dir, file);
     let content: string;
     try {
-      content = fs.readFileSync(filePath, "utf-8");
-    } catch (e: unknown) {
-      logWarn("aggregate", `Failed to read ${file}: ${e}`);
+      content = fs.readFileSync(filePath, "utf8");
+    } catch (error: unknown) {
+      logWarn("aggregate", `Failed to read ${file}: ${error}`);
       continue;
     }
 

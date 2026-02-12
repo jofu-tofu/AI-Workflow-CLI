@@ -6,8 +6,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getContextDir } from "./constants.js";
+
 import { atomicWrite } from "./atomic-write.js";
+import { getContextDir } from "./constants.js";
 import { logWarn } from "./logger.js";
 import type { ContextState, Mode } from "../types.js";
 
@@ -30,6 +31,7 @@ export function toDict(state: ContextState): Record<string, unknown> {
       result[key] = value;
     }
   }
+
   return result;
 }
 
@@ -52,11 +54,11 @@ export function readStateJson(
   if (!fs.existsSync(sp)) return null;
 
   try {
-    const raw = fs.readFileSync(sp, "utf-8");
+    const raw = fs.readFileSync(sp, "utf8");
     const data = JSON.parse(raw) as Record<string, any>;
     return dictToState(data);
-  } catch (e: any) {
-    logWarn("state_io", `Failed to read state.json for '${contextId}': ${e}`);
+  } catch (error: any) {
+    logWarn("state_io", `Failed to read state.json for '${contextId}': ${error}`);
     return null;
   }
 }
@@ -69,7 +71,7 @@ export function writeStateJson(
   contextId: string,
   state: ContextState,
   projectRoot?: string,
-): [boolean, string | null] {
+): [boolean, null | string] {
   const sp = statePath(contextId, projectRoot);
   const dir = path.dirname(sp);
   fs.mkdirSync(dir, { recursive: true });

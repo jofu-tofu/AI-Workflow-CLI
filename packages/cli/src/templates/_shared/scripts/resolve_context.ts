@@ -9,9 +9,9 @@
  * Used by command templates (/handoff, /handoff-resume) to programmatically
  * get the context ID instead of parsing system reminders.
  */
-import { findActiveContextId } from "../lib-ts/context/context-store.js";
 import { getProjectRoot } from "../lib-ts/base/constants.js";
 import { eprint } from "../lib-ts/base/utils.js";
+import { findActiveContextId } from "../lib-ts/context/context-store.js";
 
 const projectRoot = getProjectRoot(process.cwd());
 const contextId = findActiveContextId(projectRoot);

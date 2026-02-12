@@ -3,11 +3,11 @@
  * See cc-native-plan-review-spec.md §4.8
  */
 
-import { logDebug, logInfo, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv, findExecutable, execFileAsync } from "../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseCliOutput } from "./cli-output-parser.js";
-import type { AgentConfig, OrchestratorConfig, OrchestratorResult, ComplexityCategory } from "./types.js";
+import type { AgentConfig, ComplexityCategory, OrchestratorConfig, OrchestratorResult } from "./types.js";
 import { ORCHESTRATOR_SCHEMA } from "./types.js";
+import { logDebug, logError, logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
+import { execFileAsync, findExecutable, getInternalSubprocessEnv } from "../../_shared/lib-ts/base/subprocess-utils.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -211,7 +211,7 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning`
   let category = (obj.category as string) ?? "code";
   if (!categories.includes(category)) category = "code";
 
-  let selectedAgents = obj.selectedAgents;
+  let {selectedAgents} = obj;
   if (!Array.isArray(selectedAgents)) selectedAgents = [];
 
   const reasoning = String(obj.reasoning ?? "").trim() || "No reasoning provided";

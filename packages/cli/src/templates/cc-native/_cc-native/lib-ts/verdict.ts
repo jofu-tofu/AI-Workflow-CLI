@@ -54,13 +54,13 @@ export function computeReviewDecision(
   );
 
   if (signalVerdicts.length === 0) {
-    return { should_deny: false, reason: "no_signal", score: 0.0 };
+    return { should_deny: false, reason: "no_signal", score: 0 };
   }
 
   // Fail blocks unconditionally
   const failCount = signalVerdicts.filter((v) => v === "fail").length;
   if (failCount > 0) {
-    return { should_deny: true, reason: "fail_veto", score: 1.0 };
+    return { should_deny: true, reason: "fail_veto", score: 1 };
   }
 
   // Warn ratio still computed for logging/visibility, but does NOT block

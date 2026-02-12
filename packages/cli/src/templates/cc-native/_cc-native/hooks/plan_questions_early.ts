@@ -9,8 +9,8 @@
  * Skips if questions were already asked this session.
  */
 
-import { loadHookInput, runHook, logDebug, logInfo, emitContext } from "../../_shared/lib-ts/base/hook-utils.js";
 import { getProjectRoot } from "../../_shared/lib-ts/base/constants.js";
+import { emitContext, loadHookInput, logDebug, logInfo, runHook } from "../../_shared/lib-ts/base/hook-utils.js";
 import { wasQuestionsAsked } from "../lib-ts/cc-native-state.js";
 
 const PHASE_A_PROMPT = `## Plan Mode: Clarify Before Exploring

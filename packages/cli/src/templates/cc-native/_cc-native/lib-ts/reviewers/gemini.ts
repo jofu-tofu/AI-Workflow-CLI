@@ -4,9 +4,9 @@
  * See cc-native-plan-review-spec.md §4.12
  */
 
-import { logDebug, logInfo, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
-import { findExecutable, execFileAsync } from "../../../_shared/lib-ts/base/subprocess-utils.js";
-import { parseJsonMaybe, coerceToReview } from "../json-parser.js";
+import { logDebug, logError, logInfo as _logInfo, logWarn } from "../../../_shared/lib-ts/base/logger.js";
+import { execFileAsync, findExecutable } from "../../../_shared/lib-ts/base/subprocess-utils.js";
+import { coerceToReview, parseJsonMaybe } from "../json-parser.js";
 import type { ReviewerResult, ReviewOptions } from "../types.js";
 import { makeResult } from "./types.js";
 import type { Reviewer } from "./types.js";
@@ -24,7 +24,7 @@ export class GeminiReviewer implements Reviewer {
   async review(
     plan: string,
     schema: Record<string, unknown>,
-    options: ReviewOptions,
+    _options: ReviewOptions,
   ): Promise<ReviewerResult> {
     return runGeminiReview(plan, schema, this.settings);
   }

@@ -3,8 +3,9 @@
  * See SPEC.md §2
  */
 
-import * as path from "node:path";
 import * as fs from "node:fs";
+import * as path from "node:path";
+
 import { logWarn } from "./logger.js";
 
 // Directory names (relative to project root)
@@ -28,9 +29,9 @@ export const RETRY_BACKOFF_MS = [500, 1000];
 
 // Windows reserved filenames
 const WINDOWS_RESERVED = new Set([
-  "CON", "PRN", "AUX", "NUL",
-  "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-  "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+  "AUX", "COM1", "COM2", "COM3",
+  "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "CON", "LPT1", "LPT2",
+  "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "NUL", "PRN",
 ]);
 
 /**
@@ -41,9 +42,9 @@ export function sanitizeContextId(contextId: string): string {
   if (!contextId) return "context";
 
   let result = contextId.toLowerCase();
-  result = result.replace(/[^a-z0-9_-]/g, "-");
-  result = result.replace(/[-_]+/g, "-");
-  result = result.replace(/^[-_]+|[-_]+$/g, "");
+  result = result.replaceAll(/[^a-z0-9_-]/g, "-");
+  result = result.replaceAll(/[-_]+/g, "-");
+  result = result.replaceAll(/^[-_]+|[-_]+$/g, "");
 
   if (result.length > MAX_CONTEXT_ID_LENGTH) {
     result = result.slice(0, MAX_CONTEXT_ID_LENGTH).replace(/[-_]+$/, "");
@@ -102,6 +103,7 @@ export function getProjectRoot(payloadCwd?: string): string {
       return envDir;
     }
   }
+
   if (payloadCwd) return payloadCwd;
   return process.cwd();
 }
@@ -235,6 +237,7 @@ export function getHandoffFolderPath(
     folder = path.join(handoffsDir, `${ts}-${counter}`);
     counter++;
   }
+
   return folder;
 }
 
@@ -272,8 +275,8 @@ export function sanitizeFilename(
   maxLen = 32,
   allowLeadingDot = false,
 ): string {
-  let result = s.replace(/[^A-Za-z0-9._-]+/g, "_");
-  result = result.replace(/^[._-]+|[._-]+$/g, "").slice(0, maxLen) || "unknown";
+  let result = s.replaceAll(/[^A-Za-z0-9._-]+/g, "_");
+  result = result.replaceAll(/^[._-]+|[._-]+$/g, "").slice(0, maxLen) || "unknown";
 
   if (!allowLeadingDot) {
     result = result.replace(/^\.+/, "");
@@ -289,10 +292,10 @@ export function sanitizeFilename(
 
 export function sanitizeTitle(s: string, maxLen = 50): string {
   let result = s.toLowerCase().trim();
-  result = result.replace(/ /g, "-");
-  result = result.replace(/[^a-z0-9._-]+/g, "_");
-  result = result.replace(/[-_]+/g, "-");
-  result = result.replace(/^[._-]+|[._-]+$/g, "").slice(0, maxLen) || "unknown";
+  result = result.replaceAll(' ', "-");
+  result = result.replaceAll(/[^a-z0-9._-]+/g, "_");
+  result = result.replaceAll(/[-_]+/g, "-");
+  result = result.replaceAll(/^[._-]+|[._-]+$/g, "").slice(0, maxLen) || "unknown";
 
   const baseName = (result.split(".")[0] ?? result).toUpperCase();
   if (WINDOWS_RESERVED.has(baseName)) {

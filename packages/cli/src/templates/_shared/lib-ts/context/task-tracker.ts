@@ -6,10 +6,10 @@
  * Uses state-io for I/O to avoid circular imports with context-store.
  */
 
-import { readStateJson, writeStateJson, toDict } from "../base/state-io.js";
 import { logWarn } from "../base/logger.js";
+import { readStateJson, toDict as _toDict, writeStateJson } from "../base/state-io.js";
 import { nowIso } from "../base/utils.js";
-import type { ContextState, Task } from "../types.js";
+import type { ContextState as _ContextState, Task } from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -27,7 +27,7 @@ export function generateNextTaskId(contextId: string, projectRoot?: string): str
   for (const t of tasks) {
     const match = /^aiw-(\d+)$/.exec(t.id);
     if (match) {
-      const num = parseInt(match[1]!, 10);
+      const num = Number.parseInt(match[1]!, 10);
       if (num > maxNum) maxNum = num;
     }
   }
@@ -46,7 +46,7 @@ export function addTask(
   activeForm = "",
   sessionId = "",
   projectRoot?: string,
-): Task | null {
+): null | Task {
   const state = readStateJson(contextId, projectRoot);
   if (!state) return null;
 
@@ -80,11 +80,11 @@ export function updateTask(
   contextId: string,
   taskId: string,
   opts?: {
-    status?: string;
     evidence?: string;
-    work_summary?: string;
     files_changed?: string[];
     session_id?: string;
+    status?: string;
+    work_summary?: string;
   },
   projectRoot?: string,
 ): boolean {
@@ -99,6 +99,7 @@ export function updateTask(
           task.completed_at = nowIso();
         }
       }
+
       if (opts?.evidence) task.evidence = opts.evidence;
       if (opts?.work_summary) task.work_summary = opts.work_summary;
       if (opts?.files_changed !== undefined) task.files_changed = opts.files_changed;
@@ -167,12 +168,15 @@ export function generateTaskSummary(contextId: string, projectRoot?: string): st
     const ws = t.work_summary ? `\n  Work: ${t.work_summary}` : "";
     lines.push(`- [x] ${t.id}: ${t.subject}${ws}`);
   }
+
   for (const t of inProgress) {
     lines.push(`- [~] ${t.id}: ${t.subject}`);
   }
+
   for (const t of pending) {
     lines.push(`- [ ] ${t.id}: ${t.subject}`);
   }
+
   for (const t of blocked) {
     lines.push(`- [!] ${t.id}: ${t.subject}`);
   }

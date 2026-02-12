@@ -8,6 +8,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+
 import { hookLog } from "../../_shared/lib-ts/base/logger.js";
 
 /** Feature flag — set CCNATIVE_DEBUG_DISABLE=1 to turn off */
@@ -51,7 +52,7 @@ export function debugRaw(
   component: string,
   label: string,
   raw: string,
-  maxLen = 10000,
+  maxLen = 10_000,
 ): void {
   if (!DEBUG_ENABLED) return;
 

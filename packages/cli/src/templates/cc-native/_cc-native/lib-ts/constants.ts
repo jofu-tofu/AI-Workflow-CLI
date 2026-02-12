@@ -3,8 +3,8 @@
  * See cc-native-plan-review-spec.md §4.15
  */
 
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
 
 // ---------------------------------------------------------------------------
 // Feature Flags
@@ -60,7 +60,7 @@ export function validatePlanPath(planPath: string): string {
     );
   }
 
-  if (planPath.includes("\x00")) {
+  if (planPath.includes("\u0000")) {
     throw new Error("Null bytes not allowed in path");
   }
 
@@ -68,13 +68,13 @@ export function validatePlanPath(planPath: string): string {
   let resolved: string;
   try {
     resolved = path.resolve(planPath);
-  } catch (e: unknown) {
-    throw new Error(`Path resolution failed: ${e}`);
+  } catch (error: unknown) {
+    throw new Error(`Path resolution failed: ${error}`);
   }
 
   // Verify path is within allowed directory (case-insensitive on Windows)
-  const resolvedLower = resolved.toLowerCase().replace(/\\/g, "/");
-  const plansDirLower = PLANS_DIR.toLowerCase().replace(/\\/g, "/");
+  const resolvedLower = resolved.toLowerCase().replaceAll('\\', "/");
+  const plansDirLower = PLANS_DIR.toLowerCase().replaceAll('\\', "/");
   if (!resolvedLower.startsWith(plansDirLower)) {
     throw new Error(`Path outside allowed directory: ${PLANS_DIR}`);
   }

@@ -7,9 +7,10 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { logDebug, logInfo, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
-import { findExecutable, execFileAsync } from "../../../_shared/lib-ts/base/subprocess-utils.js";
-import { parseJsonMaybe, coerceToReview } from "../json-parser.js";
+
+import { logDebug, logError, logInfo as _logInfo, logWarn } from "../../../_shared/lib-ts/base/logger.js";
+import { execFileAsync, findExecutable } from "../../../_shared/lib-ts/base/subprocess-utils.js";
+import { coerceToReview, parseJsonMaybe } from "../json-parser.js";
 import { REVIEW_PROMPT_PREFIX } from "../types.js";
 import type { ReviewerResult, ReviewOptions } from "../types.js";
 import { makeResult } from "./types.js";
@@ -28,7 +29,7 @@ export class CodexReviewer implements Reviewer {
   async review(
     plan: string,
     schema: Record<string, unknown>,
-    options: ReviewOptions,
+    _options: ReviewOptions,
   ): Promise<ReviewerResult> {
     return runCodexReview(plan, schema, this.settings);
   }
@@ -106,7 +107,7 @@ ${plan}
 
     let raw = "";
     if (fs.existsSync(outPath)) {
-      raw = fs.readFileSync(outPath, "utf-8");
+      raw = fs.readFileSync(outPath, "utf8");
     }
 
     const obj = parseJsonMaybe(raw) ?? parseJsonMaybe(result.stdout);

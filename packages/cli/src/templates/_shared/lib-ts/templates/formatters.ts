@@ -32,7 +32,7 @@ export function getStatusIcon(status: string): string {
 
 // §13.3 — Task rendering
 export function renderTaskItem(
-  task: Task | Record<string, any>,
+  task: Record<string, any> | Task,
   showDescription = true,
   maxDescriptionLength = 100,
 ): string {
@@ -49,13 +49,15 @@ export function renderTaskItem(
     if (description.length > maxDescriptionLength) {
       truncated += "...";
     }
+
     return `${line}\n  - ${truncated}`;
   }
+
   return line;
 }
 
 export function renderTaskList(
-  tasks: Array<Task | Record<string, any>>,
+  tasks: Array<Record<string, any> | Task>,
   header = "Active Tasks",
   showDescription = true,
 ): string {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Load environment variable compatibility layer first
-const {loadEnvWithCompatibility} = await import('../dist/lib/env-compat.js')
+const {loadEnvWithCompatibility} = await import('../dist/lib/env-compat.js')  
 loadEnvWithCompatibility()
 
 import {execute} from '@oclif/core'

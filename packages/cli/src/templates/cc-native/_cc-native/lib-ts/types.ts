@@ -12,13 +12,13 @@ export type { ContextState, HookInput, HookOutput } from "../../_shared/lib-ts/t
 // ---------------------------------------------------------------------------
 
 /** Verdict from a single reviewer */
-export type Verdict = "pass" | "warn" | "fail" | "error" | "skip";
+export type Verdict = "error" | "fail" | "pass" | "skip" | "warn";
 
 /** Decision after aggregating all verdicts */
 export type ReviewDecision = "allow" | "deny";
 
 /** Complexity level assigned by orchestrator */
-export type ComplexityCategory = "simple" | "medium" | "high";
+export type ComplexityCategory = "high" | "medium" | "simple";
 
 // ---------------------------------------------------------------------------
 // Review Data Structures
@@ -26,57 +26,57 @@ export type ComplexityCategory = "simple" | "medium" | "high";
 
 /** A single issue found during review */
 export interface ReviewIssue {
-  severity: "high" | "medium" | "low";
   category: string;
   issue: string;
+  severity: "high" | "low" | "medium";
   suggested_fix: string;
 }
 
 /** Normalized review data from any reviewer */
 export interface ReviewData {
-  verdict: Verdict;
-  summary: string;
-  summary_source: "reviewer" | "default";
   issues: ReviewIssue[];
   missing_sections: string[];
   questions: string[];
+  summary: string;
+  summary_source: "default" | "reviewer";
+  verdict: Verdict;
 }
 
 /** Result from a single plan reviewer (Codex, Gemini, or Claude agent) */
 export interface ReviewerResult {
+  data: Record<string, unknown>;
+  err: string;
   name: string;
   ok: boolean;
-  verdict: Verdict;
-  data: Record<string, unknown>;
   raw: string;
-  err: string;
+  verdict: Verdict;
 }
 
 /** Result from the plan orchestrator */
 export interface OrchestratorResult {
-  complexity: ComplexityCategory;
   category: string;
-  selected_agents: string[];
-  reasoning: string;
-  skip_reason?: string;
+  complexity: ComplexityCategory;
   error?: string;
+  reasoning: string;
+  selected_agents: string[];
+  skip_reason?: string;
 }
 
 /** Combined result from all review phases */
 export interface CombinedReviewResult {
-  plan_hash: string;
-  overall_verdict: Verdict;
-  cli_reviewers: Record<string, ReviewerResult>;
-  orchestration: OrchestratorResult | null;
   agents: Record<string, ReviewerResult>;
+  cli_reviewers: Record<string, ReviewerResult>;
+  orchestration: null | OrchestratorResult;
+  overall_verdict: Verdict;
+  plan_hash: string;
   timestamp: string;
 }
 
 /** Result from verdict aggregation */
 export interface ReviewDecisionResult {
-  should_deny: boolean;
   reason: string; // "fail_veto" | "acceptable" | "no_signal"
   score: number;
+  should_deny: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,12 +85,12 @@ export interface ReviewDecisionResult {
 
 /** Configuration for a Claude Code review agent */
 export interface AgentConfig {
-  name: string;
-  model: string;
-  focus: string;
-  enabled: boolean;
   categories: string[];
   description: string;
+  enabled: boolean;
+  focus: string;
+  model: string;
+  name: string;
   system_prompt: string; // Markdown body content for --system-prompt
 }
 
@@ -108,36 +108,36 @@ export interface OrchestratorConfig {
 /** A single iteration history entry */
 export interface IterationEntry {
   hash: string;
-  verdict: string;
   timestamp: string;
+  verdict: string;
 }
 
 /** Iteration tracking state (stored adjacent to plan file) */
 export interface IterationState {
-  current: number;
-  max: number;
   complexity: string;
+  current: number;
   history: IterationEntry[];
+  max: number;
 }
 
 /** CC-native state stored in context state.json under cc_native key */
 export interface CcNativeState {
+  [key: string]: unknown;
   plan_review?: PlanReviewState;
   questions_asked?: QuestionsAskedState;
-  [key: string]: unknown;
 }
 
 /** Plan review state within cc_native */
 export interface PlanReviewState {
-  plan_hash: string;
-  reviewed_at: string;
   decision: string;
   iteration?: {
-    current: number;
-    max: number;
     complexity: string;
+    current: number;
     latest_verdict?: string;
+    max: number;
   };
+  plan_hash: string;
+  reviewed_at: string;
 }
 
 /** Questions-asked tracking state */
@@ -159,25 +159,25 @@ export interface DisplaySettings {
 
 /** Full plan review configuration (from plan-review.config.json) */
 export interface PlanReviewConfig {
+  [key: string]: unknown;
+  display?: Partial<DisplaySettings>;
   planReview?: {
-    enabled?: boolean;
-    reviewers?: {
-      codex?: { enabled?: boolean; timeout?: number; model?: string };
-      gemini?: { enabled?: boolean; timeout?: number; model?: string };
-    };
     agentReview?: {
-      enabled?: boolean;
-      timeout?: number;
-      orchestrator?: { enabled?: boolean; model?: string; timeout?: number };
       agentSelection?: Record<string, unknown>;
       complexityCategories?: string[];
+      enabled?: boolean;
+      orchestrator?: { enabled?: boolean; model?: string; timeout?: number };
+      timeout?: number;
     };
     display?: Partial<DisplaySettings>;
-    reviewIterations?: Record<string, number>;
     earlyExitOnAllPass?: boolean;
+    enabled?: boolean;
+    reviewers?: {
+      codex?: { enabled?: boolean; model?: string; timeout?: number; };
+      gemini?: { enabled?: boolean; model?: string; timeout?: number; };
+    };
+    reviewIterations?: Record<string, number>;
   };
-  display?: Partial<DisplaySettings>;
-  [key: string]: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -186,9 +186,9 @@ export interface PlanReviewConfig {
 
 /** Options passed to reviewer implementations */
 export interface ReviewOptions {
-  timeout: number;
   context_path?: string;
   session_name?: string;
+  timeout: number;
 }
 
 /** Interface all reviewers must implement */

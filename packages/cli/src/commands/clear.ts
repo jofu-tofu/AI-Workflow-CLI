@@ -44,6 +44,7 @@ const IDE_FOLDERS = {
  * @param targetDir - Directory containing the .aiwcli container
  * @returns Set of method names (e.g., 'cc-native', 'bmad')
  */
+ 
 async function getInstalledMethodNames(targetDir: string): Promise<Set<string>> {
   const methods = new Set<string>()
 
@@ -51,6 +52,7 @@ async function getInstalledMethodNames(targetDir: string): Promise<Set<string>> 
   for (const ide of Object.values(IDE_FOLDERS)) {
     const settingsPath = join(targetDir, ide.root, ide.settingsFile)
     try {
+      // eslint-disable-next-line no-await-in-loop
       const content = await fs.readFile(settingsPath, 'utf8')
       const settings = JSON.parse(content)
       if (settings.methods && typeof settings.methods === 'object') {
@@ -657,6 +659,7 @@ export default class ClearCommand extends BaseCommand {
    * @param targetDir - Project root directory
    * @param flags - Command flags (dry-run, force)
    */
+  // eslint-disable-next-line complexity
   private async cleanRuntimeOutput(
     targetDir: string,
     flags: {'dry-run': boolean; force: boolean},
@@ -694,7 +697,7 @@ export default class ClearCommand extends BaseCommand {
         // Log rotation: hook-log.jsonl > 1MB
         if (entry.isFile() && entry.name === 'hook-log.jsonl') {
           try {
-            const stat = await fs.stat(entryPath)
+            const stat = await fs.stat(entryPath) // eslint-disable-line no-await-in-loop
             if (stat.size > 1_048_576) {
               logAction = {path: entryPath, sizeBytes: stat.size}
             }
@@ -709,7 +712,7 @@ export default class ClearCommand extends BaseCommand {
         if (entry.isDirectory() && entry.name === 'contexts') {
           const archivePath = join(entryPath, '_archive')
           try {
-            const archiveEntries = await fs.readdir(archivePath)
+            const archiveEntries = await fs.readdir(archivePath) // eslint-disable-line no-await-in-loop
             if (archiveEntries.length > 0) {
               archiveDir = archivePath
               archiveCount = archiveEntries.length
@@ -777,7 +780,7 @@ export default class ClearCommand extends BaseCommand {
     let deletedCount = 0
     for (const item of toDelete) {
       try {
-        await fs.unlink(item.path)
+        await fs.unlink(item.path) // eslint-disable-line no-await-in-loop
         deletedCount++
       } catch (error) {
         const err = error as NodeJS.ErrnoException

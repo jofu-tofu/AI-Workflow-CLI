@@ -3,13 +3,13 @@
  * PostToolUse:TaskUpdate hook: Persist Claude's TaskUpdate calls to state.json.
  * Maps Claude's ephemeral task IDs to persistent aiw-N IDs.
  */
-import {
-  loadHookInput, validateHookEvent, getToolInput, checkSkipPersistence,
-  runHook, logDebug, logInfo, logWarn, logError,
-} from "../lib-ts/base/hook-utils.js";
 import { getProjectRoot } from "../lib-ts/base/constants.js";
+import {
+  checkSkipPersistence, getToolInput, loadHookInput, logDebug,
+  logError as _logError, logInfo, logWarn, runHook, validateHookEvent,
+} from "../lib-ts/base/hook-utils.js";
 import { getContextBySessionId } from "../lib-ts/context/context-store.js";
-import { updateTask, deleteTask } from "../lib-ts/context/task-tracker.js";
+import { deleteTask, updateTask } from "../lib-ts/context/task-tracker.js";
 
 function main(): void {
   const payload = loadHookInput();
@@ -48,6 +48,7 @@ function main(): void {
     } else {
       logWarn("task_update_capture", `Task ${persistentId} not found for deletion`);
     }
+
     return;
   }
 
@@ -58,6 +59,7 @@ function main(): void {
     if (metadata.files_changed && Array.isArray(metadata.files_changed)) {
       opts.files_changed = metadata.files_changed;
     }
+
     opts.session_id = sessionId;
 
     const ok = updateTask(state.id, persistentId, opts, projectRoot);

@@ -5,9 +5,10 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { logWarn } from "../../_shared/lib-ts/base/logger.js";
-import type { PlanReviewConfig, DisplaySettings } from "./types.js";
+
+import type { DisplaySettings, PlanReviewConfig } from "./types.js";
 import { DEFAULT_DISPLAY } from "./types.js";
+import { logWarn } from "../../_shared/lib-ts/base/logger.js";
 
 /**
  * Load full CC-Native config from _cc-native/plan-review.config.json.
@@ -24,10 +25,10 @@ export function loadConfig(projectDir: string): PlanReviewConfig {
   }
 
   try {
-    const raw = fs.readFileSync(settingsPath, "utf-8");
+    const raw = fs.readFileSync(settingsPath, "utf8");
     return JSON.parse(raw) as PlanReviewConfig;
-  } catch (e: unknown) {
-    logWarn("cc-native", `Failed to load config: ${e}`);
+  } catch (error: unknown) {
+    logWarn("cc-native", `Failed to load config: ${error}`);
     return {};
   }
 }

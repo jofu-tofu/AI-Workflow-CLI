@@ -5,23 +5,24 @@
  * Uses top-level await because archivePlan is async.
  */
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+
+import { getContextDir, getProjectRoot } from "../lib-ts/base/constants.js";
 import {
-  loadHookInput, runHookAsync, logDebug, logInfo, logWarn, logError,
+  loadHookInput, logDebug, logError, logInfo, logWarn, runHookAsync,
 } from "../lib-ts/base/hook-utils.js";
-import { getProjectRoot, getContextDir } from "../lib-ts/base/constants.js";
 import { getContextBySessionId } from "../lib-ts/context/context-store.js";
 import {
   archivePlan, extractPlanPathFromResult, findPlanPathInTranscript,
 } from "../lib-ts/context/plan-manager.js";
 
 /** Find the most recent .md file in a directory */
-function mostRecentMd(dir: string): string | null {
+function mostRecentMd(dir: string): null | string {
   try {
     if (!fs.existsSync(dir)) return null;
     const entries = fs.readdirSync(dir, { withFileTypes: true });
-    let best: { path: string; mtime: number } | null = null;
+    let best: null | { mtime: number; path: string; } = null;
     for (const e of entries) {
       if (!e.isFile() || !e.name.endsWith(".md")) continue;
       const fullPath = path.join(dir, e.name);
@@ -30,6 +31,7 @@ function mostRecentMd(dir: string): string | null {
         best = { path: fullPath, mtime: stat.mtimeMs };
       }
     }
+
     return best?.path ?? null;
   } catch {
     return null;
@@ -37,7 +39,7 @@ function mostRecentMd(dir: string): string | null {
 }
 
 /** Multi-strategy plan path discovery */
-function findPlanPath(payload: Record<string, any>, projectRoot: string): string | null {
+function findPlanPath(payload: Record<string, any>, projectRoot: string): null | string {
   const toolResult = payload.tool_result as string | undefined;
   const toolInput = (payload.tool_input ?? {}) as Record<string, any>;
   const transcriptPath = payload.transcript_path as string | undefined;
@@ -136,7 +138,7 @@ async function asyncMain(): Promise<void> {
   }
 
   // Archive the plan (async — uses AI for slug generation)
-  const [archivedPath, planHash, planSignature] = await archivePlan(planPath, state.id, projectRoot);
+  const [archivedPath, planHash, _planSignature] = await archivePlan(planPath, state.id, projectRoot);
 
   if (archivedPath) {
     // Clean up debug logs (best effort, matches Python behavior)

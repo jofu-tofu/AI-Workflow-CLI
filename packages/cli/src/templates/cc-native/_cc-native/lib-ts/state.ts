@@ -6,11 +6,12 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { atomicWrite } from "../../_shared/lib-ts/base/atomic-write.js";
-import { logInfo, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
-import { nowIso } from "../../_shared/lib-ts/base/utils.js";
+
 import { validatePlanPath } from "./constants.js";
-import type { IterationState, IterationEntry } from "./types.js";
+import type { IterationEntry, IterationState } from "./types.js";
+import { atomicWrite } from "../../_shared/lib-ts/base/atomic-write.js";
+import { logError, logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
+import { nowIso } from "../../_shared/lib-ts/base/utils.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -43,7 +44,7 @@ export function getStateFilePath(planPath: string): string {
 /**
  * Load state file with schema validation and migration.
  */
-export function loadState(planPath: string): Record<string, unknown> | null {
+export function loadState(planPath: string): null | Record<string, unknown> {
   try {
     const stateFile = getStateFilePath(planPath);
 
@@ -52,7 +53,7 @@ export function loadState(planPath: string): Record<string, unknown> | null {
     }
 
     const state = JSON.parse(
-      fs.readFileSync(stateFile, "utf-8"),
+      fs.readFileSync(stateFile, "utf8"),
     ) as Record<string, unknown>;
 
     // Handle schema version (backward compatible)
@@ -72,12 +73,13 @@ export function loadState(planPath: string): Record<string, unknown> | null {
     }
 
     return state;
-  } catch (e: unknown) {
-    if (e instanceof Error && e.message.includes("Invalid plan path")) {
-      logError("state", `SECURITY: Invalid plan path: ${e}`);
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes("Invalid plan path")) {
+      logError("state", `SECURITY: Invalid plan path: ${error}`);
     } else {
-      logError("state", `Failed to load state: ${e}`);
+      logError("state", `Failed to load state: ${error}`);
     }
+
     return null;
   }
 }
@@ -109,12 +111,13 @@ export function saveStateToPlan(
     }
 
     return true;
-  } catch (e: unknown) {
-    if (e instanceof Error && e.message.includes("Invalid plan path")) {
-      logError("state", `SECURITY: Invalid plan path: ${e}`);
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes("Invalid plan path")) {
+      logError("state", `SECURITY: Invalid plan path: ${error}`);
     } else {
-      logError("state", String(e));
+      logError("state", String(error));
     }
+
     return false;
   }
 }
@@ -130,13 +133,15 @@ export function deleteState(planPath: string): boolean {
       fs.unlinkSync(stateFile);
       logInfo("state", `Deleted state file: ${stateFile}`);
     }
+
     return true;
-  } catch (e: unknown) {
-    if (e instanceof Error && e.message.includes("Invalid plan path")) {
-      logError("state", `SECURITY: Invalid plan path in delete: ${e}`);
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes("Invalid plan path")) {
+      logError("state", `SECURITY: Invalid plan path in delete: ${error}`);
       return false;
     }
-    logWarn("state", `Failed to delete state file: ${e}`);
+
+    logWarn("state", `Failed to delete state file: ${error}`);
     return false;
   }
 }
@@ -204,7 +209,7 @@ export function shouldContinueIterating(
   verdict: string,
   config?: Record<string, unknown>,
 ): boolean {
-  const current = iteration.current;
+  const {current} = iteration;
   const maxIter = iteration.max;
 
   // At or past max iterations
@@ -221,6 +226,7 @@ export function shouldContinueIterating(
   if (config) {
     earlyExit = (config.earlyExitOnAllPass as boolean) ?? true;
   }
+
   if (earlyExit && verdict === "pass") {
     logInfo(
       "state",

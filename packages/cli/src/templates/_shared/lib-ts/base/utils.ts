@@ -4,8 +4,8 @@
  */
 
 import { sanitizeTitle } from "./constants.js";
+import { logDebug, logError, logWarn } from "./logger.js";
 import { STOP_WORDS } from "./stop-words.js";
-import { logDebug, logWarn, logError } from "./logger.js";
 
 /**
  * Print to stderr. For terminal-only UX messages, not diagnostics.
@@ -77,9 +77,9 @@ export function parseIsoTimestamp(isoStr: string): Date | null {
 export function cleanTextForSlug(text: string): string {
   if (!text) return "";
   let result = text.toLowerCase();
-  result = result.replace(/'/g, "");            // i'm -> im, you're -> youre
-  result = result.replace(/[^a-z0-9\s]/g, " "); // punctuation -> spaces
-  result = result.replace(/\s+/g, " ").trim();
+  result = result.replaceAll('\'', "");            // i'm -> im, you're -> youre
+  result = result.replaceAll(/[^a-z0-9\s]/g, " "); // punctuation -> spaces
+  result = result.replaceAll(/\s+/g, " ").trim();
   return result;
 }
 
@@ -96,11 +96,12 @@ export function generateSlug(
 ): string {
   if (!text || !text.trim()) return fallbackSlug;
 
-  let slug: string | null = null;
+  let slug: null | string = null;
   const cleanedText = cleanTextForSlug(text);
 
   // Tier 1: AI inference via generateContextIdSlug (sync — uses execFileSync)
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef
     const { generateContextIdSlug } = require("./inference.js");
     const aiSlug = generateContextIdSlug(text);
     if (aiSlug) {
@@ -118,8 +119,8 @@ export function generateSlug(
         );
       }
     }
-  } catch (e: any) {
-    logWarn("utils", `AI slug generation failed, using fallback: ${e}`);
+  } catch (error: any) {
+    logWarn("utils", `AI slug generation failed, using fallback: ${error}`);
   }
 
   // Tier 2: Stop-word filtering on cleaned text
@@ -162,10 +163,10 @@ export function generateContextId(
   try {
     const slug = generateSlug(summary);
     baseId = `${timestamp}-${slug}`;
-  } catch (e: any) {
+  } catch (error: any) {
     logError(
       "utils",
-      `Context ID generation failed entirely, using timestamp: ${e}`,
+      `Context ID generation failed entirely, using timestamp: ${error}`,
     );
     baseId = `${timestamp}-context`;
   }
@@ -178,5 +179,6 @@ export function generateContextId(
   while (existingIds.has(`${baseId}-${counter}`)) {
     counter++;
   }
+
   return `${baseId}-${counter}`;
 }

@@ -3,8 +3,8 @@
  * See cc-native-plan-review-spec.md §4.10-4.11
  */
 
-import { logDebug, logWarn } from "../../_shared/lib-ts/base/logger.js";
 import type { ReviewData, Verdict } from "./types.js";
+import { logDebug, logWarn } from "../../_shared/lib-ts/base/logger.js";
 
 /**
  * Try strict JSON parse. If that fails, attempt to extract the first {...} block.
@@ -16,12 +16,12 @@ import type { ReviewData, Verdict } from "./types.js";
 export function parseJsonMaybe(
   text: string,
   requireFields?: string[],
-): Record<string, unknown> | null {
+): null | Record<string, unknown> {
   const trimmed = text.trim();
   if (!trimmed) return null;
 
-  let obj: Record<string, unknown> | null = null;
-  let parseMethod: string | null = null;
+  let obj: null | Record<string, unknown> = null;
+  let parseMethod: null | string = null;
 
   // Strict parse
   try {
@@ -87,7 +87,7 @@ export function parseJsonMaybe(
  * @returns Tuple of [ok, verdict, normalizedData]
  */
 export function coerceToReview(
-  obj: Record<string, unknown> | null,
+  obj: null | Record<string, unknown>,
   defaultFixMsg = "Retry or check configuration.",
 ): [boolean, Verdict, ReviewData] {
   if (!obj) {
@@ -138,6 +138,7 @@ export function coerceToReview(
       `verdict=${obj.verdict}, issues_count=${Array.isArray(obj.issues) ? (obj.issues as unknown[]).length : 0}`,
     );
   }
+
   if (!obj.issues) {
     logDebug("coerce", "issues array empty or missing");
   }

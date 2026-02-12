@@ -14,29 +14,30 @@
  */
 
 import * as crypto from "node:crypto";
-import {
-  getContext,
-  getAllContexts,
-  getContextBySessionId,
-  createContextFromPrompt,
-  createContext,
-  completeContext,
-  bindSession,
-  updateMode,
-} from "./context-store.js";
+
 import {
   formatActiveContextReminder,
+  formatActiveContinuation as _formatActiveContinuation,
+  formatCommandFeedback,
   formatContextCreated,
   formatContextPickerStderr,
-  formatCommandFeedback,
   formatHandoffContinuation,
   formatPlanContinuation,
-  formatActiveContinuation,
 } from "./context-formatter.js";
+import {
+  bindSession,
+  completeContext,
+  createContext,
+  createContextFromPrompt,
+  getAllContexts,
+  getContext,
+  getContextBySessionId,
+  updateMode,
+} from "./context-store.js";
 import { normalizePlanContent } from "./plan-manager.js";
+import { logDebug, logError, logInfo, logWarn as _logWarn } from "../base/logger.js";
 import { isInternalCall } from "../base/subprocess-utils.js";
-import { logDebug, logInfo, logWarn, logError } from "../base/logger.js";
-import type { ContextState, CaretCommand } from "../types.js";
+import type { CaretCommand, ContextState } from "../types.js";
 
 /** Minimum characters required for new context description. */
 const MIN_NEW_CONTEXT_CHARS = 10;
@@ -65,7 +66,7 @@ export class BlockRequest extends Error {
 export function resolveContextByPrefix(
   query: string,
   contexts: ContextState[],
-): [number | null, string | null] {
+): [null | number, null | string] {
   const q = query.toLowerCase();
   const available = contexts.map(c => c.id).join(", ");
 
@@ -107,7 +108,7 @@ export function resolveContextByPrefix(
 export function parseChainedCaret(
   prompt: string,
   contexts: ContextState[],
-): [CaretCommand | null, string | null] {
+): [CaretCommand | null, null | string] {
   if (!prompt.startsWith("^")) return [null, null];
 
   const match = prompt.match(/^\^(\S+)(?:\s+(.*))?$/s);
@@ -120,7 +121,7 @@ export function parseChainedCaret(
 
   // ^N shorthand
   if (/^\d+$/.test(commandStr)) {
-    const num = parseInt(commandStr, 10);
+    const num = Number.parseInt(commandStr, 10);
     if (num === 0) {
       if (remaining.length < MIN_NEW_CONTEXT_CHARS) {
         return [null,
@@ -130,21 +131,25 @@ export function parseChainedCaret(
           `Example: ^0 implement user authentication with JWT tokens`,
         ];
       }
+
       return [{ ends: [], select: null, new_context_desc: remaining, remaining_prompt: "" }, null];
     }
+
     if (num < 1 || num > contexts.length) {
       if (contexts.length === 0) {
         return [null, "No existing contexts. Use ^0 <description> to create a new one."];
       }
+
       return [null, `Invalid selection. Choose 1-${contexts.length} for existing contexts, or ^0 for new.`];
     }
+
     const ctx = contexts[num - 1]!;
     return [{ ends: [], select: ctx.id, new_context_desc: null, remaining_prompt: remaining }, null];
   }
 
   // Parse chained commands
   const ends: string[] = [];
-  let select: string | null = null;
+  let select: null | string = null;
   let pos = 0;
 
   while (pos < commandStr.length) {
@@ -174,11 +179,13 @@ export function parseChainedCaret(
         if (numStart === pos) {
           return [null, `Expected number, '*', or ':prefix' after 'E' at position ${numStart + 1}`];
         }
-        const num = parseInt(commandStr.slice(numStart, pos), 10);
+
+        const num = Number.parseInt(commandStr.slice(numStart, pos), 10);
         if (num < 1 || num > contexts.length) {
           if (contexts.length === 0) return [null, "No contexts to end."];
           return [null, `Context ^E${num} invalid. Choose 1-${contexts.length}.`];
         }
+
         if (pos < commandStr.length && commandStr[pos] === "+") {
           pos++;
           for (let i = num; i <= contexts.length; i++) {
@@ -208,13 +215,16 @@ export function parseChainedCaret(
         if (numStart === pos) {
           return [null, `Expected number or ':prefix' after 'S' at position ${numStart + 1}`];
         }
-        const num = parseInt(commandStr.slice(numStart, pos), 10);
+
+        const num = Number.parseInt(commandStr.slice(numStart, pos), 10);
         if (num < 1 || num > contexts.length) {
           if (contexts.length === 0) return [null, "No contexts to select."];
           return [null, `Context ^S${num} invalid. Choose 1-${contexts.length}.`];
         }
+
         ctx = contexts[num - 1]!;
       }
+
       if (select === null) select = ctx.id;
     } else {
       return [null,
@@ -274,9 +284,9 @@ function matchPlanContent(prompt: string, hasPlanContexts: ContextState[]): Cont
   }
 
   // Tier 4 (legacy): Signature match
-  const promptHead = prompt.slice(0, 500);
+  const promptHead = new Set(prompt.slice(0, 500));
   for (const ctx of hasPlanContexts) {
-    if (ctx.plan_signature && promptHead.includes(ctx.plan_signature)) {
+    if (ctx.plan_signature && promptHead.has(ctx.plan_signature)) {
       logDebug("context_selector", `Tier 4 legacy signature match: ${ctx.id}`);
       return ctx;
     }
@@ -292,15 +302,15 @@ function matchPlanContent(prompt: string, hasPlanContexts: ContextState[]): Cont
 function createNewContext(
   prompt: string,
   projectRoot?: string,
-): [string | null, string, string | null] {
+): [null | string, string, null | string] {
   try {
     const newCtx = createContextFromPrompt(prompt, projectRoot);
     updateMode(newCtx.id, "active", projectRoot);
     newCtx.mode = "active";
     logInfo("context_selector", `Auto-created context: ${newCtx.id}`);
     return [newCtx.id, "auto_created", formatContextCreated(newCtx)];
-  } catch (e: any) {
-    logError("context_selector", `Primary context creation failed: ${e}`);
+  } catch (error: any) {
+    logError("context_selector", `Primary context creation failed: ${error}`);
     try {
       const now = new Date();
       const yy = String(now.getFullYear()).slice(2);
@@ -320,8 +330,8 @@ function createNewContext(
       newCtx.mode = "active";
       logInfo("context_selector", `Fallback context created: ${newCtx.id}`);
       return [newCtx.id, "auto_created_fallback", formatContextCreated(newCtx)];
-    } catch (e2: any) {
-      logError("context_selector", `ALL context creation failed: ${e2}`);
+    } catch (error: any) {
+      logError("context_selector", `ALL context creation failed: ${error}`);
       return [null, "creation_failed", null];
     }
   }
@@ -335,7 +345,7 @@ function handleCaretCommand(
   prompt: string,
   contexts: ContextState[],
   projectRoot?: string,
-): [string | null, string, string | null] {
+): [null | string, string, null | string] {
   if (contexts.length === 0) {
     const match = prompt.match(/^\^(\S+)(?:\s+(.*))?$/s);
     if (!match) {
@@ -344,14 +354,16 @@ function handleCaretCommand(
         "Example: ^0 implement user authentication system",
       );
     }
+
     const prefixValue = match[1]!;
     const remaining = match[2] ?? "";
-    if (!/^\d+$/.test(prefixValue) || parseInt(prefixValue, 10) !== 0) {
+    if (!/^\d+$/.test(prefixValue) || Number.parseInt(prefixValue, 10) !== 0) {
       throw new BlockRequest(
         "No existing contexts to select. Use ^0 <description> to create a new context.\n" +
         "Example: ^0 implement user authentication system",
       );
     }
+
     const description = remaining.trim();
     if (description.length < MIN_NEW_CONTEXT_CHARS) {
       throw new BlockRequest(
@@ -361,6 +373,7 @@ function handleCaretCommand(
         `Example: ^0 implement user authentication with JWT tokens`,
       );
     }
+
     return createNewContext(description, projectRoot);
   }
 
@@ -374,6 +387,7 @@ function handleCaretCommand(
     if (!ctxToEnd) {
       throw new BlockRequest(`Context '${ctxId}' no longer exists.\n` + formatContextPickerStderr(contexts));
     }
+
     completeContext(ctxToEnd.id, projectRoot);
     endedContexts.push(ctxToEnd);
     logInfo("context_selector", `Ended context: ${ctxToEnd.id}`);
@@ -384,9 +398,10 @@ function handleCaretCommand(
     if (ctxId && endedContexts.length > 0) {
       const newCtx = getContext(ctxId, projectRoot);
       const feedback = formatCommandFeedback(endedContexts, newCtx);
-      return [ctxId, method !== "creation_failed" ? "caret_new" : method, feedback];
+      return [ctxId, method === "creation_failed" ? method : "caret_new", feedback];
     }
-    return [ctxId, method !== "creation_failed" ? "caret_new" : method, output];
+
+    return [ctxId, method === "creation_failed" ? method : "caret_new", output];
   }
 
   if (cmd.select) {
@@ -394,6 +409,7 @@ function handleCaretCommand(
     if (!selectedCtx) {
       throw new BlockRequest(`Context '${cmd.select}' no longer exists.\n` + formatContextPickerStderr(contexts));
     }
+
     logInfo("context_selector", `Caret-selected context: ${selectedCtx.id}`);
     return [selectedCtx.id, "caret_select", formatCommandFeedback(endedContexts, selectedCtx)];
   }
@@ -408,6 +424,7 @@ function handleCaretCommand(
         "Example: implement user authentication system",
       );
     }
+
     throw new BlockRequest(
       feedback + "\nNo context selected.\n\nSelect a context to continue:\n" +
       formatContextPickerStderr(remainingContexts),
@@ -432,7 +449,7 @@ export function determineContext(
   prompt: string,
   sessionId?: string,
   projectRoot?: string,
-): [string | null, string, string | null] {
+): [null | string, string, null | string] {
   if (isInternalCall()) {
     logDebug("context_selector", "Skipping: internal subprocess call");
     return [null, "skip_internal", null];
@@ -460,6 +477,7 @@ export function determineContext(
         "Example: implement user authentication system",
       );
     }
+
     throw new BlockRequest(formatContextPickerStderr(contexts));
   }
 
