@@ -4,7 +4,7 @@
   "version": "0.11.0",
   "author": "jofu-tofu",
   "bin": {
-    "aiw": "./bin/run.js"
+    "aiw": "bin/run.js"
   },
   "bugs": {
     "url": "https://github.com/jofu-tofu/AI-Workflow-CLI/issues"

@@ -8,16 +8,14 @@
  * - extractPlanPathFromResult: parse plan path from ExitPlanMode output
  */
 
-import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-
+import * as crypto from "node:crypto";
+import { getContextDir, getContextPlansDir, sanitizeTitle } from "../base/constants.js";
 import { atomicWrite } from "../base/atomic-write.js";
-import { getContextDir as _getContextDir, getContextPlansDir, sanitizeTitle } from "../base/constants.js";
-import { logDebug, logError, logInfo, logWarn } from "../base/logger.js";
-import { readStateJson } from "../base/state-io.js";
+import { logDebug, logInfo, logWarn, logError } from "../base/logger.js";
 import { generateSlug } from "../base/utils.js";
-import type { ContextState as _ContextState } from "../types.js";
+import type { ContextState } from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Plan archival
@@ -32,11 +30,11 @@ import type { ContextState as _ContextState } from "../types.js";
  * Returns [archivedPath, planHash, planSignature] on success,
  * or [null, null, null] on error.
  */
-export async function archivePlan(
+export function archivePlan(
   planPath: string,
   contextId: string,
   projectRoot?: string,
-): Promise<[null | string, null | string, null | string]> {
+): [string | null, string | null, string | null] {
   if (!fs.existsSync(planPath)) {
     logWarn("plan_manager", `Plan file not found: ${planPath}`);
     return [null, null, null];
@@ -44,9 +42,9 @@ export async function archivePlan(
 
   let content: string;
   try {
-    content = fs.readFileSync(planPath, "utf8");
-  } catch (error_: any) {
-    logError("plan_manager", `Failed to read plan: ${error_}`);
+    content = fs.readFileSync(planPath, "utf-8");
+  } catch (e: any) {
+    logError("plan_manager", `Failed to read plan: ${e}`);
     return [null, null, null];
   }
 
@@ -106,7 +104,7 @@ export async function archivePlan(
  * text suitable for the AI slug generator (which expects conversational input).
  */
 function extractPlanSummary(content: string): string {
-  const lines = content.split("\n");
+  const lines = content.split(/\r?\n/);
   const parts: string[] = [];
   let firstParagraph = "";
 
@@ -117,12 +115,10 @@ function extractPlanSummary(content: string): string {
       const heading = trimmed.replace(/^#+\s*/, "");
       if (heading.length > 2) parts.push(heading);
     }
-
     // Grab first substantial non-heading line as context
     if (!firstParagraph && !trimmed.startsWith("#") && trimmed.length > 20) {
       firstParagraph = trimmed.slice(0, 120);
     }
-
     // Enough material for the AI
     if (parts.length >= 5) break;
   }
@@ -143,15 +139,17 @@ function extractPlanSummary(content: string): string {
 export function findLatestPlan(
   contextId: string,
   projectRoot?: string,
-): null | string {
+): string | null {
   // 1. Check state.json plan_path first
   try {
-    const state = readStateJson(contextId, projectRoot);
+    // Dynamic import to avoid circular dependency at module level
+    const stateIo = require("../base/state-io.js");
+    const state = stateIo.readStateJson(contextId, projectRoot);
     if (state?.plan_path && fs.existsSync(state.plan_path)) {
       return state.plan_path;
     }
-  } catch (error: any) {
-    logWarn("plan_manager", `Failed to check state.json plan_path: ${error}`);
+  } catch (e: any) {
+    logWarn("plan_manager", `Failed to check state.json plan_path: ${e}`);
   }
 
   // 2. Fall back to most recent .md in plans/ dir
@@ -184,7 +182,7 @@ export function findLatestPlan(
  * See SPEC.md §9.4
  */
 export function generatePlanId(): string {
-  return crypto.randomUUID().replaceAll('-', "").slice(0, 8);
+  return crypto.randomUUID().replace(/-/g, "").slice(0, 8);
 }
 
 /**
@@ -193,8 +191,8 @@ export function generatePlanId(): string {
  * See SPEC.md §9.5
  */
 export function normalizePlanContent(text: string): string {
-  let result = text.replaceAll(/<[^>]+>/g, "");
-  result = result.replaceAll(/\s+/g, " ").trim();
+  let result = text.replace(/<[^>]+>/g, "");
+  result = result.replace(/\s+/g, " ").trim();
   return result;
 }
 
@@ -205,17 +203,15 @@ export function normalizePlanContent(text: string): string {
  */
 export function extractPlanAnchors(content: string, maxAnchors = 5): string[] {
   const anchors: string[] = [];
-  for (const line of content.split("\n")) {
+  for (const line of content.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (trimmed.startsWith("#") && trimmed.length > 3) {
       anchors.push(trimmed.slice(0, 80));
     } else if (anchors.length === 0 && trimmed.length > 20) {
       anchors.push(trimmed.slice(0, 80));
     }
-
     if (anchors.length >= maxAnchors) break;
   }
-
   return anchors;
 }
 
@@ -230,7 +226,7 @@ const MAX_TRANSCRIPT_SIZE = 50 * 1024 * 1024; // 50 MB
  * Searches in reverse for the most recent Write tool call targeting .claude/plans/.
  * See SPEC.md §9.7
  */
-export function findPlanPathInTranscript(transcriptPath: string): null | string {
+export function findPlanPathInTranscript(transcriptPath: string): string | null {
   if (!transcriptPath) return null;
 
   if (!fs.existsSync(transcriptPath)) {
@@ -252,9 +248,9 @@ export function findPlanPathInTranscript(transcriptPath: string): null | string 
 
   let lines: string[];
   try {
-    lines = fs.readFileSync(transcriptPath, "utf8").split("\n");
-  } catch (error: any) {
-    logWarn("plan_manager", `Failed to read transcript: ${error}`);
+    lines = fs.readFileSync(transcriptPath, "utf-8").split(/\r?\n/);
+  } catch (e: any) {
+    logWarn("plan_manager", `Failed to read transcript: ${e}`);
     return null;
   }
 
@@ -286,7 +282,7 @@ export function findPlanPathInTranscript(transcriptPath: string): null | string 
       if (!filePath) continue;
 
       // Check if path contains .claude/plans/ as consecutive parts
-      const parts = filePath.replaceAll('\\', "/").split("/");
+      const parts = filePath.replace(/\\/g, "/").split("/");
       for (let j = 0; j < parts.length - 1; j++) {
         if (parts[j] === ".claude" && parts[j + 1] === "plans") {
           logInfo("plan_manager", `Extracted plan path from transcript: ${filePath}`);
@@ -309,7 +305,7 @@ export function findPlanPathInTranscript(transcriptPath: string): null | string 
  * Parses the pattern: "Your plan has been saved to: <path>"
  * See SPEC.md §9.8
  */
-export function extractPlanPathFromResult(toolResult: string): null | string {
+export function extractPlanPathFromResult(toolResult: string): string | null {
   if (!toolResult) return null;
   const match = toolResult.match(/Your plan has been saved to:\s*(.+\.md)/);
   return match ? match[1]!.trim() : null;

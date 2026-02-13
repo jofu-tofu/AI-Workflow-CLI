@@ -35,14 +35,17 @@ import {
   emitContext,
   emitContextAndBlock,
 } from "../../_shared/lib-ts/base/hook-utils.js";
-import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
+import { isInternalCall, findExecutable } from "../../_shared/lib-ts/base/subprocess-utils.js";
 import { getProjectRoot, getAiwcliDir, getContextReviewsDir, getContextDir, getReviewFolderPath } from "../../_shared/lib-ts/base/constants.js";
 import { eprint } from "../../_shared/lib-ts/base/utils.js";
 import { getContextBySessionId, getAllContexts } from "../../_shared/lib-ts/context/context-store.js";
+import { findPlanPathInTranscript } from "../../_shared/lib-ts/context/plan-manager.js";
 
 import type {
   AgentConfig,
   OrchestratorConfig,
+  ProviderConfig,
+  ModelsConfig,
   ReviewerResult,
   CombinedReviewResult,
   OrchestratorResult,
@@ -62,7 +65,8 @@ import {
   markPlanReviewed,
 } from "../lib-ts/cc-native-state.js";
 
-import { worstVerdict, computeReviewDecision } from "../lib-ts/verdict.js";
+import { worstVerdict } from "../lib-ts/verdict.js";
+import { computeCorroboratedDecision } from "../lib-ts/corroboration.js";
 import { loadConfig, getDisplaySettings } from "../lib-ts/config.js";
 import { runOrchestrator } from "../lib-ts/orchestrator.js";
 import { aggregateAgents } from "../lib-ts/aggregate-agents.js";
@@ -76,6 +80,7 @@ import {
 } from "../lib-ts/artifacts.js";
 import type { ReviewTrackerEntry } from "../lib-ts/artifacts.js";
 import { runAgentReview, runCodexReview, runGeminiReview } from "../lib-ts/reviewers/index.js";
+import { DEFAULT_REVIEW_ITERATIONS } from "../lib-ts/state.js";
 
 // ---------------------------------------------------------------------------
 // Hook Name
@@ -140,78 +145,68 @@ function extractTopIssuesForTracker(
 // ---------------------------------------------------------------------------
 
 /**
- * Determine which agents should graduate based on their review results.
- * Graduation criteria: verdict === "pass" OR zero high-severity issues.
- * Agents with "skip"/"error" do NOT graduate (no signal).
+ * Determine which agents are pass-eligible this iteration.
+ * Criteria: verdict === "pass" OR zero high-severity issues.
+ * Agents with "skip"/"error" are NOT eligible (no signal).
  */
-function computeGraduated(agentResults: Record<string, ReviewerResult>): string[] {
-  const graduated: string[] = [];
+function computePassEligible(agentResults: Record<string, ReviewerResult>): string[] {
+  const eligible: string[] = [];
   for (const [name, result] of Object.entries(agentResults)) {
     if (result.verdict === "skip" || result.verdict === "error") continue;
-    if (result.verdict === "pass") { graduated.push(name); continue; }
+    if (result.verdict === "pass") { eligible.push(name); continue; }
     const issues = Array.isArray(result.data?.issues)
       ? (result.data.issues as Array<{ severity?: string }>) : [];
     if (issues.filter(i => i.severity === "high").length === 0) {
-      graduated.push(name);
+      eligible.push(name);
     }
   }
-  return graduated;
-}
-
-/**
- * Load the set of graduated agent names from previous iterations.
- * Returns empty set on iteration 1 (no iteration.json exists).
- */
-function loadGraduatedSet(reviewsDir: string): Set<string> {
-  const existing = loadIterationState(reviewsDir);
-  return new Set(existing?.graduated ?? []);
+  return eligible;
 }
 
 // ---------------------------------------------------------------------------
 // Default Configuration
 // ---------------------------------------------------------------------------
 
-const DEFAULT_AGENTS: Array<{ name: string; model: string; focus: string; enabled: boolean; categories: string[] }> = [
-  { name: "handoff-readiness", model: "sonnet", focus: "fresh context execution readiness", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "clarity-auditor", model: "sonnet", focus: "communication clarity and execution readiness", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "skeptic", model: "sonnet", focus: "problem-solution alignment and assumption validation", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "documentation-philosophy", model: "sonnet", focus: "knowledge capture and documentation placement", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "risk-premortem", model: "sonnet", focus: "pre-mortem failure analysis", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "risk-fmea", model: "sonnet", focus: "systematic failure mode analysis", enabled: true, categories: ["code", "infrastructure", "design"] },
-  { name: "risk-dependency", model: "sonnet", focus: "dependency chain and blast radius analysis", enabled: true, categories: ["code", "infrastructure"] },
-  { name: "risk-reversibility", model: "sonnet", focus: "decision reversibility and optionality", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "completeness-gaps", model: "sonnet", focus: "structural gap analysis", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "completeness-feasibility", model: "sonnet", focus: "feasibility and resource analysis", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "completeness-ordering", model: "sonnet", focus: "step ordering and critical path analysis", enabled: true, categories: ["code", "infrastructure", "design"] },
-  { name: "arch-structure", model: "sonnet", focus: "coupling, cohesion, and boundary analysis", enabled: true, categories: ["code", "infrastructure", "design"] },
-  { name: "arch-evolution", model: "sonnet", focus: "evolutionary architecture and change amplification", enabled: true, categories: ["code", "infrastructure", "design"] },
-  { name: "arch-patterns", model: "sonnet", focus: "pattern selection and technology fit", enabled: true, categories: ["code", "infrastructure"] },
-  { name: "verify-coverage", model: "sonnet", focus: "verification coverage mapping", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "verify-strength", model: "sonnet", focus: "test quality and mutation analysis", enabled: true, categories: ["code", "infrastructure"] },
-  { name: "tradeoff-costs", model: "sonnet", focus: "opportunity cost and capability sacrifice", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "tradeoff-stakeholders", model: "sonnet", focus: "stakeholder impact and cost-benefit asymmetry", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "scope-boundary", model: "sonnet", focus: "scope drift and boundary enforcement", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "hidden-complexity", model: "sonnet", focus: "understated complexity and hidden difficulty", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "simplicity-guardian", model: "sonnet", focus: "over-engineering and unnecessary complexity", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "devils-advocate", model: "sonnet", focus: "contrarian analysis and reductio ad absurdum", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "assumption-tracer", model: "sonnet", focus: "dependency chains and foundational assumptions", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "incremental-delivery", model: "sonnet", focus: "incremental delivery and vertical slicing", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
-  { name: "constraint-validator", model: "sonnet", focus: "constraint identification and satisfaction", enabled: true, categories: ["code", "infrastructure", "documentation", "design", "research", "life", "business"] },
+const ALL_CATEGORIES = ["code", "infrastructure", "documentation", "design", "research", "life", "business"];
+const CODE_INFRA_DESIGN = ["code", "infrastructure", "design"];
+const CODE_INFRA = ["code", "infrastructure"];
+const AGENT_DEFAULTS = { model: "sonnet", provider: "claude", enabled: true } as const;
+
+const DEFAULT_AGENTS: Array<{ name: string; model: string; provider: string; focus: string; enabled: boolean; categories: string[] }> = [
+  { ...AGENT_DEFAULTS, name: "handoff-readiness", focus: "fresh context execution readiness", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "clarity-auditor", focus: "communication clarity and execution readiness", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "skeptic", focus: "problem-solution alignment and assumption validation", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "documentation-philosophy", focus: "knowledge capture and documentation placement", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "risk-premortem", focus: "pre-mortem failure analysis", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "risk-fmea", focus: "systematic failure mode analysis", categories: CODE_INFRA_DESIGN },
+  { ...AGENT_DEFAULTS, name: "risk-dependency", focus: "dependency chain and blast radius analysis", categories: CODE_INFRA },
+  { ...AGENT_DEFAULTS, name: "risk-reversibility", focus: "decision reversibility and optionality", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "completeness-gaps", focus: "structural gap analysis", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "completeness-feasibility", focus: "feasibility and resource analysis", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "completeness-ordering", focus: "step ordering and critical path analysis", categories: CODE_INFRA_DESIGN },
+  { ...AGENT_DEFAULTS, name: "arch-structure", focus: "coupling, cohesion, and boundary analysis", categories: CODE_INFRA_DESIGN },
+  { ...AGENT_DEFAULTS, name: "arch-evolution", focus: "evolutionary architecture and change amplification", categories: CODE_INFRA_DESIGN },
+  { ...AGENT_DEFAULTS, name: "arch-patterns", focus: "pattern selection and technology fit", categories: CODE_INFRA },
+  { ...AGENT_DEFAULTS, name: "verify-coverage", focus: "verification coverage mapping", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "verify-strength", focus: "test quality and mutation analysis", categories: CODE_INFRA },
+  { ...AGENT_DEFAULTS, name: "tradeoff-costs", focus: "opportunity cost and capability sacrifice", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "tradeoff-stakeholders", focus: "stakeholder impact and cost-benefit asymmetry", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "scope-boundary", focus: "scope drift and boundary enforcement", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "hidden-complexity", focus: "understated complexity and hidden difficulty", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "simplicity-guardian", focus: "over-engineering and unnecessary complexity", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "devils-advocate", focus: "contrarian analysis and reductio ad absurdum", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "assumption-tracer", focus: "dependency chains and foundational assumptions", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "incremental-delivery", focus: "incremental delivery and vertical slicing", categories: ALL_CATEGORIES },
+  { ...AGENT_DEFAULTS, name: "constraint-validator", focus: "constraint identification and satisfaction", categories: ALL_CATEGORIES },
 ];
 
 const DEFAULT_ORCHESTRATOR: { enabled: boolean; model: string; timeout: number } = { enabled: true, model: "opus", timeout: 60 };
 const DEFAULT_AGENT_MODEL = "sonnet";
 
-const DEFAULT_REVIEW_ITERATIONS: Record<string, number> = {
-  simple: 1,
-  medium: 2,
-  high: 2,
-};
-
 const DEFAULT_AGENT_SELECTION: Record<string, unknown> = {
   simple: { min: 3, max: 3 },
-  medium: { min: 8, max: 8 },
-  high: { min: 12, max: 12 },
+  medium: { min: 5, max: 5 },
+  high: { min: 7, max: 7 },
   fallbackCount: 3,
 };
 
@@ -298,35 +293,71 @@ function saveIterationState(reviewsDir: string, state: IterationState & { schema
   }
 }
 
-function getIterationStateFromContext(
-  reviewsDir: string,
-  complexity: string,
-  config?: Record<string, unknown>,
-): IterationState {
-  const existing = loadIterationState(reviewsDir);
-  if (existing) return existing;
-  const reviewIterations: Record<string, number> = { ...DEFAULT_REVIEW_ITERATIONS };
-  if (config) {
-    const overrides = config.reviewIterations;
-    if (overrides && typeof overrides === "object") {
-      Object.assign(reviewIterations, overrides);
-    }
+// ---------------------------------------------------------------------------
+// Model Provider Assignment
+// ---------------------------------------------------------------------------
+
+const DEFAULT_MODELS_CONFIG: ModelsConfig = {
+  providers: {
+    claude: { enabled: true, models: ["sonnet"] },
+    codex: { enabled: true, models: ["gpt-5.1-codex-mini"] },
+  },
+};
+
+function loadModelsConfig(settings: Record<string, unknown>): ModelsConfig {
+  const raw = settings.models as Record<string, unknown> | undefined;
+  if (!raw?.providers || typeof raw.providers !== "object") {
+    return DEFAULT_MODELS_CONFIG;
   }
-  return {
-    current: 1,
-    max: reviewIterations[complexity] ?? 1,
-    complexity,
-    history: [],
-    graduated: [],
-  };
+  const providers: Record<string, ProviderConfig> = {};
+  for (const [name, cfg] of Object.entries(raw.providers as Record<string, unknown>)) {
+    const c = cfg as Record<string, unknown>;
+    providers[name] = {
+      enabled: c.enabled !== false,
+      models: Array.isArray(c.models) ? (c.models as string[]).filter(Boolean) : [],
+    };
+  }
+  return { providers };
+}
+
+function assignModelsToAgents(
+  agents: AgentConfig[],
+  modelsConfig: ModelsConfig,
+): AgentConfig[] {
+  // Filter to providers that are enabled, have models, AND whose CLI exists
+  const enabledProviders = Object.entries(modelsConfig.providers)
+    .filter(([name, config]) => {
+      if (!config.enabled || config.models.length === 0) return false;
+      const cliName = name === "claude" ? "claude" : name; // CLI name matches provider name
+      const found = findExecutable(cliName);
+      if (!found) {
+        logWarn(HOOK, `Provider '${name}' enabled but CLI '${cliName}' not found on PATH — skipping`);
+      }
+      return !!found;
+    });
+
+  if (enabledProviders.length === 0) {
+    logWarn(HOOK, "No providers with available CLI found, falling back to Claude with agent defaults");
+    return agents.map(a => ({ ...a, provider: "claude" }));
+  }
+
+  return agents.map(agent => {
+    const idx = Math.floor(Math.random() * enabledProviders.length);
+    const entry = enabledProviders[idx];
+    if (!entry) return { ...agent, provider: "claude" };
+    const [providerName, providerConfig] = entry;
+    const modelIdx = Math.floor(Math.random() * providerConfig.models.length);
+    const model = providerConfig.models[modelIdx] ?? providerConfig.models[0] ?? agent.model;
+    return { ...agent, provider: providerName, model };
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Settings Loading
 // ---------------------------------------------------------------------------
 
-function loadSettings(projDir: string): Record<string, any> {
-  const defaults: Record<string, any> = {
+function loadSettings(projDir: string): Record<string, unknown> {
+  const defaults: Record<string, unknown> = {
     planReview: {
       enabled: true,
       reviewers: {
@@ -350,7 +381,7 @@ function loadSettings(projDir: string): Record<string, any> {
   };
 
   const config = loadConfig(projDir);
-  if (!config || Object.keys(config).length === 0) return defaults;
+  if (!config || Object.keys(config).length === 0) return { ...defaults, models: {} };
 
   // Merge planReview
   const planReview = config.planReview ?? {};
@@ -376,12 +407,13 @@ function loadSettings(projDir: string): Record<string, any> {
   mergedAgent.sanitization = { ...DEFAULT_SANITIZATION, ...((configRecord.sanitization as Record<string, unknown>) ?? {}) };
   mergedAgent.reviewIterations = { ...DEFAULT_REVIEW_ITERATIONS, ...agentReview.reviewIterations ?? {} };
 
-  return { planReview: mergedPlan, agentReview: mergedAgent };
+  const modelsRaw = (config as Record<string, unknown>).models ?? {};
+  return { planReview: mergedPlan, agentReview: mergedAgent, models: modelsRaw };
 }
 
 function loadAgentLibrary(
   projDir: string,
-  settings?: Record<string, any>,
+  settings?: Record<string, unknown>,
 ): AgentConfig[] {
   const agentsData = aggregateAgents(path.join(projDir, "_cc-native", "agents"));
   const defaultModel = settings?.agentDefaults?.model ?? DEFAULT_AGENT_MODEL;
@@ -391,6 +423,7 @@ function loadAgentLibrary(
     return DEFAULT_AGENTS.map(a => ({
       name: a.name,
       model: a.model ?? defaultModel,
+      provider: a.provider ?? "claude",
       focus: a.focus ?? "general review",
       enabled: a.enabled ?? true,
       categories: a.categories ?? ["code"],
@@ -444,8 +477,23 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Find and read plan
-  const planPath = findPlanFile();
+  // Find plan file: prefer transcript-based discovery (session-accurate), fall back to mtime scan
+  const transcriptPath = payload.transcript_path as string | undefined;
+  let planPath: string | null = null;
+
+  if (transcriptPath) {
+    planPath = findPlanPathInTranscript(transcriptPath);
+    if (planPath) {
+      logInfo(HOOK, `Found plan via transcript: ${planPath}`);
+    } else {
+      logDebug(HOOK, "No plan Write found in transcript, falling back to mtime scan");
+    }
+  }
+
+  if (!planPath) {
+    planPath = findPlanFile();
+  }
+
   if (!planPath) {
     skipWithInfo("No plan file found in ~/.claude/plans/. The plan may not have been written yet.");
     return;
@@ -501,10 +549,24 @@ async function main(): Promise<void> {
     }
   }
 
+  // Single load of iteration state — reused throughout, saved once at end.
+  // Default max=1 is safe: first iteration 1>1=false (runs), Edit E updates max from config before save.
+  let iterationState: IterationState = loadIterationState(reviewsDir) ?? {
+    current: 1, max: 1, complexity: "medium",
+    history: [], graduated: [], passStreaks: {}, lastPlanHash: "",
+  };
+
+  // Reset iteration counter when plan content changes (BEFORE early exit check)
+  // Graduation state (graduated[], passStreaks{}) persists across plan changes.
+  const lastHash = iterationState.lastPlanHash ?? "";
+  if (lastHash && lastHash !== planHash) {
+    logInfo(HOOK, `Plan hash changed (${lastHash.slice(0, 8)}→${planHash.slice(0, 8)}), resetting iteration counter`);
+    iterationState.current = 1;
+  }
+
   // Early iteration check: if we've exhausted max iterations, allow plan through
-  const earlyIterState = loadIterationState(reviewsDir);
-  if (earlyIterState && earlyIterState.current > earlyIterState.max) {
-    skipWithInfo(`Max review iterations reached (${earlyIterState.current - 1}/${earlyIterState.max}), allowing plan through.`);
+  if (iterationState.current > iterationState.max) {
+    skipWithInfo(`Max review iterations reached (${iterationState.current - 1}/${iterationState.max}), allowing plan through.`);
     return;
   }
 
@@ -513,18 +575,18 @@ async function main(): Promise<void> {
   let orchResult: OrchestratorResult | null = null;
   const agentResults: Record<string, ReviewerResult> = {};
   let allVerdicts: Verdict[] = [];
-  let iterationState: IterationState | null = null;
   let detectedComplexity = "medium";
 
   // ============================================
   // PHASE 1 & 2: CLI Reviewers + Orchestrator (PARALLEL)
   // ============================================
   const reviewersConfig = planReviewEnabled ? (planSettings.reviewers ?? {}) : {};
-  const codexEnabled = planReviewEnabled && (reviewersConfig.codex?.enabled ?? true);
+  // Deprecated: agents now support Codex provider via models.providers.codex
+  const codexEnabled = planReviewEnabled && (reviewersConfig.codex?.enabled ?? false);
   const geminiEnabled = planReviewEnabled && (reviewersConfig.gemini?.enabled ?? false);
 
-  // Load graduated agents from previous iterations (empty on iteration 1)
-  const graduatedSet = loadGraduatedSet(reviewsDir);
+  // Graduated agents from previous iterations (empty after hash reset or on iteration 1)
+  const graduatedSet = new Set(iterationState.graduated);
   if (graduatedSet.size > 0) {
     logInfo(HOOK, `Graduated agents from previous iterations: ${[...graduatedSet].sort().join(", ")}`);
   }
@@ -606,7 +668,7 @@ async function main(): Promise<void> {
     logInfo(HOOK, "=== PHASE 2: Agent Selection ===");
 
     let selectedAgents: AgentConfig[] = [];
-    const fallbackByComplexity = agentSettings.fallbackByComplexity ?? { simple: 0, medium: 5, high: 9 };
+    const fallbackByComplexity = agentSettings.fallbackByComplexity ?? { simple: 0, medium: 2, high: 4 };
 
     if (enabledAgents.length > 0) {
       let mandatoryAgents = enabledAgents.filter(a => mandatoryNames.has(a.name));
@@ -671,11 +733,19 @@ async function main(): Promise<void> {
       },
     });
 
-    // Initialize iteration state
-    if (reviewsDir) {
-      iterationState = getIterationStateFromContext(reviewsDir, detectedComplexity, agentSettings);
-      logDebug(HOOK, `Iteration state: ${iterationState.current}/${iterationState.max} (${detectedComplexity})`);
-    }
+    // Update complexity/max on the already-loaded iteration state (no second disk read)
+    const reviewIterations: Record<string, number> = {
+      ...DEFAULT_REVIEW_ITERATIONS,
+      ...(agentSettings.reviewIterations ?? {}),
+    };
+    iterationState.complexity = detectedComplexity;
+    iterationState.max = reviewIterations[detectedComplexity] ?? iterationState.max;
+    logDebug(HOOK, `Iteration state: ${iterationState.current}/${iterationState.max} (${detectedComplexity})`);
+
+    // Assign random providers + models to selected agents
+    const modelsConfig = loadModelsConfig(settings);
+    selectedAgents = assignModelsToAgents(selectedAgents, modelsConfig);
+    logInfo(HOOK, `Model assignments: ${selectedAgents.map(a => `${a.name}→${a.provider}:${a.model}`).join(", ")}`);
 
     // PHASE 3: Run selected agents in parallel
     if (selectedAgents.length > 0) {
@@ -716,11 +786,28 @@ async function main(): Promise<void> {
   }
 
   // ============================================
-  // Persist newly graduated agents (before verdict overrides)
+  // Enforce per-agent issue limit (truncate to top N by severity)
   // ============================================
-  const newlyGraduated = computeGraduated(agentResults);
-  if (newlyGraduated.length > 0) {
-    logInfo(HOOK, `Newly graduated agents: ${newlyGraduated.join(", ")}`);
+  const maxIssuesPerAgent = typeof agentSettings.maxIssuesPerAgent === "number"
+    ? agentSettings.maxIssuesPerAgent : 3;
+
+  for (const r of [...Object.values(cliResults), ...Object.values(agentResults)]) {
+    if (!Array.isArray(r.data?.issues)) continue;
+    const issues = r.data.issues as Array<{ severity?: string }>;
+    if (issues.length <= maxIssuesPerAgent) continue;
+    const severityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    issues.sort((a, b) => (severityOrder[a.severity ?? "low"] ?? 2) - (severityOrder[b.severity ?? "low"] ?? 2));
+    const originalCount = issues.length;
+    r.data.issues = issues.slice(0, maxIssuesPerAgent);
+    logInfo(HOOK, `${r.name}: truncated issues ${originalCount} → ${maxIssuesPerAgent}`);
+  }
+
+  // ============================================
+  // Compute pass-eligible agents (before verdict overrides)
+  // ============================================
+  const passEligible = computePassEligible(agentResults);
+  if (passEligible.length > 0) {
+    logInfo(HOOK, `Pass-eligible agents this iteration: ${passEligible.join(", ")}`);
   }
 
   // ============================================
@@ -774,12 +861,17 @@ async function main(): Promise<void> {
   const combinedSettings = { display: displaySettings };
 
   // Get current iteration number
-  const currentIteration = iterationState?.current ?? 1;
+  const currentIteration = iterationState.current;
 
   // Create review folder
   const reviewFolder = getReviewFolderPath(contextId, currentIteration, base);
   fs.mkdirSync(reviewFolder, { recursive: true });
   logInfo(HOOK, `Created review folder: ${reviewFolder}`);
+
+  // Review decision — corroboration-based (proportional threshold per dimension)
+  // Must be computed before writeCombinedArtifacts and buildInlineReviewSummary which consume it.
+  const allReviewerResults: Record<string, ReviewerResult> = { ...cliResults, ...agentResults };
+  const corroborationResult = computeCorroboratedDecision(allReviewerResults);
 
   const reviewFile = writeCombinedArtifacts(
     base,
@@ -790,6 +882,7 @@ async function main(): Promise<void> {
     undefined,
     reviewFolder,
     currentIteration,
+    corroborationResult,
   );
   logInfo(HOOK, `Saved review: ${reviewFile}`);
 
@@ -802,16 +895,16 @@ async function main(): Promise<void> {
   }
 
   // Build inline summary with top issues (always emitted, even on pass)
-  const inlineSummary = buildInlineReviewSummary(combinedResult);
+  const inlineSummary = buildInlineReviewSummary(combinedResult, 5, 800, corroborationResult);
   const topIssuesList = extractTopIssuesForTracker(combinedResult, 5);
   const contextParts = [inlineSummary];
   if (topIssuesList.length > 0) {
     contextParts.push(`\nTop high-severity issues:\n${topIssuesList.map(i => `- ${i}`).join("\n")}`);
   }
   contextParts.push(`\nFull review: \`${reviewFile}\`\n`);
-
-  // Review decision
-  const { should_deny: shouldDeny, reason: denyReason, score: reviewScore } = computeReviewDecision(allVerdicts);
+  const shouldDeny = corroborationResult.blocking.length > 0;
+  const denyReason = shouldDeny ? "corroborated_issues" : "no_corroboration";
+  const reviewScore = shouldDeny ? 1.0 : 0.0;
 
   logInfo(HOOK, `REVIEW_DECISION: verdict=${combinedResult.overall_verdict}, deny=${shouldDeny}, reason=${denyReason}, score=${reviewScore.toFixed(2)}`);
   logDiagnostic(HOOK, "result", `verdict=${combinedResult.overall_verdict}, deny=${shouldDeny}, reason=${denyReason}`, {
@@ -833,34 +926,51 @@ async function main(): Promise<void> {
   }
 
   // Iteration logic:
-  // - On FAIL at max: extend max by 1 (grant one more revision chance)
-  // - On WARN: block but do NOT extend max (warns don't earn extra iterations)
-  // - On PASS: jump current to max so next call triggers early exit (no more reviews)
-  const isFail = overall === "fail";
-  if (iterationState && reviewsDir) {
+  // - On PASS/WARRANT: set current past max so no more reviews happen
+  // - On DENY (fail/warn): increment current toward max (safety valve)
+  // - Max iterations (high=5, medium=3, simple=1) caps total reviews before auto-allow
+  if (reviewsDir) {
     iterationState.history.push({ hash: planHash, verdict: overall, timestamp: new Date().toISOString() });
-
-    if (isFail && iterationState.current >= iterationState.max) {
-      iterationState.max += 1;
-      logInfo(HOOK, `Extending max iterations to ${iterationState.max} due to fail at boundary (${iterationState.current}/${iterationState.max})`);
-    }
+    iterationState.lastPlanHash = planHash;
 
     if (!shouldDeny) {
-      // Pass: set current to max so next call (current+1 > max) triggers early exit
-      iterationState.current = iterationState.max;
-      logInfo(HOOK, `Pass: setting current to max (${iterationState.max}) to exhaust iterations`);
+      // Pass/warrant: stop iterating — set current past max
+      iterationState.current = iterationState.max + 1;
+      logInfo(HOOK, `Pass/warrant: stopping iterations`);
+    } else {
+      // Deny: advance iteration counter toward max so safety valve triggers
+      iterationState.current += 1;
+      logInfo(HOOK, `Deny: advancing iteration (${iterationState.current}/${iterationState.max})`);
     }
 
-    // Merge newly graduated agents into persistent state
-    if (newlyGraduated.length > 0) {
-      const allGraduated = new Set([
-        ...(iterationState.graduated ?? []),
-        ...newlyGraduated,
-      ]);
-      iterationState.graduated = [...allGraduated];
+    // Update pass streaks — only for agents that actually ran this iteration
+    const passStreaks = { ...(iterationState.passStreaks ?? {}) };
+    const passEligibleSet = new Set(passEligible);
+    const graduatedSetCurrent = new Set(iterationState.graduated);
+
+    for (const name of Object.keys(agentResults)) {
+      if (graduatedSetCurrent.has(name)) continue;
+      if (passEligibleSet.has(name)) {
+        passStreaks[name] = (passStreaks[name] ?? 0) + 1;
+      } else {
+        passStreaks[name] = 0;
+      }
+    }
+    iterationState.passStreaks = passStreaks;
+
+    // Graduate agents that reached threshold
+    const GRADUATION_THRESHOLD = 2;
+    const newGrads: string[] = [];
+    for (const [name, streak] of Object.entries(passStreaks)) {
+      if (streak >= GRADUATION_THRESHOLD && !graduatedSetCurrent.has(name)) {
+        newGrads.push(name);
+      }
+    }
+    if (newGrads.length > 0) {
+      iterationState.graduated = [...iterationState.graduated, ...newGrads];
+      logInfo(HOOK, `Newly graduated (${GRADUATION_THRESHOLD} consecutive passes): ${newGrads.join(", ")}`);
     }
 
-    iterationState.current += 1;
     saveIterationState(reviewsDir, iterationState);
   }
 
@@ -874,7 +984,7 @@ async function main(): Promise<void> {
     verdict: combinedResult.overall_verdict,
     decision: trackerDecision,
     score: reviewScore,
-    topIssues: extractTopIssuesForTracker(combinedResult, 5),
+    topIssues: topIssuesList,
     reviewFolder,
   };
   writeReviewTracker(ccNativeReviewsDir, trackerEntry);
@@ -889,18 +999,14 @@ async function main(): Promise<void> {
   const RESUBMIT_INSTRUCTION = "IMPORTANT: After revising the plan file, you MUST call ExitPlanMode again to trigger re-review. Do not end your turn or ask the user without calling ExitPlanMode.";
 
   if (shouldDeny) {
-    const disposition = iterationState
-      ? `hook_deny_iter_${iterationState.current - 1}`
-      : "hook_deny";
-    markPlanReviewed(sessionId, planHash, base, HOOK, iterationState ?? undefined, disposition);
+    const disposition = `hook_deny_iter_${iterationState.current - 1}`;
+    markPlanReviewed(sessionId, planHash, base, HOOK, iterationState, disposition);
     const topIssuesText = extractTopIssuesText(combinedResult, 3, "high");
-    const highIssuesDoc = buildHighIssuesDocument(combinedResult);
+    const highIssuesDoc = buildHighIssuesDocument(combinedResult, corroborationResult);
     const highIssuesPath = path.join(reviewFolder, "high-issues.md");
     fs.writeFileSync(highIssuesPath, highIssuesDoc, "utf-8");
 
-    const iterInfo = iterationState
-      ? ` (iteration ${iterationState.current - 1}/${iterationState.max}, score=${reviewScore.toFixed(2)})`
-      : ` (score=${reviewScore.toFixed(2)})`;
+    const iterInfo = ` (iteration ${iterationState.current - 1}/${iterationState.max}, score=${reviewScore.toFixed(2)})`;
 
     emitContextAndBlock(
       contextText,
@@ -913,7 +1019,7 @@ async function main(): Promise<void> {
       RESUBMIT_INSTRUCTION,
     );
   } else {
-    markPlanReviewed(sessionId, planHash, base, HOOK, iterationState ?? undefined, "allow");
+    markPlanReviewed(sessionId, planHash, base, HOOK, iterationState, "allow");
     emitContext(contextText);
   }
 }

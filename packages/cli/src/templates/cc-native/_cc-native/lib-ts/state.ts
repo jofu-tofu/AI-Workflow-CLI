@@ -6,12 +6,11 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-
-import { validatePlanPath } from "./constants.js";
-import type { IterationEntry, IterationState } from "./types.js";
 import { atomicWrite } from "../../_shared/lib-ts/base/atomic-write.js";
-import { logError, logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
+import { logInfo, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
 import { nowIso } from "../../_shared/lib-ts/base/utils.js";
+import { validatePlanPath } from "./constants.js";
+import type { IterationState, IterationEntry } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -19,10 +18,10 @@ import { nowIso } from "../../_shared/lib-ts/base/utils.js";
 
 const STATE_SCHEMA_VERSION = "1.0.0";
 
-const DEFAULT_REVIEW_ITERATIONS: Record<string, number> = {
+export const DEFAULT_REVIEW_ITERATIONS: Record<string, number> = {
   simple: 1,
-  medium: 1,
-  high: 2,
+  medium: 3,
+  high: 5,
 };
 
 // ---------------------------------------------------------------------------
@@ -44,7 +43,7 @@ export function getStateFilePath(planPath: string): string {
 /**
  * Load state file with schema validation and migration.
  */
-export function loadState(planPath: string): null | Record<string, unknown> {
+export function loadState(planPath: string): Record<string, unknown> | null {
   try {
     const stateFile = getStateFilePath(planPath);
 
@@ -53,7 +52,7 @@ export function loadState(planPath: string): null | Record<string, unknown> {
     }
 
     const state = JSON.parse(
-      fs.readFileSync(stateFile, "utf8"),
+      fs.readFileSync(stateFile, "utf-8"),
     ) as Record<string, unknown>;
 
     // Handle schema version (backward compatible)
@@ -73,13 +72,12 @@ export function loadState(planPath: string): null | Record<string, unknown> {
     }
 
     return state;
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes("Invalid plan path")) {
-      logError("state", `SECURITY: Invalid plan path: ${error}`);
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message.includes("Invalid plan path")) {
+      logError("state", `SECURITY: Invalid plan path: ${e}`);
     } else {
-      logError("state", `Failed to load state: ${error}`);
+      logError("state", `Failed to load state: ${e}`);
     }
-
     return null;
   }
 }
@@ -111,13 +109,12 @@ export function saveStateToPlan(
     }
 
     return true;
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes("Invalid plan path")) {
-      logError("state", `SECURITY: Invalid plan path: ${error}`);
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message.includes("Invalid plan path")) {
+      logError("state", `SECURITY: Invalid plan path: ${e}`);
     } else {
-      logError("state", String(error));
+      logError("state", String(e));
     }
-
     return false;
   }
 }
@@ -133,15 +130,13 @@ export function deleteState(planPath: string): boolean {
       fs.unlinkSync(stateFile);
       logInfo("state", `Deleted state file: ${stateFile}`);
     }
-
     return true;
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes("Invalid plan path")) {
-      logError("state", `SECURITY: Invalid plan path in delete: ${error}`);
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message.includes("Invalid plan path")) {
+      logError("state", `SECURITY: Invalid plan path in delete: ${e}`);
       return false;
     }
-
-    logWarn("state", `Failed to delete state file: ${error}`);
+    logWarn("state", `Failed to delete state file: ${e}`);
     return false;
   }
 }
@@ -178,6 +173,9 @@ export function getIterationState(
     max: reviewIterations[complexity] ?? 1,
     complexity,
     history: [],
+    graduated: [],
+    passStreaks: {},
+    lastPlanHash: "",
   };
 }
 
@@ -209,7 +207,7 @@ export function shouldContinueIterating(
   verdict: string,
   config?: Record<string, unknown>,
 ): boolean {
-  const {current} = iteration;
+  const current = iteration.current;
   const maxIter = iteration.max;
 
   // At or past max iterations
@@ -226,7 +224,6 @@ export function shouldContinueIterating(
   if (config) {
     earlyExit = (config.earlyExitOnAllPass as boolean) ?? true;
   }
-
   if (earlyExit && verdict === "pass") {
     logInfo(
       "state",

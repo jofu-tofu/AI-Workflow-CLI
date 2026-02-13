@@ -5,18 +5,18 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-
+import { atomicWrite } from "../../_shared/lib-ts/base/atomic-write.js";
+import { logDebug, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
+import { nowIso } from "../../_shared/lib-ts/base/utils.js";
+import { sanitizeFilename } from "../../_shared/lib-ts/base/constants.js";
 import { ENABLE_ROBUST_PLAN_WRITES } from "./constants.js";
 import type {
   CombinedReviewResult,
-  DisplaySettings,
   ReviewerResult,
+  DisplaySettings,
+  CorroborationResult,
 } from "./types.js";
 import { DEFAULT_DISPLAY } from "./types.js";
-import { atomicWrite } from "../../_shared/lib-ts/base/atomic-write.js";
-import { sanitizeFilename } from "../../_shared/lib-ts/base/constants.js";
-import { logDebug, logError, logWarn } from "../../_shared/lib-ts/base/logger.js";
-import { nowIso as _nowIso } from "../../_shared/lib-ts/base/utils.js";
 
 // ---------------------------------------------------------------------------
 // Markdown Formatting
@@ -39,7 +39,9 @@ export function formatReviewMarkdown(
 
   for (const r of results) {
     const displayName = r.name === r.name.toLowerCase() ? titleCase(r.name) : r.name;
-    lines.push(`## ${displayName}\n`, `- ok: \`${r.ok}\``, `- verdict: \`${r.verdict}\``);
+    lines.push(`## ${displayName}\n`);
+    lines.push(`- ok: \`${r.ok}\``);
+    lines.push(`- verdict: \`${r.verdict}\``);
 
     if (r.data && Object.keys(r.data).length > 0) {
       const summary = String(r.data.summary ?? "").trim();
@@ -48,12 +50,10 @@ export function formatReviewMarkdown(
       } else {
         lines.push(`- summary: ${summary}`);
       }
-
       appendReviewDetails(lines, r.data, display);
     } else {
       lines.push(`- note: ${r.err || "no structured output"}`);
     }
-
     lines.push("");
   }
 
@@ -66,60 +66,89 @@ export function formatReviewMarkdown(
 export function formatCombinedMarkdown(
   result: CombinedReviewResult,
   settings?: Record<string, unknown>,
+  corroboration?: CorroborationResult,
 ): string {
   const display = resolveDisplay(settings);
 
   const lines: string[] = [];
   lines.push("# CC-Native Plan Review\n");
-  lines.push(`**Overall Verdict:** \`${result.overall_verdict.toUpperCase()}\``, `**Plan Hash:** \`${result.plan_hash}\`\n`, "---\n");
+  lines.push(`**Overall Verdict:** \`${result.overall_verdict.toUpperCase()}\``);
+  lines.push(`**Plan Hash:** \`${result.plan_hash}\`\n`);
+
+  // Corroboration summary
+  if (corroboration) {
+    lines.push("## Corroboration Analysis\n");
+    if (corroboration.blocking.length > 0) {
+      lines.push("### Blocking Dimensions\n");
+      for (const group of corroboration.blocking) {
+        lines.push(`- **${group.dimension}**: ${group.issues.length} issues from ${group.agentCount} agents (threshold: >${group.threshold})`);
+      }
+      lines.push("");
+    }
+    if (corroboration.solo.length > 0) {
+      lines.push("### Solo Dimensions (informational)\n");
+      for (const s of corroboration.solo) {
+        lines.push(`- **${s.dimension}**: ${s.issues.length} issues from ${s.agentCount} agents (threshold: >${s.threshold}, not exceeded)`);
+      }
+      lines.push("");
+    }
+    if (corroboration.unclassified.length > 0) {
+      lines.push(`> ${corroboration.unclassified.length} issue(s) without dimension classification (unclassified, not blocking)\n`);
+    }
+  }
+
+  lines.push("---\n");
 
   // CLI Reviewers section
   if (Object.keys(result.cli_reviewers).length > 0) {
     lines.push("## CLI Reviewers\n");
     for (const [name, r] of Object.entries(result.cli_reviewers)) {
-      lines.push(`### ${titleCase(name)}\n`, `- verdict: \`${r.verdict}\``);
+      lines.push(`### ${titleCase(name)}\n`);
+      lines.push(`- verdict: \`${r.verdict}\``);
       if (r.data && Object.keys(r.data).length > 0) {
         appendSummaryLine(lines, r.data);
         appendReviewDetails(lines, r.data, display);
       } else if (r.err) {
         lines.push(`- error: ${r.err}`);
       }
-
       lines.push("");
     }
   }
 
   // Orchestration section
   if (result.orchestration) {
-    lines.push("---\n", "## Orchestration\n", `- **Complexity:** \`${result.orchestration.complexity}\``, `- **Category:** \`${result.orchestration.category}\``);
+    lines.push("---\n");
+    lines.push("## Orchestration\n");
+    lines.push(`- **Complexity:** \`${result.orchestration.complexity}\``);
+    lines.push(`- **Category:** \`${result.orchestration.category}\``);
     const agentsStr =
       result.orchestration.selected_agents.length > 0
         ? result.orchestration.selected_agents.join(", ")
         : "None";
-    lines.push(`- **Agents Selected:** ${agentsStr}`, `- **Reasoning:** ${result.orchestration.reasoning}`);
+    lines.push(`- **Agents Selected:** ${agentsStr}`);
+    lines.push(`- **Reasoning:** ${result.orchestration.reasoning}`);
     if (result.orchestration.skip_reason) {
       lines.push(`- **Skip Reason:** ${result.orchestration.skip_reason}`);
     }
-
     if (result.orchestration.error) {
       lines.push(`- **Error:** ${result.orchestration.error}`);
     }
-
     lines.push("");
   }
 
   // Agent Reviews section
   if (Object.keys(result.agents).length > 0) {
-    lines.push("---\n", "## Agent Reviews\n");
+    lines.push("---\n");
+    lines.push("## Agent Reviews\n");
     for (const [name, r] of Object.entries(result.agents)) {
-      lines.push(`### ${name}\n`, `- verdict: \`${r.verdict}\``);
+      lines.push(`### ${name}\n`);
+      lines.push(`- verdict: \`${r.verdict}\``);
       if (r.data && Object.keys(r.data).length > 0) {
         appendSummaryLine(lines, r.data);
         appendReviewDetails(lines, r.data, display);
       } else if (r.err) {
         lines.push(`- error: ${r.err}`);
       }
-
       lines.push("");
     }
   }
@@ -133,16 +162,23 @@ export function formatCombinedMarkdown(
 
 /**
  * Build compact inline summary of HIGH-severity findings for additionalContext.
+ * When corroboration data is provided, annotates issues as [CORROBORATED] or [perspective].
  */
 export function buildInlineReviewSummary(
   combined: CombinedReviewResult,
   maxIssues = 5,
   maxChars = 800,
+  corroboration?: CorroborationResult,
 ): string {
   const allReviewers = [
     ...Object.values(combined.cli_reviewers),
     ...Object.values(combined.agents),
   ];
+
+  // Build set of blocking dimensions for annotation
+  const blockingDims = new Set(
+    corroboration?.blocking.map(g => g.dimension) ?? [],
+  );
 
   const highIssues: Array<Record<string, unknown>> = [];
   for (const r of allReviewers) {
@@ -162,9 +198,20 @@ export function buildInlineReviewSummary(
   const issueCount = highIssues.length;
   const countSuffix =
     issueCount > 0
-      ? ` (${issueCount} high-severity issue${issueCount === 1 ? "" : "s"})`
+      ? ` (${issueCount} high-severity issue${issueCount !== 1 ? "s" : ""})`
       : "";
   parts.push(`**Plan Review: ${combined.overall_verdict.toUpperCase()}**${countSuffix}`);
+
+  // Corroboration summary if available
+  if (corroboration) {
+    const blockCount = corroboration.blocking.length;
+    const soloCount = corroboration.solo.length;
+    if (blockCount > 0) {
+      parts.push(`**Corroboration:** ${blockCount} dimension${blockCount !== 1 ? "s" : ""} exceeded threshold (blocking), ${soloCount} solo (informational)`);
+    } else {
+      parts.push(`**Corroboration:** No dimensions exceeded threshold — all ${soloCount} solo (informational)`);
+    }
+  }
 
   // High-severity issue bullets
   for (const issue of highIssues.slice(0, maxIssues)) {
@@ -172,9 +219,21 @@ export function buildInlineReviewSummary(
     const text = (issue.issue as string) ?? "";
     const fix = (issue.suggested_fix as string) ?? "";
     const reviewer = (issue._reviewer as string) ?? "unknown";
+    const dim = issue.dimension as string | undefined;
+
+    let annotation = "";
+    if (corroboration && dim) {
+      const group = corroboration.blocking.find(g => g.dimension === dim);
+      if (group) {
+        annotation = ` [CORROBORATED — ${group.issues.length} issues from ${group.agentCount} agents exceeds threshold ${group.threshold}]`;
+      } else {
+        annotation = " [perspective]";
+      }
+    }
+
     let line = `- [${cat}] ${text}`;
     if (fix) line += ` \u2192 ${fix}`;
-    line += ` (${reviewer})`;
+    line += ` (${reviewer})${annotation}`;
     parts.push(line);
   }
 
@@ -187,7 +246,6 @@ export function buildInlineReviewSummary(
   if (result.length > maxChars) {
     result = result.slice(0, maxChars - 3) + "...";
   }
-
   return result;
 }
 
@@ -218,7 +276,6 @@ export function extractTopIssuesText(
         }
       }
     }
-
     if (issues.length >= maxCount) break;
   }
 
@@ -227,11 +284,39 @@ export function extractTopIssuesText(
 }
 
 /**
- * Build markdown document containing ONLY high-severity issues.
+ * Build markdown document containing high-severity issues.
+ * When corroboration data is provided, only includes corroborated (blocking) issues.
  */
 export function buildHighIssuesDocument(
   combined: CombinedReviewResult,
+  corroboration?: CorroborationResult,
 ): string {
+  // When corroboration is available, only show blocking groups
+  if (corroboration && corroboration.blocking.length > 0) {
+    const lines = ["# Corroborated High-Severity Issues\n"];
+    lines.push("> Only issues from dimensions where the total count exceeded the proportional threshold are shown.\n");
+
+    for (const group of corroboration.blocking) {
+      lines.push(`## ${group.dimension} (${group.issues.length} issues from ${group.agentCount} agents, threshold: ${group.threshold})\n`);
+      for (const { agent, issue } of group.issues) {
+        const cat = issue.category ?? "general";
+        const text = String(issue.issue ?? "").trim();
+        const fix = String(issue.suggested_fix ?? "").trim();
+        lines.push(`- **[${cat}]** ${text} *(${agent})*`);
+        if (fix) lines.push(`  - Fix: ${fix}`);
+      }
+      lines.push("");
+    }
+
+    if (corroboration.solo.length > 0) {
+      lines.push("---\n");
+      lines.push(`> ${corroboration.solo.length} dimension${corroboration.solo.length !== 1 ? "s" : ""} had issues below threshold (not blocking): ${corroboration.solo.map(s => `${s.dimension} (${s.issues.length}/${s.threshold})`).join(", ")}\n`);
+    }
+
+    return lines.join("\n");
+  }
+
+  // Fallback: no corroboration data — show all high-severity issues
   const lines = ["# High-Severity Issues\n"];
   const allReviewers = [
     ...Object.values(combined.cli_reviewers),
@@ -256,8 +341,7 @@ export function buildHighIssuesDocument(
       lines.push(`- **[${cat}]** ${text}`);
       if (fix) lines.push(`  - Fix: ${fix}`);
     }
-
-    lines.push(""); // blank line between agents
+    lines.push("");
   }
 
   if (!foundAny) {
@@ -327,7 +411,6 @@ export function generateReviewIndex(
       `| [${name}.json](./reviewer-output/${name}.json) | ${titleCase(name)} reviewer output |`,
     );
   }
-
   for (const name of Object.keys(result.agents)) {
     const safeName = sanitizeFilename(name);
     lines.push(
@@ -346,11 +429,9 @@ export function generateReviewIndex(
   for (const [name, r] of Object.entries(result.cli_reviewers)) {
     lines.push(`| ${titleCase(name)} | \`${r.verdict}\` |`);
   }
-
   for (const [name, r] of Object.entries(result.agents)) {
     lines.push(`| ${name} | \`${r.verdict}\` |`);
   }
-
   lines.push("");
 
   return lines.join("\n");
@@ -450,6 +531,7 @@ export function writeCombinedArtifacts(
   contextReviewsDir?: string,
   reviewFolder?: string,
   iteration?: number,
+  corroboration?: CorroborationResult,
 ): string {
   const outDir = reviewFolder ?? contextReviewsDir;
   if (!outDir) {
@@ -461,9 +543,9 @@ export function writeCombinedArtifacts(
   // Create directory
   try {
     fs.mkdirSync(outDir, { recursive: true });
-  } catch (error: unknown) {
-    logError("utils", `Cannot create directory ${outDir}: ${error}`);
-    throw error;
+  } catch (e: unknown) {
+    logError("utils", `Cannot create directory ${outDir}: ${e}`);
+    throw e;
   }
 
   // JSON write
@@ -473,7 +555,7 @@ export function writeCombinedArtifacts(
 
   // Markdown write
   const mdPath = path.join(outDir, "review.md");
-  const mdContent = formatCombinedMarkdown(result, settings);
+  const mdContent = formatCombinedMarkdown(result, settings, corroboration);
   writeFile(mdPath, mdContent);
 
   // Individual reviewer writes (non-critical) — in reviewer-output/ subfolder
@@ -483,7 +565,6 @@ export function writeCombinedArtifacts(
   } catch {
     // Best-effort — non-critical
   }
-
   for (const [name, r] of Object.entries(result.cli_reviewers)) {
     if (r.data) {
       writeFileNonCritical(
@@ -492,7 +573,6 @@ export function writeCombinedArtifacts(
       );
     }
   }
-
   for (const [name, r] of Object.entries(result.agents)) {
     if (r.data) {
       writeFileNonCritical(
@@ -578,9 +658,9 @@ function writeFile(filePath: string, content: string): void {
     } else {
       fs.writeFileSync(filePath, content, "utf-8");
     }
-  } catch (error: unknown) {
-    logError("utils", `Failed to write ${path.basename(filePath)}: ${error}`);
-    throw error;
+  } catch (e: unknown) {
+    logError("utils", `Failed to write ${path.basename(filePath)}: ${e}`);
+    throw e;
   }
 }
 
@@ -594,8 +674,8 @@ function writeFileNonCritical(filePath: string, content: string): void {
     } else {
       fs.writeFileSync(filePath, content, "utf-8");
     }
-  } catch (error: unknown) {
-    logWarn("utils", `Failed to write ${path.basename(filePath)}: ${error}`);
+  } catch (e: unknown) {
+    logWarn("utils", `Failed to write ${path.basename(filePath)}: ${e}`);
   }
 }
 
@@ -617,14 +697,14 @@ function formatDate(d: Date): string {
 // ---------------------------------------------------------------------------
 
 export interface ReviewTrackerEntry {
-  decision: string;
   iteration: number;
-  planHash: string;
-  reviewFolder: string;
-  score: number;
   timestamp: string;
-  topIssues: string[];
+  planHash: string;
   verdict: string;
+  decision: string;
+  score: number;
+  topIssues: string[];
+  reviewFolder: string;
 }
 
 /**
@@ -642,7 +722,7 @@ export function writeReviewTracker(
   let existingContent = "";
   try {
     if (fs.existsSync(trackerPath)) {
-      existingContent = fs.readFileSync(trackerPath, "utf8");
+      existingContent = fs.readFileSync(trackerPath, "utf-8");
     }
   } catch {
     // Fresh start
@@ -651,26 +731,30 @@ export function writeReviewTracker(
   // Parse existing entries to detect plan changes
   const previousHashes = extractPreviousHashes(existingContent);
   const hashChanged = previousHashes.length > 0 &&
-    previousHashes.at(-1) !== entry.planHash;
+    previousHashes[previousHashes.length - 1] !== entry.planHash;
 
   // Build the new entry section
   const lines: string[] = [];
-  const verdictEmoji = entry.decision === "allow" ? "\u2705" : "\u274C";
+  const verdictEmoji = entry.decision === "allow" ? "\u2705" : "\u274c";
   const changeNote = previousHashes.length > 0
-    ? (hashChanged ? "\u2705 Plan was revised (hash changed)" : "\u26A0\uFE0F Plan unchanged since last review")
+    ? (hashChanged ? "\u2705 Plan was revised (hash changed)" : "\u26a0\ufe0f Plan unchanged since last review")
     : "Initial review";
 
-  lines.push(`## Iteration ${entry.iteration} \u2014 ${entry.timestamp} \u2014 ${verdictEmoji} ${entry.verdict.toUpperCase()}`, "", `- **Decision:** ${entry.decision}`);
-  lines.push(`- **Score:** ${entry.score.toFixed(2)}`, `- **Plan hash:** \`${entry.planHash}\``, `- **Status:** ${changeNote}`);
+  lines.push(`## Iteration ${entry.iteration} \u2014 ${entry.timestamp} \u2014 ${verdictEmoji} ${entry.verdict.toUpperCase()}`);
+  lines.push("");
+  lines.push(`- **Decision:** ${entry.decision}`);
+  lines.push(`- **Score:** ${entry.score.toFixed(2)}`);
+  lines.push(`- **Plan hash:** \`${entry.planHash}\``);
+  lines.push(`- **Status:** ${changeNote}`);
   lines.push(`- **Full review:** [\`${path.basename(entry.reviewFolder)}/\`](${path.basename(entry.reviewFolder)}/index.md)`);
 
   if (entry.topIssues.length > 0) {
-    lines.push("", "**Top issues:**");
+    lines.push("");
+    lines.push("**Top issues:**");
     for (const issue of entry.topIssues) {
       lines.push(`- ${issue}`);
     }
   }
-
   lines.push("");
 
   // Build full file
@@ -692,18 +776,17 @@ export function writeReviewTracker(
 
   try {
     fs.writeFileSync(trackerPath, output, "utf-8");
-  } catch (error) {
-    logWarn("artifacts", `Failed to write review tracker: ${error}`);
+  } catch (e) {
+    logWarn("artifacts", `Failed to write review tracker: ${e}`);
   }
 }
 
 function extractPreviousHashes(content: string): string[] {
   const hashes: string[] = [];
   const regex = /\*\*Plan hash:\*\* `([a-f0-9]+)`/g;
-  let match: null | RegExpExecArray;
+  let match: RegExpExecArray | null;
   while ((match = regex.exec(content)) !== null) {
     hashes.push(match[1]!);
   }
-
   return hashes;
 }

@@ -12,71 +12,107 @@ export type { ContextState, HookInput, HookOutput } from "../../_shared/lib-ts/t
 // ---------------------------------------------------------------------------
 
 /** Verdict from a single reviewer */
-export type Verdict = "error" | "fail" | "pass" | "skip" | "warn";
+export type Verdict = "pass" | "warn" | "fail" | "error" | "skip";
 
 /** Decision after aggregating all verdicts */
 export type ReviewDecision = "allow" | "deny";
 
 /** Complexity level assigned by orchestrator */
-export type ComplexityCategory = "high" | "medium" | "simple";
+export type ComplexityCategory = "simple" | "medium" | "high";
 
 // ---------------------------------------------------------------------------
 // Review Data Structures
 // ---------------------------------------------------------------------------
 
+/** Dimension classification for corroboration-based verdict */
+export type IssueDimension =
+  | "completeness"
+  | "simplicity"
+  | "security"
+  | "performance"
+  | "reliability"
+  | "maintainability"
+  | "testability"
+  | "scope"
+  | "feasibility"
+  | "clarity";
+
 /** A single issue found during review */
 export interface ReviewIssue {
+  severity: "high" | "medium" | "low";
   category: string;
   issue: string;
-  severity: "high" | "low" | "medium";
   suggested_fix: string;
+  dimension?: IssueDimension;
+}
+
+/** A group of issues in one dimension, classified as blocking or solo */
+export interface DimensionGroup {
+  dimension: IssueDimension;
+  issues: Array<{ agent: string; issue: ReviewIssue }>;
+  agentCount: number;
+  threshold: number; // 2 × agentCount
+}
+
+/** Corroborated (blocking) group — threshold exceeded */
+export type CorroboratedGroup = DimensionGroup;
+
+/** Solo finding — below threshold, informational only */
+export type SoloFinding = DimensionGroup;
+
+/** Result of corroboration-based verdict computation */
+export interface CorroborationResult {
+  blocking: CorroboratedGroup[];
+  solo: SoloFinding[];
+  unclassified: Array<{ agent: string; issue: ReviewIssue }>;
+  verdict: "pass" | "fail";
 }
 
 /** Normalized review data from any reviewer */
 export interface ReviewData {
+  verdict: Verdict;
+  summary: string;
+  summary_source: "reviewer" | "default";
   issues: ReviewIssue[];
   missing_sections: string[];
   questions: string[];
-  summary: string;
-  summary_source: "default" | "reviewer";
-  verdict: Verdict;
 }
 
 /** Result from a single plan reviewer (Codex, Gemini, or Claude agent) */
 export interface ReviewerResult {
-  data: Record<string, unknown>;
-  err: string;
   name: string;
   ok: boolean;
-  raw: string;
   verdict: Verdict;
+  data: Record<string, unknown>;
+  raw: string;
+  err: string;
 }
 
 /** Result from the plan orchestrator */
 export interface OrchestratorResult {
-  category: string;
   complexity: ComplexityCategory;
-  error?: string;
-  reasoning: string;
+  category: string;
   selected_agents: string[];
+  reasoning: string;
   skip_reason?: string;
+  error?: string;
 }
 
 /** Combined result from all review phases */
 export interface CombinedReviewResult {
-  agents: Record<string, ReviewerResult>;
-  cli_reviewers: Record<string, ReviewerResult>;
-  orchestration: null | OrchestratorResult;
-  overall_verdict: Verdict;
   plan_hash: string;
+  overall_verdict: Verdict;
+  cli_reviewers: Record<string, ReviewerResult>;
+  orchestration: OrchestratorResult | null;
+  agents: Record<string, ReviewerResult>;
   timestamp: string;
 }
 
 /** Result from verdict aggregation */
 export interface ReviewDecisionResult {
+  should_deny: boolean;
   reason: string; // "fail_veto" | "acceptable" | "no_signal"
   score: number;
-  should_deny: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,12 +121,13 @@ export interface ReviewDecisionResult {
 
 /** Configuration for a Claude Code review agent */
 export interface AgentConfig {
+  name: string;
+  model: string;
+  provider: string; // e.g. "claude" | "codex" — assigned at runtime by assignModelsToAgents()
+  focus: string;
+  enabled: boolean;
   categories: string[];
   description: string;
-  enabled: boolean;
-  focus: string;
-  model: string;
-  name: string;
   system_prompt: string; // Markdown body content for --system-prompt
 }
 
@@ -101,6 +138,17 @@ export interface OrchestratorConfig {
   timeout: number;
 }
 
+/** Configuration for a model provider (Claude, Codex, etc.) */
+export interface ProviderConfig {
+  enabled: boolean;
+  models: string[];
+}
+
+/** Model provider pool configuration */
+export interface ModelsConfig {
+  providers: Record<string, ProviderConfig>;
+}
+
 // ---------------------------------------------------------------------------
 // State Interfaces
 // ---------------------------------------------------------------------------
@@ -108,43 +156,55 @@ export interface OrchestratorConfig {
 /** A single iteration history entry */
 export interface IterationEntry {
   hash: string;
-  timestamp: string;
   verdict: string;
+  timestamp: string;
 }
 
 /** Iteration tracking state (stored adjacent to plan file) */
 export interface IterationState {
-  complexity: string;
   current: number;
-  graduated: string[];
-  history: IterationEntry[];
   max: number;
+  complexity: string;
+  history: IterationEntry[];
+  graduated: string[];
+  passStreaks: Record<string, number>;
+  lastPlanHash: string;
 }
 
 /** CC-native state stored in context state.json under cc_native key */
 export interface CcNativeState {
-  [key: string]: unknown;
   plan_review?: PlanReviewState;
   questions_asked?: QuestionsAskedState;
+  stuck_detection?: StuckDetectionState;
+  [key: string]: unknown;
 }
 
 /** Plan review state within cc_native */
 export interface PlanReviewState {
-  decision: string;
-  iteration?: {
-    complexity: string;
-    current: number;
-    latest_verdict?: string;
-    max: number;
-  };
   plan_hash: string;
   reviewed_at: string;
+  decision: string;
+  iteration?: {
+    current: number;
+    max: number;
+    complexity: string;
+    latest_verdict?: string;
+  };
 }
 
 /** Questions-asked tracking state */
 export interface QuestionsAskedState {
   asked: boolean;
   asked_at: string;
+}
+
+/** Stuck detection state — tracks repeated errors, file edits, and test failures */
+export interface StuckDetectionState {
+  error_hashes: Record<string, number>;
+  file_edits: Record<string, number>;
+  test_failures: number;
+  tool_calls_since_suggestion: number;
+  suggestion_count: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,25 +220,25 @@ export interface DisplaySettings {
 
 /** Full plan review configuration (from plan-review.config.json) */
 export interface PlanReviewConfig {
-  [key: string]: unknown;
-  display?: Partial<DisplaySettings>;
   planReview?: {
-    agentReview?: {
-      agentSelection?: Record<string, unknown>;
-      complexityCategories?: string[];
-      enabled?: boolean;
-      orchestrator?: { enabled?: boolean; model?: string; timeout?: number };
-      timeout?: number;
-    };
-    display?: Partial<DisplaySettings>;
-    earlyExitOnAllPass?: boolean;
     enabled?: boolean;
     reviewers?: {
-      codex?: { enabled?: boolean; model?: string; timeout?: number; };
-      gemini?: { enabled?: boolean; model?: string; timeout?: number; };
+      codex?: { enabled?: boolean; timeout?: number; model?: string };
+      gemini?: { enabled?: boolean; timeout?: number; model?: string };
     };
+    agentReview?: {
+      enabled?: boolean;
+      timeout?: number;
+      orchestrator?: { enabled?: boolean; model?: string; timeout?: number };
+      agentSelection?: Record<string, unknown>;
+      complexityCategories?: string[];
+    };
+    display?: Partial<DisplaySettings>;
     reviewIterations?: Record<string, number>;
+    earlyExitOnAllPass?: boolean;
   };
+  display?: Partial<DisplaySettings>;
+  [key: string]: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -187,9 +247,9 @@ export interface PlanReviewConfig {
 
 /** Options passed to reviewer implementations */
 export interface ReviewOptions {
+  timeout: number;
   context_path?: string;
   session_name?: string;
-  timeout: number;
 }
 
 /** Interface all reviewers must implement */
@@ -220,6 +280,14 @@ export const REVIEW_SCHEMA: Record<string, unknown> = {
           category: { type: "string" },
           issue: { type: "string" },
           suggested_fix: { type: "string" },
+          dimension: {
+            type: "string",
+            enum: [
+              "completeness", "simplicity", "security", "performance",
+              "reliability", "maintainability", "testability", "scope",
+              "feasibility", "clarity",
+            ],
+          },
         },
         required: ["severity", "category", "issue", "suggested_fix"],
         additionalProperties: false,
@@ -283,7 +351,13 @@ Call StructuredOutput with:
 - **verdict**: "pass" (no concerns), "warn" (some concerns), or "fail" (critical issues)
 - **summary**: 2-3 sentences with your overall assessment and key findings (REQUIRED)
 - **issues**: Array of concerns found. Format each as:
-  {"severity": "high/medium/low", "category": "...", "issue": "...", "suggested_fix": "..."}
+  {"severity": "high/medium/low", "category": "...", "issue": "...", "suggested_fix": "...", "dimension": "..."}
+- **dimension**: Classify each issue into exactly one dimension:
+  completeness, simplicity, security, performance, reliability,
+  maintainability, testability, scope, feasibility, or clarity.
+  Examples: "missing error handling" → reliability, "excessive abstraction" → simplicity,
+  "no test strategy" → testability, "missing deployment steps" → completeness,
+  "unclear interaction between components" → clarity.
 - **missing_sections**: Topics the plan should address but doesn't
 - **questions**: Things that need clarification before implementation
 
@@ -292,6 +366,7 @@ Call StructuredOutput with:
 2. Summary MUST explain your reasoning, not just "looks good" or empty
 3. Focus on your expertise area (architecture, security, performance, etc.)
 4. Output StructuredOutput NOW - no other tools, no questions, no delays
+5. Return ONLY your top 3 most critical issues. Prioritize high-severity over medium/low. Quality over quantity.
 `;
 
 // ---------------------------------------------------------------------------

@@ -69,7 +69,10 @@ function main(): void {
           state.plan_signature = content.slice(0, 200);
           state.plan_id = generatePlanId();
           state.plan_anchors = extractPlanAnchors(content);
-          state.plan_consumed = false;
+          // Preserve plan_consumed if already true (plan was implemented) —
+          // resetting it would re-stage the plan and block handoff staging.
+          // Only set to false when no prior consumption has occurred.
+          state.plan_consumed = state.plan_consumed || false;
 
           logInfo("session_end", `Assigned plan fallback: hash=${planHash}, path=${latestPlanPath}`);
         } catch (error) {

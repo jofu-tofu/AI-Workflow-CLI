@@ -73,6 +73,12 @@ export function parseJsonMaybe(
         `Parsed JSON (${parseMethod}) missing/empty fields: ${JSON.stringify(missing)}`,
       );
       logDebug("parse", `Keys present: ${JSON.stringify(Object.keys(obj))}`);
+      // Heuristic extraction grabbed the wrong object — reject it.
+      // Strict parse still returns partial objects (caller handles defaults).
+      if (parseMethod === "heuristic") {
+        logWarn("parse", "Rejecting heuristic result due to missing required fields");
+        return null;
+      }
     }
   }
 

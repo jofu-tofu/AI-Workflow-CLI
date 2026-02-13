@@ -8,7 +8,6 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-
 import { getContextHandoffsDir } from "../base/constants.js";
 import { getContext } from "../context/context-store.js";
 import type { HandoffSections } from "../types.js";
@@ -19,7 +18,7 @@ import type { HandoffSections } from "../types.js";
  * (YYYY-MM-DD-HHMM format ensures lexicographic = chronological).
  * Returns full path to most recent folder, or null.
  */
-export function findLatestHandoff(contextId: string, projectRoot?: string): null | string {
+export function findLatestHandoff(contextId: string, projectRoot?: string): string | null {
   const handoffsDir = getContextHandoffsDir(contextId, projectRoot);
 
   try {
@@ -30,7 +29,7 @@ export function findLatestHandoff(contextId: string, projectRoot?: string): null
       .sort();
 
     if (entries.length === 0) return null;
-    return path.join(handoffsDir, entries.at(-1)!);
+    return path.join(handoffsDir, entries[entries.length - 1]!);
   } catch {
     return null;
   }
@@ -65,7 +64,7 @@ export function readHandoffSections(handoffFolder: string): HandoffSections {
     const filePath = path.join(handoffFolder, filename);
     try {
       if (fs.existsSync(filePath)) {
-        sections[key as keyof HandoffSections] = fs.readFileSync(filePath, "utf8");
+        sections[key as keyof HandoffSections] = fs.readFileSync(filePath, "utf-8");
       }
     } catch {
       // graceful — leave as null
@@ -87,11 +86,11 @@ export function getHandoffTimestamp(handoffFolder: string): Date | null {
 
   const [, year, month, day, hour, minute] = match;
   const date = new Date(
-    Number.parseInt(year!, 10),
-    Number.parseInt(month!, 10) - 1,
-    Number.parseInt(day!, 10),
-    Number.parseInt(hour!, 10),
-    Number.parseInt(minute!, 10),
+    parseInt(year!, 10),
+    parseInt(month!, 10) - 1,
+    parseInt(day!, 10),
+    parseInt(hour!, 10),
+    parseInt(minute!, 10),
   );
 
   return isNaN(date.getTime()) ? null : date;
@@ -106,12 +105,12 @@ export function getHandoffPlanReference(
   handoffFolder: string,
   contextId: string,
   projectRoot?: string,
-): null | string {
+): string | null {
   // Try plan.md frontmatter
   const planMdPath = path.join(handoffFolder, "plan.md");
   try {
     if (fs.existsSync(planMdPath)) {
-      const content = fs.readFileSync(planMdPath, "utf8");
+      const content = fs.readFileSync(planMdPath, "utf-8");
       const frontmatter = parseFrontmatter(content);
       if (frontmatter["plan_path"]) {
         const pp = frontmatter["plan_path"];
@@ -146,7 +145,7 @@ function parseFrontmatter(content: string): Record<string, string> {
   const parts = content.split("---", 3);
   if (parts.length < 3) return frontmatter;
 
-  for (const line of parts[1]!.trim().split("\n")) {
+  for (const line of parts[1]!.trim().split(/\r?\n/)) {
     const colonIdx = line.indexOf(":");
     if (colonIdx !== -1) {
       const key = line.slice(0, colonIdx).trim();

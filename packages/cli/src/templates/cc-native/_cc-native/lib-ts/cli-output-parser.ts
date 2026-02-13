@@ -36,6 +36,26 @@ export function parseCliOutput(
         return dict.structured_output as Record<string, unknown>;
       }
 
+      // Strategy 1.5: Session result envelope (type: "result")
+      // When the model fails to call StructuredOutput, the CLI returns a
+      // session metadata object with type/subtype/duration_ms/usage/etc.
+      // but no structured_output key. Check for the `result` text field
+      // (model may have written review as text) and for error states.
+      if (dict.type === "result" || ("duration_ms" in dict && "session_id" in dict)) {
+        if (dict.is_error === true || (Array.isArray(dict.errors) && (dict.errors as unknown[]).length > 0)) {
+          logWarn("cli_parser", `CLI returned error result: ${JSON.stringify(dict.errors ?? "is_error=true")}`);
+          return null;
+        }
+        if (typeof dict.result === "string" && dict.result) {
+          logDebug("cli_parser", "Found result text in session envelope, attempting JSON extraction");
+          const extracted = parseJsonMaybe(dict.result as string, requireFields);
+          if (extracted) return extracted;
+          logWarn("cli_parser", "Session envelope result text contained no extractable JSON");
+        }
+        logDebug("cli_parser", "Session result envelope with no structured_output or extractable result");
+        return null;
+      }
+
       // Strategy 2: Assistant message with StructuredOutput tool use
       if (dict.type === "assistant") {
         const message = dict.message as Record<string, unknown> | undefined;

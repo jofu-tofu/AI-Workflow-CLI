@@ -23,7 +23,7 @@ export function getGitState(projectRoot: string): Record<string, any> {
   try {
     const status = execFileSync("git", ["status", "--short"], opts);
     if (status) {
-      const files = status.trim().split("\n")
+      const files = status.trim().split(/\r?\n/)
         .filter(Boolean)
         .slice(0, 10)
         .map(line => line.trimStart().split(/\s+/).slice(1).join(" "));

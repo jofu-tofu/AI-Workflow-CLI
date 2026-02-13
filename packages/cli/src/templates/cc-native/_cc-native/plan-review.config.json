@@ -1,4 +1,16 @@
 {
+  "models": {
+    "providers": {
+      "claude": {
+        "enabled": true,
+        "models": ["sonnet"]
+      },
+      "codex": {
+        "enabled": true,
+        "models": ["gpt-5.1-codex-mini"]
+      }
+    }
+  },
   "planReview": {
     "enabled": true,
     "reviewers": {
@@ -23,6 +35,7 @@
     "enabled": true,
     "timeout": 180,
     "warnThreshold": 0.01,
+    "maxIssuesPerAgent": 3,
     "orchestrator": {
       "enabled": true,
       "model": "opus",
@@ -71,5 +84,13 @@
   "planContext": {
     "enabled": true,
     "offerClarifyingQuestions": true
+  },
+  "stuckDetection": {
+    "enabled": true,
+    "errorThreshold": 3,
+    "fileEditThreshold": 4,
+    "testFailureThreshold": 3,
+    "cooldown": 10,
+    "maxSuggestions": 3
   }
 }

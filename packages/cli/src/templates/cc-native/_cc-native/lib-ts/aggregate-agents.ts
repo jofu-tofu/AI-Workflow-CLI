@@ -5,9 +5,8 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-
-import type { AgentConfig } from "./types.js";
 import { logDebug, logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
+import type { AgentConfig } from "./types.js";
 
 /**
  * Extract simple YAML frontmatter from markdown content.
@@ -15,8 +14,8 @@ import { logDebug, logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js"
  */
 export function extractFrontmatter(
   content: string,
-): null | Record<string, unknown> {
-  const lines = content.split("\n");
+): Record<string, unknown> | null {
+  const lines = content.split(/\r?\n/);
   if (lines[0]?.trim() !== "---") return null;
 
   const frontmatterLines: string[] = [];
@@ -27,7 +26,6 @@ export function extractFrontmatter(
       endIndex = i;
       break;
     }
-
     const line = lines[i];
     if (line !== undefined) {
       frontmatterLines.push(line);
@@ -49,7 +47,7 @@ export function extractFrontmatter(
       value = value
         .slice(1, -1)
         .split(",")
-        .map((s) => s.trim().replaceAll(/^["']|["']$/g, ""))
+        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
         .filter(Boolean);
     }
     // Handle booleans
@@ -74,7 +72,7 @@ export function extractFrontmatter(
  * Extract markdown body after frontmatter.
  */
 export function extractBody(content: string): string {
-  const lines = content.split("\n");
+  const lines = content.split(/\r?\n/);
   if (lines[0]?.trim() !== "---") return content;
 
   for (let i = 1; i < lines.length; i++) {
@@ -115,9 +113,9 @@ export function aggregateAgents(agentsDir?: string): AgentConfig[] {
     const filePath = path.join(dir, file);
     let content: string;
     try {
-      content = fs.readFileSync(filePath, "utf8");
-    } catch (error: unknown) {
-      logWarn("aggregate", `Failed to read ${file}: ${error}`);
+      content = fs.readFileSync(filePath, "utf-8");
+    } catch (e: unknown) {
+      logWarn("aggregate", `Failed to read ${file}: ${e}`);
       continue;
     }
 
@@ -138,6 +136,7 @@ export function aggregateAgents(agentsDir?: string): AgentConfig[] {
     const agent: AgentConfig = {
       name,
       model: (fm.model as string) ?? "sonnet",
+      provider: "claude", // Default; overwritten by assignModelsToAgents() at runtime
       focus: (fm.focus as string) ?? "",
       enabled: fm.enabled !== false,
       categories: Array.isArray(fm.categories)

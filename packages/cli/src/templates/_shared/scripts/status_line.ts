@@ -9,19 +9,19 @@
  *
  * Usage: echo '{"session_id":"...","model":{"display_name":"Opus"},...}' | bun status_line.ts
  */
-import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
-import { homedir } from "node:os";
 import * as path from "node:path";
+import { execFileSync } from "node:child_process";
+import { homedir } from "node:os";
 
 import { CONTEXT_BASELINE_TOKENS } from "../lib-ts/base/hook-utils.js";
-import { getContext, getContextBySessionId, loadState, saveState } from "../lib-ts/context/context-store.js";
+import { getContextBySessionId, getContext, loadState, saveState } from "../lib-ts/context/context-store.js";
 import { findLatestPlan } from "../lib-ts/context/plan-manager.js";
 
 // ---------------------------------------------------------------------------
 // Path setup
 // ---------------------------------------------------------------------------
-const _SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname);
+const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname);
 const OUTPUT_DIR = path.join(".", "_output");
 const CACHE_DIR = path.join(OUTPUT_DIR, "cache");
 const STATUSLINE_CACHE = path.join(CACHE_DIR, ".statusline-cache.json");
@@ -31,37 +31,37 @@ const STATUSLINE_CACHE = path.join(CACHE_DIR, ".statusline-cache.json");
 // ---------------------------------------------------------------------------
 const NO_COLOR = Boolean(process.env.NO_COLOR);
 
-const RESET = NO_COLOR ? "" : "\u001B[0m";
+const RESET = NO_COLOR ? "" : "\x1b[0m";
 
 // Structural
-const SLATE_300 = NO_COLOR ? "" : "\u001B[38;2;203;213;225m";
-const SLATE_400 = NO_COLOR ? "" : "\u001B[38;2;148;163;184m";
-const SLATE_500 = NO_COLOR ? "" : "\u001B[38;2;100;116;139m";
-const SLATE_600 = NO_COLOR ? "" : "\u001B[38;2;71;85;105m";
+const SLATE_300 = NO_COLOR ? "" : "\x1b[38;2;203;213;225m";
+const SLATE_400 = NO_COLOR ? "" : "\x1b[38;2;148;163;184m";
+const SLATE_500 = NO_COLOR ? "" : "\x1b[38;2;100;116;139m";
+const SLATE_600 = NO_COLOR ? "" : "\x1b[38;2;71;85;105m";
 
 // Semantic
-const EMERALD = NO_COLOR ? "" : "\u001B[38;2;74;222;128m";
-const ROSE = NO_COLOR ? "" : "\u001B[38;2;251;113;133m";
-const AMBER = NO_COLOR ? "" : "\u001B[38;2;251;191;36m";
+const EMERALD = NO_COLOR ? "" : "\x1b[38;2;74;222;128m";
+const ROSE = NO_COLOR ? "" : "\x1b[38;2;251;113;133m";
+const AMBER = NO_COLOR ? "" : "\x1b[38;2;251;191;36m";
 
 // Context colors
-const CTX_PRIMARY = NO_COLOR ? "" : "\u001B[38;2;129;140;248m";
-const CTX_SECONDARY = NO_COLOR ? "" : "\u001B[38;2;165;180;252m";
-const CTX_ACCENT = NO_COLOR ? "" : "\u001B[38;2;139;92;246m";
-const CTX_BUCKET_EMPTY = NO_COLOR ? "" : "\u001B[38;2;75;82;95m";
+const CTX_PRIMARY = NO_COLOR ? "" : "\x1b[38;2;129;140;248m";
+const CTX_SECONDARY = NO_COLOR ? "" : "\x1b[38;2;165;180;252m";
+const CTX_ACCENT = NO_COLOR ? "" : "\x1b[38;2;139;92;246m";
+const CTX_BUCKET_EMPTY = NO_COLOR ? "" : "\x1b[38;2;75;82;95m";
 
 // Git colors
-const GIT_PRIMARY = NO_COLOR ? "" : "\u001B[38;2;56;189;248m";
-const GIT_VALUE = NO_COLOR ? "" : "\u001B[38;2;186;230;253m";
-const GIT_DIR = NO_COLOR ? "" : "\u001B[38;2;147;197;253m";
-const GIT_CLEAN = NO_COLOR ? "" : "\u001B[38;2;125;211;252m";
-const GIT_MODIFIED = NO_COLOR ? "" : "\u001B[38;2;96;165;250m";
-const GIT_ADDED = NO_COLOR ? "" : "\u001B[38;2;59;130;246m";
-const GIT_STASH = NO_COLOR ? "" : "\u001B[38;2;165;180;252m";
-const GIT_AGE_FRESH = NO_COLOR ? "" : "\u001B[38;2;125;211;252m";
-const GIT_AGE_RECENT = NO_COLOR ? "" : "\u001B[38;2;96;165;250m";
-const GIT_AGE_STALE = NO_COLOR ? "" : "\u001B[38;2;59;130;246m";
-const GIT_AGE_OLD = NO_COLOR ? "" : "\u001B[38;2;99;102;241m";
+const GIT_PRIMARY = NO_COLOR ? "" : "\x1b[38;2;56;189;248m";
+const GIT_VALUE = NO_COLOR ? "" : "\x1b[38;2;186;230;253m";
+const GIT_DIR = NO_COLOR ? "" : "\x1b[38;2;147;197;253m";
+const GIT_CLEAN = NO_COLOR ? "" : "\x1b[38;2;125;211;252m";
+const GIT_MODIFIED = NO_COLOR ? "" : "\x1b[38;2;96;165;250m";
+const GIT_ADDED = NO_COLOR ? "" : "\x1b[38;2;59;130;246m";
+const GIT_STASH = NO_COLOR ? "" : "\x1b[38;2;165;180;252m";
+const GIT_AGE_FRESH = NO_COLOR ? "" : "\x1b[38;2;125;211;252m";
+const GIT_AGE_RECENT = NO_COLOR ? "" : "\x1b[38;2;96;165;250m";
+const GIT_AGE_STALE = NO_COLOR ? "" : "\x1b[38;2;59;130;246m";
+const GIT_AGE_OLD = NO_COLOR ? "" : "\x1b[38;2;99;102;241m";
 
 // ---------------------------------------------------------------------------
 // Display modes
@@ -70,16 +70,14 @@ const GIT_AGE_OLD = NO_COLOR ? "" : "\u001B[38;2;99;102;241m";
 function getTerminalWidth(): number {
   const colsEnv = process.env.COLUMNS;
   if (colsEnv) {
-    const cols = Number.parseInt(colsEnv, 10);
+    const cols = parseInt(colsEnv, 10);
     if (cols > 0) return cols;
   }
-
   try {
     if (process.stdout.columns && process.stdout.columns > 0) {
       return process.stdout.columns;
     }
   } catch { /* ignore */ }
-
   return 80;
 }
 
@@ -98,7 +96,7 @@ function getBucketColor(pos: number, maxPos: number): string {
   if (NO_COLOR) return "";
   const pct = Math.floor((pos * 100) / maxPos);
 
-  let b: number; let g: number; let r: number;
+  let r: number, g: number, b: number;
 
   if (pct <= 33) {
     r = 74 + Math.floor(((250 - 74) * pct) / 33);
@@ -116,7 +114,7 @@ function getBucketColor(pos: number, maxPos: number): string {
     b = 60 + Math.floor(((68 - 60) * t) / 34);
   }
 
-  return `\u001B[38;2;${r};${g};${b}m`;
+  return `\x1b[38;2;${r};${g};${b}m`;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,11 +131,10 @@ function renderContextBar(width: number, pct: number): [string, string] {
     if (i <= filled) {
       const color = getBucketColor(i, width);
       lastColor = color;
-      parts.push(`${color}\u26C1${RESET}`);
+      parts.push(`${color}\u26c1${RESET}`);
     } else {
-      parts.push(`${CTX_BUCKET_EMPTY}\u26C1${RESET}`);
+      parts.push(`${CTX_BUCKET_EMPTY}\u26c1${RESET}`);
     }
-
     if (width > 8) {
       parts.push(" ");
     }
@@ -169,7 +166,6 @@ function shortenModel(name: string): string {
   for (const [old, replacement] of replacements) {
     result = result.replace(old, replacement);
   }
-
   return result;
 }
 
@@ -188,54 +184,40 @@ function renderContext(
 
   const shortModel = shortenModel(modelName);
 
-  switch (mode) {
-  case "micro": {
+  if (mode === "nano") {
+    const [bar] = renderContextBar(5, contextPct);
+    console.log(
+      `${CTX_PRIMARY}\u25c9${RESET} ${CTX_ACCENT}${shortModel}${RESET} ` +
+      `${bar} ${pctColor}${contextPct}%${RESET} ` +
+      `${CTX_ACCENT}\u23f1${RESET} ${SLATE_300}${timeDisplay}${RESET}`,
+    );
+  } else if (mode === "micro") {
     const [bar] = renderContextBar(6, contextPct);
     console.log(
-      `${CTX_PRIMARY}\u25C9${RESET} ${CTX_ACCENT}${shortModel}${RESET} ` +
+      `${CTX_PRIMARY}\u25c9${RESET} ${CTX_ACCENT}${shortModel}${RESET} ` +
       `${SLATE_600}\u2502${RESET} ` +
       `${bar} ${pctColor}${contextPct}%${RESET} ${SLATE_500}(${contextK}k)${RESET} ` +
-      `${CTX_ACCENT}\u23F1${RESET} ${SLATE_300}${timeDisplay}${RESET}`,
+      `${CTX_ACCENT}\u23f1${RESET} ${SLATE_300}${timeDisplay}${RESET}`,
     );
-  
-  break;
-  }
-
-  case "mini": {
+  } else if (mode === "mini") {
     const [bar] = renderContextBar(8, contextPct);
     console.log(
-      `${CTX_PRIMARY}\u25C9${RESET} ${CTX_ACCENT}${shortModel}${RESET} ` +
+      `${CTX_PRIMARY}\u25c9${RESET} ${CTX_ACCENT}${shortModel}${RESET} ` +
       `${SLATE_600}\u2502${RESET} ` +
       `${CTX_SECONDARY}CTX:${RESET} ${bar} ` +
       `${pctColor}${contextPct}%${RESET} ${SLATE_500}(${contextK}k/${maxK}k)${RESET} ` +
-      `${CTX_ACCENT}\u23F1${RESET} ${SLATE_300}${timeDisplay}${RESET}`,
+      `${CTX_ACCENT}\u23f1${RESET} ${SLATE_300}${timeDisplay}${RESET}`,
     );
-  
-  break;
-  }
-
-  case "nano": {
-    const [bar] = renderContextBar(5, contextPct);
-    console.log(
-      `${CTX_PRIMARY}\u25C9${RESET} ${CTX_ACCENT}${shortModel}${RESET} ` +
-      `${bar} ${pctColor}${contextPct}%${RESET} ` +
-      `${CTX_ACCENT}\u23F1${RESET} ${SLATE_300}${timeDisplay}${RESET}`,
-    );
-  
-  break;
-  }
-
-  default: {
+  } else {
     const [bar, lastColor] = renderContextBar(16, contextPct);
     console.log(
-      `${CTX_PRIMARY}\u25C9${RESET} ${CTX_SECONDARY}Model:${RESET} ${CTX_ACCENT}${shortModel}${RESET} ` +
+      `${CTX_PRIMARY}\u25c9${RESET} ${CTX_SECONDARY}Model:${RESET} ${CTX_ACCENT}${shortModel}${RESET} ` +
       `${SLATE_600}\u2502${RESET} ` +
       `${CTX_SECONDARY}Context:${RESET} ${bar} ` +
       `${lastColor}${contextPct}%${RESET} ${SLATE_500}(${contextK}k/${maxK}k)${RESET} ` +
       `${SLATE_600}\u2502${RESET} ` +
-      `${CTX_ACCENT}\u23F1${RESET} ${SLATE_300}${timeDisplay}${RESET}`,
+      `${CTX_ACCENT}\u23f1${RESET} ${SLATE_300}${timeDisplay}${RESET}`,
     );
-  }
   }
 
   console.log(SEPARATOR);
@@ -246,18 +228,18 @@ function renderContext(
 // ---------------------------------------------------------------------------
 
 interface GitStatus {
-  age_color: string;
-  age_display: string;
-  ahead: number;
-  behind: number;
   branch: string;
   modified: number;
   staged: number;
-  stash_count: number;
   untracked: number;
+  stash_count: number;
+  ahead: number;
+  behind: number;
+  age_display: string;
+  age_color: string;
 }
 
-function runGit(args: string[], cwd: string, timeout = 2000): null | string {
+function runGit(args: string[], cwd: string, timeout = 2000): string | null {
   try {
     const result = execFileSync("git", args, {
       cwd,
@@ -295,27 +277,27 @@ function getGitStatus(cwd: string): GitStatus | null {
 
   // Modified files
   const diff = runGit(["diff", "--name-only"], cwd);
-  if (diff) status.modified = diff.split("\n").filter(Boolean).length;
+  if (diff) status.modified = diff.split(/\r?\n/).filter(Boolean).length;
 
   // Staged files
   const staged = runGit(["diff", "--cached", "--name-only"], cwd);
-  if (staged) status.staged = staged.split("\n").filter(Boolean).length;
+  if (staged) status.staged = staged.split(/\r?\n/).filter(Boolean).length;
 
   // Untracked files
   const untracked = runGit(["ls-files", "--others", "--exclude-standard"], cwd);
-  if (untracked) status.untracked = untracked.split("\n").filter(Boolean).length;
+  if (untracked) status.untracked = untracked.split(/\r?\n/).filter(Boolean).length;
 
   // Stash count
   const stash = runGit(["stash", "list"], cwd);
-  if (stash) status.stash_count = stash.split("\n").filter(Boolean).length;
+  if (stash) status.stash_count = stash.split(/\r?\n/).filter(Boolean).length;
 
   // Ahead/behind
   const ab = runGit(["rev-list", "--left-right", "--count", "HEAD...@{u}"], cwd);
   if (ab) {
     const parts = ab.split(/\s+/);
     if (parts.length >= 2) {
-      status.ahead = Number.parseInt(parts[0]!, 10) || 0;
-      status.behind = Number.parseInt(parts[1]!, 10) || 0;
+      status.ahead = parseInt(parts[0]!, 10) || 0;
+      status.behind = parseInt(parts[1]!, 10) || 0;
     }
   }
 
@@ -323,12 +305,12 @@ function getGitStatus(cwd: string): GitStatus | null {
   const log = runGit(["log", "-1", "--format=%ct"], cwd);
   if (log) {
     try {
-      const lastEpoch = Number.parseInt(log, 10);
+      const lastEpoch = parseInt(log, 10);
       const nowEpoch = Math.floor(Date.now() / 1000);
       const ageSec = nowEpoch - lastEpoch;
       const ageMin = Math.floor(ageSec / 60);
       const ageHrs = Math.floor(ageSec / 3600);
-      const ageDays = Math.floor(ageSec / 86_400);
+      const ageDays = Math.floor(ageSec / 86400);
 
       if (ageMin < 1) {
         status.age_display = "now";
@@ -356,28 +338,33 @@ function renderGit(mode: string, git: GitStatus, dirName: string): void {
   const totalChanged = git.modified + git.staged;
   const statusIcon = (totalChanged > 0 || git.untracked > 0) ? "*" : "\u2713";
 
-  switch (mode) {
-  case "micro": {
-    let line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET} ${GIT_VALUE}${git.branch}${RESET}`;
+  if (mode === "nano") {
+    let line = `${GIT_PRIMARY}\u25c8${RESET} ${GIT_DIR}${dirName}${RESET} ${GIT_VALUE}${git.branch}${RESET} `;
+    if (statusIcon === "\u2713") {
+      line += `${GIT_CLEAN}\u2713${RESET}`;
+    } else {
+      line += `${GIT_MODIFIED}*${totalChanged}${RESET}`;
+    }
+    console.log(line);
+  } else if (mode === "micro") {
+    let line = `${GIT_PRIMARY}\u25c8${RESET} ${GIT_DIR}${dirName}${RESET} ${GIT_VALUE}${git.branch}${RESET}`;
     if (git.age_display) {
       line += ` ${git.age_color}${git.age_display}${RESET}`;
     }
-
     line += " ";
-    line += statusIcon === "\u2713" ? `${GIT_CLEAN}${statusIcon}${RESET}` : `${GIT_MODIFIED}${statusIcon}${totalChanged}${RESET}`;
+    if (statusIcon === "\u2713") {
+      line += `${GIT_CLEAN}${statusIcon}${RESET}`;
+    } else {
+      line += `${GIT_MODIFIED}${statusIcon}${totalChanged}${RESET}`;
+    }
     console.log(line);
-  
-  break;
-  }
-
-  case "mini": {
+  } else if (mode === "mini") {
     let line =
-      `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET} ` +
+      `${GIT_PRIMARY}\u25c8${RESET} ${GIT_DIR}${dirName}${RESET} ` +
       `${SLATE_600}\u2502${RESET} ${GIT_VALUE}${git.branch}${RESET}`;
     if (git.age_display) {
       line += ` ${SLATE_600}\u2502${RESET} ${git.age_color}${git.age_display}${RESET}`;
     }
-
     line += ` ${SLATE_600}\u2502${RESET} `;
     if (statusIcon === "\u2713") {
       line += `${GIT_CLEAN}${statusIcon}${RESET}`;
@@ -387,29 +374,15 @@ function renderGit(mode: string, git: GitStatus, dirName: string): void {
         line += ` ${GIT_ADDED}+${git.untracked}${RESET}`;
       }
     }
-
     console.log(line);
-  
-  break;
-  }
-
-  case "nano": {
-    let line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET} ${GIT_VALUE}${git.branch}${RESET} `;
-    line += statusIcon === "\u2713" ? `${GIT_CLEAN}\u2713${RESET}` : `${GIT_MODIFIED}*${totalChanged}${RESET}`;
-    console.log(line);
-  
-  break;
-  }
-
-  default: {
+  } else {
     let line =
-      `${GIT_PRIMARY}\u25C8${RESET} ${GIT_PRIMARY}PWD:${RESET} ${GIT_DIR}${dirName}${RESET} ` +
+      `${GIT_PRIMARY}\u25c8${RESET} ${GIT_PRIMARY}PWD:${RESET} ${GIT_DIR}${dirName}${RESET} ` +
       `${SLATE_600}\u2502${RESET} ` +
       `${GIT_PRIMARY}Branch:${RESET} ${GIT_VALUE}${git.branch}${RESET}`;
     if (git.age_display) {
       line += ` ${SLATE_600}\u2502${RESET} ${GIT_PRIMARY}Age:${RESET} ${git.age_color}${git.age_display}${RESET}`;
     }
-
     if (git.stash_count > 0) {
       line += ` ${SLATE_600}\u2502${RESET} ${GIT_PRIMARY}Stash:${RESET} ${GIT_STASH}${git.stash_count}${RESET}`;
     }
@@ -419,7 +392,6 @@ function renderGit(mode: string, git: GitStatus, dirName: string): void {
       if (totalChanged > 0) {
         line += `${GIT_PRIMARY}Mod:${RESET} ${GIT_MODIFIED}${totalChanged}${RESET}`;
       }
-
       if (git.untracked > 0) {
         if (totalChanged > 0) line += " ";
         line += `${GIT_PRIMARY}New:${RESET} ${GIT_ADDED}${git.untracked}${RESET}`;
@@ -433,14 +405,11 @@ function renderGit(mode: string, git: GitStatus, dirName: string): void {
       if (git.ahead > 0) {
         line += `${GIT_CLEAN}\u2191${git.ahead}${RESET}`;
       }
-
       if (git.behind > 0) {
         line += `${GIT_STASH}\u2193${git.behind}${RESET}`;
       }
     }
-
     console.log(line);
-  }
   }
 }
 
@@ -448,7 +417,7 @@ function renderGit(mode: string, git: GitStatus, dirName: string): void {
 // Context manager line (line 3)
 // ---------------------------------------------------------------------------
 
-function findActivePlanFile(): null | string {
+function findActivePlanFile(): string | null {
   try {
     const plansDir = path.join(homedir(), ".claude", "plans");
     if (!fs.existsSync(plansDir)) return null;
@@ -468,7 +437,7 @@ function findActivePlanFile(): null | string {
 function renderContextManager(
   mode: string,
   contextId: string,
-  contextState: null | Record<string, any>,
+  contextState: Record<string, any> | null,
 ): void {
   // Strip YYMMDD-HHMM- timestamp prefix from context ID for display
   let displayId = contextId.replace(/^\d{6}-\d{4}-/, "");
@@ -502,7 +471,7 @@ function renderContextManager(
   }
 
   // Resolve plan file path for display
-  let planFilePath: null | string = null;
+  let planFilePath: string | null = null;
   if (isPlanning) {
     planFilePath = activePlanFile;
   } else if (statePlanPath) {
@@ -524,39 +493,25 @@ function renderContextManager(
     planPart = ` ${SLATE_600}\u2502${RESET} ${CTX_SECONDARY}Plan:${RESET} ${SLATE_300}${truncatedPlan}${RESET}`;
   }
 
-  switch (mode) {
-  case "micro": {
-    console.log(`${CTX_ACCENT}\u25C6${RESET} ${SLATE_400}${truncatedId}${RESET}${modeBadge}`);
-  
-  break;
-  }
-
-  case "mini": {
+  if (mode === "nano") {
+    console.log(`${CTX_ACCENT}\u25c6${RESET} ${SLATE_400}${truncatedId}${RESET}${modeBadge}`);
+  } else if (mode === "micro") {
+    console.log(`${CTX_ACCENT}\u25c6${RESET} ${SLATE_400}${truncatedId}${RESET}${modeBadge}`);
+  } else if (mode === "mini") {
     console.log(
-      `${CTX_ACCENT}\u25C6${RESET} ${SLATE_400}${truncatedId}${RESET}` +
+      `${CTX_ACCENT}\u25c6${RESET} ${SLATE_400}${truncatedId}${RESET}` +
       `${modeBadge}${planPart}`,
     );
-  
-  break;
-  }
-
-  case "nano": {
-    console.log(`${CTX_ACCENT}\u25C6${RESET} ${SLATE_400}${truncatedId}${RESET}${modeBadge}`);
-  
-  break;
-  }
-
-  default: {
+  } else {
     console.log(
-      `${CTX_ACCENT}\u25C6${RESET} ${CTX_SECONDARY}Context:${RESET} ${SLATE_300}${truncatedId}${RESET}` +
+      `${CTX_ACCENT}\u25c6${RESET} ${CTX_SECONDARY}Context:${RESET} ${SLATE_300}${truncatedId}${RESET}` +
       `${modeBadge}${planPart}`,
     );
-  }
   }
 }
 
 function renderNoContext(mode: string): void {
-  const warn = `${ROSE}\u26A0 ${RESET}`;
+  const warn = `${ROSE}\u26a0 ${RESET}`;
   if (mode === "normal") {
     console.log(`${warn} ${ROSE}NO CONTEXT${RESET} ${SLATE_500}\u2014 type ^ for context manager${RESET}`);
   } else {
@@ -569,16 +524,15 @@ function renderNoContext(mode: string): void {
 // ---------------------------------------------------------------------------
 
 interface StatuslineCache {
-  sessions?: Record<string, { context_id: null | string }>;
+  sessions?: Record<string, { context_id: string | null }>;
 }
 
 function loadCache(): StatuslineCache {
   try {
     if (fs.existsSync(STATUSLINE_CACHE)) {
-      return JSON.parse(fs.readFileSync(STATUSLINE_CACHE, "utf8"));
+      return JSON.parse(fs.readFileSync(STATUSLINE_CACHE, "utf-8"));
     }
   } catch { /* ignore */ }
-
   return {};
 }
 
@@ -589,7 +543,7 @@ function saveCache(cache: StatuslineCache): void {
   } catch { /* ignore */ }
 }
 
-function resolveContextId(sessionId: string): null | string {
+function resolveContextId(sessionId: string): string | null {
   if (!sessionId || sessionId === "unknown") return null;
 
   // Check cache first
@@ -614,9 +568,9 @@ function resolveContextId(sessionId: string): null | string {
   return null;
 }
 
-function loadContextState(contextId: string): null | Record<string, any> {
+function loadContextState(contextId: string): Record<string, any> | null {
   try {
-    return loadState(contextId) as null | Record<string, any>;
+    return loadState(contextId) as Record<string, any> | null;
   } catch {
     return null;
   }
@@ -624,7 +578,7 @@ function loadContextState(contextId: string): null | Record<string, any> {
 
 function writeContextWindow(contextId: string, contextWindowData: Record<string, any>): void {
   try {
-    const state = getContext(contextId) as null | Record<string, any>;
+    const state = getContext(contextId) as Record<string, any> | null;
     if (state) {
       if (!state.last_session) state.last_session = {};
       state.last_session.context_remaining_pct = contextWindowData.remaining_percentage;
@@ -641,7 +595,7 @@ function main(): void {
   // Read JSON from stdin
   let inputData: Record<string, any>;
   try {
-    inputData = JSON.parse(fs.readFileSync(0, "utf8"));
+    inputData = JSON.parse(fs.readFileSync(0, "utf-8"));
   } catch {
     inputData = {};
   }
@@ -666,7 +620,7 @@ function main(): void {
   const inputTokens: number = usage.input_tokens ?? 0;
   const cacheCreation: number = usage.cache_creation_input_tokens ?? 0;
   const outputTokens: number = usage.output_tokens ?? 0;
-  const contextMax: number = ctxWin.context_window_size ?? 200_000;
+  const contextMax: number = ctxWin.context_window_size ?? 200000;
 
   // Calculate context percentage
   const usedPct = ctxWin.used_percentage;
