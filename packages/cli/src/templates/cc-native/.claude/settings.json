@@ -62,11 +62,7 @@
             "type": "command",
             "command": "bun .aiwcli/_shared/hooks-ts/user_prompt_submit.ts",
             "timeout": 10000
-          }
-        ]
-      },
-      {
-        "hooks": [
+          },
           {
             "type": "command",
             "command": "bun .aiwcli/_cc-native/hooks/plan_questions_early.ts",

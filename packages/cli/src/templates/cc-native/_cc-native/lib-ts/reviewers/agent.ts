@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { logDebug, logInfo, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv, findExecutable, execFileAsync } from "../../../_shared/lib-ts/base/subprocess-utils.js";
+import { getInternalSubprocessEnv, findExecutable, execFileAsync, shellQuoteWin } from "../../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseCliOutput } from "../cli-output-parser.js";
 import { parseJsonMaybe, coerceToReview } from "../json-parser.js";
 import { debugLog, debugRaw } from "../debug.js";
@@ -91,15 +91,15 @@ ${plan}
   const cmdArgs = [
     "--model", agent.model,
     "--output-format", "json",
-    "--json-schema", schemaJson,
+    "--json-schema", shellQuoteWin(schemaJson),
     "--max-turns", "3",
-    "--setting-sources", "",
+    "--setting-sources", process.platform === "win32" ? '""' : "",
     "-p",
   ];
 
   if (agent.system_prompt) {
     const fullPrompt = AGENT_REVIEW_PROMPT_PREFIX + "\n\n---\n\n" + agent.system_prompt;
-    cmdArgs.push("--system-prompt", fullPrompt);
+    cmdArgs.push("--system-prompt", shellQuoteWin(fullPrompt));
   }
 
   logInfo(agent.name, `Running Claude with model: ${agent.model}, timeout: ${timeout}s`);
@@ -219,9 +219,12 @@ async function runAgentReviewCodex(
 
     logInfo(agent.name, `Running Codex with model: ${agent.model}, timeout: ${timeout}s`);
 
+    const env = getInternalSubprocessEnv();
+
     const result = await execFileAsync(codexPath, cmdArgs, {
       input: fullPrompt,
       timeout: timeout * 1000,
+      env: env as Record<string, string>,
       maxBuffer: 10 * 1024 * 1024,
       shell: process.platform === "win32",
     });
@@ -231,17 +234,27 @@ async function runAgentReviewCodex(
       return makeResult(agent.name, false, "error", {}, "", `${agent.name} (codex) timed out after ${timeout}s`);
     }
 
-    if (!result.stdout && !result.stderr && !fs.existsSync(outPath) && result.exitCode !== 0) {
+    const err = result.stderr.trim();
+
+    // Log exit code and stderr tail for ALL non-zero exits (aids diagnosis of intermittent failures)
+    if (result.exitCode !== 0) {
+      const stderrTail = err.slice(-500);
+      logWarn(agent.name, `Codex exited with code ${result.exitCode}, stderr_len=${err.length}, stderr_tail: ${stderrTail}`);
+    }
+
+    if (!result.stdout && !err && !fs.existsSync(outPath) && result.exitCode !== 0) {
       logError(agent.name, `Codex exited with code ${result.exitCode} and no output`);
       return makeResult(agent.name, false, "error", {}, "", `${agent.name} (codex) failed (exit ${result.exitCode})`);
     }
 
     // Read output: prefer temp file, fallback to stdout
     let raw = "";
-    if (fs.existsSync(outPath)) {
+    const outExists = fs.existsSync(outPath);
+    if (outExists) {
       raw = fs.readFileSync(outPath, "utf-8");
     }
-    const err = result.stderr.trim();
+
+    logDebug(agent.name, `Codex output: exit=${result.exitCode}, outFile=${outExists} (${raw.length} chars), stdout=${result.stdout.length} chars`);
 
     // Debug logging
     if (contextPath) {
@@ -251,6 +264,7 @@ async function runAgentReviewCodex(
         exit_code: result.exitCode,
         stdout_len: (raw || result.stdout).length,
         stderr_len: err.length,
+        out_file_exists: outExists,
         model: agent.model,
         provider: "codex",
         timeout,

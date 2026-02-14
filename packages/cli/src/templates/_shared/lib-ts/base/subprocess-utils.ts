@@ -15,15 +15,20 @@ export function isInternalCall(): boolean {
 
 /**
  * Get environment for internal subprocess calls.
- * Returns a copy of process.env with AIWCLI_INTERNAL_CALL=true.
+ * Returns a copy of process.env with AIWCLI_INTERNAL_CALL=true and
+ * Claude Code nesting-detection env vars removed so subprocess
+ * claude instances can run without being blocked.
  */
 export function getInternalSubprocessEnv(): Record<string, string | undefined> {
-  return {
+  const env = {
     ...process.env,
     AIWCLI_INTERNAL_CALL: "true",
   };
+  // Explicitly delete vars that block subprocess calls (set to undefined does not work)
+  delete env.CLAUDECODE;
+  delete env.CLAUDE_CODE_ENTRYPOINT;
+  return env;
 }
-
 /**
  * Find an executable on the system PATH.
  * Uses `where` on Windows, `which` on Unix.
@@ -77,6 +82,17 @@ export function isExecSyncError(e: unknown): e is ExecSyncError {
     "killed" in e &&
     "signal" in e
   );
+}
+
+/**
+ * Quote a string for use as a cmd.exe argument when shell: true.
+ * Wraps in double quotes and escapes inner double quotes as "".
+ * On non-Windows platforms, returns the string unchanged (execFile
+ * handles quoting automatically without shell).
+ */
+export function shellQuoteWin(arg: string): string {
+  if (process.platform !== "win32") return arg;
+  return '"' + arg.replace(/"/g, '""') + '"';
 }
 
 // ---------------------------------------------------------------------------

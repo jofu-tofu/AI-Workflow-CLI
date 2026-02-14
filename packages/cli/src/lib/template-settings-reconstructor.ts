@@ -14,28 +14,17 @@
  * @module lib/template-settings-reconstructor
  */
 
-import {dirname, join} from 'node:path'
-import {fileURLToPath} from 'node:url'
+import {join} from 'node:path'
 
 import type {ClaudeSettings} from './claude-settings-types.js'
 import {mergeClaudeSettings} from './hooks-merger.js'
 import {IdePathResolver} from './ide-path-resolver.js'
 import {readClaudeSettings, writeClaudeSettings} from './settings-hierarchy.js'
-import {getTemplatePath} from './template-resolver.js'
+import {getSharedTemplatePath, getTemplatePath} from './template-resolver.js'
 import {getTargetHooksFile, readWindsurfHooks, writeWindsurfHooks} from './windsurf-hooks-hierarchy.js'
 import {mergeWindsurfHooks} from './windsurf-hooks-merger.js'
 import type {WindsurfHooks} from './windsurf-hooks-types.js'
 
-/**
- * Get the path to the _shared template directory.
- *
- * @returns Absolute path to the _shared template
- */
-function getSharedTemplatePath(): string {
-  const currentFilePath = fileURLToPath(import.meta.url)
-  const currentDir = dirname(currentFilePath)
-  return join(currentDir, '..', 'templates', '_shared')
-}
 
 /**
  * Reconstruct .claude/settings.json and .windsurf/hooks.json from the union
@@ -43,7 +32,7 @@ function getSharedTemplatePath(): string {
  *
  * The function:
  * 1. Starts with empty settings
- * 2. Merges _shared template settings (always included)
+ * 2. Merges _shared template settings (when active templates exist)
  * 3. For each active template, merges its template-source settings
  * 4. Writes the result to the IDE settings file
  *
@@ -92,11 +81,13 @@ async function reconstructClaudeSettings(
   // Start from empty and merge all template settings
   let reconstructed: ClaudeSettings = {}
 
-  // 1. Merge _shared template settings
-  const sharedSettingsPath = join(sharedTemplatePath, '.claude', 'settings.json')
-  const sharedSettings = await readClaudeSettings(sharedSettingsPath)
-  if (sharedSettings) {
-    reconstructed = mergeClaudeSettings(reconstructed, sharedSettings)
+  // 1. Merge _shared template settings (only when active templates exist that need them)
+  if (activeTemplates.length > 0) {
+    const sharedSettingsPath = join(sharedTemplatePath, '.claude', 'settings.json')
+    const sharedSettings = await readClaudeSettings(sharedSettingsPath)
+    if (sharedSettings) {
+      reconstructed = mergeClaudeSettings(reconstructed, sharedSettings)
+    }
   }
 
   // 2. Merge each active template's settings (sequential for deterministic merge order)
@@ -136,11 +127,13 @@ async function reconstructWindsurfHooks(
   // Start from empty
   let reconstructed: WindsurfHooks = {hooks: {}}
 
-  // 1. Merge _shared template hooks
-  const sharedHooksPath = join(sharedTemplatePath, '.windsurf', 'hooks.json')
-  const sharedHooks = await readWindsurfHooks(sharedHooksPath)
-  if (sharedHooks) {
-    reconstructed = mergeWindsurfHooks(reconstructed, sharedHooks)
+  // 1. Merge _shared template hooks (only when active templates exist that need them)
+  if (activeTemplates.length > 0) {
+    const sharedHooksPath = join(sharedTemplatePath, '.windsurf', 'hooks.json')
+    const sharedHooks = await readWindsurfHooks(sharedHooksPath)
+    if (sharedHooks) {
+      reconstructed = mergeWindsurfHooks(reconstructed, sharedHooks)
+    }
   }
 
   // 2. Merge each active template's hooks (sequential for deterministic merge order)

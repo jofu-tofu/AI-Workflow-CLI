@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { logDebug, logInfo, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
-import { findExecutable, execFileAsync } from "../../../_shared/lib-ts/base/subprocess-utils.js";
+import { findExecutable, execFileAsync, getInternalSubprocessEnv } from "../../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseJsonMaybe, coerceToReview } from "../json-parser.js";
 import { REVIEW_PROMPT_PREFIX } from "../types.js";
 import type { ReviewerResult, ReviewOptions } from "../types.js";
@@ -86,9 +86,12 @@ ${plan}
 
     logDebug("codex", `Running command: codex ${cmdArgs.join(" ")}`);
 
+    const env = getInternalSubprocessEnv();
+
     const result = await execFileAsync(codexPath, cmdArgs, {
       input: prompt,
       timeout: timeout * 1000,
+      env: env as Record<string, string>,
       maxBuffer: 10 * 1024 * 1024,
       shell: process.platform === "win32",
     });
@@ -98,17 +101,26 @@ ${plan}
       return makeResult("codex", false, "error", {}, "", `codex timed out after ${timeout}s`);
     }
 
-    if (!result.stdout && !result.stderr && !fs.existsSync(outPath) && result.exitCode !== 0) {
+    const stderrText = result.stderr.trim();
+
+    // Log exit code and stderr tail for ALL non-zero exits (aids diagnosis of intermittent failures)
+    if (result.exitCode !== 0) {
+      const stderrTail = stderrText.slice(-500);
+      logWarn("codex", `Exited with code ${result.exitCode}, stderr_len=${stderrText.length}, stderr_tail: ${stderrTail}`);
+    }
+
+    if (!result.stdout && !stderrText && !fs.existsSync(outPath) && result.exitCode !== 0) {
       logError("codex", `Process exited with code ${result.exitCode} and no output`);
       return makeResult("codex", false, "error", {}, "", `codex failed to run (exit ${result.exitCode})`);
     }
 
-    logDebug("codex", `Exit code: ${result.exitCode}`);
-
     let raw = "";
-    if (fs.existsSync(outPath)) {
+    const outExists = fs.existsSync(outPath);
+    if (outExists) {
       raw = fs.readFileSync(outPath, "utf-8");
     }
+
+    logDebug("codex", `Exit code: ${result.exitCode}, outFile=${outExists} (${raw.length} chars), stdout=${result.stdout.length} chars`);
 
     const obj = parseJsonMaybe(raw) ?? parseJsonMaybe(result.stdout);
     const [ok, verdict, norm] = coerceToReview(
@@ -116,8 +128,7 @@ ${plan}
       "Retry or check CLI auth/config.",
     );
 
-    const err = result.stderr.trim();
-    return makeResult("codex", ok, verdict, norm, raw || result.stdout, err);
+    return makeResult("codex", ok, verdict, norm, raw || result.stdout, stderrText);
   } finally {
     // Clean up temp directory
     try {

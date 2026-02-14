@@ -4,7 +4,7 @@
  */
 
 import { logDebug, logInfo, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv, findExecutable, execFileAsync } from "../../_shared/lib-ts/base/subprocess-utils.js";
+import { getInternalSubprocessEnv, findExecutable, execFileAsync, shellQuoteWin } from "../../_shared/lib-ts/base/subprocess-utils.js";
 import { parseCliOutput } from "./cli-output-parser.js";
 import type { AgentConfig, OrchestratorConfig, OrchestratorResult, ComplexityCategory } from "./types.js";
 import { ORCHESTRATOR_SCHEMA } from "./types.js";
@@ -159,10 +159,10 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning`
   const cmdArgs = [
     "--model", config.model,
     "--output-format", "json",
-    "--json-schema", schemaJson,
+    "--json-schema", shellQuoteWin(schemaJson),
     "--max-turns", "3",
-    "--setting-sources", "",
-    "--system-prompt", systemPrompt,
+    "--setting-sources", process.platform === "win32" ? '""' : "",
+    "--system-prompt", shellQuoteWin(systemPrompt),
     "-p",
   ];
 

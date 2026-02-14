@@ -48,6 +48,17 @@ export async function getTemplatePath(templateName: string): Promise<string> {
  * @returns Array of template names (e.g., ['bmad', 'gsr'])
  * @throws Error if templates directory cannot be read (indicates corrupted installation)
  */
+/**
+ * Get the absolute path to the _shared template directory.
+ *
+ * @returns Absolute path to the _shared template
+ */
+export function getSharedTemplatePath(): string {
+  const currentFilePath = fileURLToPath(import.meta.url)
+  const currentDir = dirname(currentFilePath)
+  return join(currentDir, '..', 'templates', '_shared')
+}
+
 export async function getAvailableTemplates(): Promise<string[]> {
   const currentFileUrl = import.meta.url
   const currentFilePath = fileURLToPath(currentFileUrl)

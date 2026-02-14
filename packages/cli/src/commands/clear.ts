@@ -7,6 +7,7 @@ import {Flags} from '@oclif/core'
 import BaseCommand from '../lib/base-command.js'
 import {computeGitignoreRemovals, pruneGitignoreStaleEntries, removeGitignoreEntries} from '../lib/gitignore-manager.js'
 import {pathExists} from '../lib/paths.js'
+import {getSharedTemplatePath} from '../lib/template-resolver.js'
 import {reconstructIdeSettings} from '../lib/template-settings-reconstructor.js'
 import {EXIT_CODES} from '../types/exit-codes.js'
 
@@ -204,6 +205,53 @@ async function shouldDeleteIdeFolder(
  */
 async function removeDirectory(dir: string): Promise<void> {
   await fs.rm(dir, {force: true, recursive: true})
+}
+
+/**
+ * Recursively remove files from targetDir that match files in sourceDir.
+ * Only removes files that exist in the source template — user-created files are preserved.
+ * Prunes empty directories after file removal.
+ *
+ * @param sourceDir - Template source directory to match against
+ * @param targetDir - Target directory to remove matching files from
+ */
+async function removeMatchingFiles(sourceDir: string, targetDir: string): Promise<void> {
+  let entries
+  try {
+    entries = await fs.readdir(sourceDir, {withFileTypes: true})
+  } catch {
+    return
+  }
+
+  for (const entry of entries) {
+    const sourcePath = join(sourceDir, entry.name)
+    const targetPath = join(targetDir, entry.name)
+
+    if (entry.isDirectory()) {
+      // Recurse into subdirectories
+      await removeMatchingFiles(sourcePath, targetPath) // eslint-disable-line no-await-in-loop
+    } else if (entry.isFile()) {
+      // Skip settings files — handled by reconstruction
+      if (entry.name === 'settings.json' || entry.name === 'hooks.json') continue
+
+      // Remove matching file from target
+      try {
+        await fs.rm(targetPath, {force: true}) // eslint-disable-line no-await-in-loop
+      } catch {
+        // File doesn't exist or can't be removed
+      }
+    }
+  }
+
+  // Prune target directory if now empty
+  try {
+    const remaining = await fs.readdir(targetDir)
+    if (remaining.length === 0) {
+      await fs.rmdir(targetDir)
+    }
+  } catch {
+    // Directory doesn't exist or can't be accessed
+  }
 }
 
 /**
@@ -562,6 +610,27 @@ export default class ClearCommand extends BaseCommand {
           }
         }
       }
+
+      // Remove shared IDE content when no templates remain
+      if (methodsToRemove.length > 0) {
+        const allMethodsAfterRemove = await getInstalledMethodNames(targetDir)
+        const remainingAfterRemove = [...allMethodsAfterRemove].filter(m => !methodsToRemove.includes(m))
+
+        if (remainingAfterRemove.length === 0) {
+          await this.removeSharedIdeContent(targetDir)
+        }
+      }
+
+      // Clean up backup files created during reconstruction
+      const backupCleanups = Object.values(IDE_FOLDERS).map(async (ide) => {
+        const backupPath = join(targetDir, ide.root, `${ide.settingsFile}.backup`)
+        try {
+          await fs.rm(backupPath, {force: true})
+        } catch {
+          // Backup doesn't exist or can't be removed
+        }
+      })
+      await Promise.all(backupCleanups)
 
       // Check if IDE folders should be fully deleted (empty settings + empty subfolders)
       let removedClaudeDir = false
@@ -1039,5 +1108,26 @@ export default class ClearCommand extends BaseCommand {
       }
     })
     await Promise.all(ops)
+  }
+
+  /**
+   * Remove shared IDE content (e.g., command files from _shared template).
+   *
+   * When all templates are removed, files installed from _shared/.claude/ and
+   * _shared/.windsurf/ should also be removed. Walks the shared template source
+   * and deletes matching files from the target, then prunes empty directories.
+   */
+  private async removeSharedIdeContent(targetDir: string): Promise<void> {
+    const sharedTemplatePath = getSharedTemplatePath()
+
+    for (const ide of Object.values(IDE_FOLDERS)) {
+      const sharedIdeFolder = join(sharedTemplatePath, ide.root)
+      if (!(await pathExists(sharedIdeFolder))) continue // eslint-disable-line no-await-in-loop
+
+      const targetIdeFolder = join(targetDir, ide.root)
+      if (!(await pathExists(targetIdeFolder))) continue // eslint-disable-line no-await-in-loop
+
+      await removeMatchingFiles(sharedIdeFolder, targetIdeFolder) // eslint-disable-line no-await-in-loop
+    }
   }
 }

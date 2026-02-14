@@ -289,7 +289,7 @@ export const REVIEW_SCHEMA: Record<string, unknown> = {
             ],
           },
         },
-        required: ["severity", "category", "issue", "suggested_fix"],
+        required: ["severity", "category", "issue", "suggested_fix", "dimension"],
         additionalProperties: false,
       },
     },

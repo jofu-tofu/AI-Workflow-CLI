@@ -556,12 +556,12 @@ async function main(): Promise<void> {
     history: [], graduated: [], passStreaks: {}, lastPlanHash: "",
   };
 
-  // Reset iteration counter when plan content changes (BEFORE early exit check)
-  // Graduation state (graduated[], passStreaks{}) persists across plan changes.
+  // Log plan hash changes for diagnostics (iteration counter no longer resets —
+  // plans change every iteration as Claude addresses feedback, so resetting
+  // would keep iteration perpetually at 1).
   const lastHash = iterationState.lastPlanHash ?? "";
   if (lastHash && lastHash !== planHash) {
-    logInfo(HOOK, `Plan hash changed (${lastHash.slice(0, 8)}→${planHash.slice(0, 8)}), resetting iteration counter`);
-    iterationState.current = 1;
+    logInfo(HOOK, `Plan hash changed (${lastHash.slice(0, 8)}→${planHash.slice(0, 8)}), iteration continues at ${iterationState.current}`);
   }
 
   // Early iteration check: if we've exhausted max iterations, allow plan through
