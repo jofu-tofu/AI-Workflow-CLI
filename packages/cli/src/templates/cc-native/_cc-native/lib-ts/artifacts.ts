@@ -81,7 +81,7 @@ export function formatCombinedMarkdown(
     if (corroboration.blocking.length > 0) {
       lines.push("### Blocking Dimensions\n");
       for (const group of corroboration.blocking) {
-        lines.push(`- **${group.dimension}**: ${group.issues.length} issues from ${group.agentCount} agents (threshold: >${group.threshold})`);
+        lines.push(`- **${group.dimension}**: ${group.issues.length} issues from ${group.agentCount} agents (threshold: ≥${group.threshold})`);
       }
       lines.push("");
     }
@@ -789,4 +789,95 @@ function extractPreviousHashes(content: string): string[] {
     hashes.push(match[1]!);
   }
   return hashes;
+}
+
+// ---------------------------------------------------------------------------
+// Corroboration Report
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a detailed markdown report of the corroboration analysis.
+ * Shows blocking vs solo findings with threshold comparison.
+ */
+export function buildCorroborationReport(
+  corroborationResult: CorroborationResult,
+): string {
+  const lines: string[] = [
+    "# Corroboration Analysis",
+    "",
+    "## Verdict: " + corroborationResult.verdict.toUpperCase(),
+    "",
+  ];
+
+  // Blocking groups table
+  if (corroborationResult.blocking.length > 0) {
+    lines.push("## Blocking Issues (Corroborated)");
+    lines.push("");
+    lines.push("| Dimension | Issues | Agents | Threshold | Status |");
+    lines.push("|-----------|--------|--------|-----------|--------|");
+
+    for (const group of corroborationResult.blocking) {
+      lines.push(
+        `| ${group.dimension} | ${group.issues.length} | ${group.agentCount} | ${group.threshold} | ⛔ EXCEEDED |`
+      );
+    }
+    lines.push("");
+
+    // Issue details
+    for (const group of corroborationResult.blocking) {
+      lines.push(`### ${group.dimension} (${group.issues.length} issues)`);
+      lines.push("");
+      for (const {agent, issue} of group.issues) {
+        lines.push(`- **[${agent}]** ${issue.description || issue.issue || "No description"}`);
+      }
+      lines.push("");
+    }
+  }
+
+  // Solo findings table
+  if (corroborationResult.solo.length > 0) {
+    lines.push("## Solo Findings (Below Threshold)");
+    lines.push("");
+    lines.push("| Dimension | Issues | Agents | Threshold | Status |");
+    lines.push("|-----------|--------|--------|-----------|--------|");
+
+    for (const group of corroborationResult.solo) {
+      lines.push(
+        `| ${group.dimension} | ${group.issues.length} | ${group.agentCount} | ${group.threshold} | ℹ️ SOLO |`
+      );
+    }
+    lines.push("");
+
+    // Issue details
+    for (const group of corroborationResult.solo) {
+      lines.push(`### ${group.dimension} (${group.issues.length} issues)`);
+      lines.push("");
+      for (const {agent, issue} of group.issues) {
+        lines.push(`- **[${agent}]** ${issue.description || issue.issue || "No description"}`);
+      }
+      lines.push("");
+    }
+  }
+
+  // Unclassified issues
+  if (corroborationResult.unclassified.length > 0) {
+    lines.push("## Unclassified Issues (No Dimension)");
+    lines.push("");
+    for (const {agent, issue} of corroborationResult.unclassified) {
+      lines.push(`- **[${agent}]** ${issue.description || issue.issue || "No description"}`);
+    }
+    lines.push("");
+  }
+
+  // Summary
+  lines.push("## Summary");
+  lines.push("");
+  lines.push(`- **Blocking groups**: ${corroborationResult.blocking.length}`);
+  lines.push(`- **Solo findings**: ${corroborationResult.solo.length}`);
+  lines.push(`- **Unclassified**: ${corroborationResult.unclassified.length}`);
+  lines.push(`- **Final verdict**: ${corroborationResult.verdict}`);
+  lines.push("");
+  lines.push("**Threshold rule**: Issues in a dimension block when count ≥ 2× distinct agents in that dimension.");
+
+  return lines.join("\n");
 }

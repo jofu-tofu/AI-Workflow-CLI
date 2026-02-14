@@ -89,7 +89,7 @@ export function computeCorroboratedDecision(
     const agentCount = group.agentNames.size;
     const threshold = 2 * agentCount;
 
-    if (group.issues.length > threshold) {
+    if (group.issues.length >= threshold) {
       blocking.push({
         dimension,
         issues: group.issues,
@@ -110,6 +110,10 @@ export function computeCorroboratedDecision(
     blocking,
     solo,
     unclassified,
-    verdict: blocking.length > 0 ? "fail" : "pass",
+    verdict: blocking.length > 0
+      ? "fail"
+      : solo.length > 0
+        ? "warn"
+        : "pass",
   };
 }
