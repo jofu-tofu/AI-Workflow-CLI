@@ -26,10 +26,10 @@ export interface ExecResult {
  */
 export abstract class BaseCliAgent<T> {
   protected agent: AgentConfig;
-  protected schema: Record<string, unknown>;
-  protected timeout: number;
   protected contextPath?: string;
+  protected schema: Record<string, unknown>;
   protected sessionName: string;
+  protected timeout: number;
 
   constructor(
     agent: AgentConfig,
@@ -44,6 +44,116 @@ export abstract class BaseCliAgent<T> {
     this.contextPath = contextPath;
     this.sessionName = sessionName;
   }
+
+  /** Build the command-line arguments for the CLI */
+  protected abstract buildCliArgs(): string[];
+
+  // ─── Abstract Methods (Subclass Implements) ────────────────────────────
+
+  /** Build the stdin prompt for the CLI */
+  protected abstract buildPrompt(plan: string): string;
+
+  /** Optional cleanup after subprocess execution */
+  protected async cleanup(): Promise<void> {
+    // Default: no-op. Subclasses override if needed (e.g., Codex temp files).
+  }
+
+  /** Coerce parsed JSON into the result type T */
+  protected abstract coerceResult(obj: Record<string, unknown> | null, raw: string, err: string): T;
+
+  /** Extract stdout/stderr from subprocess result. Override for file-based output (Codex). */
+  protected extractOutput(result: ExecResult): { raw: string; err: string } {
+    return {
+      raw: result.stdout.trim(),
+      err: result.stderr.trim(),
+    };
+  }
+
+  /** Find the CLI executable. Override for custom search logic. */
+  protected findCli(): string | null {
+    return findExecutable(this.getCliName());
+  }
+
+  // ─── Template Methods (Subclass Can Override) ──────────────────────────
+
+  /** Get the CLI executable name (e.g., "claude", "codex") */
+  protected abstract getCliName(): string;
+
+  /** Get default error message for coerceToReview */
+  protected getDefaultErrorMessage(): string {
+    return `Retry or check ${this.getCliName()} configuration.`;
+  }
+
+  /** Handle non-zero exit with no output */
+  protected handleExitError(result: ExecResult): T {
+    const msg = `${this.agent.name} failed to run (exit ${result.exitCode})`;
+    logError(this.agent.name, `Process exited with code ${result.exitCode} and no output`);
+    return this.makeErrorResult("error", msg);
+  }
+
+  /** Handle timeout scenario */
+  protected handleTimeout(): T {
+    const msg = `${this.getCliName()} TIMEOUT after ${this.timeout}s`;
+    logWarn(this.agent.name, msg);
+    return this.makeErrorResult("error", `${this.agent.name} timed out after ${this.timeout}s`);
+  }
+
+  // ─── Shared Infrastructure ──────────────────────────────────────────────
+
+  /** Log parsed JSON result */
+  protected logParsedResult(obj: Record<string, unknown> | null): void {
+    if (this.contextPath && obj) {
+      debugLog(this.contextPath, this.sessionName, `agent:${this.agent.name}`, "parsed_result", {
+        parsed_keys: Object.keys(obj),
+        verdict: obj.verdict ?? null,
+        has_summary: Boolean(obj.summary),
+        issues_count: Array.isArray(obj.issues) ? (obj.issues as unknown[]).length : 0,
+      });
+    }
+
+    if (obj) {
+      logInfo(this.agent.name, `Parsed JSON successfully, verdict: ${obj.verdict ?? "N/A"}`);
+    } else {
+      logWarn(this.agent.name, "Failed to parse JSON from output");
+    }
+  }
+
+  /** Log subprocess execution results */
+  protected logSubprocessResult(result: ExecResult, raw: string, err: string): void {
+    logDebug(this.agent.name, `Exit code: ${result.exitCode}`);
+    logDebug(this.agent.name, `stdout length: ${raw.length} chars`);
+    if (err) logDebug(this.agent.name, `stderr: ${err.slice(0, 500)}`);
+
+    // Debug logging
+    if (this.contextPath) {
+      debugRaw(this.contextPath, this.sessionName, `agent:${this.agent.name}`, "stdout", raw);
+      if (err) {
+        debugRaw(this.contextPath, this.sessionName, `agent:${this.agent.name}`, "stderr", err);
+      }
+      debugLog(this.contextPath, this.sessionName, `agent:${this.agent.name}`, "subprocess_info", {
+        exit_code: result.exitCode,
+        stdout_len: raw.length,
+        stderr_len: err.length,
+        model: this.agent.model,
+        provider: this.agent.provider,
+        timeout: this.timeout,
+      });
+    }
+
+    if (raw) logDebug(this.agent.name, `stdout preview: ${raw.slice(0, 500)}`);
+  }
+
+  /** Construct a T for error/skip/timeout scenarios. Subclasses define shape. */
+  protected abstract makeErrorResult(type: "skip" | "error", message: string): T;
+
+  /** Create skip result when CLI not found */
+  protected makeSkipResult(reason: string): T {
+    logWarn(this.agent.name, reason);
+    return this.makeErrorResult("skip", reason);
+  }
+
+  /** Parse JSON from CLI output */
+  protected abstract parseOutput(raw: string, result: ExecResult): Record<string, unknown> | null;
 
   /**
    * Template method - orchestrates the review flow.
@@ -103,115 +213,5 @@ export abstract class BaseCliAgent<T> {
     await this.cleanup();
 
     return coerced;
-  }
-
-  // ─── Abstract Methods (Subclass Implements) ────────────────────────────
-
-  /** Get the CLI executable name (e.g., "claude", "codex") */
-  protected abstract getCliName(): string;
-
-  /** Build the stdin prompt for the CLI */
-  protected abstract buildPrompt(plan: string): string;
-
-  /** Build the command-line arguments for the CLI */
-  protected abstract buildCliArgs(): string[];
-
-  /** Parse JSON from CLI output */
-  protected abstract parseOutput(raw: string, result: ExecResult): Record<string, unknown> | null;
-
-  /** Coerce parsed JSON into the result type T */
-  protected abstract coerceResult(obj: Record<string, unknown> | null, raw: string, err: string): T;
-
-  // ─── Template Methods (Subclass Can Override) ──────────────────────────
-
-  /** Find the CLI executable. Override for custom search logic. */
-  protected findCli(): string | null {
-    return findExecutable(this.getCliName());
-  }
-
-  /** Extract stdout/stderr from subprocess result. Override for file-based output (Codex). */
-  protected extractOutput(result: ExecResult): { raw: string; err: string } {
-    return {
-      raw: result.stdout.trim(),
-      err: result.stderr.trim(),
-    };
-  }
-
-  /** Get default error message for coerceToReview */
-  protected getDefaultErrorMessage(): string {
-    return `Retry or check ${this.getCliName()} configuration.`;
-  }
-
-  /** Optional cleanup after subprocess execution */
-  protected async cleanup(): Promise<void> {
-    // Default: no-op. Subclasses override if needed (e.g., Codex temp files).
-  }
-
-  // ─── Shared Infrastructure ──────────────────────────────────────────────
-
-  /** Create skip result when CLI not found */
-  protected makeSkipResult(reason: string): T {
-    logWarn(this.agent.name, reason);
-    return this.makeErrorResult("skip", reason);
-  }
-
-  /** Handle timeout scenario */
-  protected handleTimeout(): T {
-    const msg = `${this.getCliName()} TIMEOUT after ${this.timeout}s`;
-    logWarn(this.agent.name, msg);
-    return this.makeErrorResult("error", `${this.agent.name} timed out after ${this.timeout}s`);
-  }
-
-  /** Handle non-zero exit with no output */
-  protected handleExitError(result: ExecResult): T {
-    const msg = `${this.agent.name} failed to run (exit ${result.exitCode})`;
-    logError(this.agent.name, `Process exited with code ${result.exitCode} and no output`);
-    return this.makeErrorResult("error", msg);
-  }
-
-  /** Construct a T for error/skip/timeout scenarios. Subclasses define shape. */
-  protected abstract makeErrorResult(type: "skip" | "error", message: string): T;
-
-  /** Log subprocess execution results */
-  protected logSubprocessResult(result: ExecResult, raw: string, err: string): void {
-    logDebug(this.agent.name, `Exit code: ${result.exitCode}`);
-    logDebug(this.agent.name, `stdout length: ${raw.length} chars`);
-    if (err) logDebug(this.agent.name, `stderr: ${err.slice(0, 500)}`);
-
-    // Debug logging
-    if (this.contextPath) {
-      debugRaw(this.contextPath, this.sessionName, `agent:${this.agent.name}`, "stdout", raw);
-      if (err) {
-        debugRaw(this.contextPath, this.sessionName, `agent:${this.agent.name}`, "stderr", err);
-      }
-      debugLog(this.contextPath, this.sessionName, `agent:${this.agent.name}`, "subprocess_info", {
-        exit_code: result.exitCode,
-        stdout_len: raw.length,
-        stderr_len: err.length,
-        model: this.agent.model,
-        provider: this.agent.provider,
-        timeout: this.timeout,
-      });
-    }
-
-    if (raw) logDebug(this.agent.name, `stdout preview: ${raw.slice(0, 500)}`);
-  }
-
-  /** Log parsed JSON result */
-  protected logParsedResult(obj: Record<string, unknown> | null): void {
-    if (this.contextPath && obj) {
-      debugLog(this.contextPath, this.sessionName, `agent:${this.agent.name}`, "parsed_result", {
-        parsed_keys: Object.keys(obj),
-        verdict: obj.verdict ?? null,
-        has_summary: Boolean(obj.summary),
-        issues_count: Array.isArray(obj.issues) ? (obj.issues as unknown[]).length : 0,
-      });
-    }
-
-    if (obj) {
-      logInfo(this.agent.name, `Parsed JSON successfully, verdict: ${obj.verdict ?? "N/A"}`);
-    } else {
-      logWarn(this.agent.name, "Failed to parse JSON from output");
-    }
   }
 }

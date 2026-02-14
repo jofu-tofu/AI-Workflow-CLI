@@ -4,9 +4,9 @@
  * See cc-native-plan-review-spec.md §4.8
  */
 
-import { logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
-import type { AgentConfig, OrchestratorConfig, OrchestratorResult } from "./types.js";
 import { OrchestratorClaudeAgent } from "./reviewers/providers/orchestrator-claude-agent.js";
+import type { AgentConfig, OrchestratorConfig, OrchestratorResult } from "./types.js";
+import { logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
 
 // Re-export for backward compatibility (moved to reviewers/schemas.ts)
 export { buildOrchestratorSchema } from "./reviewers/schemas.js";
@@ -56,16 +56,16 @@ export async function runOrchestrator(
     logInfo("orchestrator", `Result: complexity=${result.complexity}, category=${result.category}, agents=${JSON.stringify(result.selected_agents)}`);
 
     return result;
-  } catch (e) {
-    logWarn("orchestrator", `Unexpected error: ${e}`);
+  } catch (error) {
+    logWarn("orchestrator", `Unexpected error: ${error}`);
     const nonMandatory = agentLibrary.filter((a) => a.enabled && !mandatory.has(a.name));
     const fallbackCount = ((settings.agentSelection as Record<string, unknown>)?.fallbackCount as number) ?? 2;
     return {
       complexity: "medium",
       category: "code",
       selected_agents: nonMandatory.slice(0, fallbackCount).map((a) => a.name),
-      reasoning: `Orchestrator failed: ${e}`,
-      error: String(e),
+      reasoning: `Orchestrator failed: ${error}`,
+      error: String(error),
     };
   }
 }

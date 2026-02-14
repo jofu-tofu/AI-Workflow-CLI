@@ -3,17 +3,17 @@
  * SessionStart hook: Restore context after /clear (plan/handoff) or compaction.
  * Routes by source field to appropriate handler.
  */
+import { getProjectRoot } from "../lib-ts/base/constants.js";
 import {
   loadHookInput, emitContext, runHook, runHookAsync,
   logDebug, logInfo, logError, logDiagnostic,
 } from "../lib-ts/base/hook-utils.js";
-import { getProjectRoot } from "../lib-ts/base/constants.js";
-import {
-  getContextBySessionId, getAllContexts, bindSession, updateMode,
-} from "../lib-ts/context/context-store.js";
 import {
   buildRestoreSections, formatHandoffContinuation, getModeDisplay,
 } from "../lib-ts/context/context-formatter.js";
+import {
+  getContextBySessionId, getAllContexts, bindSession, updateMode,
+} from "../lib-ts/context/context-store.js";
 import type { ContextState } from "../lib-ts/types.js";
 
 /**
@@ -124,15 +124,18 @@ async function main(): Promise<void> {
   logDiagnostic("session_start", "entry", `source=${source}, session=${sessionId}`);
 
   switch (source) {
-    case "compact":
-      handleCompactRestore(sessionId, projectRoot);
-      break;
-    case "clear":
+    case "clear": {
       await handleClearRestore(sessionId, projectRoot);
       break;
-    default:
+    }
+    case "compact": {
+      handleCompactRestore(sessionId, projectRoot);
+      break;
+    }
+    default: {
       logDebug("session_start", `Unhandled source: ${source}`);
       break;
+    }
   }
 }
 

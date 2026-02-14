@@ -19,11 +19,12 @@
  *   - reviewer-output/{reviewer}.json (individual reviewer results)
  */
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-import * as os from "node:os";
 import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
+import { getProjectRoot, getAiwcliDir, getContextReviewsDir, getContextDir, getReviewFolderPath } from "../../_shared/lib-ts/base/constants.js";
 import {
   loadHookInput,
   runHookAsync,
@@ -36,11 +37,40 @@ import {
   emitContextAndBlock,
 } from "../../_shared/lib-ts/base/hook-utils.js";
 import { isInternalCall, findExecutable } from "../../_shared/lib-ts/base/subprocess-utils.js";
-import { getProjectRoot, getAiwcliDir, getContextReviewsDir, getContextDir, getReviewFolderPath } from "../../_shared/lib-ts/base/constants.js";
 import { eprint } from "../../_shared/lib-ts/base/utils.js";
 import { getContextBySessionId, getAllContexts } from "../../_shared/lib-ts/context/context-store.js";
 import { findPlanPathInTranscript } from "../../_shared/lib-ts/context/plan-manager.js";
-
+import type { ContextState } from "../../_shared/lib-ts/types.js";
+import { aggregateAgents } from "../lib-ts/aggregate-agents.js";
+import {
+  writeCombinedArtifacts,
+  buildInlineReviewSummary,
+  extractTopIssuesText,
+  buildHighIssuesDocument,
+  buildCorroborationReport,
+  writeReviewTracker,
+} from "../lib-ts/artifacts.js";
+import type { ReviewTrackerEntry } from "../lib-ts/artifacts.js";
+import {
+  isPlanAlreadyReviewed,
+  wasPlanPreviouslyDenied,
+  getLastPlanReview,
+  markPlanReviewed,
+  wasPlanQuestionsAgentAsked,
+  markQuestionsAsked,
+} from "../lib-ts/cc-native-state.js";
+import { loadConfig, getDisplaySettings } from "../lib-ts/config.js";
+import { computeCorroboratedDecision } from "../lib-ts/corroboration.js";
+import { debugLog } from "../lib-ts/debug.js";
+import { runOrchestrator } from "../lib-ts/orchestrator.js";
+import { runPlanQuestions } from "../lib-ts/plan-questions.js";
+import { runAgentReview } from "../lib-ts/reviewers/index.js";
+import { DEFAULT_REVIEW_ITERATIONS } from "../lib-ts/state.js";
+import {
+  REVIEW_SCHEMA,
+  DEFAULT_DISPLAY,
+  DEFAULT_SANITIZATION,
+} from "../lib-ts/types.js";
 import type {
   AgentConfig,
   OrchestratorConfig,
@@ -52,40 +82,7 @@ import type {
   Verdict,
   IterationState,
 } from "../lib-ts/types.js";
-import type { ContextState } from "../../_shared/lib-ts/types.js";
-import {
-  REVIEW_SCHEMA,
-  DEFAULT_DISPLAY,
-  DEFAULT_SANITIZATION,
-} from "../lib-ts/types.js";
-
-import {
-  isPlanAlreadyReviewed,
-  wasPlanPreviouslyDenied,
-  getLastPlanReview,
-  markPlanReviewed,
-  wasQuestionsAsked,
-  markQuestionsAsked,
-} from "../lib-ts/cc-native-state.js";
-
 import { worstVerdict } from "../lib-ts/verdict.js";
-import { computeCorroboratedDecision } from "../lib-ts/corroboration.js";
-import { loadConfig, getDisplaySettings } from "../lib-ts/config.js";
-import { runOrchestrator } from "../lib-ts/orchestrator.js";
-import { aggregateAgents } from "../lib-ts/aggregate-agents.js";
-import { debugLog } from "../lib-ts/debug.js";
-import {
-  writeCombinedArtifacts,
-  buildInlineReviewSummary,
-  extractTopIssuesText,
-  buildHighIssuesDocument,
-  buildCorroborationReport,
-  writeReviewTracker,
-} from "../lib-ts/artifacts.js";
-import type { ReviewTrackerEntry } from "../lib-ts/artifacts.js";
-import { runAgentReview } from "../lib-ts/reviewers/index.js";
-import { DEFAULT_REVIEW_ITERATIONS } from "../lib-ts/state.js";
-import { runPlanQuestions } from "../lib-ts/plan-questions.js";
 
 // ---------------------------------------------------------------------------
 // Hook Name
@@ -226,7 +223,7 @@ function resolveMandatoryAgents(
     return new Set(configValue as string[]);
   }
   if (!configValue || typeof configValue !== "object") {
-    return new Set(["handoff-readiness", "clarity-auditor", "skeptic"]);
+    return new Set(["clarity-auditor", "handoff-readiness", "skeptic"]);
   }
   const cfg = configValue as Record<string, string[]>;
   const names = new Set(cfg.always ?? []);
@@ -276,8 +273,8 @@ function loadIterationState(reviewsDir: string): IterationState | null {
   if (!fs.existsSync(iterationFile)) return null;
   try {
     return JSON.parse(fs.readFileSync(iterationFile, "utf-8")) as IterationState;
-  } catch (e) {
-    logError(HOOK, `Failed to load iteration state: ${e}`);
+  } catch (error) {
+    logError(HOOK, `Failed to load iteration state: ${error}`);
     return null;
   }
 }
@@ -289,8 +286,8 @@ function saveIterationState(reviewsDir: string, state: IterationState & { schema
     state.schema_version = "1.0.0";
     fs.writeFileSync(iterationFile, JSON.stringify(state, null, 2), "utf-8");
     return true;
-  } catch (e) {
-    logError(HOOK, `Failed to save iteration state: ${e}`);
+  } catch (error) {
+    logError(HOOK, `Failed to save iteration state: ${error}`);
     return false;
   }
 }
@@ -335,7 +332,7 @@ function assignModelsToAgents(
       if (!found) {
         logWarn(HOOK, `Provider '${name}' enabled but CLI '${cliName}' not found on PATH — skipping`);
       }
-      return !!found;
+      return Boolean(found);
     });
 
   if (enabledProviders.length === 0) {
@@ -403,11 +400,11 @@ function loadSettings(projDir: string): Record<string, unknown> {
   }
   mergedAgent.display = getDisplaySettings(config, "agentReview");
   const configRecord = config as Record<string, unknown>;
-  mergedAgent.agentSelection = { ...DEFAULT_AGENT_SELECTION, ...((configRecord.agentSelection as Record<string, unknown>) ?? {}) };
-  mergedAgent.agentDefaults = { model: DEFAULT_AGENT_MODEL, ...((configRecord.agentDefaults as Record<string, unknown>) ?? {}) };
+  mergedAgent.agentSelection = { ...DEFAULT_AGENT_SELECTION, ...(configRecord.agentSelection as Record<string, unknown>) };
+  mergedAgent.agentDefaults = { model: DEFAULT_AGENT_MODEL, ...(configRecord.agentDefaults as Record<string, unknown>) };
   mergedAgent.complexityCategories = (configRecord.complexityCategories as string[]) ?? [...DEFAULT_COMPLEXITY_CATEGORIES];
-  mergedAgent.sanitization = { ...DEFAULT_SANITIZATION, ...((configRecord.sanitization as Record<string, unknown>) ?? {}) };
-  mergedAgent.reviewIterations = { ...DEFAULT_REVIEW_ITERATIONS, ...agentReview.reviewIterations ?? {} };
+  mergedAgent.sanitization = { ...DEFAULT_SANITIZATION, ...(configRecord.sanitization as Record<string, unknown>) };
+  mergedAgent.reviewIterations = { ...DEFAULT_REVIEW_ITERATIONS, ...agentReview.reviewIterations };
 
   const modelsRaw = (config as Record<string, unknown>).models ?? {};
   return { planReview: mergedPlan, agentReview: mergedAgent, models: modelsRaw };
@@ -504,8 +501,8 @@ async function main(): Promise<void> {
   let plan: string;
   try {
     plan = fs.readFileSync(planPath, "utf-8").trim();
-  } catch (e) {
-    skipWithInfo(`Failed to read plan file: ${e}`);
+  } catch (error) {
+    skipWithInfo(`Failed to read plan file: ${error}`);
     return;
   }
 
@@ -520,15 +517,15 @@ async function main(): Promise<void> {
   // ============================================
   // Questions Gate: ask user questions before review
   // ============================================
-  if (!wasQuestionsAsked(sessionId, base)) {
-    logInfo(HOOK, "Questions gate: user has not been asked questions yet, running plan-questions agent");
+  if (!wasPlanQuestionsAgentAsked(sessionId, base)) {
+    logInfo(HOOK, "Questions gate (Phase B): plan-questions agent has not run yet, running now");
     const timeout = typeof (settings.agentReview ?? {}).timeout === "number"
       ? (settings.agentReview as Record<string, unknown>).timeout as number : 120;
     const questionsResult = await runPlanQuestions(plan, aiwcliDir, timeout, undefined, sessionId);
 
-    // Mark questions as asked NOW — prevents infinite gate loop if Claude
+    // Mark agent questions as asked NOW — prevents infinite gate loop if Claude
     // doesn't use AskUserQuestion after denial. Gate fires at most once.
-    markQuestionsAsked(sessionId, base);
+    markQuestionsAsked(sessionId, base, "agent");
 
     const hasQuestions = questionsResult && (
       questionsResult.questions.length > 0 ||
@@ -549,9 +546,9 @@ async function main(): Promise<void> {
       return;
     }
 
-    logInfo(HOOK, "Questions gate: no questions generated, proceeding to review");
+    logInfo(HOOK, "Questions gate (Phase B): no questions generated, proceeding to review");
   } else {
-    logInfo(HOOK, "Questions gate: questions already asked, skipping");
+    logInfo(HOOK, "Questions gate (Phase B): agent already ran, skipping");
   }
 
   const planHash = computePlanHash(plan);
@@ -585,19 +582,19 @@ async function main(): Promise<void> {
         "Plan unchanged since denial. Modify the plan to address review findings, then attempt ExitPlanMode again.",
       );
       return;
-    } else {
+    } 
       // Plan already reviewed with PASS or WARN verdict - skip review
       const verdict = lastReview?.iteration?.latest_verdict || "pass";
       const skipMsg = `[Plan Review] Plan already reviewed (verdict: ${verdict}). Skipping re-review.`;
       emitContext(skipMsg);
       logInfo(HOOK, skipMsg);
       return;
-    }
+    
   }
 
   // Single load of iteration state — reused throughout, saved once at end.
   // Default max=1 is safe: first iteration 1>1=false (runs), Edit E updates max from config before save.
-  let iterationState: IterationState = loadIterationState(reviewsDir) ?? {
+  const iterationState: IterationState = loadIterationState(reviewsDir) ?? {
     current: 1, max: 1, complexity: "medium",
     history: [], graduated: [], passStreaks: {}, lastPlanHash: "",
   };
@@ -761,7 +758,7 @@ async function main(): Promise<void> {
     // Update complexity/max on the already-loaded iteration state (no second disk read)
     const reviewIterations: Record<string, number> = {
       ...DEFAULT_REVIEW_ITERATIONS,
-      ...(agentSettings.reviewIterations ?? {}),
+      ...agentSettings.reviewIterations,
     };
     iterationState.complexity = detectedComplexity;
     iterationState.max = reviewIterations[detectedComplexity] ?? iterationState.max;
@@ -844,7 +841,7 @@ async function main(): Promise<void> {
     if (!r.verdict || r.verdict === "skip" || r.verdict === "error") continue;
     const issues = Array.isArray(r.data?.issues) ? r.data.issues as Array<{ severity?: string }> : [];
     const agentHigh = issues.filter(i => i.severity === "high").length;
-    let verdict = r.verdict;
+    let {verdict} = r;
     if (agentHigh >= highIssueThreshold) {
       logInfo(HOOK, `${r.name}: verdict overridden to 'fail' (${agentHigh} high issues >= ${highIssueThreshold})`);
       verdict = "fail";
@@ -883,8 +880,8 @@ async function main(): Promise<void> {
   };
 
   const displaySettings = {
-    ...(planSettings.display ?? {}),
-    ...(agentSettings.display ?? {}),
+    ...planSettings.display,
+    ...agentSettings.display,
   };
   const combinedSettings = { display: displaySettings };
 
@@ -919,8 +916,8 @@ async function main(): Promise<void> {
   try {
     fs.writeFileSync(path.join(reviewFolder, "plan.md"), plan, "utf-8");
     logDebug(HOOK, `Saved plan snapshot: ${path.join(reviewFolder, "plan.md")}`);
-  } catch (e) {
-    logWarn(HOOK, `Failed to save plan snapshot: ${e}`);
+  } catch (error) {
+    logWarn(HOOK, `Failed to save plan snapshot: ${error}`);
   }
 
   // Build inline summary with top issues (always emitted, even on pass)
@@ -933,7 +930,7 @@ async function main(): Promise<void> {
   contextParts.push(`\nFull review: \`${reviewFile}\`\n`);
   const shouldDeny = corroborationResult.blocking.length > 0;
   const denyReason = shouldDeny ? "corroborated_issues" : "no_corroboration";
-  const reviewScore = shouldDeny ? 1.0 : 0.0;
+  const reviewScore = shouldDeny ? 1 : 0;
 
   logInfo(HOOK, `REVIEW_DECISION: verdict=${combinedResult.overall_verdict}, deny=${shouldDeny}, reason=${denyReason}, score=${reviewScore.toFixed(2)}`);
   logDiagnostic(HOOK, "result", `verdict=${combinedResult.overall_verdict}, deny=${shouldDeny}, reason=${denyReason}`, {
@@ -972,7 +969,7 @@ async function main(): Promise<void> {
     }
 
     // Update pass streaks — only for agents that actually ran this iteration
-    const passStreaks = { ...(iterationState.passStreaks ?? {}) };
+    const passStreaks = { ...iterationState.passStreaks };
     const passEligibleSet = new Set(passEligible);
     const graduatedSetCurrent = new Set(iterationState.graduated);
 

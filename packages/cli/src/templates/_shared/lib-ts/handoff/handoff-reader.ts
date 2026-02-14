@@ -8,6 +8,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+
 import { getContextHandoffsDir } from "../base/constants.js";
 import { getContext } from "../context/context-store.js";
 import type { HandoffSections } from "../types.js";
@@ -29,7 +30,7 @@ export function findLatestHandoff(contextId: string, projectRoot?: string): stri
       .sort();
 
     if (entries.length === 0) return null;
-    return path.join(handoffsDir, entries[entries.length - 1]!);
+    return path.join(handoffsDir, entries.at(-1)!);
   } catch {
     return null;
   }

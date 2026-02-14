@@ -7,30 +7,15 @@ import { shellQuoteWin } from "../../../../_shared/lib-ts/base/subprocess-utils.
 import { parseCliOutput } from "../../cli-output-parser.js";
 import { coerceToReview } from "../../json-parser.js";
 import type { ReviewerResult } from "../../types.js";
+import { BaseCliAgent } from "../base/base-agent.js";
 import { AGENT_REVIEW_PROMPT_PREFIX } from "../schemas.js";
 import { makeResult } from "../types.js";
-import { BaseCliAgent } from "../base/base-agent.js";
 
 /**
  * Claude CLI-based agent reviewer.
  * Extends BaseCliAgent with Claude-specific prompt and argument handling.
  */
 export class ClaudeAgent extends BaseCliAgent<ReviewerResult> {
-  protected getCliName(): string {
-    return "claude";
-  }
-
-  protected buildPrompt(plan: string): string {
-    return `IMMEDIATELY call StructuredOutput with your review of the plan below.
-Do NOT output any text before calling StructuredOutput.
-
-PLAN:
-<<<
-${plan}
->>>
-`;
-  }
-
   protected buildCliArgs(): string[] {
     const schemaJson = JSON.stringify(this.schema);
     const cmdArgs = [
@@ -50,8 +35,15 @@ ${plan}
     return cmdArgs;
   }
 
-  protected parseOutput(raw: string, _result: unknown): Record<string, unknown> | null {
-    return parseCliOutput(raw, ["verdict", "summary"]);
+  protected buildPrompt(plan: string): string {
+    return `IMMEDIATELY call StructuredOutput with your review of the plan below.
+Do NOT output any text before calling StructuredOutput.
+
+PLAN:
+<<<
+${plan}
+>>>
+`;
   }
 
   protected coerceResult(obj: Record<string, unknown> | null, raw: string, err: string): ReviewerResult {
@@ -59,7 +51,15 @@ ${plan}
     return makeResult(this.agent.name, ok, verdict, norm, raw, err);
   }
 
+  protected getCliName(): string {
+    return "claude";
+  }
+
   protected makeErrorResult(type: "skip" | "error", message: string): ReviewerResult {
     return makeResult(this.agent.name, false, type, {}, "", message);
+  }
+
+  protected parseOutput(raw: string, _result: unknown): Record<string, unknown> | null {
+    return parseCliOutput(raw, ["verdict", "summary"]);
   }
 }

@@ -12,6 +12,9 @@
  * - Emits context via emitContext() — no file mutation
  */
 
+import * as os from "node:os";
+import * as path from "node:path";
+
 import {
   loadHookInput,
   runHook,
@@ -20,8 +23,6 @@ import {
 } from "../../_shared/lib-ts/base/hook-utils.js";
 import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
 import { getPlanQualityReviewContext } from "../lib-ts/plan-enhancement.js";
-import * as path from "path";
-import * as os from "os";
 
 function main(): void {
   if (isInternalCall()) return;

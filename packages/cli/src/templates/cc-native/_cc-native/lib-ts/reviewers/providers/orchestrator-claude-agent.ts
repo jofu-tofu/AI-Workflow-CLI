@@ -36,12 +36,12 @@ const DEFAULT_AGENT_SELECTION: Record<string, unknown> = {
  * Extends BaseCliAgent<OrchestratorResult> to reuse subprocess execution infrastructure.
  */
 export class OrchestratorClaudeAgent extends BaseCliAgent<OrchestratorResult> {
-  private nonMandatory: AgentConfig[];
-  private validNames: string[];
   private categories: string[];
   private fallbackCount: number;
   private mandatoryCount: number;
+  private nonMandatory: AgentConfig[];
   private settings: Record<string, unknown>;
+  private validNames: string[];
 
   constructor(
     agent: AgentConfig,
@@ -78,8 +78,28 @@ export class OrchestratorClaudeAgent extends BaseCliAgent<OrchestratorResult> {
     logDebug("orchestrator", `Non-mandatory agents for selection: ${validNames.join(", ")}`);
   }
 
-  protected getCliName(): string {
-    return "claude";
+  protected buildCliArgs(): string[] {
+    const schemaJson = JSON.stringify(this.schema);
+
+    const systemPrompt = `You are a plan orchestrator for code review. Your job is to analyze plans and select appropriate reviewer agents.
+
+You MUST call StructuredOutput immediately with your analysis. Do NOT ask questions or use any other tools.
+
+When selecting agents:
+- Match agent expertise to plan requirements
+- Consider what each agent specializes in
+- Only select agents whose categories match the plan category
+- Fewer agents for simple plans, more for complex plans`;
+
+    return [
+      "--model", this.agent.model,
+      "--output-format", "json",
+      "--json-schema", shellQuoteWin(schemaJson),
+      "--max-turns", "3",
+      "--setting-sources", process.platform === "win32" ? '""' : "",
+      "--system-prompt", shellQuoteWin(systemPrompt),
+      "-p",
+    ];
   }
 
   protected buildPrompt(plan: string): string {
@@ -118,34 +138,6 @@ ${plan}
 Call StructuredOutput now with: complexity, category, selectedAgents, reasoning`;
   }
 
-  protected buildCliArgs(): string[] {
-    const schemaJson = JSON.stringify(this.schema);
-
-    const systemPrompt = `You are a plan orchestrator for code review. Your job is to analyze plans and select appropriate reviewer agents.
-
-You MUST call StructuredOutput immediately with your analysis. Do NOT ask questions or use any other tools.
-
-When selecting agents:
-- Match agent expertise to plan requirements
-- Consider what each agent specializes in
-- Only select agents whose categories match the plan category
-- Fewer agents for simple plans, more for complex plans`;
-
-    return [
-      "--model", this.agent.model,
-      "--output-format", "json",
-      "--json-schema", shellQuoteWin(schemaJson),
-      "--max-turns", "3",
-      "--setting-sources", process.platform === "win32" ? '""' : "",
-      "--system-prompt", shellQuoteWin(systemPrompt),
-      "-p",
-    ];
-  }
-
-  protected parseOutput(raw: string, _result: unknown): Record<string, unknown> | null {
-    return parseCliOutput(raw);
-  }
-
   protected coerceResult(obj: Record<string, unknown> | null, _raw: string, _err: string): OrchestratorResult {
     if (!obj) {
       return this.makeFallback("Orchestrator output could not be parsed", "Failed to parse orchestrator output");
@@ -161,7 +153,7 @@ When selecting agents:
     let category = (obj.category as string) ?? "code";
     if (!this.categories.includes(category)) category = "code";
 
-    let selectedAgents = obj.selectedAgents;
+    let {selectedAgents} = obj;
     if (!Array.isArray(selectedAgents)) selectedAgents = [];
 
     const reasoning = String(obj.reasoning ?? "").trim() || "No reasoning provided";
@@ -176,11 +168,19 @@ When selecting agents:
     };
   }
 
+  protected getCliName(): string {
+    return "claude";
+  }
+
   protected makeErrorResult(type: "skip" | "error", message: string): OrchestratorResult {
     return this.makeFallback(
       type === "skip" ? `Orchestrator skipped - ${message}` : message,
       message,
     );
+  }
+
+  protected parseOutput(raw: string, _result: unknown): Record<string, unknown> | null {
+    return parseCliOutput(raw);
   }
 
   private makeFallback(reasoning: string, error: string): OrchestratorResult {

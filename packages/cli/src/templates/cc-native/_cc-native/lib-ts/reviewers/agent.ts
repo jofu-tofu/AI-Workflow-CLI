@@ -6,11 +6,11 @@
 
 import { logWarn } from "../../../_shared/lib-ts/base/logger.js";
 import type { AgentConfig, ReviewerResult, ReviewOptions } from "../types.js";
-import { makeResult } from "./types.js";
-import type { Reviewer } from "./types.js";
 import { ClaudeAgent } from "./providers/claude-agent.js";
 import { CodexAgent } from "./providers/codex-agent.js";
 import { GeminiAgent } from "./providers/gemini-agent.js";
+import type { Reviewer } from "./types.js";
+import { makeResult } from "./types.js";
 
 /**
  * Agent reviewer — runs a CLI instance with a custom persona.
@@ -51,21 +51,24 @@ export async function runAgentReview(
     let reviewer;
 
     switch (agent.provider) {
-      case "codex":
+      case "codex": {
         reviewer = new CodexAgent(agent, schema, timeout, contextPath, sessionName);
         break;
-      case "gemini":
+      }
+      case "gemini": {
         reviewer = new GeminiAgent(agent, schema, timeout, contextPath, sessionName);
         break;
+      }
       case "claude":
-      default:
+      default: {
         reviewer = new ClaudeAgent(agent, schema, timeout, contextPath, sessionName);
         break;
+      }
     }
 
     return await reviewer.review(plan);
-  } catch (e) {
-    logWarn(agent.name, `Unexpected error creating reviewer: ${e}`);
-    return makeResult(agent.name, false, "error", {}, "", `Failed: ${e}`);
+  } catch (error) {
+    logWarn(agent.name, `Unexpected error creating reviewer: ${error}`);
+    return makeResult(agent.name, false, "error", {}, "", `Failed: ${error}`);
   }
 }

@@ -52,13 +52,13 @@ export function computeReviewDecision(
   );
 
   if (signalVerdicts.length === 0) {
-    return { should_deny: false, reason: "no_signal", score: 0.0 };
+    return { should_deny: false, reason: "no_signal", score: 0 };
   }
 
   // Fail blocks unconditionally
   const failCount = signalVerdicts.filter((v) => v === "fail").length;
   if (failCount > 0) {
-    return { should_deny: true, reason: "fail_veto", score: 1.0 };
+    return { should_deny: true, reason: "fail_veto", score: 1 };
   }
 
   // Warn also blocks — reviewers flagged concerns worth addressing
@@ -68,5 +68,5 @@ export function computeReviewDecision(
     return { should_deny: true, reason: "warn_block", score: warnRatio };
   }
 
-  return { should_deny: false, reason: "acceptable", score: 0.0 };
+  return { should_deny: false, reason: "acceptable", score: 0 };
 }

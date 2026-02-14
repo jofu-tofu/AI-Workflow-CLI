@@ -148,15 +148,15 @@ export async function checkTemplateStatus(
  * Patterns to exclude when copying template directories.
  * These are development/test artifacts that shouldn't be packaged.
  */
-const EXCLUDED_PATTERNS = [
+const EXCLUDED_PATTERNS = new Set([
   '_output',
-]
+])
 
 /**
  * Check if a filename should be excluded from copying
  */
 export function shouldExclude(name: string): boolean {
-  return EXCLUDED_PATTERNS.includes(name)
+  return EXCLUDED_PATTERNS.has(name)
 }
 
 /**

@@ -5,13 +5,14 @@
  */
 
 import * as fs from "node:fs";
-import { logDebug, logInfo, logWarn, logError, logBlocking, logHookError, logDiagnostic, hookLog, setSessionId, setContextPath, getContextPath as _getContextPath } from "./logger.js";
+
 import { getProjectRoot } from "./constants.js";
+import { logDebug,  logWarn,     hookLog, setSessionId,  getContextPath as _getContextPath } from "./logger.js";
 import { getContextBySessionId } from "../context/context-store.js";
 import type { HookInput, HookOutput, PermissionRequestOutput } from "../types.js";
 
 // Re-export logger functions for convenience (matches Python hook_utils re-exports)
-export { logDebug, logInfo, logWarn, logError, logBlocking, logHookError, logDiagnostic, hookLog, setSessionId, setContextPath };
+export {          setSessionId };
 
 // Context window baseline: tokens not visible in hook data §5.9
 export const CONTEXT_BASELINE_TOKENS = 22_600;
@@ -93,7 +94,7 @@ export function checkSkipPersistence(
   const toolInput = getToolInput(payload);
   if (!toolInput) return false;
 
-  const metadata = toolInput.metadata;
+  const {metadata} = toolInput;
   if (metadata && typeof metadata === "object" && metadata.skip_persistence) {
     logDebug(hookName, "Skipping persistence (skip_persistence flag set)");
     return true;
@@ -105,11 +106,23 @@ export function checkSkipPersistence(
  * Emit hookSpecificOutput with additionalContext to stdout.
  * hookEventName is required by Claude Code's Zod validator (discriminated union).
  * Auto-detected from stdin payload (set by loadHookInput/runHook).
+ *
+ * SubagentStop and Stop events use top-level systemMessage field instead of hookSpecificOutput.
  * See SPEC.md §5.5
  */
 export function emitContext(additionalContext: string): void {
   const eventName = _lastHookEvent ?? undefined;
   const tool = _lastToolName;
+
+  // SubagentStop and Stop use top-level systemMessage field
+  if (eventName === "SubagentStop" || eventName === "Stop") {
+    const out = { systemMessage: additionalContext };
+    process.stdout.write(JSON.stringify(out) + "\n");
+    _logEmit("systemMessage", additionalContext.length, { event: eventName ?? "unknown", systemMessage: additionalContext });
+    return;
+  }
+
+  // All other events use hookSpecificOutput
   const out: HookOutput = {
     hookSpecificOutput: {
       ...(eventName ? { hookEventName: eventName } : {}),
@@ -153,8 +166,8 @@ export function emitContextAndBlock(
   process.stdout.write(json + "\n");
 }
 
-/** Log hook output (context or block) to hook-log.jsonl for visibility. */
-function _logEmit(type: "context" | "block", chars: number, payload: Record<string, any>): void {
+/** Log hook output (context, systemMessage, or block) to hook-log.jsonl for visibility. */
+function _logEmit(type: "context" | "systemMessage" | "block", chars: number, payload: Record<string, any>): void {
   const hook = _cachedHookName ?? "unknown";
   const event = payload.event ?? "unknown";
   const mechanism = payload.mechanism ? ` via ${payload.mechanism}` : "";
@@ -268,27 +281,28 @@ export function emitPermissionDecision(
 export function emitBlock(reason: string, context?: string): void {
   const event = _lastHookEvent;
   switch (event) {
-    case "PreToolUse":
-      emitContextAndBlock(context ?? reason, reason);
-      break;
-    case "UserPromptSubmit":
-      emitBlockPrompt(reason, context);
+    case "PermissionRequest":
+      emitPermissionDecision("deny", { message: reason });
       break;
     case "PostToolUse":
     case "PostToolUseFailure":
       emitBlockViaExit(reason, context);
       break;
+    case "PreToolUse":
+      emitContextAndBlock(context ?? reason, reason);
+      break;
     case "Stop":
     case "SubagentStop":
       emitBlockTopLevel(reason);
       break;
-    case "PermissionRequest":
-      emitPermissionDecision("deny", { message: reason });
+    case "UserPromptSubmit":
+      emitBlockPrompt(reason, context);
       break;
-    default:
+    default: {
       logWarn(_cachedHookName ?? "unknown",
         `emitBlock() called from ${event ?? "unknown"} — no blocking mechanism exists for this event type, ignoring`);
       break;
+    }
   }
 }
 
@@ -296,7 +310,7 @@ export function emitBlock(reason: string, context?: string): void {
  * Auto-detect template origin from the hook script path.
  */
 function detectTemplate(scriptPath = ""): string {
-  const p = (scriptPath || (process.argv[1] ?? "")).replace(/\\/g, "/");
+  const p = (scriptPath || (process.argv[1] ?? "")).replaceAll('\\', "/");
   if (p.includes("/_shared/hooks/") || p.startsWith("_shared/hooks/")) {
     return "shared";
   }
@@ -438,16 +452,16 @@ export function runHook(
     const result = mainFunc();
     exitCode = typeof result === "number" ? result : 0;
     status = exitCode !== 0 ? "blocked" : "success";
-  } catch (e: any) {
-    if (e instanceof Error && e.message.startsWith("SystemExit:")) {
-      const code = parseInt(e.message.slice(11), 10);
-      exitCode = isNaN(code) ? (e.message.slice(11) ? 1 : 0) : code;
+  } catch (error: any) {
+    if (error instanceof Error && error.message.startsWith("SystemExit:")) {
+      const code = parseInt(error.message.slice(11), 10);
+      exitCode = isNaN(code) ? (error.message.slice(11) ? 1 : 0) : code;
       status = exitCode !== 0 ? "blocked" : "success";
     } else {
       exitCode = 0; // Non-blocking
       status = "error";
-      const stack = e instanceof Error ? e.stack ?? "" : "";
-      errorInfo = [e instanceof Error ? e : new Error(String(e)), stack];
+      const stack = error instanceof Error ? error.stack ?? "" : "";
+      errorInfo = [error instanceof Error ? error : new Error(String(error)), stack];
     }
   }
 
@@ -487,19 +501,19 @@ export function runHookAsync(
       _emitHookEnd(hookName, startTime, exitCode, exitCode !== 0 ? "blocked" : "success", null, startData, event, tool, template);
       _drainAndExit(exitCode);
     })
-    .catch((e: any) => {
+    .catch((error: any) => {
       let exitCode = 0;
       let status = "error";
       let errorInfo: [Error, string] | null = null;
 
-      if (e instanceof Error && e.message.startsWith("SystemExit:")) {
-        const code = parseInt(e.message.slice(11), 10);
-        exitCode = isNaN(code) ? (e.message.slice(11) ? 1 : 0) : code;
+      if (error instanceof Error && error.message.startsWith("SystemExit:")) {
+        const code = parseInt(error.message.slice(11), 10);
+        exitCode = isNaN(code) ? (error.message.slice(11) ? 1 : 0) : code;
         status = exitCode !== 0 ? "blocked" : "success";
       } else {
         exitCode = 0; // Non-blocking (fail open)
-        const stack = e instanceof Error ? e.stack ?? "" : "";
-        errorInfo = [e instanceof Error ? e : new Error(String(e)), stack];
+        const stack = error instanceof Error ? error.stack ?? "" : "";
+        errorInfo = [error instanceof Error ? error : new Error(String(error)), stack];
       }
 
       _emitHookEnd(hookName, startTime, exitCode, status, errorInfo, startData, event, tool, template);
@@ -541,7 +555,7 @@ function _emitHookEnd(
   if (errorInfo) {
     const [err, tb] = errorInfo;
     endData.error_type = err.constructor.name;
-    hookLog("error", hookName, `[${endEvent}] ${err.constructor.name}: ${String(err).replace(/[\n\r]/g, " ").slice(0, 200)}`, { traceback_str: tb });
+    hookLog("error", hookName, `[${endEvent}] ${err.constructor.name}: ${String(err).replaceAll(/[\n\r]/g, " ").slice(0, 200)}`, { traceback_str: tb });
     hookLog("error", hookName, `HOOK_END: ${err}`, { data: endData, traceback_str: tb });
   } else if (status === "blocked") {
     hookLog("warn", hookName, "HOOK_END", { data: endData });
@@ -568,3 +582,5 @@ function _drainAndExit(code: number): void {
     process.exit(code);
   });
 }
+
+export {logInfo, logError, logBlocking, logHookError, logDiagnostic, setContextPath, hookLog, logDebug, logWarn} from "./logger.js";

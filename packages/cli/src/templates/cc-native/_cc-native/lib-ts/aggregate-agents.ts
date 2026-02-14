@@ -5,8 +5,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { logDebug, logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
+
 import type { AgentConfig } from "./types.js";
+import { logDebug, logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
 
 /**
  * Extract simple YAML frontmatter from markdown content.
@@ -47,7 +48,7 @@ export function extractFrontmatter(
       value = value
         .slice(1, -1)
         .split(",")
-        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+        .map((s) => s.trim().replaceAll(/^["']|["']$/g, ""))
         .filter(Boolean);
     }
     // Handle booleans
@@ -114,8 +115,8 @@ export function aggregateAgents(agentsDir?: string): AgentConfig[] {
     let content: string;
     try {
       content = fs.readFileSync(filePath, "utf-8");
-    } catch (e: unknown) {
-      logWarn("aggregate", `Failed to read ${file}: ${e}`);
+    } catch (error: unknown) {
+      logWarn("aggregate", `Failed to read ${file}: ${error}`);
       continue;
     }
 

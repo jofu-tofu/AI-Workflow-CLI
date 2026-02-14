@@ -4,9 +4,6 @@
  * See cc-native-plan-review-spec.md §4.5
  */
 
-import { getContextBySessionId, saveState } from "../../_shared/lib-ts/context/context-store.js";
-import { logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
-import { nowIso } from "../../_shared/lib-ts/base/utils.js";
 import type {
   CcNativeState,
   PlanReviewState,
@@ -14,6 +11,9 @@ import type {
   IterationState,
   StuckDetectionState,
 } from "./types.js";
+import { logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
+import { nowIso } from "../../_shared/lib-ts/base/utils.js";
+import { getContextBySessionId, saveState } from "../../_shared/lib-ts/context/context-store.js";
 import type { ContextState } from "../../_shared/lib-ts/types.js";
 
 /**
@@ -62,8 +62,8 @@ export function saveCcNativeState(
       saveState(state.id, state, projectRoot);
       return true;
     }
-  } catch (e: unknown) {
-    logWarn("utils", `Failed to save cc_native state: ${e}`);
+  } catch (error: unknown) {
+    logWarn("utils", `Failed to save cc_native state: ${error}`);
   }
   return false;
 }
@@ -145,9 +145,9 @@ export function markPlanReviewed(
         max: iterationState.max ?? 1,
         complexity: iterationState.complexity ?? "unknown",
       };
-      const history = iterationState.history;
+      const {history} = iterationState;
       if (history && history.length > 0) {
-        const lastEntry = history[history.length - 1];
+        const lastEntry = history.at(-1);
         if (lastEntry) {
           reviewData.iteration.latest_verdict = lastEntry.verdict ?? "unknown";
         }
@@ -167,8 +167,8 @@ export function markPlanReviewed(
         `Failed to save plan review state for session ${sessionId}`,
       );
     }
-  } catch (e: unknown) {
-    logWarn(hookName, `Failed to mark plan reviewed: ${e}`);
+  } catch (error: unknown) {
+    logWarn(hookName, `Failed to mark plan reviewed: ${error}`);
   }
 }
 
@@ -190,24 +190,73 @@ export function wasQuestionsAsked(
 }
 
 /**
- * Mark that AskUserQuestion was called. Returns true on success.
+ * Check if early questions (Phase A: AskUserQuestion) were asked this session.
+ * Returns false on any error (fail-safe: allow feature to work).
+ */
+export function wasEarlyQuestionsAsked(
+  sessionId: string,
+  projectRoot: string,
+): boolean {
+  const ccNative = getCcNativeState(sessionId, projectRoot);
+  if (!ccNative) return false;
+  return ccNative.questions_asked?.early_questions_asked?.asked === true;
+}
+
+/**
+ * Check if plan questions agent (Phase B: independent question agent) ran this session.
+ * Returns false on any error (fail-safe: allow feature to work).
+ */
+export function wasPlanQuestionsAgentAsked(
+  sessionId: string,
+  projectRoot: string,
+): boolean {
+  const ccNative = getCcNativeState(sessionId, projectRoot);
+  if (!ccNative) return false;
+  return ccNative.questions_asked?.plan_questions_agent_asked?.asked === true;
+}
+
+/**
+ * Mark that questions were asked in a specific phase. Returns true on success.
  * Only stores timestamp, no user data.
+ * @param phase - 'early' for Phase A (AskUserQuestion), 'agent' for Phase B (independent question agent)
  */
 export function markQuestionsAsked(
   sessionId: string,
   projectRoot: string,
+  phase: "early" | "agent",
 ): boolean {
   try {
     const ccNative = getCcNativeState(sessionId, projectRoot) ?? {};
+    const timestamp = nowIso();
 
-    ccNative.questions_asked = {
-      asked: true,
-      asked_at: nowIso(),
-    };
+    // Initialize questions_asked if it doesn't exist
+    if (!ccNative.questions_asked) {
+      ccNative.questions_asked = {
+        asked: false,
+        asked_at: "",
+      };
+    }
+
+    // Mark phase-specific gate
+    if (phase === "early") {
+      ccNative.questions_asked.early_questions_asked = {
+        asked: true,
+        asked_at: timestamp,
+      };
+    } else {
+      ccNative.questions_asked.plan_questions_agent_asked = {
+        asked: true,
+        asked_at: timestamp,
+      };
+    }
+
+    // Update backward-compatible fields
+    ccNative.questions_asked.asked = true;
+    ccNative.questions_asked.asked_at = timestamp;
 
     return saveCcNativeState(sessionId, projectRoot, ccNative);
-  } catch (e: unknown) {
-    logWarn("utils", `Failed to mark questions asked: ${e}`);
+  } catch (error: unknown) {
+    logWarn("utils", `Failed to mark questions asked: ${error}`);
     return false;
   }
 }
@@ -239,8 +288,8 @@ export function updateStuckDetectionState(
     const ccNative = getCcNativeState(sessionId, projectRoot) ?? {};
     ccNative.stuck_detection = stuckState;
     return saveCcNativeState(sessionId, projectRoot, ccNative);
-  } catch (e: unknown) {
-    logWarn("utils", `Failed to update stuck detection state: ${e}`);
+  } catch (error: unknown) {
+    logWarn("utils", `Failed to update stuck detection state: ${error}`);
     return false;
   }
 }

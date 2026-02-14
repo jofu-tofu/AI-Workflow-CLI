@@ -5,10 +5,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { atomicWrite } from "../../_shared/lib-ts/base/atomic-write.js";
-import { logDebug, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
-import { nowIso } from "../../_shared/lib-ts/base/utils.js";
-import { sanitizeFilename } from "../../_shared/lib-ts/base/constants.js";
+
 import { ENABLE_ROBUST_PLAN_WRITES } from "./constants.js";
 import type {
   CombinedReviewResult,
@@ -17,6 +14,10 @@ import type {
   CorroborationResult,
 } from "./types.js";
 import { DEFAULT_DISPLAY } from "./types.js";
+import { atomicWrite } from "../../_shared/lib-ts/base/atomic-write.js";
+import { sanitizeFilename } from "../../_shared/lib-ts/base/constants.js";
+import { logDebug, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
+import { nowIso } from "../../_shared/lib-ts/base/utils.js";
 
 // ---------------------------------------------------------------------------
 // Markdown Formatting
@@ -490,9 +491,9 @@ export function writeCombinedArtifacts(
   // Create directory
   try {
     fs.mkdirSync(outDir, { recursive: true });
-  } catch (e: unknown) {
-    logError("utils", `Cannot create directory ${outDir}: ${e}`);
-    throw e;
+  } catch (error: unknown) {
+    logError("utils", `Cannot create directory ${outDir}: ${error}`);
+    throw error;
   }
 
   // JSON write
@@ -597,9 +598,9 @@ function writeFile(filePath: string, content: string): void {
     } else {
       fs.writeFileSync(filePath, content, "utf-8");
     }
-  } catch (e: unknown) {
-    logError("utils", `Failed to write ${path.basename(filePath)}: ${e}`);
-    throw e;
+  } catch (error: unknown) {
+    logError("utils", `Failed to write ${path.basename(filePath)}: ${error}`);
+    throw error;
   }
 }
 
@@ -613,8 +614,8 @@ function writeFileNonCritical(filePath: string, content: string): void {
     } else {
       fs.writeFileSync(filePath, content, "utf-8");
     }
-  } catch (e: unknown) {
-    logWarn("utils", `Failed to write ${path.basename(filePath)}: ${e}`);
+  } catch (error: unknown) {
+    logWarn("utils", `Failed to write ${path.basename(filePath)}: ${error}`);
   }
 }
 
@@ -670,13 +671,13 @@ export function writeReviewTracker(
   // Parse existing entries to detect plan changes
   const previousHashes = extractPreviousHashes(existingContent);
   const hashChanged = previousHashes.length > 0 &&
-    previousHashes[previousHashes.length - 1] !== entry.planHash;
+    previousHashes.at(-1) !== entry.planHash;
 
   // Build the new entry section
   const lines: string[] = [];
-  const verdictEmoji = entry.decision === "allow" ? "\u2705" : "\u274c";
+  const verdictEmoji = entry.decision === "allow" ? "\u2705" : "\u274C";
   const changeNote = previousHashes.length > 0
-    ? (hashChanged ? "\u2705 Plan was revised (hash changed)" : "\u26a0\ufe0f Plan unchanged since last review")
+    ? (hashChanged ? "\u2705 Plan was revised (hash changed)" : "\u26A0\uFE0F Plan unchanged since last review")
     : "Initial review";
 
   lines.push(`## Iteration ${entry.iteration} \u2014 ${entry.timestamp} \u2014 ${verdictEmoji} ${entry.verdict.toUpperCase()}`);
@@ -715,8 +716,8 @@ export function writeReviewTracker(
 
   try {
     fs.writeFileSync(trackerPath, output, "utf-8");
-  } catch (e) {
-    logWarn("artifacts", `Failed to write review tracker: ${e}`);
+  } catch (error) {
+    logWarn("artifacts", `Failed to write review tracker: ${error}`);
   }
 }
 

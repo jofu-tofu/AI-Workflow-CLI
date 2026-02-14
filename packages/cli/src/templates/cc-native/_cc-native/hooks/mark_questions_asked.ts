@@ -11,6 +11,7 @@
  * Fail-safe: Any error exits 0 (non-blocking).
  */
 
+import { getProjectRoot } from "../../_shared/lib-ts/base/constants.js";
 import {
   loadHookInput,
   runHook,
@@ -18,7 +19,6 @@ import {
   logDiagnostic,
 } from "../../_shared/lib-ts/base/hook-utils.js";
 import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
-import { getProjectRoot } from "../../_shared/lib-ts/base/constants.js";
 import { markQuestionsAsked } from "../lib-ts/cc-native-state.js";
 
 function main(): void {
@@ -39,14 +39,14 @@ function main(): void {
 
   const projectRoot = getProjectRoot(payload.cwd);
 
-  // PostToolUse: AskUserQuestion — mark that questions were asked
+  // PostToolUse: AskUserQuestion — mark that early questions (Phase A) were asked
   if (toolName === "AskUserQuestion") {
     const sessionId = String(payload.session_id ?? "");
     if (sessionId) {
-      markQuestionsAsked(sessionId, projectRoot);
-      logInfo("add_plan_context", `Marked questions asked for session ${sessionId.slice(0, 8)}...`);
+      markQuestionsAsked(sessionId, projectRoot, "early");
+      logInfo("add_plan_context", `Marked early questions asked for session ${sessionId.slice(0, 8)}...`);
     }
-    return;
+    
   }
 }
 

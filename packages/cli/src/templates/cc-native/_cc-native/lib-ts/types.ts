@@ -193,8 +193,16 @@ export interface PlanReviewState {
 
 /** Questions-asked tracking state */
 export interface QuestionsAskedState {
-  asked: boolean;
+  asked: boolean; // Backward-compatible: true if either phase asked
   asked_at: string;
+  early_questions_asked?: {
+    asked: boolean;
+    asked_at: string;
+  };
+  plan_questions_agent_asked?: {
+    asked: boolean;
+    asked_at: string;
+  };
 }
 
 /** Stuck detection state — tracks repeated errors, file edits, and test failures */
@@ -264,7 +272,7 @@ export interface Reviewer {
 // JSON Schemas (moved to reviewers/schemas.ts)
 // ---------------------------------------------------------------------------
 // Re-export for backwards compatibility
-export { REVIEW_SCHEMA, ORCHESTRATOR_SCHEMA, REVIEW_PROMPT_PREFIX, AGENT_REVIEW_PROMPT_PREFIX } from "./reviewers/schemas.js";
+export { AGENT_REVIEW_PROMPT_PREFIX, ORCHESTRATOR_SCHEMA, REVIEW_PROMPT_PREFIX, REVIEW_SCHEMA } from "./reviewers/schemas.js";
 
 // ---------------------------------------------------------------------------
 // Display Defaults

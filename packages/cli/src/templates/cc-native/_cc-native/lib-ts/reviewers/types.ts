@@ -3,10 +3,10 @@
  * See cc-native-plan-review-spec.md §4.9
  */
 
-import type { ReviewerResult, ReviewOptions, Reviewer, Verdict, ReviewData } from "../types.js";
+import type { ReviewerResult,   Verdict, ReviewData } from "../types.js";
 
 // Re-export for convenience
-export type { ReviewerResult, ReviewOptions, Reviewer };
+
 
 /** Create a standard ReviewerResult. Shared by all reviewer implementations. */
 export function makeResult(
@@ -19,3 +19,5 @@ export function makeResult(
 ): ReviewerResult {
   return { name, ok, verdict, data: data as Record<string, unknown>, raw, err };
 }
+
+export {type Reviewer, type ReviewerResult, type ReviewOptions} from "../types.js";

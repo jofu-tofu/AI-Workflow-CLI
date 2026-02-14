@@ -92,7 +92,7 @@ export function isExecSyncError(e: unknown): e is ExecSyncError {
  */
 export function shellQuoteWin(arg: string): string {
   if (process.platform !== "win32") return arg;
-  return '"' + arg.replace(/"/g, '""') + '"';
+  return '"' + arg.replaceAll('"', '""') + '"';
 }
 
 // ---------------------------------------------------------------------------

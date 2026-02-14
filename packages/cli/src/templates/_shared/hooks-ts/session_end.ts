@@ -5,17 +5,69 @@
  */
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as path from "node:path";
 
-import { getProjectRoot } from "../lib-ts/base/constants.js";
+import { getProjectRoot, getContextDir } from "../lib-ts/base/constants.js";
 import { getGitState } from "../lib-ts/base/git-state.js";
 import {
-  loadHookInput, logDebug, logDiagnostic, logError, logInfo, logWarn as _logWarn, runHook,
+  loadHookInput, runHook, logDebug, logInfo, logWarn, logError, logDiagnostic,
 } from "../lib-ts/base/hook-utils.js";
 import { nowIso } from "../lib-ts/base/utils.js";
 import { getContextBySessionId, saveState } from "../lib-ts/context/context-store.js";
 import {
-  extractPlanAnchors, findLatestPlan, generatePlanId, normalizePlanContent,
+  findLatestPlan, normalizePlanContent, generatePlanId, extractPlanAnchors,
 } from "../lib-ts/context/plan-manager.js";
+
+/**
+ * Archive session transcript to context's session-transcripts/ folder.
+ * Returns archived path on success, null if skipped or failed.
+ */
+function archiveTranscript(
+  transcriptPath: string,
+  contextId: string,
+  sessionId: string,
+  projectRoot: string,
+): string | null {
+  // 1. Validate inputs
+  if (!transcriptPath || !fs.existsSync(transcriptPath)) {
+    logDebug("session_end", `Transcript not found: ${transcriptPath}`);
+    return null;
+  }
+
+  // 2. Ensure session-transcripts directory exists
+  const contextDir = getContextDir(contextId, projectRoot);
+  const transcriptsDir = path.join(contextDir, "session-transcripts");
+  fs.mkdirSync(transcriptsDir, { recursive: true });
+
+  // 3. Generate archive filename: YYYY-MM-DD-HHMM-{session_id}.jsonl
+  const now = new Date();
+  // Format: 2026-02-14-1400 (year-month-day-hourminute)
+  // Note: Hours and minutes are concatenated without separator (HHMM)
+  const timestamp =
+    `${now.getFullYear()}-` +
+    `${String(now.getMonth() + 1).padStart(2, "0")}-` +
+    `${String(now.getDate()).padStart(2, "0")}-` +
+    `${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+
+  // 4. Handle collisions (rare, but possible with rapid session churn)
+  let archiveName = `${timestamp}-${sessionId}.jsonl`;
+  let archivePath = path.join(transcriptsDir, archiveName);
+  let counter = 2;
+  while (fs.existsSync(archivePath)) {
+    archiveName = `${timestamp}-${sessionId}-${counter}.jsonl`;
+    archivePath = path.join(transcriptsDir, archiveName);
+    counter++;
+  }
+
+  // 5. Copy transcript file
+  try {
+    fs.copyFileSync(transcriptPath, archivePath);
+    return archivePath;
+  } catch (error) {
+    logError("session_end", `Failed to copy transcript: ${error}`);
+    return null;
+  }
+}
 
 function main(): void {
   const payload = loadHookInput();
@@ -50,6 +102,25 @@ function main(): void {
   };
   state.last_active = nowIso();
 
+  // Archive transcript (NEW)
+  // Note: state is a ContextState object (from getContextBySessionId on line 33)
+  // state.id is the context ID used to construct paths like _output/contexts/{context_id}/
+  if (payload.transcript_path) {
+    try {
+      const archived = archiveTranscript(
+        payload.transcript_path,
+        state.id,  // Context ID, verified by existing code on line 98: saveState(state.id, ...)
+        sessionId,
+        projectRoot,
+      );
+      if (archived) {
+        logInfo("session_end", `Archived transcript: ${path.basename(archived)}`);
+      }
+    } catch (error) {
+      logError("session_end", `Transcript archival failed: ${error}`);
+    }
+  }
+
   // Plan fallback assignment (skip in plan mode — rejected plans shouldn't stage)
   if (permissionMode !== "plan") {
     // Step 1: Assign plan fields if missing
@@ -57,7 +128,7 @@ function main(): void {
       const latestPlanPath = findLatestPlan(state.id, projectRoot);
       if (latestPlanPath) {
         try {
-          const content = fs.readFileSync(latestPlanPath, "utf8");
+          const content = fs.readFileSync(latestPlanPath, "utf-8");
           const normalized = normalizePlanContent(content);
           const planHash = crypto.createHash("sha256")
             .update(normalized, "utf-8")

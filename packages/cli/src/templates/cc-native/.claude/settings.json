@@ -123,6 +123,17 @@
             "timeout": 5000
           }
         ]
+      },
+      {
+        "matcher": "^Task$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun .aiwcli/_cc-native/hooks/enhance_plan_post_subagent.ts",
+            "timeout": 10000,
+            "blockOnFail": false
+          }
+        ]
       }
     ],
     "PermissionRequest": [
@@ -163,18 +174,6 @@
             "type": "command",
             "command": "bun .aiwcli/_cc-native/hooks/cc-native-plan-review.ts",
             "timeout": 5000
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "matcher": "Plan",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun .aiwcli/_cc-native/hooks/enhance_plan_post_subagent.ts",
-            "timeout": 10000
           }
         ]
       }

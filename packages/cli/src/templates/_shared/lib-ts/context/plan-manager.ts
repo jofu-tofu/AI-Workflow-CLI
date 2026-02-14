@@ -8,11 +8,12 @@
  * - extractPlanPathFromResult: parse plan path from ExitPlanMode output
  */
 
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as crypto from "node:crypto";
-import { getContextDir, getContextPlansDir, sanitizeTitle } from "../base/constants.js";
+
 import { atomicWrite } from "../base/atomic-write.js";
+import { getContextDir, getContextPlansDir, sanitizeTitle } from "../base/constants.js";
 import { logDebug, logInfo, logWarn, logError } from "../base/logger.js";
 import { generateSlug } from "../base/utils.js";
 import type { ContextState } from "../types.js";
@@ -43,8 +44,8 @@ export function archivePlan(
   let content: string;
   try {
     content = fs.readFileSync(planPath, "utf-8");
-  } catch (e: any) {
-    logError("plan_manager", `Failed to read plan: ${e}`);
+  } catch (error_: any) {
+    logError("plan_manager", `Failed to read plan: ${error_}`);
     return [null, null, null];
   }
 
@@ -148,8 +149,8 @@ export function findLatestPlan(
     if (state?.plan_path && fs.existsSync(state.plan_path)) {
       return state.plan_path;
     }
-  } catch (e: any) {
-    logWarn("plan_manager", `Failed to check state.json plan_path: ${e}`);
+  } catch (error: any) {
+    logWarn("plan_manager", `Failed to check state.json plan_path: ${error}`);
   }
 
   // 2. Fall back to most recent .md in plans/ dir
@@ -182,7 +183,7 @@ export function findLatestPlan(
  * See SPEC.md §9.4
  */
 export function generatePlanId(): string {
-  return crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+  return crypto.randomUUID().replaceAll('-', "").slice(0, 8);
 }
 
 /**
@@ -191,8 +192,8 @@ export function generatePlanId(): string {
  * See SPEC.md §9.5
  */
 export function normalizePlanContent(text: string): string {
-  let result = text.replace(/<[^>]+>/g, "");
-  result = result.replace(/\s+/g, " ").trim();
+  let result = text.replaceAll(/<[^>]+>/g, "");
+  result = result.replaceAll(/\s+/g, " ").trim();
   return result;
 }
 
@@ -249,8 +250,8 @@ export function findPlanPathInTranscript(transcriptPath: string): string | null 
   let lines: string[];
   try {
     lines = fs.readFileSync(transcriptPath, "utf-8").split(/\r?\n/);
-  } catch (e: any) {
-    logWarn("plan_manager", `Failed to read transcript: ${e}`);
+  } catch (error: any) {
+    logWarn("plan_manager", `Failed to read transcript: ${error}`);
     return null;
   }
 
@@ -282,7 +283,7 @@ export function findPlanPathInTranscript(transcriptPath: string): string | null 
       if (!filePath) continue;
 
       // Check if path contains .claude/plans/ as consecutive parts
-      const parts = filePath.replace(/\\/g, "/").split("/");
+      const parts = filePath.replaceAll('\\', "/").split("/");
       for (let j = 0; j < parts.length - 1; j++) {
         if (parts[j] === ".claude" && parts[j + 1] === "plans") {
           logInfo("plan_manager", `Extracted plan path from transcript: ${filePath}`);

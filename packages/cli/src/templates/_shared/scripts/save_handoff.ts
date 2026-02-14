@@ -22,12 +22,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { getContext, saveState } from "../lib-ts/context/context-store.js";
-import { getHandoffFolderPath, getProjectRoot } from "../lib-ts/base/constants.js";
 import { atomicWrite } from "../lib-ts/base/atomic-write.js";
-import { logInfo, logWarn, logError } from "../lib-ts/base/logger.js";
+import { getHandoffFolderPath, getProjectRoot } from "../lib-ts/base/constants.js";
 import { getGitStatusShort } from "../lib-ts/base/git-state.js";
+import { logInfo, logWarn, logError } from "../lib-ts/base/logger.js";
 import { eprint } from "../lib-ts/base/utils.js";
+import { getContext, saveState } from "../lib-ts/context/context-store.js";
 
 // ---------------------------------------------------------------------------
 // Parsing helpers
@@ -250,8 +250,8 @@ function main(): void {
       } else {
         logWarn("save_handoff", `Failed to copy plan: ${error}`);
       }
-    } catch (e) {
-      logWarn("save_handoff", `Failed to read plan: ${e}`);
+    } catch (error) {
+      logWarn("save_handoff", `Failed to read plan: ${error}`);
     }
   }
 
@@ -339,8 +339,8 @@ function main(): void {
     } else {
       logWarn("save_handoff", `Could not load context state for ${contextId}`);
     }
-  } catch (e) {
-    logWarn("save_handoff", `Handoff saved but auto-resume won't work (context update failed): ${e}`);
+  } catch (error) {
+    logWarn("save_handoff", `Handoff saved but auto-resume won't work (context update failed): ${error}`);
   }
 
   // Output success message

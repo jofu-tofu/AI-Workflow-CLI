@@ -235,7 +235,7 @@ export function logHookError(
   tracebackStr = "",
 ): void {
   const errStr = typeof error === "string" ? error : String(error);
-  const msg = errStr.replace(/[\n\r]/g, " ").slice(0, 200);
+  const msg = errStr.replaceAll(/[\n\r]/g, " ").slice(0, 200);
   const errType =
     typeof error === "object" && error !== null
       ? error.constructor.name

@@ -10,8 +10,8 @@
  */
 
 import { getProjectRoot } from "../../_shared/lib-ts/base/constants.js";
-import { emitContext, loadHookInput, logDebug, logInfo, runHook } from "../../_shared/lib-ts/base/hook-utils.js";
-import { wasQuestionsAsked } from "../lib-ts/cc-native-state.js";
+import { loadHookInput, runHook, logDebug, logInfo, emitContext } from "../../_shared/lib-ts/base/hook-utils.js";
+import { wasEarlyQuestionsAsked } from "../lib-ts/cc-native-state.js";
 
 const PHASE_A_PROMPT = `## Plan Mode: Narrow the Approach After Exploration
 
@@ -49,8 +49,8 @@ function main(): void {
 
   const projectRoot = getProjectRoot(payload.cwd);
 
-  if (wasQuestionsAsked(sessionId, projectRoot)) {
-    logDebug("plan_questions_early", "Questions already asked, skipping");
+  if (wasEarlyQuestionsAsked(sessionId, projectRoot)) {
+    logDebug("plan_questions_early", "Early questions already asked, skipping Phase A prompt");
     return;
   }
 

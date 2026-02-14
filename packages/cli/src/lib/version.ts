@@ -41,7 +41,7 @@ const MIN_CLAUDE_CODE_VERSION = '0.1.0'
  * Known incompatible Claude Code versions.
  * These versions have confirmed issues with AI Workflow CLI.
  */
-const INCOMPATIBLE_VERSIONS = ['0.0.9']
+const INCOMPATIBLE_VERSIONS = new Set(['0.0.9'])
 
 /**
  * Result of version compatibility check.
@@ -139,7 +139,7 @@ export function checkVersionCompatibility(version: null | string | undefined): V
   }
 
   // Check known incompatible versions first
-  if (INCOMPATIBLE_VERSIONS.includes(version)) {
+  if (INCOMPATIBLE_VERSIONS.has(version)) {
     return {
       compatible: false,
       version,
