@@ -5,7 +5,7 @@
  * Renders context window usage and git status with ANSI colors.
  * Optionally persists context_window data to the session's state.json.
  *
- * Ported from status_line.py — context and git sections only.
+ * Context and git sections only.
  *
  * Usage: echo '{"session_id":"...","model":{"display_name":"Opus"},...}' | bun status_line.ts
  */

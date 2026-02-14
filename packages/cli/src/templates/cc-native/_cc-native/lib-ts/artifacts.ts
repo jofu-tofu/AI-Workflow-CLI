@@ -99,22 +99,6 @@ export function formatCombinedMarkdown(
 
   lines.push("---\n");
 
-  // CLI Reviewers section
-  if (Object.keys(result.cli_reviewers).length > 0) {
-    lines.push("## CLI Reviewers\n");
-    for (const [name, r] of Object.entries(result.cli_reviewers)) {
-      lines.push(`### ${titleCase(name)}\n`);
-      lines.push(`- verdict: \`${r.verdict}\``);
-      if (r.data && Object.keys(r.data).length > 0) {
-        appendSummaryLine(lines, r.data);
-        appendReviewDetails(lines, r.data, display);
-      } else if (r.err) {
-        lines.push(`- error: ${r.err}`);
-      }
-      lines.push("");
-    }
-  }
-
   // Orchestration section
   if (result.orchestration) {
     lines.push("---\n");
@@ -170,10 +154,7 @@ export function buildInlineReviewSummary(
   maxChars = 800,
   corroboration?: CorroborationResult,
 ): string {
-  const allReviewers = [
-    ...Object.values(combined.cli_reviewers),
-    ...Object.values(combined.agents),
-  ];
+  const allReviewers = Object.values(combined.agents);
 
   // Build set of blocking dimensions for annotation
   const blockingDims = new Set(
@@ -257,10 +238,7 @@ export function extractTopIssuesText(
   maxCount = 3,
   severity = "high",
 ): string {
-  const allReviewers = [
-    ...Object.values(combined.cli_reviewers),
-    ...Object.values(combined.agents),
-  ];
+  const allReviewers = Object.values(combined.agents);
 
   const issues: string[] = [];
   for (const r of allReviewers) {
@@ -318,10 +296,7 @@ export function buildHighIssuesDocument(
 
   // Fallback: no corroboration data — show all high-severity issues
   const lines = ["# High-Severity Issues\n"];
-  const allReviewers = [
-    ...Object.values(combined.cli_reviewers),
-    ...Object.values(combined.agents),
-  ];
+  const allReviewers = Object.values(combined.agents);
 
   let foundAny = false;
   for (const r of allReviewers) {
@@ -406,11 +381,6 @@ export function generateReviewIndex(
     "| [plan.md](./plan.md) | Plan snapshot at review time |",
   );
 
-  for (const name of Object.keys(result.cli_reviewers)) {
-    lines.push(
-      `| [${name}.json](./reviewer-output/${name}.json) | ${titleCase(name)} reviewer output |`,
-    );
-  }
   for (const name of Object.keys(result.agents)) {
     const safeName = sanitizeFilename(name);
     lines.push(
@@ -426,9 +396,6 @@ export function generateReviewIndex(
     "|----------|---------|",
   );
 
-  for (const [name, r] of Object.entries(result.cli_reviewers)) {
-    lines.push(`| ${titleCase(name)} | \`${r.verdict}\` |`);
-  }
   for (const [name, r] of Object.entries(result.agents)) {
     lines.push(`| ${name} | \`${r.verdict}\` |`);
   }
@@ -456,26 +423,6 @@ export function buildCombinedJson(
       verdict: result.overall_verdict,
     },
   };
-
-  // CLI reviewers
-  if (Object.keys(result.cli_reviewers).length > 0) {
-    const cliReviewers: Record<string, unknown> = {};
-    output.cliReviewers = cliReviewers;
-    for (const [name, r] of Object.entries(result.cli_reviewers)) {
-      cliReviewers[name] = {
-        verdict: r.verdict,
-        summary: r.data?.summary ?? null,
-        summarySource: r.data?.summary_source ?? null,
-        issues: r.data
-          ? ((r.data.issues as Array<Record<string, unknown>>) ?? []).filter(
-              (i) => i.severity !== "low",
-            )
-          : [],
-        ok: r.ok,
-        error: r.err || null,
-      };
-    }
-  }
 
   // Orchestration
   if (result.orchestration) {
@@ -564,14 +511,6 @@ export function writeCombinedArtifacts(
     fs.mkdirSync(reviewerOutputDir, { recursive: true });
   } catch {
     // Best-effort — non-critical
-  }
-  for (const [name, r] of Object.entries(result.cli_reviewers)) {
-    if (r.data) {
-      writeFileNonCritical(
-        path.join(reviewerOutputDir, `${name}.json`),
-        JSON.stringify(r.data, null, 2),
-      );
-    }
   }
   for (const [name, r] of Object.entries(result.agents)) {
     if (r.data) {

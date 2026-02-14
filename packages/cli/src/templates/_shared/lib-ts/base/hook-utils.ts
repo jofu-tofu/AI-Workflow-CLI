@@ -5,26 +5,25 @@
  */
 
 import * as fs from "node:fs";
-
+import { logDebug, logInfo, logWarn, logError, logBlocking, logHookError, logDiagnostic, hookLog, setSessionId, setContextPath, getContextPath as _getContextPath } from "./logger.js";
 import { getProjectRoot } from "./constants.js";
-import { getContextPath as _getContextPath, hookLog, logDebug, setSessionId } from "./logger.js";
 import { getContextBySessionId } from "../context/context-store.js";
 import type { HookInput, HookOutput } from "../types.js";
 
 // Re-export logger functions for convenience (matches Python hook_utils re-exports)
-
+export { logDebug, logInfo, logWarn, logError, logBlocking, logHookError, logDiagnostic, hookLog, setSessionId, setContextPath };
 
 // Context window baseline: tokens not visible in hook data §5.9
 export const CONTEXT_BASELINE_TOKENS = 22_600;
 export const DEFAULT_CONTEXT_WINDOW_SIZE = 200_000;
 
 // Event metadata stash — populated by loadHookInput(), read by runHook()
-let _lastHookEvent: null | string = null;
-let _lastToolName: null | string = null;
-let _cachedHookName: null | string = null;
+let _lastHookEvent: string | null = null;
+let _lastToolName: string | null = null;
+let _cachedHookName: string | null = null;
 
 // Pre-fetched input stash
-let _prefetchedInput: null | Record<string, any> = null;
+let _prefetchedInput: Record<string, any> | null = null;
 
 /**
  * Load and parse JSON from stdin (or return prefetched input if set).
@@ -39,13 +38,12 @@ export function loadHookInput(): HookInput | null {
       _lastHookEvent = result.hook_event_name ?? null;
       _lastToolName = result.tool_name ?? null;
     }
-
     return result as HookInput;
   }
 
   try {
     // Read entire stdin using fd 0 (cross-platform, works on Windows)
-    const inputData = fs.readFileSync(0, "utf8").trim();
+    const inputData = fs.readFileSync(0, "utf-8").trim();
     if (!inputData) return null;
 
     const result = JSON.parse(inputData);
@@ -53,7 +51,6 @@ export function loadHookInput(): HookInput | null {
       _lastHookEvent = result.hook_event_name ?? null;
       _lastToolName = result.tool_name ?? null;
     }
-
     return result as HookInput;
   } catch {
     return null;
@@ -80,7 +77,7 @@ export function validateHookEvent(
  */
 export function getToolInput(
   payload: HookInput,
-): null | Record<string, any> {
+): Record<string, any> | null {
   const toolInput = payload.tool_input;
   return toolInput && typeof toolInput === "object" ? toolInput : null;
 }
@@ -96,12 +93,11 @@ export function checkSkipPersistence(
   const toolInput = getToolInput(payload);
   if (!toolInput) return false;
 
-  const {metadata} = toolInput;
+  const metadata = toolInput.metadata;
   if (metadata && typeof metadata === "object" && metadata.skip_persistence) {
     logDebug(hookName, "Skipping persistence (skip_persistence flag set)");
     return true;
   }
-
   return false;
 }
 
@@ -113,6 +109,7 @@ export function checkSkipPersistence(
  */
 export function emitContext(additionalContext: string): void {
   const eventName = _lastHookEvent ?? undefined;
+  const tool = _lastToolName;
   const out: HookOutput = {
     hookSpecificOutput: {
       ...(eventName ? { hookEventName: eventName } : {}),
@@ -120,7 +117,8 @@ export function emitContext(additionalContext: string): void {
     },
   };
   const json = JSON.stringify(out);
-  _logEmit("context", additionalContext.length, { additionalContext });
+  const eventDesc = tool ? `${eventName}:${tool}` : eventName ?? "unknown";
+  _logEmit("context", additionalContext.length, { event: eventDesc, additionalContext });
   process.stdout.write(json + "\n");
 }
 
@@ -135,6 +133,7 @@ export function emitContextAndBlock(
   reason: string,
 ): void {
   const eventName = _lastHookEvent ?? undefined;
+  const tool = _lastToolName;
   const out: HookOutput = {
     hookSpecificOutput: {
       ...(eventName ? { hookEventName: eventName } : {}),
@@ -144,16 +143,18 @@ export function emitContextAndBlock(
     },
   };
   const json = JSON.stringify(out);
-  _logEmit("block", additionalContext.length, { additionalContext, blockReason: reason });
+  const eventDesc = tool ? `${eventName}:${tool}` : eventName ?? "unknown";
+  _logEmit("block", additionalContext.length, { event: eventDesc, additionalContext, blockReason: reason });
   process.stdout.write(json + "\n");
 }
 
 /** Log hook output (context or block) to hook-log.jsonl for visibility. */
-function _logEmit(type: "block" | "context", chars: number, payload: Record<string, any>): void {
+function _logEmit(type: "context" | "block", chars: number, payload: Record<string, any>): void {
   const hook = _cachedHookName ?? "unknown";
+  const event = payload.event ?? "unknown";
   const msg = type === "block"
-    ? `HOOK_OUTPUT [${type}] ${chars} chars, reason="${(payload.blockReason ?? "").slice(0, 80)}"`
-    : `HOOK_OUTPUT [${type}] ${chars} chars`;
+    ? `HOOK_OUTPUT [${type}] ${event} ${chars} chars, reason="${(payload.blockReason ?? "").slice(0, 80)}"`
+    : `HOOK_OUTPUT [${type}] ${event} ${chars} chars`;
   hookLog("info", hook, msg, { data: payload });
 }
 
@@ -161,11 +162,10 @@ function _logEmit(type: "block" | "context", chars: number, payload: Record<stri
  * Auto-detect template origin from the hook script path.
  */
 function detectTemplate(scriptPath = ""): string {
-  const p = (scriptPath || (process.argv[1] ?? "")).replaceAll('\\', "/");
+  const p = (scriptPath || (process.argv[1] ?? "")).replace(/\\/g, "/");
   if (p.includes("/_shared/hooks/") || p.startsWith("_shared/hooks/")) {
     return "shared";
   }
-
   const match = p.match(/_([a-z][a-z0-9-]*)\/hooks\//);
   if (match?.[1]) return match[1]; // e.g., "cc-native"
   return "unknown";
@@ -178,7 +178,7 @@ function detectTemplate(scriptPath = ""): string {
  */
 export function parseContextWindow(
   hookInput: HookInput,
-): [null | number, null | number] {
+): [number | null, number | null] {
   const contextWindow = hookInput.context_window;
   if (!contextWindow) return [null, null];
 
@@ -204,7 +204,7 @@ export function parseContextWindow(
  */
 export function getContextPercentRemaining(
   hookInput: HookInput,
-): [null | number, null | number, null | number] {
+): [number | null, number | null, number | null] {
   const [tokensUsed, maxTokens] = parseContextWindow(hookInput);
 
   if (tokensUsed !== null && maxTokens !== null && maxTokens > 0) {
@@ -249,13 +249,12 @@ function _earlyReadInput(prefetchedInput?: Record<string, any>): void {
     if (_prefetchedInput.session_id) {
       setSessionId(_prefetchedInput.session_id);
     }
-
     return;
   }
 
   // Read stdin now so HOOK_START can include sid
   try {
-    const inputData = fs.readFileSync(0, "utf8").trim();
+    const inputData = fs.readFileSync(0, "utf-8").trim();
     if (inputData) {
       const parsed = JSON.parse(inputData);
       if (parsed && typeof parsed === "object") {
@@ -304,17 +303,17 @@ export function runHook(
   try {
     const result = mainFunc();
     exitCode = typeof result === "number" ? result : 0;
-    status = exitCode === 0 ? "success" : "blocked";
-  } catch (error: any) {
-    if (error instanceof Error && error.message.startsWith("SystemExit:")) {
-      const code = parseInt(error.message.slice(11), 10);
-      exitCode = isNaN(code) ? (error.message.slice(11) ? 1 : 0) : code;
+    status = exitCode !== 0 ? "blocked" : "success";
+  } catch (e: any) {
+    if (e instanceof Error && e.message.startsWith("SystemExit:")) {
+      const code = parseInt(e.message.slice(11), 10);
+      exitCode = isNaN(code) ? (e.message.slice(11) ? 1 : 0) : code;
       status = exitCode !== 0 ? "blocked" : "success";
     } else {
       exitCode = 0; // Non-blocking
       status = "error";
-      const stack = error instanceof Error ? error.stack ?? "" : "";
-      errorInfo = [error instanceof Error ? error : new Error(String(error)), stack];
+      const stack = e instanceof Error ? e.stack ?? "" : "";
+      errorInfo = [e instanceof Error ? e : new Error(String(e)), stack];
     }
   }
 
@@ -351,22 +350,22 @@ export function runHookAsync(
   mainFunc()
     .then((result) => {
       const exitCode = typeof result === "number" ? result : 0;
-      _emitHookEnd(hookName, startTime, exitCode, exitCode === 0 ? "success" : "blocked", null, startData, event, tool, template);
+      _emitHookEnd(hookName, startTime, exitCode, exitCode !== 0 ? "blocked" : "success", null, startData, event, tool, template);
       _drainAndExit(exitCode);
     })
-    .catch((error: any) => {
+    .catch((e: any) => {
       let exitCode = 0;
       let status = "error";
       let errorInfo: [Error, string] | null = null;
 
-      if (error instanceof Error && error.message.startsWith("SystemExit:")) {
-        const code = parseInt(error.message.slice(11), 10);
-        exitCode = isNaN(code) ? (error.message.slice(11) ? 1 : 0) : code;
+      if (e instanceof Error && e.message.startsWith("SystemExit:")) {
+        const code = parseInt(e.message.slice(11), 10);
+        exitCode = isNaN(code) ? (e.message.slice(11) ? 1 : 0) : code;
         status = exitCode !== 0 ? "blocked" : "success";
       } else {
         exitCode = 0; // Non-blocking (fail open)
-        const stack = error instanceof Error ? error.stack ?? "" : "";
-        errorInfo = [error instanceof Error ? error : new Error(String(error)), stack];
+        const stack = e instanceof Error ? e.stack ?? "" : "";
+        errorInfo = [e instanceof Error ? e : new Error(String(e)), stack];
       }
 
       _emitHookEnd(hookName, startTime, exitCode, status, errorInfo, startData, event, tool, template);
@@ -383,7 +382,7 @@ function _emitHookEnd(
   errorInfo: [Error, string] | null,
   startData: Record<string, any>,
   event: string,
-  tool: null | string,
+  tool: string | null,
   template: string,
 ): void {
   // Retroactive HOOK_START to per-context log (context_path resolved after main runs)
@@ -408,7 +407,7 @@ function _emitHookEnd(
   if (errorInfo) {
     const [err, tb] = errorInfo;
     endData.error_type = err.constructor.name;
-    hookLog("error", hookName, `[${endEvent}] ${err.constructor.name}: ${String(err).replaceAll(/[\n\r]/g, " ").slice(0, 200)}`, { traceback_str: tb });
+    hookLog("error", hookName, `[${endEvent}] ${err.constructor.name}: ${String(err).replace(/[\n\r]/g, " ").slice(0, 200)}`, { traceback_str: tb });
     hookLog("error", hookName, `HOOK_END: ${err}`, { data: endData, traceback_str: tb });
   } else if (status === "blocked") {
     hookLog("warn", hookName, "HOOK_END", { data: endData });
@@ -435,5 +434,3 @@ function _drainAndExit(code: number): void {
     process.exit(code);
   });
 }
-
-export {hookLog, logBlocking, logDebug, logDiagnostic, logError, logHookError, logInfo, logWarn, setContextPath, setSessionId} from "./logger.js";

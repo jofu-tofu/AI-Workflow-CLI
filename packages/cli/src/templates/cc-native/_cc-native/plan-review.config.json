@@ -13,18 +13,6 @@
   },
   "planReview": {
     "enabled": true,
-    "reviewers": {
-      "codex": {
-        "enabled": true,
-        "model": "gpt-5.1-codex-mini",
-        "timeout": 120
-      },
-      "gemini": {
-        "enabled": false,
-        "model": "",
-        "timeout": 120
-      }
-    },
     "display": {
       "maxIssues": 12,
       "maxMissingSections": 12,
@@ -53,8 +41,8 @@
     },
     "reviewIterations": {
       "simple": 1,
-      "medium": 1,
-      "high": 2
+      "medium": 3,
+      "high": 5
     },
     "highIssueThreshold": 2,
     "earlyExitOnAllPass": true,

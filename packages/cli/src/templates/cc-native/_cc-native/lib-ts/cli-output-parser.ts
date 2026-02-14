@@ -1,6 +1,6 @@
 /**
  * Unified Claude CLI output parser.
- * Deduplicates identical logic from orchestrator.py and reviewers/agent.py.
+ * Deduplicates identical logic from orchestrator.ts and reviewers/agent.ts.
  * See cc-native-plan-review-spec.md §4.6
  */
 

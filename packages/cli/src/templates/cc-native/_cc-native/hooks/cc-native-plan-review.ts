@@ -62,6 +62,7 @@ import {
 import {
   isPlanAlreadyReviewed,
   wasPlanPreviouslyDenied,
+  getLastPlanReview,
   markPlanReviewed,
 } from "../lib-ts/cc-native-state.js";
 
@@ -76,10 +77,11 @@ import {
   buildInlineReviewSummary,
   extractTopIssuesText,
   buildHighIssuesDocument,
+  buildCorroborationReport,
   writeReviewTracker,
 } from "../lib-ts/artifacts.js";
 import type { ReviewTrackerEntry } from "../lib-ts/artifacts.js";
-import { runAgentReview, runCodexReview, runGeminiReview } from "../lib-ts/reviewers/index.js";
+import { runAgentReview } from "../lib-ts/reviewers/index.js";
 import { DEFAULT_REVIEW_ITERATIONS } from "../lib-ts/state.js";
 
 // ---------------------------------------------------------------------------
@@ -118,10 +120,7 @@ function extractTopIssuesForTracker(
   combined: CombinedReviewResult,
   maxCount = 5,
 ): string[] {
-  const allReviewers = [
-    ...Object.values(combined.cli_reviewers),
-    ...Object.values(combined.agents),
-  ];
+  const allReviewers = Object.values(combined.agents);
   const issues: string[] = [];
   for (const r of allReviewers) {
     if (!r.data) continue;
@@ -537,14 +536,21 @@ async function main(): Promise<void> {
   // Plan-hash deduplication
   logDebug(HOOK, `Plan hash: ${planHash}`);
   if (isPlanAlreadyReviewed(sessionId, planHash, base)) {
+    const lastReview = getLastPlanReview(sessionId, planHash, base);
+
     if (wasPlanPreviouslyDenied(sessionId, planHash, base)) {
+      // Plan unchanged since last FAIL verdict
       emitContextAndBlock(
         "[Plan Review] Plan content unchanged since last review which found issues.",
         "Plan unchanged since denial. Modify the plan to address review findings, then attempt ExitPlanMode again.",
       );
       return;
     } else {
-      skipWithInfo("Plan already reviewed and approved (same hash).");
+      // Plan already reviewed with PASS or WARN verdict - skip review
+      const verdict = lastReview?.iteration?.latest_verdict || "pass";
+      const skipMsg = `[Plan Review] Plan already reviewed (verdict: ${verdict}). Skipping re-review.`;
+      emitContext(skipMsg);
+      logInfo(HOOK, skipMsg);
       return;
     }
   }
@@ -571,19 +577,13 @@ async function main(): Promise<void> {
   }
 
   // Initialize result containers
-  const cliResults: Record<string, ReviewerResult> = {};
   let orchResult: OrchestratorResult | null = null;
   const agentResults: Record<string, ReviewerResult> = {};
-  let allVerdicts: Verdict[] = [];
   let detectedComplexity = "medium";
 
   // ============================================
-  // PHASE 1 & 2: CLI Reviewers + Orchestrator (PARALLEL)
+  // PHASE 1: Orchestrator (Complexity Analysis)
   // ============================================
-  const reviewersConfig = planReviewEnabled ? (planSettings.reviewers ?? {}) : {};
-  // Deprecated: agents now support Codex provider via models.providers.codex
-  const codexEnabled = planReviewEnabled && (reviewersConfig.codex?.enabled ?? false);
-  const geminiEnabled = planReviewEnabled && (reviewersConfig.gemini?.enabled ?? false);
 
   // Graduated agents from previous iterations (empty after hash reset or on iteration 1)
   const graduatedSet = new Set(iterationState.graduated);
@@ -608,7 +608,6 @@ async function main(): Promise<void> {
   const alwaysMandatory = resolveMandatoryAgents(mandatoryConfig, "simple");
   let mandatoryNames = alwaysMandatory;
 
-  logDebug(HOOK, `Codex enabled: ${codexEnabled}, Gemini enabled: ${geminiEnabled}`);
   logDebug(HOOK, `Agent library: ${agentLibrary.map(a => a.name)}`);
   logDebug(HOOK, `Mandatory agents: ${[...mandatoryNames].sort()}`);
   logDebug(HOOK, `Orchestrator enabled: ${orchestratorConfig.enabled}`);
@@ -616,18 +615,6 @@ async function main(): Promise<void> {
   // Build phase 1 tasks as promises
   const phase1Promises: Array<{ name: string; promise: Promise<ReviewerResult | OrchestratorResult> }> = [];
 
-  if (codexEnabled) {
-    phase1Promises.push({
-      name: "codex",
-      promise: runCodexReview(plan, REVIEW_SCHEMA, planSettings),
-    });
-  }
-  if (geminiEnabled) {
-    phase1Promises.push({
-      name: "gemini",
-      promise: runGeminiReview(plan, REVIEW_SCHEMA, planSettings),
-    });
-  }
   if (orchestratorConfig.enabled && enabledAgents.length > 0 && !legacyMode) {
     phase1Promises.push({
       name: "orchestrator",
@@ -656,9 +643,7 @@ async function main(): Promise<void> {
     }
   }
 
-  // Collect CLI results
-  if (phase1Results.codex) cliResults.codex = phase1Results.codex as ReviewerResult;
-  if (phase1Results.gemini) cliResults.gemini = phase1Results.gemini as ReviewerResult;
+  // Collect orchestrator result
   if (phase1Results.orchestrator) orchResult = phase1Results.orchestrator as OrchestratorResult;
 
   // ============================================
@@ -791,7 +776,7 @@ async function main(): Promise<void> {
   const maxIssuesPerAgent = typeof agentSettings.maxIssuesPerAgent === "number"
     ? agentSettings.maxIssuesPerAgent : 3;
 
-  for (const r of [...Object.values(cliResults), ...Object.values(agentResults)]) {
+  for (const r of Object.values(agentResults)) {
     if (!Array.isArray(r.data?.issues)) continue;
     const issues = r.data.issues as Array<{ severity?: string }>;
     if (issues.length <= maxIssuesPerAgent) continue;
@@ -814,9 +799,8 @@ async function main(): Promise<void> {
   // Per-agent high-severity threshold: override verdict to "fail"
   // ============================================
   const highIssueThreshold = typeof agentSettings.highIssueThreshold === "number" ? agentSettings.highIssueThreshold : 3;
-  allVerdicts = [];
 
-  for (const r of [...Object.values(cliResults), ...Object.values(agentResults)]) {
+  for (const r of Object.values(agentResults)) {
     if (!r.verdict || r.verdict === "skip" || r.verdict === "error") continue;
     const issues = Array.isArray(r.data?.issues) ? r.data.issues as Array<{ severity?: string }> : [];
     const agentHigh = issues.filter(i => i.severity === "high").length;
@@ -826,7 +810,6 @@ async function main(): Promise<void> {
       verdict = "fail";
       r.verdict = verdict;
     }
-    allVerdicts.push(verdict);
   }
 
   // ============================================
@@ -834,7 +817,7 @@ async function main(): Promise<void> {
   // ============================================
   logInfo(HOOK, "=== PHASE 4: Generate Output ===");
 
-  if (Object.keys(cliResults).length === 0 && Object.keys(agentResults).length === 0) {
+  if (Object.keys(agentResults).length === 0) {
     if (graduatedSet.size > 0 && originalAgentCount > 0) {
       skipWithInfo("All agent reviewers graduated from previous iterations — no review needed.");
     } else {
@@ -843,12 +826,17 @@ async function main(): Promise<void> {
     return;
   }
 
-  const overall = allVerdicts.length > 0 ? worstVerdict(allVerdicts) : "pass";
+  // Review decision — corroboration-based (proportional threshold per dimension)
+  // Must be computed before writeCombinedArtifacts and buildInlineReviewSummary which consume it.
+  const allReviewerResults: Record<string, ReviewerResult> = agentResults;
+  const corroborationResult = computeCorroboratedDecision(allReviewerResults);
+
+  // Use corroboration verdict as single source of truth (not worstVerdict from individual agents)
+  const overall = corroborationResult.verdict;
 
   const combinedResult: CombinedReviewResult = {
     plan_hash: planHash,
     overall_verdict: overall,
-    cli_reviewers: cliResults,
     orchestration: orchResult,
     agents: agentResults,
     timestamp: new Date().toISOString(),
@@ -868,11 +856,6 @@ async function main(): Promise<void> {
   fs.mkdirSync(reviewFolder, { recursive: true });
   logInfo(HOOK, `Created review folder: ${reviewFolder}`);
 
-  // Review decision — corroboration-based (proportional threshold per dimension)
-  // Must be computed before writeCombinedArtifacts and buildInlineReviewSummary which consume it.
-  const allReviewerResults: Record<string, ReviewerResult> = { ...cliResults, ...agentResults };
-  const corroborationResult = computeCorroboratedDecision(allReviewerResults);
-
   const reviewFile = writeCombinedArtifacts(
     base,
     plan,
@@ -885,6 +868,12 @@ async function main(): Promise<void> {
     corroborationResult,
   );
   logInfo(HOOK, `Saved review: ${reviewFile}`);
+
+  // Write corroboration analysis report
+  const corroborationReport = buildCorroborationReport(corroborationResult);
+  const corroborationPath = path.join(reviewFolder, "corroboration.md");
+  fs.writeFileSync(corroborationPath, corroborationReport, "utf-8");
+  logInfo(HOOK, `Saved corroboration report: ${corroborationPath}`);
 
   // Save plan snapshot for diffing between iterations
   try {
@@ -913,7 +902,6 @@ async function main(): Promise<void> {
     inputs: {
       overall_verdict: combinedResult.overall_verdict,
       review_score: Math.round(reviewScore * 100) / 100,
-      cli_count: Object.keys(cliResults).length,
       agent_count: Object.keys(agentResults).length,
     },
   });
@@ -990,7 +978,8 @@ async function main(): Promise<void> {
   writeReviewTracker(ccNativeReviewsDir, trackerEntry);
   logInfo(HOOK, `Updated review tracker: ${path.join(ccNativeReviewsDir, "review-tracker.md")}`);
 
-  // Emit output — always emit context with top issues + link; block only on fail
+  // ALL first-time reviews block ExitPlanMode and inject feedback
+  // Verdict controls iteration logic and next-run skip decision only
   const contextText = contextParts.join("");
 
   logDebug(HOOK, `REVIEW_CONTEXT_INJECTED: chars=${contextText.length}, inline_chars=${inlineSummary.length}`);
@@ -998,7 +987,10 @@ async function main(): Promise<void> {
   const REVIEWER_CAVEAT = "Reviewers have limited context compared to your full session — use your judgment to adopt valid points and dismiss genuine false positives. However, treat false positives as a clarity signal: if a reviewer misunderstood your plan, an agent executing it will likely hit the same confusion. Revise those sections to be unambiguous so no future reader — human or AI — makes the same mistake.";
   const RESUBMIT_INSTRUCTION = "IMPORTANT: After revising the plan file, you MUST call ExitPlanMode again to trigger re-review. Do not end your turn or ask the user without calling ExitPlanMode.";
 
+  const iterInfo = ` (iteration ${iterationState.current - 1}/${iterationState.max}, score=${reviewScore.toFixed(2)})`;
+
   if (shouldDeny) {
+    // FAIL verdict - critical issues found
     const disposition = `hook_deny_iter_${iterationState.current - 1}`;
     markPlanReviewed(sessionId, planHash, base, HOOK, iterationState, disposition);
     const topIssuesText = extractTopIssuesText(combinedResult, 3, "high");
@@ -1006,21 +998,23 @@ async function main(): Promise<void> {
     const highIssuesPath = path.join(reviewFolder, "high-issues.md");
     fs.writeFileSync(highIssuesPath, highIssuesDoc, "utf-8");
 
-    const iterInfo = ` (iteration ${iterationState.current - 1}/${iterationState.max}, score=${reviewScore.toFixed(2)})`;
-
-    emitContextAndBlock(
-      contextText,
-      `Plan review FAILED${iterInfo}. ` +
+    const blockReason = `Plan review FAILED${iterInfo}. ` +
       `Critical issues: ${topIssuesText}. ` +
       `IMPORTANT: Read \`${highIssuesPath}\` for ALL high-severity issues — ` +
       `this file contains only the most critical findings, no noise. ` +
       `${REVIEWER_CAVEAT} ` +
       `Revise the plan to address these issues, then call ExitPlanMode again. ` +
-      RESUBMIT_INSTRUCTION,
-    );
+      RESUBMIT_INSTRUCTION;
+
+    emitContextAndBlock(contextText, blockReason);
   } else {
-    markPlanReviewed(sessionId, planHash, base, HOOK, iterationState, "allow");
-    emitContext(contextText);
+    // PASS or WARN verdict - block to inject feedback, but mark as allowed
+    const disposition = `hook_allow_iter_${iterationState.current - 1}`;
+    markPlanReviewed(sessionId, planHash, base, HOOK, iterationState, disposition);
+
+    const blockReason = `Plan review ${overall.toUpperCase()}${iterInfo}. Review complete. ${REVIEWER_CAVEAT}`;
+
+    emitContextAndBlock(contextText, blockReason);
   }
 }
 

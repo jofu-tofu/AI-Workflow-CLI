@@ -109,8 +109,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun .aiwcli/_cc-native/hooks/add_plan_context.ts",
+            "command": "bun .aiwcli/_cc-native/hooks/mark_questions_asked.ts",
             "timeout": 3000
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun .aiwcli/_cc-native/hooks/enhance_plan_post_write.ts",
+            "timeout": 5000
           }
         ]
       }
@@ -147,22 +157,24 @@
         ]
       },
       {
-        "matcher": "^Task$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun .aiwcli/_cc-native/hooks/add_plan_context.ts",
-            "timeout": 5000
-          }
-        ]
-      },
-      {
         "matcher": "ExitPlanMode",
         "hooks": [
           {
             "type": "command",
             "command": "bun .aiwcli/_cc-native/hooks/cc-native-plan-review.ts",
-            "timeout": 600000
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "Plan",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun .aiwcli/_cc-native/hooks/enhance_plan_post_subagent.ts",
+            "timeout": 10000
           }
         ]
       }

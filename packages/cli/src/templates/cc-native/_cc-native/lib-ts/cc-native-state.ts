@@ -1,18 +1,21 @@
 /**
  * CC-native state accessor for context state.json.
- * Deduplicates state access patterns for cc-native hooks.
+ * Deduplicates state access patterns from utils.py and suggest-fresh-perspective.py.
  * See cc-native-plan-review-spec.md §4.5
  */
 
-import type {
-  CcNativeState,
-  IterationState,
-  PlanReviewState,
-  QuestionsAskedState as _QuestionsAskedState,
-} from "./types.js";
+import { getContextBySessionId, saveState } from "../../_shared/lib-ts/context/context-store.js";
 import { logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
 import { nowIso } from "../../_shared/lib-ts/base/utils.js";
-import { getContextBySessionId, saveState } from "../../_shared/lib-ts/context/context-store.js";
+import * as path from "path";
+import type {
+  CcNativeState,
+  PlanReviewState,
+  QuestionsAskedState,
+  IterationState,
+  StuckDetectionState,
+  PlanEnhancementState,
+} from "./types.js";
 import type { ContextState } from "../../_shared/lib-ts/types.js";
 
 /**
@@ -42,7 +45,6 @@ export function getCcNativeState(
   } catch {
     // Fail-safe: return null
   }
-
   return null;
 }
 
@@ -62,10 +64,9 @@ export function saveCcNativeState(
       saveState(state.id, state, projectRoot);
       return true;
     }
-  } catch (error: unknown) {
-    logWarn("utils", `Failed to save cc_native state: ${error}`);
+  } catch (e: unknown) {
+    logWarn("utils", `Failed to save cc_native state: ${e}`);
   }
-
   return false;
 }
 
@@ -105,6 +106,22 @@ export function wasPlanPreviouslyDenied(
 }
 
 /**
+ * Get the last plan review state for this session.
+ * Returns null if no review state exists or plan hash doesn't match.
+ */
+export function getLastPlanReview(
+  sessionId: string,
+  planHash: string,
+  projectRoot: string,
+): PlanReviewState | null {
+  const ccNative = getCcNativeState(sessionId, projectRoot);
+  if (!ccNative) return null;
+  const reviewState = ccNative.plan_review;
+  if (reviewState?.plan_hash !== planHash) return null;
+  return reviewState;
+}
+
+/**
  * Mark this plan as reviewed (stores hash and decision in state.json).
  */
 export function markPlanReviewed(
@@ -130,9 +147,9 @@ export function markPlanReviewed(
         max: iterationState.max ?? 1,
         complexity: iterationState.complexity ?? "unknown",
       };
-      const {history} = iterationState;
+      const history = iterationState.history;
       if (history && history.length > 0) {
-        const lastEntry = history.at(-1);
+        const lastEntry = history[history.length - 1];
         if (lastEntry) {
           reviewData.iteration.latest_verdict = lastEntry.verdict ?? "unknown";
         }
@@ -152,8 +169,8 @@ export function markPlanReviewed(
         `Failed to save plan review state for session ${sessionId}`,
       );
     }
-  } catch (error: unknown) {
-    logWarn(hookName, `Failed to mark plan reviewed: ${error}`);
+  } catch (e: unknown) {
+    logWarn(hookName, `Failed to mark plan reviewed: ${e}`);
   }
 }
 
@@ -191,9 +208,121 @@ export function markQuestionsAsked(
     };
 
     return saveCcNativeState(sessionId, projectRoot, ccNative);
-  } catch (error: unknown) {
-    logWarn("utils", `Failed to mark questions asked: ${error}`);
+  } catch (e: unknown) {
+    logWarn("utils", `Failed to mark questions asked: ${e}`);
     return false;
   }
 }
 
+// ---------------------------------------------------------------------------
+// Stuck Detection State
+// ---------------------------------------------------------------------------
+
+/**
+ * Get stuck detection state from cc_native.
+ */
+export function getStuckDetectionState(
+  sessionId: string,
+  projectRoot: string,
+): StuckDetectionState | null {
+  const ccNative = getCcNativeState(sessionId, projectRoot);
+  return ccNative?.stuck_detection ?? null;
+}
+
+/**
+ * Update stuck detection state.
+ */
+export function updateStuckDetectionState(
+  sessionId: string,
+  projectRoot: string,
+  stuckState: StuckDetectionState,
+): boolean {
+  try {
+    const ccNative = getCcNativeState(sessionId, projectRoot) ?? {};
+    ccNative.stuck_detection = stuckState;
+    return saveCcNativeState(sessionId, projectRoot, ccNative);
+  } catch (e: unknown) {
+    logWarn("utils", `Failed to update stuck detection state: ${e}`);
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Plan Enhancement State
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if this specific plan file has already been enhanced.
+ * Returns true ONLY if enhancement_applied === true AND stored plan_path matches.
+ * If paths don't match, returns false (new plan needs enhancement).
+ */
+export function isPlanEnhancementApplied(
+  sessionId: string,
+  planPath: string,
+  projectRoot: string,
+): boolean {
+  const ccNative = getCcNativeState(sessionId, projectRoot);
+  if (!ccNative) return false;
+
+  const enhancementState = ccNative.plan_enhancement;
+  if (!enhancementState?.enhancement_applied) return false;
+
+  // Normalize both paths for comparison
+  const normalizedStored = path.normalize(enhancementState.plan_path);
+  const normalizedCurrent = path.normalize(planPath);
+
+  return normalizedStored === normalizedCurrent;
+}
+
+/**
+ * Mark this plan as enhanced.
+ * Stores enhancement_applied=true, enhanced_at timestamp, and normalized absolute plan_path.
+ */
+export function markPlanEnhancementApplied(
+  sessionId: string,
+  planPath: string,
+  projectRoot: string,
+  hookName = "cc-native",
+): boolean {
+  try {
+    const ccNative = getCcNativeState(sessionId, projectRoot) ?? {};
+
+    const enhancementData: PlanEnhancementState = {
+      enhancement_applied: true,
+      enhanced_at: nowIso(),
+      plan_path: path.normalize(path.resolve(planPath)),
+    };
+
+    ccNative.plan_enhancement = enhancementData;
+
+    if (saveCcNativeState(sessionId, projectRoot, ccNative)) {
+      logInfo(hookName, `Saved plan enhancement state (path: ${planPath})`);
+      return true;
+    } else {
+      logWarn(hookName, `Failed to save plan enhancement state for session ${sessionId}`);
+      return false;
+    }
+  } catch (e: unknown) {
+    logWarn(hookName, `Failed to mark plan enhancement: ${e}`);
+    return false;
+  }
+}
+
+/**
+ * Reset plan enhancement state.
+ * Optional housekeeping function. Not strictly required due to path-based checking,
+ * but keeps state clean when plans are consumed.
+ */
+export function resetPlanEnhancement(
+  sessionId: string,
+  projectRoot: string,
+): boolean {
+  try {
+    const ccNative = getCcNativeState(sessionId, projectRoot) ?? {};
+    delete ccNative.plan_enhancement;
+    return saveCcNativeState(sessionId, projectRoot, ccNative);
+  } catch (e: unknown) {
+    logWarn("utils", `Failed to reset plan enhancement: ${e}`);
+    return false;
+  }
+}

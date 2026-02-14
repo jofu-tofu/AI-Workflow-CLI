@@ -150,7 +150,7 @@ If a plan document path was provided in `$ARGUMENTS`:
 Instead of writing the file directly, pipe your handoff content to the save script:
 
 ```bash
-python .aiwcli/_shared/scripts/save_handoff.py "{context_id}" <<'EOF'
+bun .aiwcli/_shared/scripts/save_handoff.ts "{context_id}" <<'EOF'
 {Your complete handoff markdown content from Step 3}
 EOF
 ```

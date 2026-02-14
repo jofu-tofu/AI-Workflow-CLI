@@ -150,11 +150,6 @@ export async function checkTemplateStatus(
  */
 export const EXCLUDED_PATTERNS = [
   '_output',
-  '__pycache__',
-  '.pytest_cache',
-  'conftest.py',
-  /^test_.*\.py$/,
-  /.*\.pyc$/,
 ]
 
 /**

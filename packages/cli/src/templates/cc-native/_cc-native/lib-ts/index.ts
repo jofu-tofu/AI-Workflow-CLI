@@ -64,11 +64,7 @@ export { buildOrchestratorSchema, runOrchestrator } from "./orchestrator.js";
 // Reviewers
 export {
   AgentReviewer,
-  CodexReviewer,
-  GeminiReviewer,
   runAgentReview,
-  runCodexReview,
-  runGeminiReview,
 } from "./reviewers/index.js";
 
 // Iteration state

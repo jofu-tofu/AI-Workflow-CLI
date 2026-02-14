@@ -3,18 +3,18 @@
  * SessionStart hook: Restore context after /clear (plan/handoff) or compaction.
  * Routes by source field to appropriate handler.
  */
+import {
+  loadHookInput, emitContext, runHook, runHookAsync,
+  logDebug, logInfo, logError, logDiagnostic,
+} from "../lib-ts/base/hook-utils.js";
 import { getProjectRoot } from "../lib-ts/base/constants.js";
 import {
-  emitContext, loadHookInput, logDebug,
-  logDiagnostic, logError as _logError, logInfo, runHook,
-} from "../lib-ts/base/hook-utils.js";
+  getContextBySessionId, getAllContexts, bindSession, updateMode,
+} from "../lib-ts/context/context-store.js";
 import {
   buildRestoreSections, formatHandoffContinuation, getModeDisplay,
 } from "../lib-ts/context/context-formatter.js";
-import {
-  bindSession, getAllContexts, getContextBySessionId, updateMode,
-} from "../lib-ts/context/context-store.js";
-import type { ContextState as _ContextState } from "../lib-ts/types.js";
+import type { ContextState } from "../lib-ts/types.js";
 
 /**
  * Handle post-compaction restore: re-inject context that was lost during compaction.
@@ -53,7 +53,7 @@ function handleCompactRestore(sessionId: string, projectRoot: string): void {
  * Handle post-clear restore: find staged has_plan or has_handoff context,
  * bind session, transition to active, inject context.
  */
-function handleClearRestore(sessionId: string, projectRoot: string): void {
+async function handleClearRestore(sessionId: string, projectRoot: string): Promise<void> {
   const allContexts = getAllContexts("active", projectRoot);
 
   // Priority 1: has_plan contexts
@@ -64,6 +64,15 @@ function handleClearRestore(sessionId: string, projectRoot: string): void {
 
     bindSession(ctx.id, sessionId, projectRoot);
     updateMode(ctx.id, "active", projectRoot, { plan_consumed: true });
+
+    // Optional: Reset cc-native plan enhancement state (method-specific feature)
+    try {
+      const { resetPlanEnhancement } = await import("../../_cc-native/lib-ts/cc-native-state.js");
+      resetPlanEnhancement(sessionId, projectRoot);
+      logDebug("session_start", "Reset plan enhancement state");
+    } catch {
+      // CC-native not installed or function missing, skip gracefully
+    }
 
     logInfo("session_start", `Clear restore: ${ctx.id} has_plan → active (plan_consumed=true)`);
 
@@ -108,7 +117,7 @@ function handleClearRestore(sessionId: string, projectRoot: string): void {
   logDebug("session_start", "No has_plan or has_handoff contexts found");
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const payload = loadHookInput();
   if (!payload) return;
 
@@ -124,21 +133,16 @@ function main(): void {
   logDiagnostic("session_start", "entry", `source=${source}, session=${sessionId}`);
 
   switch (source) {
-    case "clear": {
-      handleClearRestore(sessionId, projectRoot);
-      break;
-    }
-
-    case "compact": {
+    case "compact":
       handleCompactRestore(sessionId, projectRoot);
       break;
-    }
-
-    default: {
+    case "clear":
+      await handleClearRestore(sessionId, projectRoot);
+      break;
+    default:
       logDebug("session_start", `Unhandled source: ${source}`);
       break;
-    }
   }
 }
 
-runHook(main, "session_start");
+runHookAsync(main, "session_start");
