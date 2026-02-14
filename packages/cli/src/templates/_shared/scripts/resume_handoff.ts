@@ -315,6 +315,31 @@ function main(): void {
   out.push("---");
   out.push("");
   out.push("**Create ISC tasks** from the pending items and remaining plan items above using TaskCreate. Each task should be ~8 words, state a desired end-state (not an action), and be binary testable.");
+  out.push("");
+
+  // Appendix: Full Plan
+  let fullPlanContent: string | null = sections.plan ?? null;
+  if (!fullPlanContent && resolvedContextId) {
+    const planRef = getHandoffPlanReference(handoffFolder, resolvedContextId, projectRoot);
+    if (planRef) {
+      try {
+        fullPlanContent = fs.readFileSync(planRef, "utf-8");
+      } catch {
+        // ignore — no plan to append
+      }
+    }
+  }
+  if (fullPlanContent) {
+    const planBody = stripTitle(fullPlanContent);
+    if (planBody && planBody !== "(No content for this section)") {
+      out.push("---");
+      out.push("");
+      out.push("### Appendix: Full Plan");
+      out.push("");
+      out.push(planBody);
+      out.push("");
+    }
+  }
 
   console.log(out.join("\n"));
 }
