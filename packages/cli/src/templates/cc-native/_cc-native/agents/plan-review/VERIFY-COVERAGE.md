@@ -3,7 +3,6 @@ name: verify-coverage
 description: Test coverage mapper who ensures every implementation step has a corresponding verification step. Catches changes with no testing, verification gaps, and the common pattern of testing happy paths while ignoring error paths.
 model: sonnet
 focus: verification coverage mapping
-enabled: false
 categories:
   - code
   - infrastructure

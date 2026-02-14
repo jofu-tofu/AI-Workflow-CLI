@@ -3,7 +3,6 @@ name: testdriven-characterization
 description: Characterization test advocate who checks whether plans that modify existing code include safety-net tests to capture current behavior first. Catches "refactor without tests" and "change behavior without verifying consumers."
 model: sonnet
 focus: safety-net tests before code modification
-enabled: false
 categories:
   - code
   - infrastructure

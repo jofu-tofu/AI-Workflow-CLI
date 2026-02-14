@@ -3,7 +3,6 @@ name: testdriven-behavior-auditor
 description: Behavior contract auditor who checks whether tests target what code does (inputs/outputs) rather than how it does it (internal calls). Catches implementation-coupled tests, excessive mocking, and test names that describe mechanics instead of behavior.
 model: sonnet
 focus: behavior-over-implementation test design
-enabled: false
 categories:
   - code
   - infrastructure

@@ -3,7 +3,6 @@ name: arch-structure
 description: Structural architecture analyst focused on component boundaries, coupling patterns, dependency direction, and responsibility separation. Evaluates whether planned boundaries are drawn at natural seams.
 model: sonnet
 focus: coupling, cohesion, and boundary analysis
-enabled: false
 categories:
   - code
   - infrastructure

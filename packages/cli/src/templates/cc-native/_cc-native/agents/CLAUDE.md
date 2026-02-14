@@ -113,7 +113,7 @@ Each family covers the same topic area but through different analytical lenses. 
 ## File Structure
 
 Each agent file has:
-- **Frontmatter (YAML):** name, model, focus, categories, enabled
+- **Frontmatter (YAML):** name, model, focus, categories
 - **Body (Markdown):** Full persona content → becomes `system_prompt` for `--system-prompt` flag
 
 ## --setting-sources "" Requirement
@@ -140,10 +140,4 @@ Each agent file has:
 
 **Constraint:** The agent markdown files MUST contain clear instructions to "call StructuredOutput IMMEDIATELY" and "do NOT use any other tools". Without these instructions, the model will try to use its turns for file operations instead of outputting the review.
 
-## enabled: false Convention
 
-**Decision:** Set `enabled: false` in frontmatter for all plan review agents
-
-**Rationale:** The `enabled` field controls Claude Code's auto-suggestion feature (showing agents in command palette). For plan review agents, we don't want them appearing as general-purpose agents - they're invoked programmatically by the hook. Setting `enabled: false` hides them from auto-suggestion while still allowing the hook to use them.
-
-**Constraint:** Don't set `enabled: true` unless you want the agent to appear in Claude Code's agent picker for general use.

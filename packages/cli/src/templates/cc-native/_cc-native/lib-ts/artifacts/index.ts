@@ -1,6 +1,5 @@
 /**
- * Review artifact writing and formatting.
- * Re-exports from artifacts/ subdirectory for backward compatibility.
+ * Barrel re-export for artifacts submodules.
  */
 
 export {
@@ -12,10 +11,16 @@ export {
   buildCorroborationReport,
   generateReviewIndex,
   buildCombinedJson,
+} from "./format.js";
+
+export {
   writeCombinedArtifacts,
   writeFile,
   writeFileNonCritical,
+} from "./write.js";
+
+export {
   writeReviewTracker,
   extractPreviousHashes,
-} from "./artifacts/index.js";
-export type { ReviewTrackerEntry } from "./artifacts/index.js";
+} from "./tracker.js";
+export type { ReviewTrackerEntry } from "./tracker.js";

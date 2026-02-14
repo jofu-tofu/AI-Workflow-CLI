@@ -36,7 +36,6 @@ export async function runOrchestrator(
     model: config.model,
     provider: "claude",
     focus: "plan analysis and agent selection",
-    enabled: config.enabled,
     categories: [],
     description: "Plan orchestrator",
     system_prompt: "",
@@ -58,7 +57,7 @@ export async function runOrchestrator(
     return result;
   } catch (error) {
     logWarn("orchestrator", `Unexpected error: ${error}`);
-    const nonMandatory = agentLibrary.filter((a) => a.enabled && !mandatory.has(a.name));
+    const nonMandatory = agentLibrary.filter((a) => !mandatory.has(a.name));
     const fallbackCount = ((settings.agentSelection as Record<string, unknown>)?.fallbackCount as number) ?? 2;
     return {
       complexity: "medium",

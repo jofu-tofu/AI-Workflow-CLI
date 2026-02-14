@@ -3,7 +3,6 @@ name: scope-boundary
 description: Detects scope drift between a plan's stated goal and its actual implementation steps. Catches plans that start with a narrow objective but quietly expand into broader changes, refactors, or unrelated improvements.
 model: sonnet
 focus: scope drift and boundary enforcement
-enabled: false
 categories:
   - code
   - infrastructure

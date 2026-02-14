@@ -8,9 +8,9 @@
  */
 
 import * as fs from "node:fs";
-import * as _path from "node:path";
-
+import * as path from "node:path";
 import { parseIsoTimestamp } from "../base/utils.js";
+import { getContextDir } from "../base/constants.js";
 import type { ContextState, Task } from "../types.js";
 
 const MAX_PLAN_INLINE_CHARS = 30_000;
@@ -42,10 +42,10 @@ export function getModeDisplay(mode: string): string {
  * Format ISO timestamp as '2 hours ago', 'yesterday', etc.
  * See SPEC.md §11.3
  */
-export function formatRelativeTime(isoTimestamp: null | string): string {
+export function formatRelativeTime(isoTimestamp: string | null): string {
   if (!isoTimestamp) return "unknown";
 
-  const dt = parseIsoTimestamp(isoTimestamp);
+  let dt = parseIsoTimestamp(isoTimestamp);
   if (!dt) return isoTimestamp.slice(0, 16);
 
   const now = new Date();
@@ -62,10 +62,8 @@ export function formatRelativeTime(isoTimestamp: null | string): string {
       if (diffMin === 0) return "just now";
       return diffMin === 1 ? "1 minute ago" : `${diffMin} minutes ago`;
     }
-
     return diffHours === 1 ? "1 hour ago" : `${diffHours} hours ago`;
   }
-
   if (diffDays === 1) return "yesterday";
   if (diffDays < 7) return `${diffDays} days ago`;
 
@@ -80,23 +78,21 @@ export function formatRelativeTime(isoTimestamp: null | string): string {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function taskAttr(task: Record<string, any> | Task, key: string, defaultVal = ""): string {
+function taskAttr(task: Task | Record<string, any>, key: string, defaultVal = ""): string {
   if (typeof task === "object" && task !== null) {
     return (task as any)[key] ?? defaultVal;
   }
-
   return defaultVal;
 }
 
-function readPlanContent(planPath: string): [null | string, boolean, number] {
+function readPlanContent(planPath: string): [string | null, boolean, number] {
   try {
     if (!fs.existsSync(planPath)) return [null, false, 0];
-    const content = fs.readFileSync(planPath, "utf8");
+    const content = fs.readFileSync(planPath, "utf-8");
     const total = content.length;
     if (total > MAX_PLAN_INLINE_CHARS) {
       return [content.slice(0, MAX_PLAN_INLINE_CHARS), true, total];
     }
-
     return [content, false, total];
   } catch {
     return [null, false, 0];
@@ -105,7 +101,7 @@ function readPlanContent(planPath: string): [null | string, boolean, number] {
 
 function modeLabel(ctx: ContextState): string {
   const d = getModeDisplay(ctx.mode ?? "idle");
-  return d ? d.replaceAll(/^\[|\]$/g, "") : "Active";
+  return d ? d.replace(/^\[|\]$/g, "") : "Active";
 }
 
 /**
@@ -124,7 +120,7 @@ export function buildRestoreSections(
     const savedAt = lastSession.saved_at ?? "";
     if (savedAt) {
       const reason = lastSession.save_reason ?? "";
-      const reasonDisplay = reason ? reason.replaceAll('_', " ") : "unknown";
+      const reasonDisplay = reason ? reason.replace(/_/g, " ") : "unknown";
       sections.push(`**Last session ended:** ${formatRelativeTime(savedAt)} (${reasonDisplay})`);
     }
   }
@@ -143,7 +139,6 @@ export function buildRestoreSections(
         buckets[s]!.push(taskAttr(t, "subject"));
       }
     }
-
     if (Object.values(buckets).some(b => b.length > 0)) {
       sections.push("", `### Previous Work (${tasks.length} tasks)`, "");
       const marks: Record<string, string> = {
@@ -201,7 +196,8 @@ function resumeBlock(ctx: ContextState, projectRoot: string | undefined, modeTex
   ];
   const restore = buildRestoreSections(ctx, projectRoot, true);
   if (restore) lines.push(restore);
-  lines.push("", "---", "", "**Instructions:**", ...instructions);
+  lines.push("", "---", "", "**Instructions:**");
+  lines.push(...instructions);
   return lines.join("\n");
 }
 
@@ -223,12 +219,12 @@ export function formatHandoffContinuation(ctx: ContextState, projectRoot?: strin
 
   try {
     if (handoffPath && fs.existsSync(handoffPath)) {
-      lines.push("### Previous Session Handoff", "", fs.readFileSync(handoffPath, "utf8"), "");
+      lines.push("### Previous Session Handoff", "", fs.readFileSync(handoffPath, "utf-8"), "");
     } else {
       lines.push(`*Handoff document not found at \`${handoffPath}\`*`, "");
     }
-  } catch (error: any) {
-    lines.push(`*Handoff document at \`${handoffPath}\` could not be read: ${error}*`, "");
+  } catch (e: any) {
+    lines.push(`*Handoff document at \`${handoffPath}\` could not be read: ${e}*`, "");
   }
 
   const restore = buildRestoreSections(ctx, projectRoot, true);
@@ -271,21 +267,20 @@ export function formatContextList(contexts: ContextState[]): string {
   if (contexts.length === 0) return "No active contexts found.";
 
   const lines = ["## Active Contexts\n"];
-  for (const [i, context_] of contexts.entries()) {
-    const ctx = context_!;
+  for (let i = 0; i < contexts.length; i++) {
+    const ctx = contexts[i]!;
     const timeStr = formatRelativeTime(ctx.last_active);
     const md = getModeDisplay(ctx.mode ?? "idle");
     const si = md ? ` ${md}` : "";
-    lines.push(`**${i + 1}. ${ctx.id}**${si}`, `   ${ctx.summary}`);
+    lines.push(`**${i + 1}. ${ctx.id}**${si}`);
+    lines.push(`   ${ctx.summary}`);
     if (ctx.method) {
       lines.push(`   Method: ${ctx.method} | Last active: ${timeStr}`);
     } else {
       lines.push(`   Last active: ${timeStr}`);
     }
-
     lines.push("");
   }
-
   return lines.join("\n");
 }
 
@@ -355,11 +350,11 @@ export function formatContextPickerStderr(contexts: ContextState[]): string {
   ];
 
   let selectableCount = 0;
-  for (const [i, context_] of contexts.entries()) {
-    const ctx = context_!;
+  for (let i = 0; i < contexts.length; i++) {
+    const ctx = contexts[i]!;
     const timeStr = formatRelativeTime(ctx.last_active);
     const mode = ctx.mode ?? "idle";
-    const isSelectable = mode === "active" || Boolean(ctx.handoff_path);
+    const isSelectable = mode === "active" || !!ctx.handoff_path;
     if (isSelectable) selectableCount++;
 
     let status = "";
@@ -372,7 +367,10 @@ export function formatContextPickerStderr(contexts: ContextState[]): string {
     const summary = ctx.summary.length > 48 ? ctx.summary.slice(0, 45) + "..." : ctx.summary;
     const selTag = isSelectable ? " [selectable]" : " [end only]";
 
-    lines.push(`|  ^${i + 1}  ${ctx.id}${status}${selTag}`, `|       ${summary}`, `|       [${timeStr}]`, "|");
+    lines.push(`|  ^${i + 1}  ${ctx.id}${status}${selTag}`);
+    lines.push(`|       ${summary}`);
+    lines.push(`|       [${timeStr}]`);
+    lines.push("|");
   }
 
   lines.push(
@@ -397,7 +395,6 @@ export function formatContextPickerStderr(contexts: ContextState[]): string {
       "+----------------------------------------------------------------+",
     );
   }
-
   lines.push("");
   return lines.join("\n");
 }
@@ -417,7 +414,6 @@ export function formatCommandFeedback(
       const s = ctx.summary.length > 50 ? ctx.summary.slice(0, 50) + "..." : ctx.summary;
       lines.push(`- **${ctx.id}**: ${s}`);
     }
-
     lines.push("");
   }
 
@@ -433,6 +429,132 @@ export function formatCommandFeedback(
       "Tasks created with TaskCreate will be persisted to this context.",
     );
   }
-
   return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Context Inventory
+// ---------------------------------------------------------------------------
+
+/** Collector function: scans one aspect of the context folder, returns markdown or null. */
+type InventoryCollector = (
+  contextId: string,
+  contextDir: string,
+  state: ContextState,
+) => string | null;
+
+/** Descriptions for known context subfolders. */
+const KNOWN_FOLDERS: Record<string, string> = {
+  "plans": "Archived implementation plans from plan mode",
+  "session-transcripts": "JSONL records of previous agent sessions — read these to understand prior work",
+  "handoffs": "Structured briefing documents for session continuity",
+  "reviews": "Plan review artifacts (reviewer verdicts, corroboration reports)",
+};
+
+function collectFolderPath(contextId: string, contextDir: string, state: ContextState): string | null {
+  if (!fs.existsSync(contextDir)) return null;
+  return `**Context folder:** \`${contextDir}\`\n**State file:** \`${path.join(contextDir, "state.json")}\` — contains session history, task records, plan/handoff metadata`;
+}
+
+function collectStatePointers(contextId: string, contextDir: string, state: ContextState): string | null {
+  const pointers: string[] = [];
+  if (state.plan_path) {
+    const exists = fs.existsSync(state.plan_path);
+    pointers.push(`- **Active plan:** \`${state.plan_path}\`${exists ? "" : " (not found)"}`);
+  }
+  if (state.handoff_path) {
+    const exists = fs.existsSync(state.handoff_path);
+    pointers.push(`- **Active handoff:** \`${state.handoff_path}\`${exists ? "" : " (not found)"}`);
+  }
+  if (pointers.length === 0) return null;
+  return "**Key artifacts:**\n" + pointers.join("\n");
+}
+
+function countFilesRecursive(dirPath: string): number {
+  let count = 0;
+  try {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile()) {
+        count++;
+      } else if (entry.isDirectory()) {
+        count += countFilesRecursive(path.join(dirPath, entry.name));
+      }
+    }
+  } catch { /* permission errors, etc. */ }
+  return count;
+}
+
+function collectFolderInventory(contextId: string, contextDir: string, state: ContextState): string | null {
+  if (!fs.existsSync(contextDir)) return null;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(contextDir, { withFileTypes: true });
+  } catch { return null; }
+
+  const dirs = entries.filter(e => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
+  if (dirs.length === 0) return null;
+
+  const lines: string[] = ["**Available folders:**"];
+  for (const dir of dirs) {
+    const dirPath = path.join(contextDir, dir.name);
+    const desc = KNOWN_FOLDERS[dir.name] ?? "Project-specific artifacts";
+    const fileCount = countFilesRecursive(dirPath);
+    lines.push(`- \`${dir.name}/\` — ${desc} (${fileCount} file${fileCount !== 1 ? "s" : ""})`);
+  }
+  return lines.join("\n");
+}
+
+function collectSessionStats(contextId: string, contextDir: string, state: ContextState): string | null {
+  const sessionCount = (state.session_ids ?? []).length;
+  if (sessionCount === 0) return null;
+
+  const transcriptsDir = path.join(contextDir, "session-transcripts");
+  let transcriptCount = 0;
+  let timeRange = "";
+
+  if (fs.existsSync(transcriptsDir)) {
+    try {
+      const files = fs.readdirSync(transcriptsDir).filter(f => f.endsWith(".jsonl")).sort();
+      transcriptCount = files.length;
+      if (files.length > 1) {
+        const oldest = files[0]!.slice(0, 10);
+        const newest = files[files.length - 1]!.slice(0, 10);
+        if (oldest !== newest) timeRange = ` (${oldest} to ${newest})`;
+      }
+    } catch { /* ignore */ }
+  }
+
+  let line = `**Sessions:** ${sessionCount} total`;
+  if (transcriptCount > 0) {
+    line += `, ${transcriptCount} transcript${transcriptCount !== 1 ? "s" : ""} archived${timeRange}`;
+  }
+  return line;
+}
+
+/** Ordered list of inventory collectors. Append new collectors here. */
+const INVENTORY_COLLECTORS: InventoryCollector[] = [
+  collectFolderPath,
+  collectStatePointers,
+  collectFolderInventory,
+  collectSessionStats,
+];
+
+/**
+ * Build a markdown inventory of resources available in the context folder.
+ * Returns null if the context folder doesn't exist yet (brand new context).
+ */
+export function buildContextInventory(
+  state: ContextState,
+  projectRoot: string,
+): string | null {
+  const contextDir = getContextDir(state.id, projectRoot);
+  if (!fs.existsSync(contextDir)) return null;
+
+  const sections = INVENTORY_COLLECTORS
+    .map(c => c(state.id, contextDir, state))
+    .filter((s): s is string => s !== null);
+
+  if (sections.length === 0) return null;
+  return "### Context Resources\n\n" + sections.join("\n\n");
 }

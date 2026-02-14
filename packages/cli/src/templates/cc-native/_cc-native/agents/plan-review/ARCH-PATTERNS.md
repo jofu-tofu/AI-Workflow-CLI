@@ -3,7 +3,6 @@ name: arch-patterns
 description: Pattern selection analyst who evaluates whether chosen architectural patterns and technologies fit the actual problem. Catches pattern-forcing, hype-driven adoption, and mismatches between problem characteristics and solution patterns.
 model: sonnet
 focus: pattern selection and technology fit
-enabled: false
 categories:
   - code
   - infrastructure

@@ -3,7 +3,6 @@ name: completeness-ordering
 description: Critical path analyst who evaluates step ordering, identifies implicit dependencies between steps, finds parallelizable work presented serially, and catches ordering violations that would cause implementation failures.
 model: sonnet
 focus: step ordering and critical path analysis
-enabled: false
 categories:
   - code
   - infrastructure

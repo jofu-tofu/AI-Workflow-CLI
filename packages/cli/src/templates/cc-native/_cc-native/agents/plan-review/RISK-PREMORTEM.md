@@ -3,7 +3,6 @@ name: risk-premortem
 description: Pre-mortem failure analyst who assumes the plan was executed and failed, then works backward to identify what went wrong. Bypasses optimism bias through narrative failure analysis.
 model: sonnet
 focus: pre-mortem failure analysis
-enabled: false
 categories:
   - code
   - infrastructure

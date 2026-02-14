@@ -3,7 +3,6 @@ name: testdriven-pyramid-analyzer
 description: Test pyramid analyzer who evaluates test type distribution and feedback loop speed. Catches inverted pyramids (all e2e, few unit), missing test layers, and slow feedback loops from over-reliance on integration tests.
 model: sonnet
 focus: test type distribution and feedback speed
-enabled: false
 categories:
   - code
   - infrastructure

@@ -3,7 +3,6 @@ name: tradeoff-costs
 description: Opportunity cost analyst who makes hidden costs explicit. Every decision has a price — capabilities sacrificed, futures foreclosed, resources consumed. This agent ensures the plan acknowledges what it is giving up.
 model: sonnet
 focus: opportunity cost and capability sacrifice
-enabled: false
 categories:
   - code
   - infrastructure

@@ -3,7 +3,6 @@ name: risk-fmea
 description: Failure Mode and Effects Analysis specialist who systematically evaluates each plan step for failure probability, severity, and detectability. Catches low-probability-high-impact failures that narrative approaches miss.
 model: sonnet
 focus: systematic failure mode analysis
-enabled: false
 categories:
   - code
   - infrastructure

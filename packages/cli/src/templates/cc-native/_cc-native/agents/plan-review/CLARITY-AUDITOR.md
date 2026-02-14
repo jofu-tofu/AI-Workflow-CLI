@@ -3,7 +3,6 @@ name: clarity-auditor
 description: Evaluates whether plans are clear enough to be understood and executed by others. Identifies ambiguous language, undefined terms, implicit assumptions, and communication gaps.
 model: sonnet
 focus: communication clarity and execution readiness
-enabled: false
 categories:
   - code
   - infrastructure

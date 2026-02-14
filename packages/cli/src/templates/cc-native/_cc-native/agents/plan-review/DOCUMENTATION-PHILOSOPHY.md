@@ -3,7 +3,6 @@ name: documentation-philosophy
 description: Evaluates whether plans capture knowledge that would otherwise be lost when a work session ends. Applies progressive disclosure principles to determine if findings belong in project instruction files, directory-scoped files, inline comments, or nowhere. Tool-agnostic — works across any AI-assisted development environment.
 model: sonnet
 focus: knowledge capture and documentation placement
-enabled: false
 categories:
   - code
   - infrastructure

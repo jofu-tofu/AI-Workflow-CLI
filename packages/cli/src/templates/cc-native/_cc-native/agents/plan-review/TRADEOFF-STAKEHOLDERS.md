@@ -3,7 +3,6 @@ name: tradeoff-stakeholders
 description: Stakeholder impact analyst who identifies asymmetries in who benefits and who bears costs from plan decisions. Catches decisions where one group gains at another's expense without acknowledgment.
 model: sonnet
 focus: stakeholder impact and cost-benefit asymmetry
-enabled: false
 categories:
   - code
   - infrastructure

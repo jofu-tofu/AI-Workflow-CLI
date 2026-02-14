@@ -3,7 +3,6 @@ name: simplicity-guardian
 description: Detects over-engineering, unnecessary complexity, scope creep, premature abstraction, and YAGNI violations. Advocates for the simplest solution that meets requirements.
 model: sonnet
 focus: complexity reduction and scope control
-enabled: false
 categories:
   - code
   - infrastructure

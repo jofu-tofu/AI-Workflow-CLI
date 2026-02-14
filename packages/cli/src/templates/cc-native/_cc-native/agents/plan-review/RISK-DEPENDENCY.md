@@ -3,7 +3,6 @@ name: risk-dependency
 description: Dependency graph analyst who maps upstream and downstream chains to find single points of failure, fan-out risks, and cascading breakage patterns when external systems change or fail.
 model: sonnet
 focus: dependency chain and blast radius analysis
-enabled: false
 categories:
   - code
   - infrastructure

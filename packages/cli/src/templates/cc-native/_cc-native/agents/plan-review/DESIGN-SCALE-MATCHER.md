@@ -3,7 +3,6 @@ name: design-scale-matcher
 description: Design scale analyst who checks whether design depth matches problem scope. Catches over-designed small changes (5 sections for a boolean flip) and under-designed architectural shifts (one paragraph for a system rewrite).
 model: sonnet
 focus: design depth vs problem scale alignment
-enabled: false
 categories:
   - design
   - code

@@ -3,7 +3,6 @@ name: verify-strength
 description: Test quality analyst who evaluates whether verification steps would catch subtle bugs, not just total failures. Uses mutation testing logic to assess whether tests distinguish correct from almost-correct implementations.
 model: sonnet
 focus: test quality and mutation analysis
-enabled: false
 categories:
   - code
   - infrastructure

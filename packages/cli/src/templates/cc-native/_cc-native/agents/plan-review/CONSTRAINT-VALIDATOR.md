@@ -3,7 +3,6 @@ name: constraint-validator
 description: Constraint satisfaction analyst who inventories all explicit and implicit constraints, then verifies the plan respects each one. Catches plans that violate their own stated constraints or ignore environmental constraints.
 model: sonnet
 focus: constraint identification and satisfaction
-enabled: false
 categories:
   - code
   - infrastructure

@@ -3,7 +3,6 @@ name: testdriven-first-validator
 description: FIRST principles validator who checks test strategies for Fast, Independent, Repeatable, Self-validating, and Thorough compliance. Catches slow setup, shared state, external dependencies, manual verification, and missing edge cases.
 model: sonnet
 focus: FIRST test principles compliance
-enabled: false
 categories:
   - code
   - infrastructure

@@ -3,7 +3,6 @@ name: assumption-tracer
 description: Traces stacked assumptions to their foundations. Plans rest on assumptions that rest on other assumptions. One false assumption at the base brings down the entire structure. This agent asks "what does this depend on?"
 model: sonnet
 focus: dependency chains and foundational assumptions
-enabled: false
 categories:
   - code
   - infrastructure

@@ -3,7 +3,6 @@ name: completeness-feasibility
 description: Feasibility analyst who evaluates whether a plan can actually be built with available resources, expertise, and constraints. Catches ambitious plans that assume capabilities, tools, or knowledge that may not exist.
 model: sonnet
 focus: feasibility and resource analysis
-enabled: false
 categories:
   - code
   - infrastructure

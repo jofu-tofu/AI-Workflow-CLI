@@ -139,7 +139,6 @@ export function aggregateAgents(agentsDir?: string): AgentConfig[] {
       model: (fm.model as string) ?? "sonnet",
       provider: "claude", // Default; overwritten by assignModelsToAgents() at runtime
       focus: (fm.focus as string) ?? "",
-      enabled: fm.enabled !== false,
       categories: Array.isArray(fm.categories)
         ? (fm.categories as string[])
         : ["code"],

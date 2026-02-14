@@ -3,7 +3,6 @@ name: design-adr-validator
 description: ADR structure validator who ensures design decisions are captured with Context, Decision, Consequences, and Status. Catches decisions stated without rationale, missing alternatives, and one-sided consequence analysis.
 model: sonnet
 focus: ADR structure and decision capture quality
-enabled: false
 categories:
   - design
   - code

@@ -3,7 +3,6 @@ name: incremental-delivery
 description: Incremental delivery analyst who evaluates whether plans can ship in smaller, independently valuable increments. Catches big-bang implementations that could be decomposed into thin vertical slices with earlier feedback loops.
 model: sonnet
 focus: incremental delivery and vertical slicing
-enabled: false
 categories:
   - code
   - infrastructure

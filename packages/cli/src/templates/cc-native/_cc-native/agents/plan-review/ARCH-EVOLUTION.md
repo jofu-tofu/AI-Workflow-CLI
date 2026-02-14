@@ -3,7 +3,6 @@ name: arch-evolution
 description: Evolutionary architecture analyst who evaluates how well planned architecture accommodates future change. Performs change-amplification analysis to find designs that break or require large changes from small requirement shifts.
 model: sonnet
 focus: evolutionary architecture and change amplification
-enabled: false
 categories:
   - code
   - infrastructure

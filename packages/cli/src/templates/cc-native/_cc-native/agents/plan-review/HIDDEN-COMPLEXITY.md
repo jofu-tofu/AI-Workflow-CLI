@@ -3,7 +3,6 @@ name: hidden-complexity
 description: Surfaces understated difficulty and implementation nightmares hiding behind simple-sounding requirements. Simple plans hide complex reality. This agent asks "what makes this harder than it sounds?"
 model: sonnet
 focus: understated complexity and hidden difficulty
-enabled: false
 categories:
   - code
   - infrastructure

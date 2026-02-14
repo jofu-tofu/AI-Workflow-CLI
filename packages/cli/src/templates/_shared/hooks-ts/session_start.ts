@@ -3,17 +3,18 @@
  * SessionStart hook: Restore context after /clear (plan/handoff) or compaction.
  * Routes by source field to appropriate handler.
  */
-import { getProjectRoot } from "../lib-ts/base/constants.js";
 import {
   loadHookInput, emitContext, runHook, runHookAsync,
   logDebug, logInfo, logError, logDiagnostic,
 } from "../lib-ts/base/hook-utils.js";
-import {
-  buildRestoreSections, formatHandoffContinuation, getModeDisplay,
-} from "../lib-ts/context/context-formatter.js";
+import { getProjectRoot } from "../lib-ts/base/constants.js";
 import {
   getContextBySessionId, getAllContexts, bindSession, updateMode,
 } from "../lib-ts/context/context-store.js";
+import {
+  buildRestoreSections, formatHandoffContinuation, getModeDisplay,
+  buildContextInventory,
+} from "../lib-ts/context/context-formatter.js";
 import type { ContextState } from "../lib-ts/types.js";
 
 /**
@@ -38,6 +39,9 @@ function handleCompactRestore(sessionId: string, projectRoot: string): void {
   // Inline plan = true (plan not auto-pasted after compact)
   const restore = buildRestoreSections(state, projectRoot, true);
   if (restore) sections.push(restore);
+
+  const inventory = buildContextInventory(state, projectRoot);
+  if (inventory) sections.push("", inventory);
 
   sections.push(
     "",
@@ -79,6 +83,9 @@ async function handleClearRestore(sessionId: string, projectRoot: string): Promi
     const restore = buildRestoreSections(ctx, projectRoot, false);
     if (restore) sections.push(restore);
 
+    const inventory = buildContextInventory(ctx, projectRoot);
+    if (inventory) sections.push("", inventory);
+
     sections.push(
       "",
       "---",
@@ -100,7 +107,9 @@ async function handleClearRestore(sessionId: string, projectRoot: string): Promi
     logInfo("session_start", `Clear restore: ${ctx.id} has_handoff → active (handoff_consumed=true)`);
 
     const handoffContent = formatHandoffContinuation(ctx, projectRoot);
-    emitContext(handoffContent);
+    const handoffInventory = buildContextInventory(ctx, projectRoot);
+    const combined = handoffInventory ? handoffContent + "\n\n" + handoffInventory : handoffContent;
+    emitContext(combined);
     return;
   }
 
@@ -124,18 +133,15 @@ async function main(): Promise<void> {
   logDiagnostic("session_start", "entry", `source=${source}, session=${sessionId}`);
 
   switch (source) {
-    case "clear": {
-      await handleClearRestore(sessionId, projectRoot);
-      break;
-    }
-    case "compact": {
+    case "compact":
       handleCompactRestore(sessionId, projectRoot);
       break;
-    }
-    default: {
+    case "clear":
+      await handleClearRestore(sessionId, projectRoot);
+      break;
+    default:
       logDebug("session_start", `Unhandled source: ${source}`);
       break;
-    }
   }
 }
 

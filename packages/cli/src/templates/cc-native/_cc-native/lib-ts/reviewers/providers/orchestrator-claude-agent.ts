@@ -54,7 +54,7 @@ export class OrchestratorClaudeAgent extends BaseCliAgent<OrchestratorResult> {
   ) {
     // Build schema dynamically based on valid agent names
     const nonMandatory = agentLibrary.filter(
-      (a) => a.enabled && !mandatoryNames.has(a.name),
+      (a) => !mandatoryNames.has(a.name),
     );
     const validNames = nonMandatory.map((a) => a.name);
     const categories = (settings.complexityCategories as string[]) ?? DEFAULT_COMPLEXITY_CATEGORIES;

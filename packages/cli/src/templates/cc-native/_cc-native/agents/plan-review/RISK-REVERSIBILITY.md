@@ -3,7 +3,6 @@ name: risk-reversibility
 description: Decision reversibility analyst who classifies plan decisions as one-way doors, expensive reversals, or two-way doors. Surfaces vendor lock-in, path dependencies, and foreclosed options before commitment.
 model: sonnet
 focus: decision reversibility and optionality
-enabled: false
 categories:
   - code
   - infrastructure

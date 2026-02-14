@@ -3,7 +3,6 @@ name: completeness-gaps
 description: Structural gap analyst who identifies missing steps, unhandled error paths, absent pre/post-conditions, and implicit assumptions in plan structure. Ensures plans are complete enough to execute without discovering gaps mid-implementation.
 model: sonnet
 focus: structural gap analysis
-enabled: false
 categories:
   - code
   - infrastructure

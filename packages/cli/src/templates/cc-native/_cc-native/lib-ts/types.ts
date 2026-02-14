@@ -124,7 +124,6 @@ export interface AgentConfig {
   model: string;
   provider: string; // e.g. "claude" | "codex" — assigned at runtime by assignModelsToAgents()
   focus: string;
-  enabled: boolean;
   categories: string[];
   description: string;
   system_prompt: string; // Markdown body content for --system-prompt
@@ -168,6 +167,7 @@ export interface IterationState {
   graduated: string[];
   passStreaks: Record<string, number>;
   lastPlanHash: string;
+  lastPlanPath: string;
 }
 
 /** CC-native state stored in context state.json under cc_native key */
@@ -272,7 +272,7 @@ export interface Reviewer {
 // JSON Schemas (moved to reviewers/schemas.ts)
 // ---------------------------------------------------------------------------
 // Re-export for backwards compatibility
-export { AGENT_REVIEW_PROMPT_PREFIX, ORCHESTRATOR_SCHEMA, REVIEW_PROMPT_PREFIX, REVIEW_SCHEMA } from "./reviewers/schemas.js";
+export { REVIEW_SCHEMA, ORCHESTRATOR_SCHEMA, REVIEW_PROMPT_PREFIX, AGENT_REVIEW_PROMPT_PREFIX } from "./reviewers/schemas.js";
 
 // ---------------------------------------------------------------------------
 // Display Defaults
@@ -288,3 +288,41 @@ export const DEFAULT_SANITIZATION = {
   maxSessionIdLength: 32,
   maxTitleLength: 50,
 };
+
+// ---------------------------------------------------------------------------
+// Pipeline Types (review-pipeline.ts)
+// ---------------------------------------------------------------------------
+
+/** Discovered plan file with content and hash */
+export interface DiscoveredPlan {
+  path: string;
+  content: string;
+  hash: string;
+}
+
+/** Input to the review pipeline */
+export interface PipelineInput {
+  sessionId: string;
+  base: string;
+  aiwcliDir: string;
+  transcriptPath?: string;
+  payload: Record<string, unknown>;
+}
+
+/** Result from the review pipeline */
+export type PipelineResult =
+  | { action: "skip"; reason: string }
+  | { action: "block"; contextText: string; blockReason: string };
+
+/** Result of agent selection phase */
+export interface AgentSelectionResult {
+  selectedAgents: AgentConfig[];
+  mandatoryNames: Set<string>;
+  detectedComplexity: string;
+}
+
+/** Result of iteration advancement after review */
+export interface IterationAdvancement {
+  updatedState: IterationState;
+  newGraduates: string[];
+}
