@@ -64,6 +64,8 @@ import {
   wasPlanPreviouslyDenied,
   getLastPlanReview,
   markPlanReviewed,
+  wasQuestionsAsked,
+  markQuestionsAsked,
 } from "../lib-ts/cc-native-state.js";
 
 import { worstVerdict } from "../lib-ts/verdict.js";
@@ -83,6 +85,7 @@ import {
 import type { ReviewTrackerEntry } from "../lib-ts/artifacts.js";
 import { runAgentReview } from "../lib-ts/reviewers/index.js";
 import { DEFAULT_REVIEW_ITERATIONS } from "../lib-ts/state.js";
+import { runPlanQuestions } from "../lib-ts/plan-questions.js";
 
 // ---------------------------------------------------------------------------
 // Hook Name
@@ -414,7 +417,7 @@ function loadAgentLibrary(
   projDir: string,
   settings?: Record<string, unknown>,
 ): AgentConfig[] {
-  const agentsData = aggregateAgents(path.join(projDir, "_cc-native", "agents"));
+  const agentsData = aggregateAgents(path.join(projDir, "_cc-native", "agents", "plan-review"));
   const defaultModel = settings?.agentDefaults?.model ?? DEFAULT_AGENT_MODEL;
 
   if (!agentsData || agentsData.length === 0) {
@@ -513,6 +516,43 @@ async function main(): Promise<void> {
 
   logInfo(HOOK, `Found plan at: ${planPath}`);
   logDebug(HOOK, `Plan length: ${plan.length} chars`);
+
+  // ============================================
+  // Questions Gate: ask user questions before review
+  // ============================================
+  if (!wasQuestionsAsked(sessionId, base)) {
+    logInfo(HOOK, "Questions gate: user has not been asked questions yet, running plan-questions agent");
+    const timeout = typeof (settings.agentReview ?? {}).timeout === "number"
+      ? (settings.agentReview as Record<string, unknown>).timeout as number : 120;
+    const questionsResult = await runPlanQuestions(plan, aiwcliDir, timeout, undefined, sessionId);
+
+    // Mark questions as asked NOW — prevents infinite gate loop if Claude
+    // doesn't use AskUserQuestion after denial. Gate fires at most once.
+    markQuestionsAsked(sessionId, base);
+
+    const hasQuestions = questionsResult && (
+      questionsResult.questions.length > 0 ||
+      questionsResult.assumptions.length > 0 ||
+      questionsResult.ambiguities.length > 0
+    );
+
+    if (hasQuestions) {
+      const questionsList = questionsResult.questions.map((q: string, i: number) => `${i + 1}. ${q}`).join("\n");
+      const assumptionsList = questionsResult.assumptions.length > 0
+        ? `\n\nAssumptions detected:\n${questionsResult.assumptions.map((a: string) => `- ${a}`).join("\n")}`
+        : "";
+      const ambiguitiesList = questionsResult.ambiguities.length > 0
+        ? `\n\nAmbiguities detected:\n${questionsResult.ambiguities.map((a: string) => `- ${a}`).join("\n")}`
+        : "";
+      const contextMsg = `## Plan Questions (from independent review)\n\nAn agent reviewed your plan in a fresh context — without access to your session history or codebase exploration. It identified these questions:\n\n${questionsList}${assumptionsList}${ambiguitiesList}\n\nAsk the user these questions using AskUserQuestion before submitting the plan.`;
+      emitContextAndBlock(contextMsg, "Ask the user clarifying questions before submitting the plan. Use AskUserQuestion with the questions above.");
+      return;
+    }
+
+    logInfo(HOOK, "Questions gate: no questions generated, proceeding to review");
+  } else {
+    logInfo(HOOK, "Questions gate: questions already asked, skipping");
+  }
 
   const planHash = computePlanHash(plan);
   logDiagnostic(HOOK, "receive", `plan_size=${plan.length}, session=${sessionId.slice(0, 8)}`, {

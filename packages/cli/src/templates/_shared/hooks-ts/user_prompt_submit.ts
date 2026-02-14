@@ -4,10 +4,10 @@
  * to a tracked context. The most complex shared hook.
  *
  * Uses emitContext() for output — context text is passed via hookSpecificOutput JSON.
- * Catches BlockRequest and exits with code 2 to block the prompt.
+ * Catches BlockRequest and uses emitBlock() to block the prompt.
  */
 import {
-  loadHookInput, runHookAsync, logDebug, logInfo, logWarn, logBlocking, logDiagnostic, hookLog, emitContext,
+  loadHookInput, runHookAsync, logDebug, logInfo, logWarn, logBlocking, logDiagnostic, hookLog, emitContext, emitBlock,
 } from "../lib-ts/base/hook-utils.js";
 import { getProjectRoot } from "../lib-ts/base/constants.js";
 import {
@@ -66,8 +66,8 @@ async function asyncMain(): Promise<void> {
       }
     } catch (e) {
       if (e instanceof BlockRequest) {
-        logBlocking("user_prompt_submit", (e as Error).message);
-        process.exit(2); // Block the prompt
+        emitBlock((e as Error).message);
+        return;
       }
       throw e; // Re-throw unexpected errors
     }

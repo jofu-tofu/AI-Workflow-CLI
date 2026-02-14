@@ -24,16 +24,3 @@ export function getAiwDir(): string | undefined {
   return process.env['AIW_DIR']
 }
 
-/**
- * Get AIW_CONFIG environment variable
- */
-export function getAiwConfig(): string | undefined {
-  return process.env['AIW_CONFIG']
-}
-
-/**
- * Check if using legacy environment variables
- */
-export function isUsingLegacyEnvVars(): boolean {
-  return false
-}

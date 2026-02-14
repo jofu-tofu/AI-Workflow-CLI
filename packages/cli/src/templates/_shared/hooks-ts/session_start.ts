@@ -65,15 +65,6 @@ async function handleClearRestore(sessionId: string, projectRoot: string): Promi
     bindSession(ctx.id, sessionId, projectRoot);
     updateMode(ctx.id, "active", projectRoot, { plan_consumed: true });
 
-    // Optional: Reset cc-native plan enhancement state (method-specific feature)
-    try {
-      const { resetPlanEnhancement } = await import("../../_cc-native/lib-ts/cc-native-state.js");
-      resetPlanEnhancement(sessionId, projectRoot);
-      logDebug("session_start", "Reset plan enhancement state");
-    } catch {
-      // CC-native not installed or function missing, skip gracefully
-    }
-
     logInfo("session_start", `Clear restore: ${ctx.id} has_plan → active (plan_consumed=true)`);
 
     const sections: string[] = [

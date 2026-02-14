@@ -7,14 +7,12 @@
 import { getContextBySessionId, saveState } from "../../_shared/lib-ts/context/context-store.js";
 import { logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
 import { nowIso } from "../../_shared/lib-ts/base/utils.js";
-import * as path from "path";
 import type {
   CcNativeState,
   PlanReviewState,
   QuestionsAskedState,
   IterationState,
   StuckDetectionState,
-  PlanEnhancementState,
 } from "./types.js";
 import type { ContextState } from "../../_shared/lib-ts/types.js";
 
@@ -247,82 +245,3 @@ export function updateStuckDetectionState(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Plan Enhancement State
-// ---------------------------------------------------------------------------
-
-/**
- * Check if this specific plan file has already been enhanced.
- * Returns true ONLY if enhancement_applied === true AND stored plan_path matches.
- * If paths don't match, returns false (new plan needs enhancement).
- */
-export function isPlanEnhancementApplied(
-  sessionId: string,
-  planPath: string,
-  projectRoot: string,
-): boolean {
-  const ccNative = getCcNativeState(sessionId, projectRoot);
-  if (!ccNative) return false;
-
-  const enhancementState = ccNative.plan_enhancement;
-  if (!enhancementState?.enhancement_applied) return false;
-
-  // Normalize both paths for comparison
-  const normalizedStored = path.normalize(enhancementState.plan_path);
-  const normalizedCurrent = path.normalize(planPath);
-
-  return normalizedStored === normalizedCurrent;
-}
-
-/**
- * Mark this plan as enhanced.
- * Stores enhancement_applied=true, enhanced_at timestamp, and normalized absolute plan_path.
- */
-export function markPlanEnhancementApplied(
-  sessionId: string,
-  planPath: string,
-  projectRoot: string,
-  hookName = "cc-native",
-): boolean {
-  try {
-    const ccNative = getCcNativeState(sessionId, projectRoot) ?? {};
-
-    const enhancementData: PlanEnhancementState = {
-      enhancement_applied: true,
-      enhanced_at: nowIso(),
-      plan_path: path.normalize(path.resolve(planPath)),
-    };
-
-    ccNative.plan_enhancement = enhancementData;
-
-    if (saveCcNativeState(sessionId, projectRoot, ccNative)) {
-      logInfo(hookName, `Saved plan enhancement state (path: ${planPath})`);
-      return true;
-    } else {
-      logWarn(hookName, `Failed to save plan enhancement state for session ${sessionId}`);
-      return false;
-    }
-  } catch (e: unknown) {
-    logWarn(hookName, `Failed to mark plan enhancement: ${e}`);
-    return false;
-  }
-}
-
-/**
- * Reset plan enhancement state.
- * Optional housekeeping function. Not strictly required due to path-based checking,
- * but keeps state clean when plans are consumed.
- */
-export function resetPlanEnhancement(
-  sessionId: string,
-  projectRoot: string,
-): boolean {
-  try {
-    const ccNative = getCcNativeState(sessionId, projectRoot) ?? {};
-    delete ccNative.plan_enhancement;
-    return saveCcNativeState(sessionId, projectRoot, ccNative);
-  } catch (e: unknown) {
-    logWarn("utils", `Failed to reset plan enhancement: ${e}`);
-    return false;
-  }
-}

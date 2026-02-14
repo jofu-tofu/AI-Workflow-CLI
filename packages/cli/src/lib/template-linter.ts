@@ -11,7 +11,7 @@
 import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 
-export interface LintViolation {
+interface LintViolation {
   file: string;
   line: number;
   match: string;
@@ -19,7 +19,7 @@ export interface LintViolation {
   rule: string;
 }
 
-export interface LintRule {
+interface LintRule {
   description: string;
   /** Message template - use {match} for the matched text */
   message: string;
@@ -138,7 +138,7 @@ export function lintFileContent(
 /**
  * Get all markdown files in a template method directory
  */
-export function getTemplateMarkdownFiles(templatesDir: string, method: string): string[] {
+function getTemplateMarkdownFiles(templatesDir: string, method: string): string[] {
   const methodDir = path.join(templatesDir, method);
   const files: string[] = [];
 
@@ -199,7 +199,7 @@ export function lintTemplateMethod(
 /**
  * Lint all template methods in a templates directory
  */
-export function lintAllTemplates(templatesDir: string): Map<string, LintViolation[]> {
+function lintAllTemplates(templatesDir: string): Map<string, LintViolation[]> {
   const results = new Map<string, LintViolation[]>();
   const methods = ['cc-native'];
 

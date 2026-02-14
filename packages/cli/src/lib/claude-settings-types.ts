@@ -73,7 +73,7 @@ export type EnvConfig = Record<string, string>
 /**
  * Method installation tracking metadata
  */
-export interface MethodTracking {
+interface MethodTracking {
   /** IDEs configured for this method */
   ides?: string[]
   /** ISO timestamp when method was installed */

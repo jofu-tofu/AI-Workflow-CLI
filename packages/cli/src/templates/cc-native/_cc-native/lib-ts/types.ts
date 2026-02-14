@@ -175,7 +175,6 @@ export interface CcNativeState {
   plan_review?: PlanReviewState;
   questions_asked?: QuestionsAskedState;
   stuck_detection?: StuckDetectionState;
-  plan_enhancement?: PlanEnhancementState;
   [key: string]: unknown;
 }
 
@@ -196,13 +195,6 @@ export interface PlanReviewState {
 export interface QuestionsAskedState {
   asked: boolean;
   asked_at: string;
-}
-
-/** Plan enhancement state — tracks whether enhancement sections were added */
-export interface PlanEnhancementState {
-  enhancement_applied: boolean;
-  enhanced_at: string;
-  plan_path: string;
 }
 
 /** Stuck detection state — tracks repeated errors, file edits, and test failures */

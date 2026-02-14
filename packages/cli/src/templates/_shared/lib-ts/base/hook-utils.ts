@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 import { logDebug, logInfo, logWarn, logError, logBlocking, logHookError, logDiagnostic, hookLog, setSessionId, setContextPath, getContextPath as _getContextPath } from "./logger.js";
 import { getProjectRoot } from "./constants.js";
 import { getContextBySessionId } from "../context/context-store.js";
-import type { HookInput, HookOutput } from "../types.js";
+import type { HookInput, HookOutput, PermissionRequestOutput } from "../types.js";
 
 // Re-export logger functions for convenience (matches Python hook_utils re-exports)
 export { logDebug, logInfo, logWarn, logError, logBlocking, logHookError, logDiagnostic, hookLog, setSessionId, setContextPath };
@@ -133,6 +133,11 @@ export function emitContextAndBlock(
   reason: string,
 ): void {
   const eventName = _lastHookEvent ?? undefined;
+  if (eventName && eventName !== "PreToolUse") {
+    logWarn(_cachedHookName ?? "unknown",
+      `emitContextAndBlock() called from ${eventName} — permissionDecision only works for PreToolUse. ` +
+      `Use emitBlock() or the event-specific function instead.`);
+  }
   const tool = _lastToolName;
   const out: HookOutput = {
     hookSpecificOutput: {
@@ -152,10 +157,139 @@ export function emitContextAndBlock(
 function _logEmit(type: "context" | "block", chars: number, payload: Record<string, any>): void {
   const hook = _cachedHookName ?? "unknown";
   const event = payload.event ?? "unknown";
+  const mechanism = payload.mechanism ? ` via ${payload.mechanism}` : "";
   const msg = type === "block"
-    ? `HOOK_OUTPUT [${type}] ${event} ${chars} chars, reason="${(payload.blockReason ?? "").slice(0, 80)}"`
+    ? `HOOK_OUTPUT [${type}] ${event} ${chars} chars${mechanism}, reason="${(payload.blockReason ?? "").slice(0, 80)}"`
     : `HOOK_OUTPUT [${type}] ${event} ${chars} chars`;
   hookLog("info", hook, msg, { data: payload });
+}
+
+/**
+ * Block a user prompt submission with a reason.
+ * Only works for UserPromptSubmit hooks.
+ * Output: top-level { decision: "block", reason } + optional hookSpecificOutput.additionalContext
+ */
+export function emitBlockPrompt(reason: string, context?: string): void {
+  const eventName = _lastHookEvent ?? undefined;
+  if (eventName && eventName !== "UserPromptSubmit") {
+    logWarn(_cachedHookName ?? "unknown",
+      `emitBlockPrompt() called from ${eventName} — only works for UserPromptSubmit`);
+  }
+  const out: HookOutput = {
+    decision: "block",
+    reason,
+    ...(context ? {
+      hookSpecificOutput: {
+        ...(eventName ? { hookEventName: eventName } : {}),
+        additionalContext: context,
+      }
+    } : {}),
+  };
+  _logEmit("block", context?.length ?? 0, { event: eventName ?? "unknown", additionalContext: context, blockReason: reason });
+  process.stdout.write(JSON.stringify(out) + "\n");
+}
+
+/**
+ * Block via exit code 2 + stderr feedback.
+ * Works for PostToolUse, PostToolUseFailure.
+ * The reason becomes the stderr message (fed to Claude as system-reminder).
+ * If context is provided, it's prepended to the stderr message for richer feedback.
+ * NOTE: Exit 2 causes Claude Code to ignore all JSON stdout — only stderr matters.
+ */
+export function emitBlockViaExit(reason: string, context?: string): void {
+  const stderrMessage = context ? `${context}\n\n${reason}` : reason;
+  _logEmit("block", stderrMessage.length, {
+    event: _lastHookEvent ?? "unknown",
+    blockReason: reason,
+    mechanism: "exit2",
+  });
+  process.stderr.write(stderrMessage + "\n");
+  throw new Error("SystemExit:2");
+}
+
+/**
+ * Block via top-level { decision: "block", reason }.
+ * Works for Stop and SubagentStop events.
+ * These events do NOT support additionalContext — only reason is available.
+ */
+export function emitBlockTopLevel(reason: string): void {
+  const eventName = _lastHookEvent ?? undefined;
+  if (eventName && eventName !== "Stop" && eventName !== "SubagentStop") {
+    logWarn(_cachedHookName ?? "unknown",
+      `emitBlockTopLevel() called from ${eventName} — only works for Stop/SubagentStop`);
+  }
+  const out = { decision: "block", reason };
+  _logEmit("block", reason.length, {
+    event: eventName ?? "unknown",
+    blockReason: reason,
+    mechanism: "topLevelDecision",
+  });
+  process.stdout.write(JSON.stringify(out) + "\n");
+}
+
+/**
+ * Respond to a PermissionRequest with allow/deny.
+ * Only works for PermissionRequest hooks.
+ */
+export function emitPermissionDecision(
+  behavior: "allow" | "deny",
+  opts?: { message?: string; updatedInput?: Record<string, unknown>; updatedPermissions?: Record<string, unknown> },
+): void {
+  const out: PermissionRequestOutput = {
+    decision: {
+      behavior,
+      ...(opts?.message ? { message: opts.message } : {}),
+      ...(opts?.updatedInput ? { updatedInput: opts.updatedInput } : {}),
+      ...(opts?.updatedPermissions ? { updatedPermissions: opts.updatedPermissions } : {}),
+    },
+  };
+  _logEmit("block", 0, {
+    event: _lastHookEvent ?? "unknown",
+    blockReason: `permission:${behavior}`,
+    mechanism: "permissionRequest",
+  });
+  process.stdout.write(JSON.stringify(out) + "\n");
+}
+
+/**
+ * Unified block dispatcher — auto-detects the correct blocking mechanism
+ * based on the current hook event type.
+ *
+ * PreToolUse → permissionDecision: "deny" (via emitContextAndBlock)
+ * UserPromptSubmit → top-level decision: "block" (via emitBlockPrompt)
+ * PostToolUse/PostToolUseFailure → exit(2) + stderr (via emitBlockViaExit)
+ * Stop/SubagentStop → top-level { decision: "block", reason } (via emitBlockTopLevel)
+ * PermissionRequest → decision: { behavior: "deny" } (via emitPermissionDecision)
+ * SessionStart/Notification/SubagentStart/SessionEnd/etc. → warn and no-op
+ *
+ * This is the RECOMMENDED universal blocking API. Hook authors should use
+ * emitBlock() and let the library handle event-specific dispatch.
+ */
+export function emitBlock(reason: string, context?: string): void {
+  const event = _lastHookEvent;
+  switch (event) {
+    case "PreToolUse":
+      emitContextAndBlock(context ?? reason, reason);
+      break;
+    case "UserPromptSubmit":
+      emitBlockPrompt(reason, context);
+      break;
+    case "PostToolUse":
+    case "PostToolUseFailure":
+      emitBlockViaExit(reason, context);
+      break;
+    case "Stop":
+    case "SubagentStop":
+      emitBlockTopLevel(reason);
+      break;
+    case "PermissionRequest":
+      emitPermissionDecision("deny", { message: reason });
+      break;
+    default:
+      logWarn(_cachedHookName ?? "unknown",
+        `emitBlock() called from ${event ?? "unknown"} — no blocking mechanism exists for this event type, ignoring`);
+      break;
+  }
 }
 
 /**

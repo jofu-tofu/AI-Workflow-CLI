@@ -37,7 +37,7 @@ function areHookMatchersEqual(a: HookMatcher, b: HookMatcher): boolean {
  * @param template - Template hooks configuration to merge
  * @returns New merged hooks configuration
  */
-export function mergeHooks(existing: HooksConfig | undefined, template: HooksConfig | undefined): HooksConfig {
+function mergeHooks(existing: HooksConfig | undefined, template: HooksConfig | undefined): HooksConfig {
   return mergeConfigByEventType<HookEventType, HookMatcher, HooksConfig>(
     existing,
     template,

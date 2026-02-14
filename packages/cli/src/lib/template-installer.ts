@@ -7,7 +7,7 @@ import {pathExists} from './paths.js'
 /**
  * Configuration for template installation
  */
-export interface TemplateInstallConfig {
+interface TemplateInstallConfig {
   /** List of IDE names to install (e.g., ['claude', 'windsurf']) */
   ides: string[]
   /** Project name for configuration generation */
@@ -25,7 +25,7 @@ export interface TemplateInstallConfig {
 /**
  * Status of a single template item (file or folder)
  */
-export interface TemplateItemStatus {
+interface TemplateItemStatus {
   /** Whether the item exists in target directory */
   exists: boolean
   /** Whether the item is a directory */
@@ -37,7 +37,7 @@ export interface TemplateItemStatus {
 /**
  * Result of checking template installation status
  */
-export interface TemplateInstallationStatus {
+interface TemplateInstallationStatus {
   /** Items that already exist in target directory */
   existing: TemplateItemStatus[]
   /** Items that are missing from target directory */
@@ -51,7 +51,7 @@ export interface TemplateInstallationStatus {
 /**
  * Result of template installation
  */
-export interface InstallationResult {
+interface InstallationResult {
   /** List of folder names that were installed (for gitignore) */
   installedFolders: string[]
   /** Whether shared settings were merged into IDE settings */
@@ -148,7 +148,7 @@ export async function checkTemplateStatus(
  * Patterns to exclude when copying template directories.
  * These are development/test artifacts that shouldn't be packaged.
  */
-export const EXCLUDED_PATTERNS = [
+const EXCLUDED_PATTERNS = [
   '_output',
 ]
 
@@ -156,13 +156,7 @@ export const EXCLUDED_PATTERNS = [
  * Check if a filename should be excluded from copying
  */
 export function shouldExclude(name: string): boolean {
-  return EXCLUDED_PATTERNS.some((pattern) => {
-    if (typeof pattern === 'string') {
-      return name === pattern
-    }
-
-    return pattern.test(name)
-  })
+  return EXCLUDED_PATTERNS.includes(name)
 }
 
 /**

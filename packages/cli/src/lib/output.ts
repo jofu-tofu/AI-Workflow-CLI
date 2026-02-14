@@ -14,7 +14,7 @@ import {type ProcessLike, shouldUseColors} from './tty-detection.js'
  * Dependencies for output functions.
  * Allows tests to inject mock values without mutating global state.
  */
-export interface OutputDependencies {
+interface OutputDependencies {
   proc?: ProcessLike
 }
 

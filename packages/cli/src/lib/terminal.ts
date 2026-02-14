@@ -32,7 +32,7 @@ import {execSync, spawn} from 'node:child_process'
 /**
  * Options for launching a new terminal window.
  */
-export interface TerminalLaunchOptions {
+interface TerminalLaunchOptions {
   /**
    * Command to execute in the new terminal.
    */
@@ -53,7 +53,7 @@ export interface TerminalLaunchOptions {
 /**
  * Result of a terminal launch operation.
  */
-export interface TerminalLaunchResult {
+interface TerminalLaunchResult {
   /**
    * Error message if launch failed.
    */
@@ -322,7 +322,3 @@ export async function launchTerminal(options: TerminalLaunchOptions): Promise<Te
   return launchLinuxTerminal(cwd, command, debugLog)
 }
 
-/**
- * Escape shell argument utility - exported for use in command construction.
- */
-export {escapeShellArg}

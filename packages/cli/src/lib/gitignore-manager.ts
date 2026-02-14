@@ -12,7 +12,7 @@ const AIW_GITIGNORE_HEADER = '# AIW Installation'
 export const AIW_GITIGNORE_ENTRIES = ['.aiwcli', '_output', '.claude', '.windsurf']
 
 /** Entries that should NEVER be removed from gitignore, even on clear */
-export const AIW_PERMANENT_ENTRIES = ['_output']
+const AIW_PERMANENT_ENTRIES = ['_output']
 
 /**
  * Prune stale entries from the AIW Installation section in .gitignore.

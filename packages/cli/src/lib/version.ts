@@ -35,18 +35,18 @@ const execAsync = promisify(exec)
  * Minimum supported Claude Code version.
  * Versions below this will trigger a compatibility warning.
  */
-export const MIN_CLAUDE_CODE_VERSION = '0.1.0'
+const MIN_CLAUDE_CODE_VERSION = '0.1.0'
 
 /**
  * Known incompatible Claude Code versions.
  * These versions have confirmed issues with AI Workflow CLI.
  */
-export const INCOMPATIBLE_VERSIONS = ['0.0.9']
+const INCOMPATIBLE_VERSIONS = ['0.0.9']
 
 /**
  * Result of version compatibility check.
  */
-export interface VersionCheckResult {
+interface VersionCheckResult {
   /**
    * Whether the version is compatible with AI Workflow CLI.
    * If version is unknown, assumes compatible (graceful degradation).

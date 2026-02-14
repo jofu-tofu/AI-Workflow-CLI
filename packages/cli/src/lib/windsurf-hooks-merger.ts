@@ -26,7 +26,7 @@ function areHookCommandsEqual(a: WindsurfHookCommand, b: WindsurfHookCommand): b
  * @param template - Template hooks configuration to merge
  * @returns New merged hooks configuration
  */
-export function mergeWindsurfHooksConfig(
+function mergeWindsurfHooksConfig(
   existing: undefined | WindsurfHooksConfig,
   template: undefined | WindsurfHooksConfig,
 ): WindsurfHooksConfig {

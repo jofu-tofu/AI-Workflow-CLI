@@ -119,6 +119,62 @@ export function buildOrchestratorSchema(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Plan Questions Schema
+// ---------------------------------------------------------------------------
+
+/** Prefix for plan question generation prompts */
+export const QUESTIONS_PROMPT_PREFIX = `# PLAN QUESTION GENERATION
+
+## CRITICAL: ONE TURN ONLY
+You have exactly ONE response. Do NOT attempt multi-step workflows or tool use beyond StructuredOutput.
+
+## YOUR TASK
+You are reviewing a plan that was written by another agent. You have NO access to the codebase, NO session history, and NO exploration context. You see ONLY the plan text.
+
+This is intentional. Plans must be executable by a fresh agent in a new session. If the plan assumes knowledge that isn't written down, that's a gap.
+
+## WHAT TO LOOK FOR
+- Questions the plan doesn't answer but should
+- Assumptions the plan makes without stating them
+- Ambiguities where a reader could interpret something two ways
+- Missing context that would be obvious to the author but not a new reader
+
+## IMPORTANT
+- Focus on questions that would change the implementation approach if answered differently
+- Don't ask about things clearly stated in the plan
+- Don't generate generic questions — every question should be specific to THIS plan
+- Aim for 3-6 high-value questions
+`;
+
+/** JSON schema for plan question generation output */
+export const QUESTIONS_SCHEMA: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    questions: {
+      type: "array",
+      items: { type: "string" },
+      description: "Questions the user should answer before this plan is implemented",
+    },
+    assumptions: {
+      type: "array",
+      items: { type: "string" },
+      description: "Assumptions the plan makes that are not explicitly stated",
+    },
+    ambiguities: {
+      type: "array",
+      items: { type: "string" },
+      description: "Parts of the plan that could be interpreted multiple ways",
+    },
+  },
+  required: ["questions", "assumptions", "ambiguities"],
+  additionalProperties: false,
+};
+
+// ---------------------------------------------------------------------------
+// Orchestrator Schemas
+// ---------------------------------------------------------------------------
+
 /** JSON schema for orchestrator structured output (static fallback) */
 export const ORCHESTRATOR_SCHEMA: Record<string, unknown> = {
   type: "object",

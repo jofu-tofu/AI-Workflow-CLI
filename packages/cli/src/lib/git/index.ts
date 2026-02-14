@@ -12,8 +12,5 @@ export {branchExists, deleteBranch, getCurrentBranch, getMainBranch} from './bra
 // Safety checks
 export {hasMergeRequest, hasUnpushedCommits} from './safety-checks.js'
 
-// Types
-export type {GitCommandOptions, WorktreeInfo} from './types.js'
-
 // Worktree operations
 export {createWorktree, deleteWorktreeFolder, getAllWorktrees, getWorktreePath} from './worktree.js'

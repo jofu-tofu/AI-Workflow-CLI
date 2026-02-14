@@ -1,0 +1,8 @@
+{
+  "ignore": ["src/templates/**"],
+  "entry": ["src/commands/**/*.ts"],
+  "project": ["src/**/*.ts"],
+  "mocha": {
+    "entry": ["test/**/*.test.ts"]
+  }
+}

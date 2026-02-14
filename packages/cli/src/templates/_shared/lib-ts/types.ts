@@ -108,13 +108,28 @@ export interface HookInput {
   transcript_path?: string;
 }
 
-// §1.7
+// §1.7 — Three hook output patterns (see hook-utils.ts for emit functions)
 export interface HookOutput {
+  // Pattern 1: hookSpecificOutput (PreToolUse, PostToolUse, UserPromptSubmit, etc.)
   hookSpecificOutput?: {
     additionalContext?: string;
     hookEventName?: string;
-    permissionDecision?: "allow" | "deny";
+    permissionDecision?: "allow" | "deny" | "ask";
     permissionDecisionReason?: string;
+    updatedInput?: Record<string, unknown>;
+  };
+  // Pattern 2: Top-level decision (UserPromptSubmit, Stop, SubagentStop)
+  decision?: "block";
+  reason?: string;
+}
+
+// §1.7b — PermissionRequest output (structurally different from HookOutput)
+export interface PermissionRequestOutput {
+  decision: {
+    behavior: "allow" | "deny";
+    message?: string;
+    updatedInput?: Record<string, unknown>;
+    updatedPermissions?: Record<string, unknown>;
   };
 }
 

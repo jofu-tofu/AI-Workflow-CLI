@@ -8,9 +8,13 @@
 
 | Hook | Trigger | Purpose |
 |------|---------|---------|
-| `cc-native-plan-review.ts` | PreToolUse: ExitPlanMode | Review plans before user approval |
+| `cc-native-plan-review.ts` | PreToolUse: ExitPlanMode | Questions gate + plan review before user approval |
 | `add_plan_context.ts` | PostToolUse: AskUserQuestion, PreToolUse: Task | Mark questions asked; nudge Plan subagent to ask questions first |
 | `plan_questions_early.ts` | UserPromptSubmit | Inject Phase A clarification prompt in plan mode |
+
+### Questions Gate (in cc-native-plan-review.ts)
+
+Before running plan review agents, the hook checks `wasQuestionsAsked()`. If the user hasn't been asked questions yet, it runs a fresh-context plan-questions agent (from `agents/plan-questions/PLAN-QUESTIONER.md`) that independently reviews the plan and generates questions, assumptions, and ambiguities. If questions are found, ExitPlanMode is denied with the question list injected as context. After the user answers via AskUserQuestion (which triggers `mark_questions_asked.ts`), the next ExitPlanMode attempt passes the gate and proceeds to normal plan review.
 
 ---
 
@@ -210,6 +214,7 @@ Hooks fail silently on import errors — verify after any import path changes.
 
 | Date | Change |
 |------|--------|
+| 2026-02-14 | **Questions gate added to plan review.** `cc-native-plan-review.ts` now runs a fresh-context plan-questions agent before plan review. If `wasQuestionsAsked()` returns false, the PLAN-QUESTIONER agent (from `agents/plan-questions/`) generates questions/assumptions/ambiguities using `QUESTIONS_SCHEMA`. On questions found, ExitPlanMode is denied with question list as context. New library module: `lib-ts/plan-questions.ts`. Agent directory reorganized: review agents moved to `agents/plan-review/`, question agents in `agents/plan-questions/`. |
 | 2026-02-10 | **Migrated cc-native hooks from Python to TypeScript.** `cc-native-plan-review.ts` (async, parallel agent reviews via `Promise.all()`), `add_plan_context.ts`, `plan_questions_early.ts`. All hooks use `runHook()`/`runHookAsync()` entry points. Library code in `_cc-native/lib-ts/` (18 files). Settings.json updated to use `bun` runner. Python `.py` files kept as fallback until TS hooks verified. |
 | 2026-02-10 | Flipped TS logger stderr default to opt-in (`opts?.stderr === true`). Added `logBlocking()` for intentional stderr visibility. Removed redundant `{stderr: false}` from hook-utils.ts, user_prompt_submit.ts, context_monitor.ts. Added "Hook Error Visibility" section documenting visibility tiers and exit code behavior. |
 | 2026-02-10 | Fixed `debug.py` `context_path` crash. Added local try/catch around `maybeActivate` in `user_prompt_submit.ts` and `context_monitor.ts` to prevent stderr error display on non-critical I/O failures. Removed dead `context_path` from `_emitHookEnd` in `hook-utils.ts`. Added "Error Handling" section to CLAUDE.md. |

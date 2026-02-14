@@ -1,6 +1,28 @@
 # CC-Native Plan Review Agents
 
-Agent persona definitions for single-turn plan review. 31 agents total: 4 mandatory + 27 selectable (organized into 7 variation families + 7 standalone).
+Agent persona definitions for single-turn plan review. 31 review agents + 1 question agent.
+
+## Directory Structure
+
+```
+agents/
+├── CLAUDE.md              # This file
+├── PLAN-ORCHESTRATOR.md   # Complexity/agent selection orchestrator
+├── plan-review/           # Review agents (31 files)
+│   ├── HANDOFF-READINESS.md
+│   ├── CLARITY-AUDITOR.md
+│   ├── SKEPTIC.md
+│   ├── ...                # All review agent .md files
+│   └── TESTDRIVEN-CHARACTERIZATION.md
+└── plan-questions/        # Question generation agents
+    └── PLAN-QUESTIONER.md # Fresh-context question generator
+```
+
+**Important:** Review agents MUST be in `plan-review/`. The hook loads from `agents/plan-review/` — files in the root `agents/` directory (other than CLAUDE.md and PLAN-ORCHESTRATOR.md) are ignored.
+
+## Review Agents (31 total)
+
+4 mandatory + 27 selectable (organized into 7 variation families + 7 standalone).
 
 ## Agent Roster (31 agents)
 

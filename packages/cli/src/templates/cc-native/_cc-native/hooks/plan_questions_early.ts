@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 /**
- * UserPromptSubmit hook — injects Phase A clarification prompt in plan mode.
+ * UserPromptSubmit hook — injects post-exploration clarification prompt in plan mode.
  *
- * On the first prompt in plan mode (before any code exploration), injects
- * a system-reminder telling Claude to ask clarification questions via
- * AskUserQuestion before exploring the codebase.
+ * After explore agents finish examining the codebase, injects a system-reminder
+ * telling Claude to ask clarification questions via AskUserQuestion to narrow
+ * the approach before drafting the plan.
  *
  * Skips if questions were already asked this session.
  */
@@ -13,25 +13,25 @@ import { getProjectRoot } from "../../_shared/lib-ts/base/constants.js";
 import { emitContext, loadHookInput, logDebug, logInfo, runHook } from "../../_shared/lib-ts/base/hook-utils.js";
 import { wasQuestionsAsked } from "../lib-ts/cc-native-state.js";
 
-const PHASE_A_PROMPT = `## Plan Mode: Clarify Before Exploring
+const PHASE_A_PROMPT = `## Plan Mode: Narrow the Approach After Exploration
 
-Use AskUserQuestion now — one call, 3-4 questions — before reading any code.
+After exploring the codebase, use AskUserQuestion — one call, 3-4 questions — before drafting the plan.
 
 ### Why This Matters
-Once you explore the codebase, you anchor on what you find. Questions asked after exploration confirm your assumptions instead of challenging them. Ask now, while your interpretation is still flexible.
+Once you've explored the codebase, you'll understand what exists — but not which direction the user prefers. That's a branch point: multiple viable approaches, and the user's priorities determine which is best. Questions asked after exploration have maximum steering value: they narrow your path before you commit to an implementation direction.
 
 ### What to Ask About
-Only ask about things you cannot discover from code — the user's intent, constraints, history, and priorities:
+Only ask about decisions that exploration will surface but can't resolve — where human judgment is needed to choose between viable options:
 
-- **Ambiguity:** If you can read this request two different ways, ask which interpretation is correct. Provide your top 2-3 readings as options.
-- **Invisible context:** What does the user assume "everyone knows" about this system that isn't documented? What's obvious to them but hidden to you?
-- **Success criteria:** What does "done well" look like beyond the literal request? What would make them rate this a 10?
-- **Constraints and history:** Has this been attempted before? Are there parts of the system that are off-limits or sensitive?
+- **Approach selection:** If exploration reveals 2-3 viable implementation paths, ask which the user prefers. Present each option with its trade-offs as concrete choices.
+- **Scope boundaries:** What's in scope vs. out of scope for this change? Which areas of the codebase should be left untouched? How far should the change ripple?
+- **Trade-off preferences:** Where exploration reveals tensions (simplicity vs. flexibility, speed vs. thoroughness, minimal change vs. full refactor), ask which side the user leans toward.
+- **Success criteria beyond the literal ask:** What would make this a 10? What non-obvious quality matters most — performance, readability, extensibility, consistency with existing patterns?
 
 ### How to Select Questions
-1. Generate 5+ candidate questions across the lenses above
-2. For each, evaluate: "If they answered A vs B, would I explore different files or take a different approach?" If no — discard it.
-3. Keep the 3-4 where different answers lead to meaningfully different exploration strategies
+1. Generate 5+ candidate questions across the categories above
+2. For each, evaluate: "If they answered A vs B, would I take a different approach or write different code?" If no — discard it.
+3. Keep the 3-4 where different answers lead to meaningfully different implementation strategies
 4. Frame each with 2-3 concrete options so the user can react rather than generate from scratch`;
 
 function main(): void {

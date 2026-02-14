@@ -112,5 +112,14 @@ export function dictToState(data: Record<string, any>): ContextState {
   if ("handoff_path" in data) state.handoff_path = data.handoff_path;
   if ("last_session" in data) state.last_session = data.last_session;
 
+  // Preserve method-specific extension data (e.g., cc_native) that isn't
+  // part of the core ContextState interface. Without this, round-trip
+  // read→write cycles silently drop extension fields.
+  for (const key of Object.keys(data)) {
+    if (!(key in state)) {
+      state[key] = data[key];
+    }
+  }
+
   return state as ContextState;
 }

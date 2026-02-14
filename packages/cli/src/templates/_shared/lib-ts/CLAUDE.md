@@ -83,17 +83,37 @@ logBlocking("my_hook", "Critical: state corrupt"); // shows in UI
 
 ---
 
-## Hook Output — Three Communication Channels
+## Hook Output — Communication Channels
 
-Hooks have three channels back to the session. Pick the right one:
+Hooks have multiple channels back to the session. Pick the right one:
 
 | Want to... | Function | Who sees it |
 |------------|----------|-------------|
-| Block tool + return message | `emitContextAndBlock(context, reason)` | Claude + user (denial reason prominent) |
+| **Block (any event)** | `emitBlock(reason, context?)` | Claude + user — auto-dispatches to correct mechanism |
+| Block tool (PreToolUse only) | `emitContextAndBlock(context, reason)` | Claude + user (denial reason prominent) |
 | Return message, don't block | `emitContext(context)` | Claude + user (in transcript) |
 | Log only (diagnostics) | `logInfo()` / `logWarn()` / etc. | Nobody in session — file only |
 
 **There is no way to show something to the user but hide it from Claude, or vice versa.** Both `emitContext()` and `emitContextAndBlock()` produce output visible to both.
+
+### Universal Blocking: `emitBlock()` (RECOMMENDED)
+
+```typescript
+emitBlock("Reason for blocking", "Optional detailed context");
+```
+
+Auto-detects the correct blocking mechanism from the current hook event:
+
+| Event | Mechanism | Dispatches to |
+|-------|-----------|---------------|
+| **PreToolUse** | `permissionDecision: "deny"` in hookSpecificOutput | `emitContextAndBlock()` |
+| **UserPromptSubmit** | Top-level `{ decision: "block", reason }` | `emitBlockPrompt()` |
+| **PostToolUse / PostToolUseFailure** | Exit code 2 + stderr | `emitBlockViaExit()` |
+| **Stop / SubagentStop** | Top-level `{ decision: "block", reason }` | `emitBlockTopLevel()` |
+| **PermissionRequest** | `{ decision: { behavior: "deny" } }` | `emitPermissionDecision()` |
+| **SessionStart / Notification / SubagentStart / SessionEnd** | No blocking mechanism — warns and no-ops | — |
+
+**Use `emitBlock()` for all new hooks.** The per-pattern functions below exist for advanced use cases only.
 
 ### Channel 1: Block + Context (PreToolUse only)
 
@@ -103,12 +123,41 @@ emitContextAndBlock(
   "Short reason for the block"        // permissionDecisionReason
 );
 // No SystemExit needed — permissionDecision:"deny" with exit 0 is sufficient.
-// runHookAsync drains stdout before exit to ensure pipe consumers receive the JSON.
+// Warns if called from non-PreToolUse events (output will be silently rejected by Claude Code).
 ```
 
 The tool call is **prevented from executing**. Only works for PreToolUse hooks.
 
-### Channel 2: Non-blocking Context (any hook event)
+### Channel 2: Block Prompt Submission (UserPromptSubmit only)
+
+```typescript
+emitBlockPrompt("Reason the prompt was blocked", "Optional context for Claude");
+```
+
+Emits top-level `{ decision: "block", reason }`. The prompt is rejected before Claude processes it.
+
+### Channel 3: Block via Exit Code (PostToolUse / PostToolUseFailure)
+
+```typescript
+emitBlockViaExit("Reason for blocking", "Optional context prepended to stderr");
+// Throws SystemExit:2 — handled by runHook/runHookAsync
+// NOTE: Exit 2 causes Claude Code to ignore all JSON stdout — only stderr matters
+```
+
+### Channel 4: Block Stop/SubagentStop
+
+```typescript
+emitBlockTopLevel("Reason to prevent stopping");
+```
+
+### Channel 5: PermissionRequest Decision
+
+```typescript
+emitPermissionDecision("deny", { message: "Why denied" });
+emitPermissionDecision("allow", { updatedInput: { /* modified input */ } });
+```
+
+### Channel 6: Non-blocking Context (any hook event)
 
 ```typescript
 emitContext("Information added to Claude's context");
@@ -116,7 +165,7 @@ emitContext("Information added to Claude's context");
 
 The tool call / session continues normally. Works for PreToolUse, PostToolUse, UserPromptSubmit, SessionStart, Notification, SubagentStart.
 
-### Channel 3: Log-only (diagnostics)
+### Channel 7: Log-only (diagnostics)
 
 ```typescript
 logInfo("my_hook", "Processing started");     // File only
@@ -252,7 +301,7 @@ Use this table to find the right file. Read the source for full API details.
 
 | File | Purpose | Key Exports |
 |------|---------|-------------|
-| `hook-utils.ts` | Hook lifecycle, stdin parsing, output emit, re-exports | `runHook`, `runHookAsync`, `loadHookInput`, `emitContext`, `emitContextAndBlock`, `logDebug`...`logBlocking` |
+| `hook-utils.ts` | Hook lifecycle, stdin parsing, output emit, re-exports | `runHook`, `runHookAsync`, `loadHookInput`, `emitContext`, `emitContextAndBlock`, `emitBlock`, `emitBlockPrompt`, `emitBlockViaExit`, `emitBlockTopLevel`, `emitPermissionDecision`, `logDebug`...`logBlocking` |
 | `logger.ts` | JSONL logging engine | `hookLog`, `logDebug`, `logInfo`, `logWarn`, `logError`, `logBlocking`, `logHookError`, `logDiagnostic` |
 | `constants.ts` | Path resolution, limits | `getProjectRoot()`, `getContextDir()`, `MAX_FILE_SIZE` |
 | `atomic-write.ts` | Crash-safe file writes | `atomicWriteFileSync()` |
