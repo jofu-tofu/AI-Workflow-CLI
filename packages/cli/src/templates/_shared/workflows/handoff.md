@@ -147,20 +147,42 @@ If a plan document path was provided in `$ARGUMENTS`:
 
 ### Step 5: Save and Update Status
 
+**⚠️ CRITICAL: Heredoc EOF Delimiter Placement**
+
+The closing `EOF` delimiter **MUST** be at column 0 (no leading spaces or tabs). Even a single space will cause bash to report: `unexpected EOF while looking for matching \`''`
+
+**Correct Example:**
+```bash
+bun .aiwcli/_shared/scripts/save_handoff.ts <<'EOF'
+content here
+EOF
+```
+← Notice: EOF is flush left at column 0
+
+**Wrong Example (will fail):**
+```bash
+bun .aiwcli/_shared/scripts/save_handoff.ts <<'EOF'
+content here
+  EOF
+```
+← This FAILS: EOF has leading spaces
+
+---
+
 Instead of writing the file directly, pipe your handoff content to the save script:
 
 ```bash
-bun .aiwcli/_shared/scripts/save_handoff.ts "{context_id}" <<'EOF'
+bun .aiwcli/_shared/scripts/save_handoff.ts <<'EOF'
 {Your complete handoff markdown content from Step 3}
 EOF
 ```
 
 This script:
-1. Creates a folder at `_output/contexts/{context_id}/handoffs/{YYYY-MM-DD-HHMM}/`
-2. Parses sections and writes sharded files (index.md, completed-work.md, dead-ends.md, etc.)
-3. Copies the current plan (if any) to plan.md
-4. Records the event in the context's event log (informational only)
-5. Sets the context to dormant (`mode="idle"`) so it won't auto-select in new sessions
+1. Auto-resolves the active context ID
+2. Creates a folder at `_output/contexts/{context_id}/handoffs/{YYYY-MM-DD-HHMM}/`
+3. Parses sections and writes sharded files (index.md, completed-work.md, dead-ends.md, etc.)
+4. Copies the current plan (if any) to plan.md
+5. Sets `handoff_path` and `handoff_consumed=false` in state.json
 
 **After handoff is saved, the context becomes dormant:**
 - It will **not** auto-select when starting new sessions — new work gets a fresh context

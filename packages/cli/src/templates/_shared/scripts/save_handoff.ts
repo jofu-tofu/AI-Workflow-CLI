@@ -23,7 +23,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { getContext, saveState, findActiveContextId } from "../lib-ts/context/context-store.js";
+import { getContext, saveState, getContextBySessionId } from "../lib-ts/context/context-store.js";
 import { getHandoffFolderPath, getProjectRoot } from "../lib-ts/base/constants.js";
 import { atomicWrite } from "../lib-ts/base/atomic-write.js";
 import { logInfo, logWarn, logError } from "../lib-ts/base/logger.js";
@@ -189,12 +189,22 @@ function main(): void {
   // Project root via shared utility (checks CLAUDE_PROJECT_DIR, falls back to cwd)
   const projectRoot = getProjectRoot(process.cwd());
 
-  // Auto-resolve active context ID
-  const contextId = findActiveContextId(projectRoot);
-  if (!contextId) {
-    eprint("No active context found. Handoffs require an active context.");
+  // Resolve context ID from session (requires CLAUDE_SESSION_ID env var)
+  const sessionId = process.env.CLAUDE_SESSION_ID;
+
+  if (!sessionId) {
+    eprint("CLAUDE_SESSION_ID not set. This script must be run from within a Claude Code session.");
     process.exit(1);
   }
+
+  const context = getContextBySessionId(sessionId, projectRoot);
+  if (!context) {
+    eprint(`No context found for session: ${sessionId}`);
+    process.exit(1);
+  }
+
+  const contextId = context.id;
+  logInfo("save_handoff", `Resolved context via session ID: ${sessionId} -> ${contextId}`);
 
   // Read content from stdin
   let content: string;
@@ -208,13 +218,6 @@ function main(): void {
 
   if (!content.trim()) {
     logError("save_handoff", "No content provided via stdin");
-    process.exit(1);
-  }
-
-  // Verify context exists
-  const context = getContext(contextId, projectRoot);
-  if (!context) {
-    logError("save_handoff", `Context not found: ${contextId}`);
     process.exit(1);
   }
 

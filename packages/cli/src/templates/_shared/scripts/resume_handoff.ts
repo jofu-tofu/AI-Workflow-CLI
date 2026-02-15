@@ -15,16 +15,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { getProjectRoot } from "../lib-ts/base/constants.js";
-import { getGitStatusShort } from "../lib-ts/base/git-state.js";
-import { eprint } from "../lib-ts/base/utils.js";
-import { findActiveContextId } from "../lib-ts/context/context-store.js";
 import {
   findLatestHandoff,
   readHandoffSections,
   getHandoffTimestamp,
   getHandoffPlanReference,
 } from "../lib-ts/handoff/handoff-reader.js";
+import { getProjectRoot } from "../lib-ts/base/constants.js";
+import { getContextBySessionId } from "../lib-ts/context/context-store.js";
+import { getGitStatusShort } from "../lib-ts/base/git-state.js";
+import { eprint } from "../lib-ts/base/utils.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -117,19 +117,22 @@ function resolveHandoffFolder(args: string[]): [string, string | null] {
     return [target, null];
   }
 
-  // Auto-discover active context
-  const discoveredId = findActiveContextId(projectRoot);
-  if (discoveredId) {
-    const folder = findLatestHandoff(discoveredId, projectRoot);
-    if (!folder) {
-      eprint(`No handoff folders found for context: ${discoveredId} (auto-discovered)`);
-      process.exit(1);
+  // Auto-discover via session ID (when running from Claude Code)
+  const sessionId = process.env.CLAUDE_SESSION_ID;
+  if (sessionId) {
+    const context = getContextBySessionId(sessionId, projectRoot);
+    if (context) {
+      const folder = findLatestHandoff(context.id, projectRoot);
+      if (!folder) {
+        eprint(`No handoff folders found for context: ${context.id} (from session ${sessionId})`);
+        process.exit(1);
+      }
+      return [folder, context.id];
     }
-    return [folder, discoveredId];
   }
 
   eprint(
-    "No active context found.\n\n" +
+    "No context found for current session.\n\n" +
     "Usage: bun resume_handoff.ts <handoff_folder_or_index>\n" +
     "       bun resume_handoff.ts --context <context_id>",
   );
