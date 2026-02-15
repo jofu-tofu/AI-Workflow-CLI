@@ -5,11 +5,10 @@
  */
 
 import { execFileSync } from "node:child_process";
-
 import { logDebug, logWarn } from "./logger.js";
 import { STOP_WORDS } from "./stop-words.js";
-import { cleanTextForSlug } from "./utils.js";
 import type { InferenceResult } from "../types.js";
+import { execFileAsync, getInternalSubprocessEnv, shellQuoteWin } from "./subprocess-utils.js";
 
 // Model configurations §6.1
 const MODELS: Record<string, string> = {
@@ -35,8 +34,8 @@ export function inference(
   timeout?: number,
 ): InferenceResult {
   const startTime = Date.now();
-  const model = MODELS[level] ?? MODELS["fast"] ?? "claude-3-haiku-20240307";
-  const timeoutSec = timeout ?? TIMEOUTS[level] ?? 15;
+  const model = MODELS[level] ?? MODELS.fast;
+  const timeoutSec = timeout ?? TIMEOUTS[level] ?? TIMEOUTS.fast;
   const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
 
   // Remove ANTHROPIC_API_KEY to force subscription auth
@@ -45,6 +44,8 @@ export function inference(
 
   try {
     const isWin = process.platform === "win32";
+    let stdout: string;
+
     // On Windows with shell:true, Node.js sets windowsVerbatimArguments —
     // args are joined with spaces, NOT individually quoted. We must manually
     // wrap multi-word/special-char args in "..." for cmd.exe parsing.
@@ -52,10 +53,10 @@ export function inference(
     const empty = isWin ? '""' : "";
     let promptArg = fullPrompt;
     if (isWin) {
-      promptArg = '"' + fullPrompt.replaceAll(/\r?\n/g, " ").replaceAll('"', '""') + '"';
+      promptArg = '"' + fullPrompt.replace(/\r?\n/g, " ").replace(/"/g, '""') + '"';
     }
 
-    const stdout = execFileSync(
+    stdout = execFileSync(
       "claude",
       ["--model", model, "--print", "--setting-sources", empty, "-p", promptArg],
       {
@@ -73,10 +74,10 @@ export function inference(
       output: stdout.trim(),
       latency_ms: latencyMs,
     };
-  } catch (error: any) {
+  } catch (e: any) {
     const latencyMs = Date.now() - startTime;
 
-    if (error.code === "ETIMEDOUT" || error.killed) {
+    if (e.code === "ETIMEDOUT" || e.killed) {
       return {
         success: false,
         output: "",
@@ -85,7 +86,7 @@ export function inference(
       };
     }
 
-    if (error.code === "ENOENT") {
+    if (e.code === "ENOENT") {
       return {
         success: false,
         output: "",
@@ -95,11 +96,11 @@ export function inference(
     }
 
     // Non-zero exit code
-    if (error.status !== undefined && error.status !== 0) {
+    if (e.status !== undefined && e.status !== 0) {
       return {
         success: false,
-        output: (error.stdout ?? "").toString().trim(),
-        error: (error.stderr ?? "").toString().trim() || `Exit code: ${error.status}`,
+        output: (e.stdout ?? "").toString().trim(),
+        error: (e.stderr ?? "").toString().trim() || `Exit code: ${e.status}`,
         latency_ms: latencyMs,
       };
     }
@@ -107,7 +108,7 @@ export function inference(
     return {
       success: false,
       output: "",
-      error: String(error),
+      error: String(e),
       latency_ms: latencyMs,
     };
   }
@@ -133,13 +134,13 @@ Output ONLY the keywords separated by spaces, nothing else.`;
 export function generateSemanticSummary(
   prompt: string,
   timeout = 15,
-): null | string {
+): string | null {
   const result = inference(CONTEXT_ID_SYSTEM_PROMPT, prompt, "standard", timeout);
 
   if (!result.success || !result.output) return null;
 
   let summary = result.output.trim();
-  summary = summary.replaceAll(/^["']+|["']+$/g, "");
+  summary = summary.replace(/^["']+|["']+$/g, "");
   summary = summary.replace(/[.!?]+$/, "");
 
   // Filter stop words
@@ -194,7 +195,7 @@ Respond with ONLY a JSON object: {"slug": "your 8-12 word phrase here"}`;
 export function generateContextIdSlug(
   prompt: string,
   timeout = 3,
-): null | string {
+): string | null {
   const truncated = prompt.slice(0, 500);
 
   const result = inference(CONTEXT_ID_SLUG_PROMPT, truncated, "fast", timeout);
@@ -207,7 +208,7 @@ export function generateContextIdSlug(
   const raw = result.output.trim();
 
   // Parse JSON response, fall back to raw text
-  let slug: null | string = null;
+  let slug: string | null = null;
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object" && "slug" in parsed) {
@@ -220,11 +221,11 @@ export function generateContextIdSlug(
   if (!slug) slug = raw;
 
   // Clean up
-  slug = slug.replaceAll(/^["'`]+|["'`]+$/g, "");
+  slug = slug.replace(/^["'`]+|["'`]+$/g, "");
   slug = slug.replace(/[.!?]+$/, "");
-  slug = slug.replaceAll('-', " ");
-  slug = slug.replaceAll(/[^a-zA-Z0-9 ]/g, "");
-  slug = slug.replaceAll(/\s+/g, " ").trim();
+  slug = slug.replace(/-/g, " ");
+  slug = slug.replace(/[^a-zA-Z0-9 ]/g, "");
+  slug = slug.replace(/\s+/g, " ").trim();
 
   const words = slug.split(" ");
 
@@ -240,12 +241,60 @@ export function generateContextIdSlug(
 }
 
 /**
+ * Async version of inference() that does NOT block the event loop.
+ * Use for parallel AI calls (e.g., Stage 3 parallel summarizers).
+ * Uses execFileAsync and getInternalSubprocessEnv for proper subprocess isolation.
+ */
+export async function inferenceAsync(
+  systemPrompt: string,
+  userPrompt: string,
+  level = "fast",
+  timeout?: number,
+): Promise<InferenceResult> {
+  const startTime = Date.now();
+  const model = (level in MODELS ? MODELS[level] : undefined) ?? MODELS.fast;
+  const timeoutSec = timeout ?? (level in TIMEOUTS ? TIMEOUTS[level] : undefined) ?? TIMEOUTS.fast;
+  const timeoutMs = timeoutSec * 1000;
+  const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+
+  const env = getInternalSubprocessEnv();
+  delete env.ANTHROPIC_API_KEY;
+
+  const isWin = process.platform === "win32";
+  const empty = isWin ? '""' : "";
+  const promptArg = isWin
+    ? shellQuoteWin(fullPrompt.replace(/\r?\n/g, " "))
+    : fullPrompt;
+
+  const result = await execFileAsync(
+    "claude",
+    ["--model", model, "--print", "--setting-sources", empty, "-p", promptArg],
+    { timeout: timeoutMs, env, shell: isWin },
+  );
+
+  const latencyMs = Date.now() - startTime;
+
+  if (result.killed) {
+    return { success: false, output: "", error: `Timeout after ${timeoutSec}s`, latency_ms: latencyMs };
+  }
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      output: result.stdout.trim(),
+      error: result.stderr.trim() || `Exit code: ${result.exitCode}`,
+      latency_ms: latencyMs,
+    };
+  }
+  return { success: true, output: result.stdout.trim(), latency_ms: latencyMs };
+}
+
+/**
  * Filter stop words from text.
  * See SPEC.md §6.4
  */
 function filterStopWords(text: string): string {
-  const cleaned = cleanTextForSlug(text);
-  return cleaned
+  return text
+    .toLowerCase()
     .split(/\s+/)
     .filter((w) => !STOP_WORDS.has(w) && w.length > 1)
     .join(" ");

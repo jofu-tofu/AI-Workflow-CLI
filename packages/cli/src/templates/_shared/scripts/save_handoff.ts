@@ -3,31 +3,32 @@
  * Save a handoff document with folder-based sharding.
  *
  * Usage:
- *   bun .aiwcli/_shared/scripts/save_handoff.ts <context_id> <<'EOF'
+ *   bun .aiwcli/_shared/scripts/save_handoff.ts <<'EOF'
  *   # Your handoff markdown content here (with <!-- SECTION: name --> markers)
  *   EOF
  *
  * Or with a file:
- *   bun .aiwcli/_shared/scripts/save_handoff.ts <context_id> < handoff.md
+ *   bun .aiwcli/_shared/scripts/save_handoff.ts < handoff.md
  *
  * This script:
- * 1. Parses sections from incoming markdown using <!-- SECTION: name --> markers
- * 2. Creates a timestamped folder at _output/contexts/{context_id}/handoffs/{YYYY-MM-DD-HHMM}/
- * 3. Writes sharded files:
+ * 1. Auto-resolves the active context ID
+ * 2. Parses sections from incoming markdown using <!-- SECTION: name --> markers
+ * 3. Creates a timestamped folder at _output/contexts/{context_id}/handoffs/{YYYY-MM-DD-HHMM}/
+ * 4. Writes sharded files:
  *    - index.md (main entry point with navigation)
  *    - completed-work.md, dead-ends.md, decisions.md, pending.md, context.md
  *    - plan.md (copy of original plan if it exists)
- * 4. Sets handoff_path and handoff_consumed=false in state.json
+ * 5. Sets handoff_path and handoff_consumed=false in state.json
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { atomicWrite } from "../lib-ts/base/atomic-write.js";
+import { getContext, saveState, findActiveContextId } from "../lib-ts/context/context-store.js";
 import { getHandoffFolderPath, getProjectRoot } from "../lib-ts/base/constants.js";
-import { getGitStatusShort } from "../lib-ts/base/git-state.js";
+import { atomicWrite } from "../lib-ts/base/atomic-write.js";
 import { logInfo, logWarn, logError } from "../lib-ts/base/logger.js";
+import { getGitStatusShort } from "../lib-ts/base/git-state.js";
 import { eprint } from "../lib-ts/base/utils.js";
-import { getContext, saveState } from "../lib-ts/context/context-store.js";
 
 // ---------------------------------------------------------------------------
 // Parsing helpers
@@ -185,17 +186,15 @@ function writeSectionFile(folder: string, filename: string, title: string, conte
 // ---------------------------------------------------------------------------
 
 function main(): void {
-  if (process.argv.length < 3) {
-    eprint(
-      "Usage: bun save_handoff.ts <context_id> < content.md\n" +
-      "       bun save_handoff.ts <context_id> <<'EOF'\n" +
-      "       ... markdown content with <!-- SECTION: name --> markers ...\n" +
-      "       EOF",
-    );
+  // Project root via shared utility (checks CLAUDE_PROJECT_DIR, falls back to cwd)
+  const projectRoot = getProjectRoot(process.cwd());
+
+  // Auto-resolve active context ID
+  const contextId = findActiveContextId(projectRoot);
+  if (!contextId) {
+    eprint("No active context found. Handoffs require an active context.");
     process.exit(1);
   }
-
-  const contextId = process.argv[2]!;
 
   // Read content from stdin
   let content: string;
@@ -211,9 +210,6 @@ function main(): void {
     logError("save_handoff", "No content provided via stdin");
     process.exit(1);
   }
-
-  // Project root via shared utility (checks CLAUDE_PROJECT_DIR, falls back to cwd)
-  const projectRoot = getProjectRoot(process.cwd());
 
   // Verify context exists
   const context = getContext(contextId, projectRoot);
@@ -250,8 +246,8 @@ function main(): void {
       } else {
         logWarn("save_handoff", `Failed to copy plan: ${error}`);
       }
-    } catch (error) {
-      logWarn("save_handoff", `Failed to read plan: ${error}`);
+    } catch (e) {
+      logWarn("save_handoff", `Failed to read plan: ${e}`);
     }
   }
 
@@ -339,8 +335,8 @@ function main(): void {
     } else {
       logWarn("save_handoff", `Could not load context state for ${contextId}`);
     }
-  } catch (error) {
-    logWarn("save_handoff", `Handoff saved but auto-resume won't work (context update failed): ${error}`);
+  } catch (e) {
+    logWarn("save_handoff", `Handoff saved but auto-resume won't work (context update failed): ${e}`);
   }
 
   // Output success message

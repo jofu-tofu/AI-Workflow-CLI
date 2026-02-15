@@ -8,6 +8,20 @@ Generate a handoff document summarizing the current session's work, decisions, a
 - `/handoff path/to/PLAN.md` - with plan document integration
 - Phrases like "write a handoff", "create a session summary", "document what we did", "end session with notes"
 
+## Philosophy
+
+Handoffs exist to minimize the token and time cost of session startup. A precise handoff lets the next session hit the ground running without rediscovering context through Explore agents or file searches.
+
+**Think: "What would I need to continue this work with zero prior context?"**
+
+Key principles:
+- **Absolute paths over vague references** — `C:\project\src\auth\handler.ts:45` not "handler.ts line 45"
+- **Specific locations over general areas** — Name the function/class/section, not just the file
+- **Enough detail to skip discovery** — Include enough context that the next session doesn't need to grep or search
+- **Self-contained decisions** — Capture the "why" and the "why not" so alternatives aren't re-explored
+
+A good handoff pays for itself in the first minute of the next session.
+
 ## Arguments
 
 - `$ARGUMENTS` - Optional path to a plan document. If provided, the handoff will:
@@ -17,19 +31,7 @@ Generate a handoff document summarizing the current session's work, decisions, a
 
 ## Process
 
-### Step 1: Get Context ID
-
-Resolve the active context ID programmatically:
-
-```bash
-bun .aiwcli/_shared/scripts/resolve_context.ts
-```
-
-This prints the active context ID to stdout. Use its output as `{context_id}` in subsequent steps.
-
-If the script exits with an error (no active context found), inform the user and stop — handoffs require an active context.
-
-### Step 2: Gather Information
+### Step 1: Gather Information
 
 1. Review conversation history for:
    - Completed tasks and implementations
@@ -37,21 +39,15 @@ If the script exits with an error (no active context found), inform the user and
    - Failed approaches (to avoid repeating)
    - External context (deadlines, stakeholder requirements)
 
-2. Check git status if available:
-   ```bash
-   git status --short
-   git diff --stat
-   ```
+2. Look for TODOs/FIXMEs mentioned in session
 
-3. Look for TODOs/FIXMEs mentioned in session
-
-4. **If plan document provided**: Read the plan and identify:
+3. **If plan document provided**: Read the plan and identify:
    - Tasks that are now completed
    - Tasks that are partially done
    - Tasks that were attempted but blocked
    - New tasks discovered during implementation
 
-### Step 3: Generate Document
+### Step 2: Generate Document
 
 Use this template. The `<!-- SECTION: name -->` markers are required for the save script to parse sections into sharded files.
 
@@ -61,7 +57,6 @@ title: Session Handoff
 date: {ISO timestamp}
 session_id: {conversation ID if available}
 project: {project name from package.json, Cargo.toml, or directory name}
-context_id: {context_id from Step 1}
 plan_document: {path to plan if provided, or "none"}
 ---
 
@@ -69,11 +64,24 @@ plan_document: {path to plan if provided, or "none"}
 
 <!-- SECTION: summary -->
 ## Summary
-{2-3 sentences: what's different now vs. session start}
+{2-3 sentences covering: (1) session goal, (2) what changed technically, (3) current state}
+
+Example: "Session goal: Implement JWT refresh tokens. Added refresh token generation in `C:\project\src\auth\tokens.ts:145-203` and rotation endpoint. Feature works but needs rate-limiting before production (see Pending Issues)."
 
 <!-- SECTION: completed -->
 ## Work Completed
-{Grouped by category if multiple areas. Specific file:function references.}
+
+**Bad (requires exploration):**
+- Fixed auth bug
+- Updated tests
+
+**Good (exploration-free):**
+- Auth: Fixed JWT validation race condition in `C:\project\src\auth\handler.ts:67-89`
+  - Issue: Token validation happened after user session creation → security gap
+  - Fix: Moved validation to middleware, added async lock
+  - Tests updated: `C:\project\tests\auth\handler.test.ts:45` now covers concurrent validation
+
+{Your work completed here, following the "Good" example format with absolute paths}
 
 <!-- SECTION: dead-ends -->
 ## Dead Ends — Do Not Retry
@@ -94,11 +102,11 @@ These approaches were attempted and failed. Do not retry without addressing the 
 
 <!-- SECTION: next-steps -->
 ## Next Steps
-1. {Actionable item with file:line reference if applicable}
+1. {Actionable item with absolute path and line number, e.g., C:\path\to\file.ts:123}
 
 <!-- SECTION: files -->
 ## Files Modified
-{Significant changes only. Skip formatting-only edits.}
+{Absolute paths with line numbers for significant changes. Skip formatting-only edits.}
 
 <!-- SECTION: context -->
 ## Context for Future Sessions
@@ -106,7 +114,7 @@ These approaches were attempted and failed. Do not retry without addressing the 
 
 ```
 
-### Step 4: Update Plan Document (if provided)
+### Step 3: Update Plan Document (if provided)
 
 If a plan document path was provided in `$ARGUMENTS`:
 
@@ -146,27 +154,17 @@ If a plan document path was provided in `$ARGUMENTS`:
 5. **If no plan document was provided**:
    - Skip plan creation - the handoff document serves as the session record
 
-### Step 5: Save and Update Status
+### Step 4: Save and Update Status
 
 Instead of writing the file directly, pipe your handoff content to the save script:
 
 ```bash
-bun .aiwcli/_shared/scripts/save_handoff.ts "{context_id}" <<'EOF'
-{Your complete handoff markdown content from Step 3}
+bun .aiwcli/_shared/scripts/save_handoff.ts <<'EOF'
+{Your complete handoff markdown content from Step 2}
 EOF
 ```
 
-This script:
-1. Creates a folder at `_output/contexts/{context_id}/handoffs/{YYYY-MM-DD-HHMM}/`
-2. Parses sections and writes sharded files (index.md, completed-work.md, dead-ends.md, etc.)
-3. Copies the current plan (if any) to plan.md
-4. Sets `handoff_path` to the index.md path and `handoff_consumed = false` in state.json
-5. Mode stays `active` — staging happens later via session_end hook
-
-When the session ends, `session_end.ts` stages `active → has_handoff` (if handoff_path
-exists and handoff_consumed is false). On next `/clear`, `session_start.ts` picks up the
-`has_handoff` state, binds the new session, transitions to `active`, and injects the
-handoff content via `formatHandoffContinuation()`.
+The script will automatically find the active context and create the handoff folder structure.
 
 ## Dead Ends Section Guidelines
 
@@ -194,39 +192,7 @@ This section is critical for preventing context rot across sessions. Be specific
 
 ## Post-Generation Output
 
-After creating file, output:
-
-```
-✓ Created handoff folder: _output/contexts/{context_id}/handoffs/{YYYY-MM-DD-HHMM}/
-  - index.md (entry point with navigation)
-  - completed-work.md, dead-ends.md, decisions.md, pending.md, context.md
-  - plan.md (copy of current plan, if any)
-
-To continue next session:
-  Automatic: Handoff restored on next /clear via session_start hook.
-  Manual: Use /handoff-resume to explicitly load handoff context at any time.
-  Read dead-ends.md first to avoid repeating failed approaches.
-
-⚠️  {N} dead ends documented — avoid re-attempting these approaches
-```
-
-If plan was updated:
-```
-✓ Updated plan document: {path}
-   - {N} items marked complete
-   - {N} items partially complete
-   - {N} new items added
-```
-
-## Success Criteria
-
-- [ ] Handoff folder created at `handoffs/{YYYY-MM-DD-HHMM}/`
-- [ ] index.md contains summary and navigation table
-- [ ] All section files created (completed-work.md, dead-ends.md, etc.)
-- [ ] Dead ends use structured table format for quick scanning
-- [ ] plan.md copied from context if plan exists
-- [ ] Next steps are actionable with file references
-- [ ] Git status included in index.md
-- [ ] If plan provided: checkboxes updated to reflect completion status
-- [ ] If plan provided: Session Progress Log appended
-- [ ] State has handoff_path set and handoff_consumed = false
+After saving, confirm:
+- Handoff folder location
+- Number of dead ends documented (if any)
+- Plan update summary (if plan was provided)
