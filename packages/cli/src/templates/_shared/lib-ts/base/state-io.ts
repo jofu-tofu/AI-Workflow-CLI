@@ -6,9 +6,8 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-
-import { atomicWrite } from "./atomic-write.js";
 import { getContextDir } from "./constants.js";
+import { atomicWrite } from "./atomic-write.js";
 import { logWarn } from "./logger.js";
 import type { ContextState, Mode } from "../types.js";
 
@@ -31,7 +30,6 @@ export function toDict(state: ContextState): Record<string, unknown> {
       result[key] = value;
     }
   }
-
   return result;
 }
 
@@ -54,11 +52,11 @@ export function readStateJson(
   if (!fs.existsSync(sp)) return null;
 
   try {
-    const raw = fs.readFileSync(sp, "utf8");
+    const raw = fs.readFileSync(sp, "utf-8");
     const data = JSON.parse(raw) as Record<string, any>;
     return dictToState(data);
-  } catch (error: any) {
-    logWarn("state_io", `Failed to read state.json for '${contextId}': ${error}`);
+  } catch (e: any) {
+    logWarn("state_io", `Failed to read state.json for '${contextId}': ${e}`);
     return null;
   }
 }
@@ -71,7 +69,7 @@ export function writeStateJson(
   contextId: string,
   state: ContextState,
   projectRoot?: string,
-): [boolean, null | string] {
+): [boolean, string | null] {
   const sp = statePath(contextId, projectRoot);
   const dir = path.dirname(sp);
   fs.mkdirSync(dir, { recursive: true });
@@ -111,6 +109,13 @@ export function dictToState(data: Record<string, any>): ContextState {
   if ("plan_id" in data) state.plan_id = data.plan_id;
   if ("handoff_path" in data) state.handoff_path = data.handoff_path;
   if ("last_session" in data) state.last_session = data.last_session;
+
+  // Migration: plan_hash_consumed (added in multi-plan context fix)
+  if ("plan_hash_consumed" in data) {
+    state.plan_hash_consumed = data.plan_hash_consumed;
+  } else {
+    state.plan_hash_consumed = null;  // Default for old contexts
+  }
 
   // Preserve method-specific extension data (e.g., cc_native) that isn't
   // part of the core ContextState interface. Without this, round-trip

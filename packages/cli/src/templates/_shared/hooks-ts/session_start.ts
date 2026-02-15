@@ -67,7 +67,10 @@ async function handleClearRestore(sessionId: string, projectRoot: string): Promi
     const ctx = hasPlan[0]!;
 
     bindSession(ctx.id, sessionId, projectRoot);
-    updateMode(ctx.id, "active", projectRoot, { plan_consumed: true });
+    updateMode(ctx.id, "active", projectRoot, {
+      plan_consumed: true,
+      plan_hash_consumed: ctx.plan_hash  // Track which hash was consumed
+    });
 
     logInfo("session_start", `Clear restore: ${ctx.id} has_plan → active (plan_consumed=true)`);
 

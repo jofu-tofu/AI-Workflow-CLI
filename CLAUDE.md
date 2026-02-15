@@ -112,6 +112,8 @@ Next /clear         → fresh context (no staged handoff)
 
 **Consumed flags are one-shot latches.** `plan_consumed` and `handoff_consumed` are set to `True` when their respective mode transitions from staged (`has_plan`/`has_handoff`) → `active`. Prevents `session_end` from re-staging the same artifact. Reset to `False` when a new artifact is created or when mode returns to idle.
 
+**One plan per session assumption:** Plan review iteration state resets across sessions but NOT within a session. When a plan is rejected by reviewers and the user creates a new plan in the same session, the iteration state (agent graduation, pass streaks) persists. This allows the review framework to work correctly: rejection within a session means "fix and retry," not "start completely fresh." Only when starting a new planning session (new session ID) does iteration state reset to allow full fresh review.
+
 **Staged modes are transient.** `has_plan` and `has_handoff` exist only between SessionEnd (which sets them) and SessionStart(clear) (which consumes them). They should not persist across multiple sessions. If not consumed, `user_prompt_submit.ts` (via `determineContext`) provides fallback matching.
 
 **Rejection handling:** `archive_plan` archives the file on PermissionRequest (before accept/reject decision). If rejected, the archive exists but `session_end`'s fallback may assign plan_hash. This is acceptable — rejected plans with hash set don't cause harm because has_plan matching in context_selector requires content match.

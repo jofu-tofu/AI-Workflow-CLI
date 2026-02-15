@@ -122,10 +122,31 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
   const contextPath = getContextDir(contextId, base);
 
   // 4a. Load iteration state
-  let iterationState: IterationState = loadIterationState(reviewsDir) ?? {
-    current: 1, max: 1, complexity: "medium",
-    history: [], graduated: [], passStreaks: {}, lastPlanHash: "", lastPlanPath: "",
-  };
+  let iterationState: IterationState | null = loadIterationState(reviewsDir);
+
+  // 4a-migration. Backfill sessionId for old iteration files
+  if (iterationState && !iterationState.sessionId) {
+    logInfo(HOOK, `Migrating iteration state: adding sessionId=${sessionId}`);
+    iterationState.sessionId = sessionId;
+    saveIterationState(reviewsDir, iterationState);  // Persist migration
+  }
+
+  // 4a-session. Detect session change — reset iteration state for new planning session
+  if (iterationState && iterationState.sessionId && iterationState.sessionId !== sessionId) {
+    logInfo(HOOK, `Session changed (${iterationState.sessionId} → ${sessionId}), resetting iteration state`);
+    iterationState = null;  // Force fresh state creation below
+  }
+
+  // 4a-init. Initialize if null
+  if (!iterationState) {
+    iterationState = {
+      current: 1, max: 1, complexity: "medium",
+      history: [], graduated: [], passStreaks: {},
+      lastPlanHash: "", lastPlanPath: "",
+      sessionId: sessionId,
+    };
+    saveIterationState(reviewsDir, iterationState);
+  }
 
   // 4b. Detect plan file change — reset iteration state for new plan topic
   const lastPath = iterationState.lastPlanPath ?? "";
@@ -135,6 +156,7 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
       current: 1, max: 1, complexity: "medium",
       history: [], graduated: [], passStreaks: {},
       lastPlanHash: "", lastPlanPath: "",
+      sessionId: sessionId,
     };
     saveIterationState(reviewsDir, iterationState);
     resetPlanQuestionsAsked(sessionId, base);

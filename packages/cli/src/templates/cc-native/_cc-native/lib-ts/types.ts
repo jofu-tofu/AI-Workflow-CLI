@@ -168,6 +168,7 @@ export interface IterationState {
   passStreaks: Record<string, number>;
   lastPlanHash: string;
   lastPlanPath: string;
+  sessionId: string;
 }
 
 /** CC-native state stored in context state.json under cc_native key */
@@ -225,7 +226,7 @@ export interface DisplaySettings {
   maxQuestions: number;
 }
 
-/** Full plan review configuration (from plan-review.config.json) */
+/** Full plan review configuration (from cc-native.config.json) */
 export interface PlanReviewConfig {
   planReview?: {
     enabled?: boolean;

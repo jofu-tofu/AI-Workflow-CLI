@@ -3,20 +3,19 @@
  * SessionEnd hook: Save session state, assign plan fields (fallback),
  * stage has_plan/has_handoff for next session.
  */
-import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as crypto from "node:crypto";
 import * as path from "node:path";
-
-import { getProjectRoot, getContextDir } from "../lib-ts/base/constants.js";
-import { getGitState } from "../lib-ts/base/git-state.js";
 import {
   loadHookInput, runHook, logDebug, logInfo, logWarn, logError, logDiagnostic,
 } from "../lib-ts/base/hook-utils.js";
+import { getProjectRoot, getContextDir } from "../lib-ts/base/constants.js";
 import { nowIso } from "../lib-ts/base/utils.js";
 import { getContextBySessionId, saveState } from "../lib-ts/context/context-store.js";
 import {
   findLatestPlan, normalizePlanContent, generatePlanId, extractPlanAnchors,
 } from "../lib-ts/context/plan-manager.js";
+import { getGitState } from "../lib-ts/base/git-state.js";
 
 /**
  * Archive session transcript to context's session-transcripts/ folder.
@@ -63,8 +62,8 @@ function archiveTranscript(
   try {
     fs.copyFileSync(transcriptPath, archivePath);
     return archivePath;
-  } catch (error) {
-    logError("session_end", `Failed to copy transcript: ${error}`);
+  } catch (e) {
+    logError("session_end", `Failed to copy transcript: ${e}`);
     return null;
   }
 }
@@ -116,8 +115,8 @@ function main(): void {
       if (archived) {
         logInfo("session_end", `Archived transcript: ${path.basename(archived)}`);
       }
-    } catch (error) {
-      logError("session_end", `Transcript archival failed: ${error}`);
+    } catch (e) {
+      logError("session_end", `Transcript archival failed: ${e}`);
     }
   }
 
@@ -146,10 +145,16 @@ function main(): void {
           state.plan_consumed = state.plan_consumed || false;
 
           logInfo("session_end", `Assigned plan fallback: hash=${planHash}, path=${latestPlanPath}`);
-        } catch (error) {
-          logError("session_end", `Failed to read plan: ${error}`);
+        } catch (e) {
+          logError("session_end", `Failed to read plan: ${e}`);
         }
       }
+    }
+
+    // NEW PLAN DETECTION: If plan_hash differs from last consumed hash, reset consumed flag
+    if (state.plan_hash && state.plan_hash_consumed && state.plan_hash !== state.plan_hash_consumed) {
+      logInfo("session_end", `New plan detected: ${state.plan_hash} != ${state.plan_hash_consumed}, resetting plan_consumed`);
+      state.plan_consumed = false;
     }
 
     // Step 2: Stage has_plan if conditions met
