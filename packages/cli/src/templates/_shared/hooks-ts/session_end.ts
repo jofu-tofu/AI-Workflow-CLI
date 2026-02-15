@@ -11,7 +11,7 @@ import {
 } from "../lib-ts/base/hook-utils.js";
 import { getProjectRoot, getContextDir } from "../lib-ts/base/constants.js";
 import { nowIso } from "../lib-ts/base/utils.js";
-import { getContextBySessionId, saveState } from "../lib-ts/context/context-store.js";
+import { getContextBySessionId, saveState, determineArtifactType } from "../lib-ts/context/context-store.js";
 import {
   findLatestPlan, normalizePlanContent, generatePlanId, extractPlanAnchors,
 } from "../lib-ts/context/plan-manager.js";
@@ -120,55 +120,68 @@ function main(): void {
     }
   }
 
-  // Plan fallback assignment (skip in plan mode — rejected plans shouldn't stage)
-  if (permissionMode !== "plan") {
-    // Step 1: Assign plan fields if missing
-    if (!state.plan_hash) {
-      const latestPlanPath = findLatestPlan(state.id, projectRoot);
-      if (latestPlanPath) {
-        try {
-          const content = fs.readFileSync(latestPlanPath, "utf-8");
-          const normalized = normalizePlanContent(content);
-          const planHash = crypto.createHash("sha256")
-            .update(normalized, "utf-8")
-            .digest("hex")
-            .slice(0, 12);
+  // CRITICAL ORDER: New plan detection FIRST, then fallback assignment
+  // This prevents plan fallback from resurrecting old plan and clearing newer handoff
 
-          state.plan_hash = planHash;
-          state.plan_path = latestPlanPath;
-          state.plan_signature = content.slice(0, 200);
-          state.plan_id = generatePlanId();
-          state.plan_anchors = extractPlanAnchors(content);
-          // Preserve plan_consumed if already true (plan was implemented) —
-          // resetting it would re-stage the plan and block handoff staging.
-          // Only set to false when no prior consumption has occurred.
-          state.plan_consumed = state.plan_consumed || false;
+  // New plan detection (reset consumed flag if hash changed)
+  // Handles both hash change AND first plan creation (plan_hash_consumed null)
+  if (
+    state.plan_hash &&
+    (!state.plan_hash_consumed || state.plan_hash !== state.plan_hash_consumed)
+  ) {
+    logInfo("session_end", `New plan detected: hash=${state.plan_hash}`);
+    state.work_consumed = false; // CHANGED: unified flag
+    state.next_artifact_type = "plan";
 
-          logInfo("session_end", `Assigned plan fallback: hash=${planHash}, path=${latestPlanPath}`);
-        } catch (e) {
-          logError("session_end", `Failed to read plan: ${e}`);
-        }
-      }
+    // Latest artifact wins: clear handoff if it exists
+    if (state.handoff_path) {
+      logInfo("session_end", "New plan replaces existing handoff (latest wins)");
+      state.handoff_path = null;
     }
-
-    // NEW PLAN DETECTION: If plan_hash differs from last consumed hash, reset consumed flag
-    if (state.plan_hash && state.plan_hash_consumed && state.plan_hash !== state.plan_hash_consumed) {
-      logInfo("session_end", `New plan detected: ${state.plan_hash} != ${state.plan_hash_consumed}, resetting plan_consumed`);
-      state.plan_consumed = false;
-    }
-
-    // Step 2: Stage has_plan if conditions met
-    if (state.plan_hash && state.mode === "active" && !state.plan_consumed) {
-      state.mode = "has_plan";
-      logInfo("session_end", `Staged ${state.id}: active → has_plan`);
-    }
-    // If plan_consumed, skip — already consumed, don't re-stage
   }
 
-  // Handoff staging (only if mode is still "active" — plan check may have changed it)
-  if (state.handoff_path && state.mode === "active" && !state.handoff_consumed) {
-    state.mode = "has_handoff";
-    logInfo("session_end", `Staged ${state.id}: active → has_handoff`);
+  // Plan fallback assignment AFTER new plan check
+  // Guard: Only assign fallback if no plan AND no handoff AND no next_artifact_type
+  // (don't overwrite handoff, don't run after new plan detection just set artifact type)
+  // Note: Removed permissionMode guard - fallback now runs in plan mode to fix staging bug
+  if (
+    !state.plan_hash &&
+    !state.handoff_path &&
+    !state.next_artifact_type
+  ) {
+    const latestPlanPath = findLatestPlan(state.id, projectRoot);
+    if (latestPlanPath) {
+      try {
+        const content = fs.readFileSync(latestPlanPath, "utf-8");
+        const normalized = normalizePlanContent(content);
+        const planHash = crypto
+          .createHash("sha256")
+          .update(normalized, "utf-8")
+          .digest("hex")
+          .slice(0, 12);
+
+        state.plan_hash = planHash;
+        state.plan_path = latestPlanPath;
+        state.plan_signature = content.slice(0, 200);
+        state.plan_id = generatePlanId();
+        state.plan_anchors = extractPlanAnchors(content);
+        state.work_consumed = state.work_consumed ?? false; // CHANGED: unified flag
+
+        logInfo("session_end", `Assigned plan fallback: hash=${planHash}`);
+      } catch (e) {
+        logError("session_end", `Failed to read plan: ${e}`);
+      }
+    }
+  }
+
+  // Unified staging logic (replaces separate plan/handoff checks)
+  const artifactType = determineArtifactType(state);
+  // Allow staging from active mode OR when session ends in plan mode (fixes plan mode staging bug)
+  const canStage = state.mode === "active" || permissionMode === "plan";
+  if (artifactType && canStage && !state.work_consumed) {
+    state.mode = "has_staged_work"; // CHANGED: unified mode
+    state.next_artifact_type = artifactType;
+    logInfo("session_end", `Staged ${state.id}: ${state.mode} → has_staged_work (${artifactType})`);
   }
 
   // Save final state
