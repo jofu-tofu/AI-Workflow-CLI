@@ -4,6 +4,54 @@
  */
 
 import { execSync, execFile } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+
+// ─── Child Process Cleanup ─────────────────────────────────────────────────
+//
+// Track all spawned child processes to prevent orphaned Node.js processes.
+//
+// Problem: When parent process exits (Ctrl+C, abnormal termination), child
+// processes spawned via execFile can become orphaned if they haven't completed.
+//
+// Solution: Track children in a Set, register exit/signal handlers to kill all
+// tracked children before parent exits.
+//
+// Windows behavior: On Windows with shell:true, execFile spawns cmd.exe which
+// spawns the actual node.exe. Using SIGKILL ensures both are terminated.
+
+const childProcesses = new Set<ChildProcess>();
+
+/**
+ * Cleanup all tracked child processes.
+ * Called by exit and signal handlers.
+ */
+function cleanupChildren(): void {
+  childProcesses.forEach((child) => {
+    try {
+      // Use SIGKILL for forceful termination (important on Windows with shell)
+      child.kill("SIGKILL");
+    } catch {
+      // Ignore errors (child may have already exited)
+    }
+  });
+  childProcesses.clear();
+}
+
+// Register exit handler (runs when process exits normally)
+process.on("exit", () => {
+  cleanupChildren();
+});
+
+// Register signal handlers (Ctrl+C, kill command)
+process.on("SIGINT", () => {
+  cleanupChildren();
+  process.exit(130); // Standard exit code for SIGINT
+});
+
+process.on("SIGTERM", () => {
+  cleanupChildren();
+  process.exit(143); // Standard exit code for SIGTERM
+});
 
 /**
  * Check if this is an internal subprocess call.
@@ -171,6 +219,14 @@ export function execFileAsync(
         }
       },
     );
+
+    // Track child process for cleanup on abnormal parent exit
+    childProcesses.add(child);
+
+    // Remove from tracking when child exits (normal completion)
+    child.on("exit", () => {
+      childProcesses.delete(child);
+    });
 
     // Pipe input to stdin if provided
     if (options?.input != null && child.stdin) {

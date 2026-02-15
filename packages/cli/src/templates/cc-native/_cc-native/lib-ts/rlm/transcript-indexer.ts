@@ -93,11 +93,23 @@ function needsIndexing(session: SessionFile, sourceMtime: number): boolean {
   const indexPath = join(RLM_INDEX_DIR, session.project, `${session.sessionId}.index.json`);
   if (!existsSync(indexPath)) return true;
   try {
-    const raw = readFileSync(indexPath, "utf-8");
-    const existing = JSON.parse(raw) as SessionIndex;
-    if (existing.schema_version !== CURRENT_SCHEMA_VERSION) return true;
-    if (Math.abs(existing.source_mtime - sourceMtime) > 1000) return true;
-    return false;
+    // Fast path: Read only first 100 bytes to check schema_version
+    // If version matches, skip without checking mtime (schema bumps trigger full reindex anyway)
+    const fd = require("fs").openSync(indexPath, "r");
+    const buffer = Buffer.alloc(100);
+    const bytesRead = require("fs").readSync(fd, buffer, 0, 100, 0);
+    require("fs").closeSync(fd);
+
+    const partial = buffer.toString("utf-8", 0, bytesRead);
+    const versionMatch = partial.match(/"schema_version"\s*:\s*(\d+)/);
+
+    // If version matches, skip (no mtime check needed - schema version bump handles major changes)
+    if (versionMatch && parseInt(versionMatch[1]) === CURRENT_SCHEMA_VERSION) {
+      return false; // Skip - index is current
+    }
+
+    // Version mismatch or missing - needs reindex
+    return true;
   } catch {
     return true;
   }

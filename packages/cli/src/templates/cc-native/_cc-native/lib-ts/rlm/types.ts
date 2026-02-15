@@ -7,8 +7,8 @@
 
 import { homedir } from "os";
 import { join } from "path";
-import { getProjectRoot } from "../../../../_shared/lib-ts/base/constants.js";
-import { loadConfig } from "../../config.js";
+import { getProjectRoot } from "../../../_shared/lib-ts/base/constants.js";
+import { loadConfig } from "../config.js";
 
 // ---------------------------------------------------------------------------
 // Constants
