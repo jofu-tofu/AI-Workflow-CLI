@@ -1,9 +1,9 @@
 ---
-description: Summarize sessions about a topic or time range
+description: Get a timeline overview of sessions by topic or time range
 ---
-# RLM Summarize — Session Summary by Topic or Time Range
+# RLM Overview — Timeline Summary of Past Work
 
-Summarize what happened across multiple sessions matching a topic or time range.
+Get a grouped timeline summary of sessions matching a topic or time range.
 
 ## Input
 
@@ -15,26 +15,26 @@ A topic, project name, or time range. Examples:
 ## Workflow
 
 ### Step 1: Search
-Run the searcher to find matching sessions:
+Find matching sessions:
 ```bash
 bun .aiwcli/_cc-native/lib-ts/rlm/transcript-searcher.ts "$ARGUMENTS" --top=20
 ```
 
-For time-range queries ("this week", "last 3 days"), search with a broad project/topic term and then filter results by date in the output.
+For time-range queries ("this week", "last 3 days"), search with broad terms and filter by date in output.
 
 ### Step 2: Group
-Group the results by:
-- **Date** (if many sessions span multiple days)
+Group results by:
+- **Date** (if sessions span multiple days)
 - **Project** (if sessions span multiple projects)
 - **Theme** (cluster by keywords/summary similarity)
 
 ### Step 3: Summarize per Group
-For each group of 3+ sessions, optionally load the first 100 lines of 2-3 representative sessions:
+For each group of 3+ sessions, load excerpts from 2-3 representative sessions:
 ```bash
 bun .aiwcli/_cc-native/lib-ts/rlm/transcript-loader.ts "<source_path>" --lines=1-100
 ```
 
-Spawn parallel sub-agents (Task tool, subagent_type=general-purpose, model=haiku) to summarize each group. Prompt:
+Spawn parallel sub-agents (Task tool, subagent_type=general-purpose, model=haiku):
 
 > Summarize these session excerpts in 2-3 sentences. Focus on: what was built, what decisions were made, what problems were solved.
 
@@ -42,7 +42,7 @@ Spawn parallel sub-agents (Task tool, subagent_type=general-purpose, model=haiku
 Present a timeline-style summary:
 
 ```
-## Session Summary: {topic/range}
+## Session Overview: {topic/range}
 
 ### {Date or Group 1}
 - {2-3 sentence summary}
