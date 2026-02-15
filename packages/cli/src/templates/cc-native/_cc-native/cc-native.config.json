@@ -80,5 +80,17 @@
     "testFailureThreshold": 3,
     "cooldown": 10,
     "maxSuggestions": 3
+  },
+  "rlm": {
+    "hyde": {
+      "enabled": false,
+      "provider": "ollama",
+      "ollamaModel": "qwen2.5:1.5b",
+      "numResponses": 5,
+      "maxTokens": 200,
+      "timeoutMs": 10000,
+      "fallbackToQuery": true,
+      "fallbackToClaude": false
+    }
   }
 }

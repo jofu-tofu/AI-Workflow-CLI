@@ -11,13 +11,13 @@ import { DEFAULT_DISPLAY } from "./types.js";
 import { logWarn } from "../../_shared/lib-ts/base/logger.js";
 
 /**
- * Load full CC-Native config from _cc-native/plan-review.config.json.
+ * Load full CC-Native config from _cc-native/cc-native.config.json.
  */
 export function loadConfig(projectDir: string): PlanReviewConfig {
   const settingsPath = path.join(
     projectDir,
     "_cc-native",
-    "plan-review.config.json",
+    "cc-native.config.json",
   );
 
   if (!fs.existsSync(settingsPath)) {

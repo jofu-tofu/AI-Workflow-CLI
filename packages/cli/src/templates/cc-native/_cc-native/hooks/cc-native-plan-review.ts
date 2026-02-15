@@ -6,7 +6,7 @@
  * to the review pipeline for plan quality review.
  *
  * Trigger: ExitPlanMode tool use (PreToolUse)
- * Configuration: _cc-native/plan-review.config.json
+ * Configuration: _cc-native/cc-native.config.json
  * Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}/reviews/
  */
 
