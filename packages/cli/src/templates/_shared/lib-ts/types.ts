@@ -5,7 +5,7 @@
  */
 
 // §1.1
-export type Mode = "idle" | "has_plan" | "has_handoff" | "active";
+export type Mode = "idle" | "has_staged_work" | "active";
 
 export interface ContextState {
   id: string;
@@ -21,10 +21,16 @@ export interface ContextState {
   plan_signature: string | null;
   plan_id: string | null;
   plan_anchors: string[];
-  plan_consumed: boolean;
   plan_hash_consumed: string | null;
   handoff_path: string | null;
-  handoff_consumed: boolean;
+  // Unified lifecycle fields (v0.13.0+)
+  work_consumed: boolean;  // Replaces plan_consumed + handoff_consumed
+  next_artifact_type: "plan" | "handoff" | null;  // Explicit artifact type for has_staged_work mode
+  // Deprecated fields (kept for migration)
+  /** @deprecated Use work_consumed instead */
+  plan_consumed?: boolean;
+  /** @deprecated Use work_consumed instead */
+  handoff_consumed?: boolean;
   session_ids: string[];
   last_session: LastSession | null;
   tasks: Task[];

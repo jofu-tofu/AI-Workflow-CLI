@@ -21,8 +21,7 @@ const MAX_PLAN_INLINE_CHARS = 30_000;
 
 const MODE_DISPLAY_MAP: Record<string, string> = {
   idle: "",
-  has_plan: "[Plan Ready]",
-  has_handoff: "[Handoff Ready]",
+  has_staged_work: "[Staged]", // CHANGED: unified mode (plan or handoff)
   active: "[Active]",
 };
 
@@ -449,6 +448,7 @@ const KNOWN_FOLDERS: Record<string, string> = {
   "session-transcripts": "JSONL records of previous agent sessions — read these to understand prior work",
   "handoffs": "Structured briefing documents for session continuity",
   "reviews": "Plan review artifacts (reviewer verdicts, corroboration reports)",
+  "notes": "Analysis files, reports, and documentation that don't belong in the codebase",
 };
 
 function collectFolderPath(contextId: string, contextDir: string, state: ContextState): string | null {
@@ -532,12 +532,18 @@ function collectSessionStats(contextId: string, contextDir: string, state: Conte
   return line;
 }
 
+function collectNotesGuidance(contextId: string, contextDir: string, state: ContextState): string | null {
+  const notesDir = path.join(contextDir, "notes");
+  return `**Notes:** Put notes and files that don't belong in the codebase here. Reference them in other documents as needed: \`${notesDir}\``;
+}
+
 /** Ordered list of inventory collectors. Append new collectors here. */
 const INVENTORY_COLLECTORS: InventoryCollector[] = [
   collectFolderPath,
   collectStatePointers,
   collectFolderInventory,
   collectSessionStats,
+  collectNotesGuidance,
 ];
 
 /**

@@ -5,11 +5,11 @@
  */
 import {
   loadHookInput, emitContext, runHook, runHookAsync,
-  logDebug, logInfo, logError, logDiagnostic,
+  logDebug, logInfo, logWarn, logError, logDiagnostic,
 } from "../lib-ts/base/hook-utils.js";
 import { getProjectRoot } from "../lib-ts/base/constants.js";
 import {
-  getContextBySessionId, getAllContexts, bindSession, updateMode,
+  getContextBySessionId, getAllContexts, bindSession, updateMode, determineArtifactType,
 } from "../lib-ts/context/context-store.js";
 import {
   buildRestoreSections, formatHandoffContinuation, getModeDisplay,
@@ -33,6 +33,7 @@ function handleCompactRestore(sessionId: string, projectRoot: string): void {
     "",
     `**Summary:** ${state.summary}`,
     `**Mode:** ${getModeDisplay(state.mode) || state.mode}`,
+    `**Session ID:** ${sessionId}`,
     "",
   ];
 
@@ -54,70 +55,81 @@ function handleCompactRestore(sessionId: string, projectRoot: string): void {
 }
 
 /**
- * Handle post-clear restore: find staged has_plan or has_handoff context,
+ * Handle post-clear restore: find staged has_staged_work context,
  * bind session, transition to active, inject context.
  */
-async function handleClearRestore(sessionId: string, projectRoot: string): Promise<void> {
+async function handleClearRestore(
+  sessionId: string,
+  projectRoot: string,
+): Promise<void> {
   const allContexts = getAllContexts("active", projectRoot);
 
-  // Priority 1: has_plan contexts
-  const hasPlan = allContexts.filter(c => c.mode === "has_plan");
-  if (hasPlan.length > 0) {
-    // Pick most recently active (getAllContexts sorts by last_active desc)
-    const ctx = hasPlan[0]!;
+  // Find staged contexts (CHANGED: unified mode search)
+  const staged = allContexts.filter((c) => c.mode === "has_staged_work");
+  if (staged.length === 0) {
+    logDebug("session_start", "No has_staged_work contexts found");
+    return;
+  }
 
-    bindSession(ctx.id, sessionId, projectRoot);
-    updateMode(ctx.id, "active", projectRoot, {
-      plan_consumed: true,
-      plan_hash_consumed: ctx.plan_hash  // Track which hash was consumed
-    });
+  // Pick most recent (getAllContexts sorts by last_active desc)
+  const ctx = staged[0]!;
+  const artifactType = determineArtifactType(ctx);
 
-    logInfo("session_start", `Clear restore: ${ctx.id} has_plan → active (plan_consumed=true)`);
+  // Edge case: has_staged_work mode but no artifacts (corrupted state)
+  // Graceful degradation: Reset mode to idle, log warning, skip restoration
+  if (!artifactType) {
+    logWarn(
+      "session_start",
+      `has_staged_work context ${ctx.id} has no artifacts - corrupted state, resetting to idle`,
+    );
+    updateMode(ctx.id, "idle", projectRoot);
+    return;
+  }
 
-    const sections: string[] = [
-      `## Resuming Context After Plan Clear: ${ctx.id}`,
-      "",
-      `**Summary:** ${ctx.summary}`,
-      `**Mode:** Active (Plan Restored)`,
-      "",
-    ];
+  // Bind and consume (CHANGED: unified flag)
+  bindSession(ctx.id, sessionId, projectRoot);
+  updateMode(ctx.id, "active", projectRoot, {
+    work_consumed: true, // CHANGED: unified flag
+    plan_hash_consumed: artifactType === "plan" ? ctx.plan_hash : undefined,
+  });
 
-    // inline_plan=false — Claude auto-pastes plan content after /clear
+  logInfo(
+    "session_start",
+    `Restored ${ctx.id}: has_staged_work → active (${artifactType})`,
+  );
+
+  // Build context sections (dispatch by artifact type)
+  const sections: string[] = [
+    `## Resuming Context After ${artifactType === "plan" ? "Plan" : "Handoff"} Clear: ${ctx.id}`,
+    "",
+    `**Summary:** ${ctx.summary}`,
+    `**Mode:** Active (${artifactType === "plan" ? "Plan" : "Handoff"} Restored)`,
+    `**Session ID:** ${sessionId}`,
+    "",
+  ];
+
+  if (artifactType === "plan") {
+    // Plan restoration (inline_plan=false, Claude auto-pastes)
     const restore = buildRestoreSections(ctx, projectRoot, false);
     if (restore) sections.push(restore);
-
-    const inventory = buildContextInventory(ctx, projectRoot);
-    if (inventory) sections.push("", inventory);
-
-    sections.push(
-      "",
-      "---",
-      "*Plan has been accepted. The plan content was auto-pasted above. Implement according to the plan.*",
-    );
-
-    emitContext(sections.join("\n"));
-    return;
-  }
-
-  // Priority 2: has_handoff contexts
-  const hasHandoff = allContexts.filter(c => c.mode === "has_handoff");
-  if (hasHandoff.length > 0) {
-    const ctx = hasHandoff[0]!;
-
-    bindSession(ctx.id, sessionId, projectRoot);
-    updateMode(ctx.id, "active", projectRoot, { handoff_consumed: true });
-
-    logInfo("session_start", `Clear restore: ${ctx.id} has_handoff → active (handoff_consumed=true)`);
-
+  } else {
+    // Handoff restoration (inject content via hook)
     const handoffContent = formatHandoffContinuation(ctx, projectRoot);
-    const handoffInventory = buildContextInventory(ctx, projectRoot);
-    const combined = handoffInventory ? handoffContent + "\n\n" + handoffInventory : handoffContent;
-    emitContext(combined);
-    return;
+    sections.push(handoffContent);
   }
 
-  // Nothing to restore
-  logDebug("session_start", "No has_plan or has_handoff contexts found");
+  const inventory = buildContextInventory(ctx, projectRoot);
+  if (inventory) sections.push("", inventory);
+
+  sections.push(
+    "",
+    "---",
+    artifactType === "plan"
+      ? "*Plan has been accepted. The plan content was auto-pasted above. Implement according to the plan.*"
+      : "*Handoff document has been loaded. Continue the work from where it was left off.*",
+  );
+
+  emitContext(sections.join("\n"));
 }
 
 async function main(): Promise<void> {

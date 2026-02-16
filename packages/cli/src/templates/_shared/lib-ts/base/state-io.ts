@@ -19,6 +19,18 @@ const MODE_MIGRATION: Record<string, Mode> = {
   implementing: "active",
 };
 
+/** Legacy state data structure for migration type safety. */
+interface LegacyStateData {
+  mode?: string;
+  plan_path?: string | null;
+  plan_hash?: string | null;
+  handoff_path?: string | null;
+  plan_consumed?: boolean;
+  handoff_consumed?: boolean;
+  work_consumed?: boolean;
+  next_artifact_type?: "plan" | "handoff" | null;
+}
+
 /**
  * Serialize a ContextState for JSON output.
  * Omits null/undefined keys but keeps false, 0, empty string, and empty arrays.
@@ -31,6 +43,59 @@ export function toDict(state: ContextState): Record<string, unknown> {
     }
   }
   return result;
+}
+
+/**
+ * Migrate old consumed flags to unified work_consumed.
+ * Runs on every state.json read for transparent backward compatibility.
+ * Idempotent: safe to run multiple times.
+ */
+function migrateConsumedFlags(data: Record<string, unknown>): void {
+  const legacy = data as LegacyStateData;
+
+  // Skip if already migrated (check both fields and mode)
+  const alreadyMigrated =
+    typeof legacy.work_consumed === "boolean" &&
+    legacy.mode !== "has_plan" &&
+    legacy.mode !== "has_handoff";
+  if (alreadyMigrated) return;
+
+  const hasPlan = Boolean(legacy.plan_path && legacy.plan_hash);
+  const hasHandoff = Boolean(legacy.handoff_path);
+
+  // Migrate consumed flag (plan takes precedence if both exist)
+  if (hasPlan && typeof legacy.plan_consumed === "boolean") {
+    (data as Record<string, unknown>).work_consumed = legacy.plan_consumed;
+  } else if (hasHandoff && typeof legacy.handoff_consumed === "boolean") {
+    (data as Record<string, unknown>).work_consumed = legacy.handoff_consumed;
+  } else {
+    (data as Record<string, unknown>).work_consumed = false;
+  }
+
+  // Migrate mode: has_plan/has_handoff → has_staged_work
+  if (legacy.mode === "has_plan" || legacy.mode === "has_handoff") {
+    const artifactType = legacy.mode === "has_handoff" ? "handoff" : "plan";
+    (data as Record<string, unknown>).mode = "has_staged_work";
+    (data as Record<string, unknown>).next_artifact_type = artifactType;
+  }
+
+  // Set next_artifact_type based on which artifact exists
+  if (!legacy.next_artifact_type) {
+    if (hasPlan && hasHandoff) {
+      // Both exist - conflict resolution: plan priority during migration
+      // (Cannot determine "latest" without timestamps - plan takes precedence)
+      (data as Record<string, unknown>).next_artifact_type = "plan";
+      (data as Record<string, unknown>).handoff_path = null;
+    } else if (hasPlan) {
+      (data as Record<string, unknown>).next_artifact_type = "plan";
+    } else if (hasHandoff) {
+      (data as Record<string, unknown>).next_artifact_type = "handoff";
+    }
+  }
+
+  // Delete old flags (clean cut migration)
+  delete (data as Record<string, unknown>).plan_consumed;
+  delete (data as Record<string, unknown>).handoff_consumed;
 }
 
 /**
@@ -54,6 +119,7 @@ export function readStateJson(
   try {
     const raw = fs.readFileSync(sp, "utf-8");
     const data = JSON.parse(raw) as Record<string, any>;
+    migrateConsumedFlags(data); // Migrate before dictToState
     return dictToState(data);
   } catch (e: any) {
     logWarn("state_io", `Failed to read state.json for '${contextId}': ${e}`);
@@ -82,8 +148,14 @@ export function writeStateJson(
  * Construct a ContextState from a dict, migrating old mode names.
  * Only includes fields that are present in the source data (preserves null-stripping).
  */
-export function dictToState(data: Record<string, any>): ContextState {
-  const rawMode: string = data.mode ?? "idle";
+export function dictToState(data: Record<string, unknown>): ContextState {
+  // Validate required fields
+  if (typeof data.id !== "string" || !data.id) {
+    throw new Error("dictToState: missing or invalid required field 'id'");
+  }
+
+  const rawMode: string =
+    typeof data.mode === "string" ? data.mode : "idle";
   const mode: Mode = (MODE_MIGRATION[rawMode] ?? rawMode) as Mode;
 
   const state: any = {
@@ -96,8 +168,7 @@ export function dictToState(data: Record<string, any>): ContextState {
     last_active: data.last_active ?? "",
     mode,
     plan_anchors: data.plan_anchors ?? [],
-    plan_consumed: data.plan_consumed ?? false,
-    handoff_consumed: data.handoff_consumed ?? false,
+    work_consumed: data.work_consumed ?? false,
     session_ids: data.session_ids ?? [],
     tasks: data.tasks ?? [],
   };
@@ -108,6 +179,7 @@ export function dictToState(data: Record<string, any>): ContextState {
   if ("plan_signature" in data) state.plan_signature = data.plan_signature;
   if ("plan_id" in data) state.plan_id = data.plan_id;
   if ("handoff_path" in data) state.handoff_path = data.handoff_path;
+  if ("next_artifact_type" in data) state.next_artifact_type = data.next_artifact_type;
   if ("last_session" in data) state.last_session = data.last_session;
 
   // Migration: plan_hash_consumed (added in multi-plan context fix)

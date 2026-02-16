@@ -27,6 +27,47 @@ import type { ContextState, IndexFile, IndexEntry, Mode } from "../types.js";
 const INDEX_VERSION = "3.0";
 
 // ---------------------------------------------------------------------------
+// Public utilities
+// ---------------------------------------------------------------------------
+
+/**
+ * Determine artifact type from context state.
+ * Checks explicit next_artifact_type field first, falls back to field detection.
+ *
+ * Edge cases:
+ * - Both artifacts exist: Log warning, return "plan" (deterministic fallback for corrupted state)
+ * - No artifacts: Return null (caller handles gracefully)
+ */
+export function determineArtifactType(
+  state: ContextState,
+): "plan" | "handoff" | null {
+  // Explicit field takes precedence
+  if (state.next_artifact_type) {
+    return state.next_artifact_type;
+  }
+
+  // Implicit detection
+  const hasPlan = Boolean(state.plan_path && state.plan_hash);
+  const hasHandoff = Boolean(state.handoff_path);
+
+  // Edge case: Both exist (shouldn't happen - indicates bug in replacement logic)
+  // Fallback: Pick plan (deterministic, no filesystem I/O)
+  if (hasPlan && hasHandoff) {
+    logWarn(
+      "context_store",
+      `Context ${state.id} has both plan and handoff - indicates bug in replacement logic`,
+    );
+    return "plan";
+  }
+
+  if (hasPlan) return "plan";
+  if (hasHandoff) return "handoff";
+
+  // No artifacts present - return null (caller logs warning and skips)
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
@@ -196,6 +237,7 @@ export function createContext(
   }
 
   fs.mkdirSync(contextDir, { recursive: true });
+  fs.mkdirSync(path.join(contextDir, "notes"), { recursive: true });
 
   const now = nowIso();
   const state: ContextState = {
@@ -212,10 +254,10 @@ export function createContext(
     plan_signature: null,
     plan_id: null,
     plan_anchors: [],
-    plan_consumed: false,
     plan_hash_consumed: null,
     handoff_path: null,
-    handoff_consumed: false,
+    work_consumed: false, // CHANGED: unified flag
+    next_artifact_type: null,
     session_ids: [],
     last_session: null,
     tasks: [],
@@ -392,9 +434,8 @@ export function updateMode(
     plan_signature?: string;
     plan_id?: string;
     plan_anchors?: string[];
-    plan_consumed?: boolean;
+    work_consumed?: boolean; // FIXED: unified flag (was plan_consumed/handoff_consumed)
     plan_hash_consumed?: string;
-    handoff_consumed?: boolean;
   },
 ): ContextState | null {
   const state = getContext(contextId, projectRoot);
@@ -409,9 +450,9 @@ export function updateMode(
     if (opts.plan_signature !== undefined) state.plan_signature = opts.plan_signature;
     if (opts.plan_id !== undefined) state.plan_id = opts.plan_id;
     if (opts.plan_anchors !== undefined) state.plan_anchors = opts.plan_anchors;
-    if (opts.plan_consumed !== undefined) state.plan_consumed = opts.plan_consumed;
-    if (opts.plan_hash_consumed !== undefined) state.plan_hash_consumed = opts.plan_hash_consumed;
-    if (opts.handoff_consumed !== undefined) state.handoff_consumed = opts.handoff_consumed;
+    if (opts.work_consumed !== undefined) state.work_consumed = opts.work_consumed; // CHANGED: unified flag
+    if (opts.plan_hash_consumed !== undefined)
+      state.plan_hash_consumed = opts.plan_hash_consumed;
   }
 
   // Clear plan/handoff fields when returning to idle
@@ -421,9 +462,10 @@ export function updateMode(
     state.plan_signature = null;
     state.plan_id = null;
     state.plan_anchors = [];
-    state.plan_consumed = false;
     state.plan_hash_consumed = null;
-    state.handoff_consumed = false;
+    state.handoff_path = null;
+    state.work_consumed = false; // CHANGED: unified flag
+    state.next_artifact_type = null;
   }
 
   saveState(contextId, state, projectRoot);
@@ -431,7 +473,7 @@ export function updateMode(
 }
 
 /**
- * Transition idle/has_plan/has_handoff → active, unless in plan mode.
+ * Transition idle/has_staged_work → active, unless in plan mode.
  * See SPEC.md §7.11
  */
 export function maybeActivate(
@@ -445,13 +487,15 @@ export function maybeActivate(
   const state = getContext(contextId, projectRoot);
   if (!state) return false;
 
-  if (state.mode === "idle" || state.mode === "has_plan" || state.mode === "has_handoff") {
+  if (state.mode === "idle" || state.mode === "has_staged_work") {
     const oldMode = state.mode;
     const opts: Record<string, any> = {};
-    if (oldMode === "has_plan") opts.plan_consumed = true;
-    else if (oldMode === "has_handoff") opts.handoff_consumed = true;
+    if (oldMode === "has_staged_work") opts.work_consumed = true; // CHANGED: unified flag
     updateMode(contextId, "active", projectRoot, opts);
-    logInfo("context_store", `maybe_activate (${caller}): ${contextId} ${oldMode} -> active`);
+    logInfo(
+      "context_store",
+      `maybe_activate (${caller}): ${contextId} ${oldMode} -> active`,
+    );
     return true;
   }
 

@@ -58,7 +58,7 @@ export function inference(
 
     stdout = execFileSync(
       "claude",
-      ["--model", model, "--print", "--setting-sources", empty, "-p", promptArg],
+      ["--model", model, "--print", "--setting-sources", empty, "-p", "--no-session-persistence", promptArg],
       {
         timeout: timeoutSec * 1000,
         env,
@@ -268,7 +268,7 @@ export async function inferenceAsync(
 
   const result = await execFileAsync(
     "claude",
-    ["--model", model, "--print", "--setting-sources", empty, "-p", promptArg],
+    ["--model", model, "--print", "--setting-sources", empty, "-p", "--no-session-persistence", promptArg],
     { timeout: timeoutMs, env, shell: isWin },
   );
 
