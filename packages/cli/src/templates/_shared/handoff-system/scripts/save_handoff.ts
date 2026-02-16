@@ -204,9 +204,10 @@ function main(): void {
     process.exit(1);
   }
 
-  // Parse frontmatter to extract session_id
+  // Parse frontmatter to extract session_id and context_id
   const [frontmatter, body] = parseFrontmatter(content);
   const frontmatterSessionId = frontmatter["session_id"] || null;
+  const frontmatterContextId = frontmatter["context_id"] || null;
 
   // Parse arguments
   let explicitContextId: string | null = null;
@@ -220,12 +221,13 @@ function main(): void {
     }
   }
 
-  // Five-tier context resolution:
+  // Six-tier context resolution:
   // 1a. Explicit --context-id argument
   // 1b. Explicit --session-id argument
   // 2a. session_id from frontmatter (piped through handoff content)
-  // 2b. CLAUDE_SESSION_ID environment variable
-  // 3. Most recent active context (fallback)
+  // 2b. context_id from frontmatter (piped through handoff content)
+  // 3. CLAUDE_SESSION_ID environment variable
+  // 4. Most recent active context (fallback)
   let context: ReturnType<typeof getContext> = null;
   let contextId: string;
 
@@ -256,6 +258,15 @@ function main(): void {
     }
     contextId = context.id;
     logInfo("save_handoff", `Resolved context via frontmatter session_id: ${frontmatterSessionId} -> ${contextId}`);
+  } else if (frontmatterContextId) {
+    // Tier 2b: Frontmatter context_id (piped data)
+    context = getContext(frontmatterContextId, projectRoot);
+    if (!context) {
+      eprint(`No context found for context_id: ${frontmatterContextId} (from frontmatter)`);
+      process.exit(1);
+    }
+    contextId = context.id;
+    logInfo("save_handoff", `Resolved context via frontmatter context_id: ${frontmatterContextId}`);
   } else {
     const envSessionId = process.env.CLAUDE_SESSION_ID;
     if (envSessionId) {

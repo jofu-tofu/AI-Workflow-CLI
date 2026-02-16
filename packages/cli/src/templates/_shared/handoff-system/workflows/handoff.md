@@ -58,9 +58,9 @@ Use this template. The `<!-- SECTION: name -->` markers are required for the sav
 ---
 title: Session Handoff
 date: {ISO timestamp}
-session_id: {conversation ID if available}
-project: {project name from package.json, Cargo.toml, or directory name}
+session_id: $CLAUDE_SESSION_ID
 context_id: {context_id from Step 1}
+project: {project name from package.json, Cargo.toml, or directory name}
 plan_document: {path to plan if provided, or "none"}
 ---
 
