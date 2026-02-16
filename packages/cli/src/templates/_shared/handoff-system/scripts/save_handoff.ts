@@ -3,12 +3,12 @@
  * Save a handoff document with folder-based sharding.
  *
  * Usage:
- *   bun .aiwcli/_shared/scripts/save_handoff.ts <<'EOF'
+ *   bun .aiwcli/_shared/handoff-system/scripts/save_handoff.ts <<'EOF'
  *   # Your handoff markdown content here (with <!-- SECTION: name --> markers)
  *   EOF
  *
  * Or with a file:
- *   bun .aiwcli/_shared/scripts/save_handoff.ts < handoff.md
+ *   bun .aiwcli/_shared/handoff-system/scripts/save_handoff.ts < handoff.md
  *
  * This script:
  * 1. Auto-resolves the active context ID
@@ -23,12 +23,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { getContext, saveState, getContextBySessionId } from "../lib-ts/context/context-store.js";
-import { getHandoffFolderPath, getProjectRoot } from "../lib-ts/base/constants.js";
-import { atomicWrite } from "../lib-ts/base/atomic-write.js";
-import { logInfo, logWarn, logError } from "../lib-ts/base/logger.js";
-import { getGitStatusShort } from "../lib-ts/base/git-state.js";
-import { eprint } from "../lib-ts/base/utils.js";
+import { getContext, saveState, getContextBySessionId, getAllContexts } from "../../lib-ts/context/context-store.js";
+import { getHandoffFolderPath, getProjectRoot } from "../../lib-ts/base/constants.js";
+import { atomicWrite } from "../../lib-ts/base/atomic-write.js";
+import { logInfo, logWarn, logError } from "../../lib-ts/base/logger.js";
+import { getGitStatusShort } from "../../lib-ts/base/git-state.js";
+import { eprint } from "../../lib-ts/base/utils.js";
 
 // ---------------------------------------------------------------------------
 // Parsing helpers
@@ -189,24 +189,7 @@ function main(): void {
   // Project root via shared utility (checks CLAUDE_PROJECT_DIR, falls back to cwd)
   const projectRoot = getProjectRoot(process.cwd());
 
-  // Resolve context ID from session (requires CLAUDE_SESSION_ID env var)
-  const sessionId = process.env.CLAUDE_SESSION_ID;
-
-  if (!sessionId) {
-    eprint("CLAUDE_SESSION_ID not set. This script must be run from within a Claude Code session.");
-    process.exit(1);
-  }
-
-  const context = getContextBySessionId(sessionId, projectRoot);
-  if (!context) {
-    eprint(`No context found for session: ${sessionId}`);
-    process.exit(1);
-  }
-
-  const contextId = context.id;
-  logInfo("save_handoff", `Resolved context via session ID: ${sessionId} -> ${contextId}`);
-
-  // Read content from stdin
+  // Read content from stdin FIRST (needed to extract session_id from frontmatter)
   let content: string;
   try {
     content = fs.readFileSync(0, "utf-8");
@@ -221,8 +204,85 @@ function main(): void {
     process.exit(1);
   }
 
-  // Parse frontmatter and sections
+  // Parse frontmatter to extract session_id
   const [frontmatter, body] = parseFrontmatter(content);
+  const frontmatterSessionId = frontmatter["session_id"] || null;
+
+  // Parse arguments
+  let explicitContextId: string | null = null;
+  let explicitSessionId: string | null = null;
+  const args = process.argv.slice(2);
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--context-id" && i + 1 < args.length) {
+      explicitContextId = args[i + 1];
+    } else if (args[i] === "--session-id" && i + 1 < args.length) {
+      explicitSessionId = args[i + 1];
+    }
+  }
+
+  // Five-tier context resolution:
+  // 1a. Explicit --context-id argument
+  // 1b. Explicit --session-id argument
+  // 2a. session_id from frontmatter (piped through handoff content)
+  // 2b. CLAUDE_SESSION_ID environment variable
+  // 3. Most recent active context (fallback)
+  let context: ReturnType<typeof getContext> = null;
+  let contextId: string;
+
+  if (explicitContextId) {
+    // Tier 1a: Explicit context ID argument
+    context = getContext(explicitContextId, projectRoot);
+    if (!context) {
+      eprint(`Context not found: ${explicitContextId}`);
+      process.exit(1);
+    }
+    contextId = context.id;
+    logInfo("save_handoff", `Resolved context via --context-id argument: ${contextId}`);
+  } else if (explicitSessionId) {
+    // Tier 1b: Explicit session ID argument
+    context = getContextBySessionId(explicitSessionId, projectRoot);
+    if (!context) {
+      eprint(`No context found for session: ${explicitSessionId} (from --session-id argument)`);
+      process.exit(1);
+    }
+    contextId = context.id;
+    logInfo("save_handoff", `Resolved context via --session-id argument: ${explicitSessionId} -> ${contextId}`);
+  } else if (frontmatterSessionId) {
+    // Tier 2a: Frontmatter session_id (piped data)
+    context = getContextBySessionId(frontmatterSessionId, projectRoot);
+    if (!context) {
+      eprint(`No context found for session: ${frontmatterSessionId} (from frontmatter)`);
+      process.exit(1);
+    }
+    contextId = context.id;
+    logInfo("save_handoff", `Resolved context via frontmatter session_id: ${frontmatterSessionId} -> ${contextId}`);
+  } else {
+    const envSessionId = process.env.CLAUDE_SESSION_ID;
+    if (envSessionId) {
+      // Tier 2b: Environment variable
+      context = getContextBySessionId(envSessionId, projectRoot);
+      if (!context) {
+        eprint(`No context found for session: ${envSessionId}`);
+        process.exit(1);
+      }
+      contextId = context.id;
+      logInfo("save_handoff", `Resolved context via CLAUDE_SESSION_ID env var: ${envSessionId} -> ${contextId}`);
+    } else {
+      // Tier 3: Fallback to most recent active context
+      const activeContexts = getAllContexts("active", projectRoot);
+      if (activeContexts.length === 0) {
+        eprint("No active context found. Use --context-id or --session-id to specify explicitly.");
+        eprint("Example: bun save_handoff.ts --session-id abc-123-def < handoff.md");
+        eprint("      or: bun save_handoff.ts --context-id 260215-1234-my-context < handoff.md");
+        process.exit(1);
+      }
+      context = activeContexts[0]!; // getAllContexts sorts by last_active descending
+      contextId = context.id;
+      logInfo("save_handoff", `Resolved context via fallback (most recent active): ${contextId}`);
+    }
+  }
+
+  // Parse sections from body
   const sections = parseHandoffSections(body);
 
   logInfo("save_handoff", `Parsed ${Object.keys(sections).length} sections: ${Object.keys(sections).join(", ")}`);
@@ -239,13 +299,39 @@ function main(): void {
   const planPath = getPlanPathFromContext(contextId, projectRoot);
   const hasPlan = planPath !== null;
 
-  // Copy plan if exists
-  if (planPath) {
+  // Write updated plan if Claude provided it
+  if (sections["plan"]) {
+    try {
+      const updatedPlan = sections["plan"];
+
+      // Write to original plan path if it exists
+      if (planPath) {
+        const [success, error] = atomicWrite(planPath, updatedPlan);
+        if (success) {
+          logInfo("save_handoff", `Plan updated at ${planPath}`);
+        } else {
+          logWarn("save_handoff", `Failed to update original plan: ${error}`);
+        }
+      }
+
+      // Write to handoff folder
+      const handoffPlanPath = path.join(handoffFolder, "plan.md");
+      const [success, error] = atomicWrite(handoffPlanPath, updatedPlan);
+      if (success) {
+        logInfo("save_handoff", `Plan copied to handoff folder`);
+      } else {
+        logWarn("save_handoff", `Failed to copy plan to handoff: ${error}`);
+      }
+    } catch (e) {
+      logWarn("save_handoff", `Plan update failed (non-critical): ${e}`);
+    }
+  } else if (planPath) {
+    // Fallback: copy unchanged plan if Claude didn't provide an update
     try {
       const planContent = fs.readFileSync(planPath, "utf-8");
       const [success, error] = atomicWrite(path.join(handoffFolder, "plan.md"), planContent);
       if (success) {
-        logInfo("save_handoff", `Copied plan from ${planPath}`);
+        logInfo("save_handoff", `Copied unchanged plan from ${planPath}`);
       } else {
         logWarn("save_handoff", `Failed to copy plan: ${error}`);
       }
@@ -322,16 +408,30 @@ function main(): void {
     }
   }
 
-  // Set handoff_path and handoff_consumed=false in state.json
+  // Set handoff_path and work_consumed=false in state.json
+  // Latest artifact wins: clear plan if it exists
   try {
     const indexPathStr = path.join(handoffFolder, "index.md");
     const state = getContext(contextId, projectRoot);
     if (state) {
+      // Latest artifact wins: clear plan if it exists
+      if (state.plan_path || state.plan_hash) {
+        logInfo("save_handoff", "Handoff replaces existing plan (latest wins)");
+        state.plan_path = null;
+        state.plan_hash = null;
+        state.plan_signature = null;
+        state.plan_id = null;
+        state.plan_anchors = [];
+        state.plan_hash_consumed = null;
+      }
+
       state.handoff_path = indexPathStr;
-      state.handoff_consumed = false;
+      state.work_consumed = false; // CHANGED: unified flag
+      state.next_artifact_type = "handoff";
+
       const [ok, err] = saveState(contextId, state, projectRoot);
       if (ok) {
-        logInfo("save_handoff", `Set handoff_path: ${indexPathStr}`);
+        logInfo("save_handoff", `Set handoff as staged artifact`);
       } else {
         logWarn("save_handoff", `Failed to save state: ${err}`);
       }
@@ -339,7 +439,7 @@ function main(): void {
       logWarn("save_handoff", `Could not load context state for ${contextId}`);
     }
   } catch (e) {
-    logWarn("save_handoff", `Handoff saved but auto-resume won't work (context update failed): ${e}`);
+    logWarn("save_handoff", `Handoff saved but auto-resume won't work: ${e}`);
   }
 
   // Output success message

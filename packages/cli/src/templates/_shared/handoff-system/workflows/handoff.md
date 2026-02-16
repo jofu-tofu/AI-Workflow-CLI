@@ -19,7 +19,7 @@ Generate a handoff document summarizing the current session's work, decisions, a
 
 ### Step 1: Get Context ID
 
-Extract the `context_id` from the system reminder injected by the user_prompt_submit hook.
+Extract the `context_id` from the system reminder injected by the context enforcer hook.
 
 Look for the pattern in the system reminder:
 ```
@@ -153,7 +153,7 @@ The closing `EOF` delimiter **MUST** be at column 0 (no leading spaces or tabs).
 
 **Correct Example:**
 ```bash
-bun .aiwcli/_shared/scripts/save_handoff.ts <<'EOF'
+bun .aiwcli/_shared/handoff-system/scripts/save_handoff.ts <<'EOF'
 content here
 EOF
 ```
@@ -161,7 +161,7 @@ EOF
 
 **Wrong Example (will fail):**
 ```bash
-bun .aiwcli/_shared/scripts/save_handoff.ts <<'EOF'
+bun .aiwcli/_shared/handoff-system/scripts/save_handoff.ts <<'EOF'
 content here
   EOF
 ```
@@ -172,7 +172,7 @@ content here
 Instead of writing the file directly, pipe your handoff content to the save script:
 
 ```bash
-bun .aiwcli/_shared/scripts/save_handoff.ts <<'EOF'
+bun .aiwcli/_shared/handoff-system/scripts/save_handoff.ts <<'EOF'
 {Your complete handoff markdown content from Step 3}
 EOF
 ```

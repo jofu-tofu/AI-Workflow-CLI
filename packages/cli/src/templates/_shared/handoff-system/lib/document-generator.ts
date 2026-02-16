@@ -6,18 +6,17 @@
  * work to a new session (typically due to context window limits).
  */
 
-import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-
+import * as crypto from "node:crypto";
+import { getContextHandoffsDir, getContextDir } from "../base/constants.js";
 import { atomicWrite } from "../base/atomic-write.js";
-import { getContextDir, getContextHandoffsDir } from "../base/constants.js";
-import { logError, logInfo } from "../base/logger.js";
+import { logInfo, logError } from "../base/logger.js";
 import { nowIso } from "../base/utils.js";
-import { getContext, saveState as _saveState } from "../context/context-store.js";
+import { getContext, saveState } from "../context/context-store.js";
 import { getTasks } from "../context/task-tracker.js";
-import { formatContinuationHeader, formatReason, renderTaskList } from "../templates/formatters.js";
-import type { HandoffDocument, Task as _Task } from "../types.js";
+import { renderTaskList, formatContinuationHeader, formatReason } from "../templates/formatters.js";
+import type { HandoffDocument, Task } from "../types.js";
 
 /**
  * Generate and save a handoff document for a context.
@@ -125,7 +124,8 @@ function renderHandoffMarkdown(doc: HandoffDocument): string {
   );
 
   // Active tasks
-  lines.push(renderTaskList(doc.active_tasks, "Active Tasks", true).trimEnd(), "");
+  lines.push(renderTaskList(doc.active_tasks, "Active Tasks", true).trimEnd());
+  lines.push("");
 
   // Completed this session
   if (doc.completed_tasks_this_session.length > 0) {
@@ -133,7 +133,8 @@ function renderHandoffMarkdown(doc: HandoffDocument): string {
       doc.completed_tasks_this_session as any[],
       "Completed This Session",
       false,
-    ).trimEnd(), "");
+    ).trimEnd());
+    lines.push("");
   }
 
   // Work summary
@@ -147,7 +148,6 @@ function renderHandoffMarkdown(doc: HandoffDocument): string {
     for (let i = 0; i < doc.next_steps.length; i++) {
       lines.push(`${i + 1}. ${doc.next_steps[i]}`);
     }
-
     lines.push("");
   }
 
@@ -157,7 +157,6 @@ function renderHandoffMarkdown(doc: HandoffDocument): string {
     for (const note of doc.important_notes) {
       lines.push(`- ${note}`);
     }
-
     lines.push("");
   }
 
