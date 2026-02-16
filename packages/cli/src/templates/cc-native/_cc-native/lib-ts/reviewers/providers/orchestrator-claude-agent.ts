@@ -99,6 +99,7 @@ When selecting agents:
       "--setting-sources", process.platform === "win32" ? '""' : "",
       "--system-prompt", shellQuoteWin(systemPrompt),
       "-p",
+      "--no-session-persistence", // Prevent subprocess from creating session records
     ];
   }
 

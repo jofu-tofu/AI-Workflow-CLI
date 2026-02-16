@@ -25,6 +25,7 @@ export class ClaudeAgent extends BaseCliAgent<ReviewerResult> {
       "--max-turns", "3",
       "--setting-sources", process.platform === "win32" ? '""' : "",
       "-p",
+      "--no-session-persistence", // Prevent subprocess from creating session records
     ];
 
     if (this.agent.system_prompt) {
