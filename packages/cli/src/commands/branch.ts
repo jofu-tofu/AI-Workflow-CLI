@@ -97,7 +97,16 @@ static override flags = {
 
     // Validate that one of the flags is provided
     if (!flags.main && !flags.launch && !flags.delete) {
-      this.error('Either --main, --launch, or --delete flag is required', {exit: EXIT_CODES.INVALID_USAGE})
+      if (args.branchName) {
+        // Bare positional arg = shorthand for --launch <name>
+        await this.handleWorktreeLaunch(args.branchName)
+        return
+      }
+
+      this.error(
+        'Either provide a branch name directly (aiw branch <name>) or use --main, --launch, or --delete',
+        {exit: EXIT_CODES.INVALID_USAGE},
+      )
     }
 
     // Route to appropriate handler
@@ -469,7 +478,7 @@ static override flags = {
   private async handleWorktreeLaunch(branchName: string | undefined): Promise<void> {
     // Validate branch name
     if (!branchName || branchName.trim().length === 0) {
-      this.error('Branch name is required when using --launch flag', {exit: EXIT_CODES.INVALID_USAGE})
+      this.error('Branch name is required. Usage: aiw branch <name> or aiw branch --launch <name>', {exit: EXIT_CODES.INVALID_USAGE})
     }
 
     // Validate branch name format (no spaces, special chars that could cause issues)
