@@ -266,9 +266,10 @@ function runGit(args: string[], cwd: string, timeout = 2000): string | null {
 }
 
 function getGitStatus(cwd: string): GitStatus | null {
-  if (runGit(["rev-parse", "--git-dir"], cwd) === null) {
-    return null;
-  }
+  // One call replaces 6: branch, modified, staged, untracked, ahead/behind, and repo check.
+  // porcelain=v2 -b gives structured header lines + per-file XY status codes.
+  const porcelain = runGit(["status", "--porcelain=v2", "-b"], cwd);
+  if (porcelain === null) return null;
 
   const status: GitStatus = {
     branch: "detached",
@@ -282,35 +283,31 @@ function getGitStatus(cwd: string): GitStatus | null {
     age_color: GIT_AGE_FRESH,
   };
 
-  // Branch
-  const branch = runGit(["branch", "--show-current"], cwd);
-  if (branch) status.branch = branch;
-
-  // Modified files
-  const diff = runGit(["diff", "--name-only"], cwd);
-  if (diff) status.modified = diff.split(/\r?\n/).filter(Boolean).length;
-
-  // Staged files
-  const staged = runGit(["diff", "--cached", "--name-only"], cwd);
-  if (staged) status.staged = staged.split(/\r?\n/).filter(Boolean).length;
-
-  // Untracked files
-  const untracked = runGit(["ls-files", "--others", "--exclude-standard"], cwd);
-  if (untracked) status.untracked = untracked.split(/\r?\n/).filter(Boolean).length;
-
-  // Stash count
-  const stash = runGit(["stash", "list"], cwd);
-  if (stash) status.stash_count = stash.split(/\r?\n/).filter(Boolean).length;
-
-  // Ahead/behind
-  const ab = runGit(["rev-list", "--left-right", "--count", "HEAD...@{u}"], cwd);
-  if (ab) {
-    const parts = ab.split(/\s+/);
-    if (parts.length >= 2) {
-      status.ahead = parseInt(parts[0]!, 10) || 0;
-      status.behind = parseInt(parts[1]!, 10) || 0;
+  for (const line of porcelain.split(/\r?\n/)) {
+    if (line.startsWith("# branch.head ")) {
+      const b = line.slice(14).trim();
+      status.branch = b === "(detached)" ? "detached" : b;
+    } else if (line.startsWith("# branch.ab ")) {
+      // Format: "+<ahead> -<behind>"
+      const m = line.match(/\+(\d+) -(\d+)/);
+      if (m) {
+        status.ahead = parseInt(m[1]!, 10);
+        status.behind = parseInt(m[2]!, 10);
+      }
+    } else if (line.startsWith("1 ") || line.startsWith("2 ")) {
+      // Changed tracked file: "1 XY ..." where X=staged Y=unstaged, '.'=unchanged
+      const x = line[2]!;
+      const y = line[3]!;
+      if (x !== ".") status.staged++;
+      if (y !== ".") status.modified++;
+    } else if (line.startsWith("? ")) {
+      status.untracked++;
     }
   }
+
+  // Stash count (no equivalent in status output)
+  const stash = runGit(["stash", "list"], cwd);
+  if (stash) status.stash_count = stash.split(/\r?\n/).filter(Boolean).length;
 
   // Commit age
   const log = runGit(["log", "-1", "--format=%ct"], cwd);
