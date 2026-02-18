@@ -97,11 +97,13 @@ export function extractBody(content: string): string {
  * Discover and load all agent configs from a directory of markdown files.
  * Skips the plan-orchestrator agent. Defaults categories to ["code"].
  *
- * @param agentsDir - Path to agents directory (default: _cc-native/agents/)
+ * @param agentsDir - Path to agents directory. Callers must pass an explicit path.
+ *   Known call sites: settings.ts → plan-review/agents/plan-review,
+ *   plan-questions.ts → plan-review/agents/plan-questions
  * @returns Array of AgentConfig objects
  */
 export function aggregateAgents(agentsDir?: string): AgentConfig[] {
-  const dir = agentsDir ?? path.join("_cc-native", "agents");
+  const dir = agentsDir ?? path.join("_cc-native", "plan-review", "agents");
 
   if (!fs.existsSync(dir)) {
     logWarn("aggregate", `Agents directory not found: ${dir}`);
