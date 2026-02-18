@@ -54,7 +54,6 @@ The artifacts system is invoked indirectly through the plan review pipeline — 
 ## Callers
 
 - `../plan-review/lib/review-pipeline.ts` — primary caller, writes all review artifacts
-- `../../lib-ts/artifacts.ts` — thin re-export wrapper (backward compat, will be removed)
 - `../../lib-ts/index.ts` — re-exports public API surface
 
 ## Design Decisions
