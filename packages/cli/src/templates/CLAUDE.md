@@ -203,3 +203,30 @@ Load and execute `_{method}/workflows/{name}.md`.
 - Hardcoded paths without method namespace
 - Putting hook scripts directly in IDE directories (`.claude/hooks/`)
 - Creating `_shared/` directories inside method templates (e.g., `cc-native/_shared/`). All shared code lives in `packages/cli/src/templates/_shared/`. Method templates reference shared code via imports at runtime, not by copying.
+
+---
+
+## System Co-location Pattern
+
+Cohesive subsystems are organized as self-contained folders, following the handoff system model. Each system folder lives at the `_shared/` or `_cc-native/` level and contains:
+
+```
+{system-name}/
+├── CLAUDE.md       ← Spec: lifecycle, API reference, design decisions, gotchas
+├── lib/            ← TypeScript implementation (imported by hooks and other systems)
+├── agents/         ← Agent spec .md files used by this system (if any)
+├── scripts/        ← Standalone entry points invoked independently (if any)
+└── workflows/      ← User-facing procedural workflow docs (if any)
+```
+
+**Existing systems following this pattern:**
+- `_shared/handoff-system/` — handoff creation and restoration
+- `_cc-native/plan-review/` — multi-agent plan review pipeline
+- `_cc-native/artifacts/` — review artifact generation and tracking
+- `_cc-native/lib-ts/rlm/` — retrieval-augmented learning memory
+
+**Hooks are NOT co-located with their owning system.**
+Claude Code hooks are path-referenced in `.claude/settings.json` at install time.
+Moving a hook file requires settings.json updates — high blast-radius, fragile.
+Hooks live in `_shared/hooks-ts/` or `_cc-native/hooks/`. Each system's CLAUDE.md
+lists the hooks that invoke it under a "Hooks" section.

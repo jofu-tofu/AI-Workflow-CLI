@@ -14,19 +14,19 @@
 
 ### Plan Review Architecture
 
-The hook is a thin coordinator (~70 lines) that delegates to `lib-ts/review-pipeline.ts`. The pipeline wires together focused modules:
+The hook is a thin coordinator (~70 lines) that delegates to `plan-review/lib/review-pipeline.ts`. The pipeline wires together focused modules:
 
-| Module | Responsibility |
-|--------|----------------|
-| `plan-discovery.ts` | Find plan file, read content, compute hash |
-| `settings.ts` | Load + merge config with defaults, load agent library |
-| `agent-selection.ts` | Mandatory agent resolution, orchestrator-based selection, model assignment |
-| `graduation.ts` | Pass eligibility, pass streaks, graduation threshold, iteration advancement |
-| `output-builder.ts` | Issue truncation, verdict override, context/block message construction |
-| `review-pipeline.ts` | Pipeline orchestrator wiring all modules together |
-| `artifacts/format.ts` | Pure formatting (markdown, JSON, inline summaries) |
-| `artifacts/write.ts` | File I/O for review artifacts |
-| `artifacts/tracker.ts` | Review tracker management |
+| Module | Location | Responsibility |
+|--------|----------|----------------|
+| `plan-discovery.ts` | `lib-ts/` | Find plan file, read content, compute hash |
+| `settings.ts` | `lib-ts/` | Load + merge config with defaults, load agent library |
+| `agent-selection.ts` | `plan-review/lib/` | Mandatory agent resolution, orchestrator-based selection, model assignment |
+| `graduation.ts` | `plan-review/lib/` | Pass eligibility, pass streaks, graduation threshold, iteration advancement |
+| `output-builder.ts` | `plan-review/lib/` | Issue truncation, verdict override, context/block message construction |
+| `review-pipeline.ts` | `plan-review/lib/` | Pipeline orchestrator wiring all modules together |
+| `artifacts/lib/format.ts` | `artifacts/` | Pure formatting (markdown, JSON, inline summaries) |
+| `artifacts/lib/write.ts` | `artifacts/` | File I/O for review artifacts |
+| `artifacts/lib/tracker.ts` | `artifacts/` | Review tracker management |
 
 ### Questions Gate (in review-pipeline.ts)
 

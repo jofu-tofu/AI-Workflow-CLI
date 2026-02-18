@@ -20,7 +20,7 @@ export {
   formatReviewMarkdown,
   generateReviewIndex,
   writeCombinedArtifacts,
-} from "./artifacts.js";
+} from "../artifacts/lib/index.js";
 
 // CC-native state
 export {
@@ -59,13 +59,13 @@ export { cleanupDebugFolder, debugLog, debugRaw, getDebugDir } from "./debug.js"
 export { coerceToReview, parseJsonMaybe } from "./json-parser.js";
 
 // Orchestrator
-export { buildOrchestratorSchema, runOrchestrator } from "./orchestrator.js";
+export { buildOrchestratorSchema, runOrchestrator } from "../plan-review/lib/orchestrator.js";
 
 // Reviewers
 export {
   AgentReviewer,
   runAgentReview,
-} from "./reviewers/index.js";
+} from "../plan-review/lib/reviewers/index.js";
 
 // Iteration state
 export {
@@ -113,4 +113,4 @@ export {
 } from "./types.js";
 
 // Verdict aggregation
-export { computeReviewDecision, worstVerdict } from "./verdict.js";
+export { computeReviewDecision, worstVerdict } from "../plan-review/lib/verdict.js";

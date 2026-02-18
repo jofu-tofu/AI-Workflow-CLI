@@ -273,7 +273,7 @@ export interface Reviewer {
 // JSON Schemas (moved to reviewers/schemas.ts)
 // ---------------------------------------------------------------------------
 // Re-export for backwards compatibility
-export { REVIEW_SCHEMA, ORCHESTRATOR_SCHEMA, REVIEW_PROMPT_PREFIX, AGENT_REVIEW_PROMPT_PREFIX } from "./reviewers/schemas.js";
+export { REVIEW_SCHEMA, ORCHESTRATOR_SCHEMA, REVIEW_PROMPT_PREFIX, AGENT_REVIEW_PROMPT_PREFIX } from "../plan-review/lib/reviewers/schemas.js";
 
 // ---------------------------------------------------------------------------
 // Display Defaults

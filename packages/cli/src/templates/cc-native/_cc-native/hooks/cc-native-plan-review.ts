@@ -21,7 +21,7 @@ import {
 } from "../../_shared/lib-ts/base/hook-utils.js";
 import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
 import { getProjectRoot, getAiwcliDir } from "../../_shared/lib-ts/base/constants.js";
-import { runReviewPipeline } from "../lib-ts/review-pipeline.js";
+import { runReviewPipeline } from "../plan-review/lib/review-pipeline.js";
 import type { PipelineResult } from "../lib-ts/types.js";
 
 const HOOK = "cc-native-plan-review";

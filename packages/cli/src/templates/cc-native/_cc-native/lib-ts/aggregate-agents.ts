@@ -1,6 +1,11 @@
 /**
  * Agent frontmatter parser — discovers and loads agent configs from markdown files.
  * See cc-native-plan-review-spec.md §4.14
+ *
+ * NOTE: This file intentionally stays in lib-ts/ rather than plan-review/lib/.
+ * Both settings.ts (shared cc-native infra) and plan-questions.ts (plan-review) import it.
+ * Moving it to plan-review/ would create a forbidden backward dependency: lib-ts → plan-review.
+ * Do not move this file without first moving settings.ts out of lib-ts/.
  */
 
 import * as fs from "node:fs";

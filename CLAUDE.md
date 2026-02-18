@@ -15,6 +15,8 @@ Changes to the working directory (`.aiwcli/`) should also be applied to the temp
 - `.aiwcli/_shared/lib-ts/**/*.ts` → `packages/cli/src/templates/_shared/lib-ts/`
 - `.aiwcli/_cc-native/hooks/*.ts` → `packages/cli/src/templates/cc-native/_cc-native/hooks/`
 - `.aiwcli/_cc-native/lib-ts/**/*.ts` → `packages/cli/src/templates/cc-native/_cc-native/lib-ts/`
+- `.aiwcli/_cc-native/plan-review/**` → `packages/cli/src/templates/cc-native/_cc-native/plan-review/`
+- `.aiwcli/_cc-native/artifacts/**` → `packages/cli/src/templates/cc-native/_cc-native/artifacts/`
 - `.claude/settings.json` → `packages/cli/src/templates/cc-native/.claude/settings.json`
 
 **When to sync:**
@@ -46,3 +48,28 @@ Each hook has a single responsibility:
 
 
 See `.aiwcli/_shared/handoff-system/CLAUDE.md` for full lifecycle details including restore paths, rejection handling, and design principles.
+
+## System Co-location Pattern
+
+Cohesive subsystems are organized as self-contained folders, following the handoff system model. Each system folder lives at the `_shared/` or `_cc-native/` level and contains:
+
+```
+{system-name}/
+├── CLAUDE.md       ← Spec: lifecycle, API reference, design decisions, gotchas
+├── lib/            ← TypeScript implementation (imported by hooks and other systems)
+├── agents/         ← Agent spec .md files used by this system (if any)
+├── scripts/        ← Standalone entry points invoked independently (if any)
+└── workflows/      ← User-facing procedural workflow docs (if any)
+```
+
+**Existing systems following this pattern:**
+- `_shared/handoff-system/` — handoff creation and restoration
+- `_cc-native/plan-review/` — multi-agent plan review pipeline
+- `_cc-native/artifacts/` — review artifact generation and tracking
+- `_cc-native/lib-ts/rlm/` — retrieval-augmented learning memory
+
+**Hooks are NOT co-located with their owning system.**
+Claude Code hooks are path-referenced in `.claude/settings.json` at install time.
+Moving a hook file requires settings.json updates — high blast-radius, fragile.
+Hooks live in `_shared/hooks-ts/` or `_cc-native/hooks/`. Each system's CLAUDE.md
+lists the hooks that invoke it under a "Hooks" section.
