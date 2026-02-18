@@ -134,7 +134,7 @@ const context = getContextBySessionId(sessionId, projectRoot);
 if (!context) {
   // Fallback: find single planning context
   const allActive = getAllContexts("active", projectRoot);
-  const planning = allActive.filter((c: any) => c.mode === "active" || c.mode === "has_plan");
+  const planning = allActive.filter((c: any) => c.mode === "active" || c.mode === "has_staged_work");
   if (planning.length === 1) {
     context = planning[0];
   }
@@ -235,13 +235,3 @@ Hooks fail silently on import errors — verify after any import path changes.
 | 2026-02-10 | **Migrated cc-native hooks from Python to TypeScript.** `cc-native-plan-review.ts` (async, parallel agent reviews via `Promise.all()`), `add_plan_context.ts`, `plan_questions_early.ts`. All hooks use `runHook()`/`runHookAsync()` entry points. Library code in `_cc-native/lib-ts/` (18 files). Settings.json updated to use `bun` runner. Python `.py` files kept as fallback until TS hooks verified. |
 | 2026-02-10 | Flipped TS logger stderr default to opt-in (`opts?.stderr === true`). Added `logBlocking()` for intentional stderr visibility. Removed redundant `{stderr: false}` from hook-utils.ts, user_prompt_submit.ts, context_monitor.ts. Added "Hook Error Visibility" section documenting visibility tiers and exit code behavior. |
 | 2026-02-10 | Fixed `debug.py` `context_path` crash. Added local try/catch around `maybeActivate` in `user_prompt_submit.ts` and `context_monitor.ts` to prevent stderr error display on non-critical I/O failures. Removed dead `context_path` from `_emitHookEnd` in `hook-utils.ts`. Added "Error Handling" section to CLAUDE.md. |
-| 2026-02-07 | Handoff staging lifecycle: `has_handoff` mode + `handoff_consumed` flag mirrors plan lifecycle. `save_handoff.py` no longer transitions to idle — stays active for session_end staging. `session_end.py` stages `active→has_handoff` when handoff_path set and not consumed. `session_start.py` restores `has_handoff→active` on /clear. `context_selector.py` has fallback Case 3b for has_handoff. PostToolUse context_monitor matcher simplified from specific tool list to `*`. |
-| 2026-02-07 | Removed PreToolUse:Write matcher from `add_plan_context.py`. Write-time plan nudges were redundant after consolidating enforcement to PreToolUse:Task. Removed `is_plan_file_write()`, `load_plan_context_config()`, `PHASE_B_ENFORCEMENT`, `nudge_write_questions()`, and `project_dir` import. |
-| 2026-02-07 | Question enforcement is now advisory-only (never blocks). `add_plan_context.py` uses `emit_context()` for all question nudges — no `permissionDecision:deny` anywhere. Removed `emit_context_and_block` import and `TASK_ENFORCEMENT_REASON` constant. |
-| 2026-02-07 | Moved question enforcement to PreToolUse:Task (Plan subagent gate). `add_plan_context.py` now handles three events: PostToolUse:AskUserQuestion, PreToolUse:Task (primary gate), PreToolUse:Write (fallback). Added `is_plan_task()`, `is_internal_call()` guard, `TASK_ENFORCEMENT_CONTEXT` constant. Registered `^Task$` command hook in settings.json. |
-| 2026-02-07 | Deleted `plan_accepted.py` (dead code — PostToolUse:ExitPlanMode never fires due to /clear race). Plan field assignment handled by `session_end.py` fallback. Added `plan_consumed` flag to prevent infinite plan re-staging. |
-| 2026-02-07 | Hook lifecycle diagnostics: all hooks now use `run_hook(main, "hook_name")` entry point. Logs HOOK_START/HOOK_END with template origin, event type, duration_ms, and status. Millisecond timestamps in logger. |
-| 2026-02-07 | Unified logger: all diagnostic logging uses `log_debug/log_info/log_warn/log_error` from `_shared/lib/base/logger.py` instead of eprint/print-to-stderr. Updated debugging and error handling docs. |
-| 2026-02-06 | Merged mark_questions_asked.py into add_plan_context.py. Hook now handles both PostToolUse:AskUserQuestion and PreToolUse:Write. Deleted standalone mark_questions_asked.py. |
-| 2026-02-06 | Fixed add_plan_context.py trigger docs (was PostToolUse: EnterPlanMode, is PreToolUse: Write). Added emit_context/emit_context_and_block utility docs. |
-| 2026-02-03 | Initial creation |

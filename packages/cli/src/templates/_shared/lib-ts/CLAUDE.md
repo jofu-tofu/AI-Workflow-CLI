@@ -287,9 +287,9 @@ if (state) {
 }
 ```
 
-**Valid modes:** `idle` | `has_plan` | `has_handoff` | `active`
+**Valid modes:** `idle` | `has_staged_work` | `active`
 
-Transitions: `idle`/`has_plan`/`has_handoff` --> `active` (via `maybeActivate`). `active` --> `has_plan`/`has_handoff` (via `session_end`).
+Transitions: `idle`/`has_staged_work` --> `active` (via `maybeActivate`). `active` --> `has_staged_work` (via `session_end`).
 
 ---
 
@@ -347,7 +347,7 @@ These run for ALL templates. Method-specific hooks live in `_{method}/hooks/`.
 | `user_prompt_submit.ts` | UserPromptSubmit | Context enforcement — binds prompts to tracked contexts |
 | `context_monitor.ts` | PostToolUse:* | Context window tracking, handoff warnings at 30/20/10% |
 | `session_start.ts` | SessionStart | Restores plan/handoff context after `/clear` or compaction |
-| `session_end.ts` | SessionEnd | Stages `active` --> `has_plan`/`has_handoff` for next session |
+| `session_end.ts` | SessionEnd | Stages `active` --> `has_staged_work` for next session |
 | `archive_plan.ts` | PreToolUse:ExitPlanMode | Archives plan file before accept/reject decision |
 | `pre_compact.ts` | PreToolUse:Compact | Pre-compaction state snapshot |
 | `task_create_capture.ts` | PostToolUse:TaskCreate | Persists task creation to context state |

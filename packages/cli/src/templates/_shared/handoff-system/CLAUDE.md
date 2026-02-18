@@ -369,6 +369,18 @@ Expected: No import errors, clean execution.
 - Prevents `session_end` from re-staging same artifact
 - Reset to `false` when new artifact created
 
+## Plan-Specific Behaviors
+
+**Critical: Auto-paste bypasses hooks.** After ExitPlanMode "clear context", Claude Code runs `/clear` and auto-pastes the plan content. This auto-paste is an internal mechanism that does NOT trigger UserPromptSubmit. The `session_start.ts` handler for `source=clear` bridges this gap.
+
+**One plan per session assumption:** Plan review iteration state resets across sessions but NOT within a session. When a plan is rejected by reviewers and the user creates a new plan in the same session, the iteration state (agent graduation, pass streaks) persists. This allows the review framework to work correctly: rejection within a session means "fix and retry," not "start completely fresh." Only when starting a new planning session (new session ID) does iteration state reset to allow full fresh review.
+
+**Rejection handling:** `archive_plan` archives the file on PermissionRequest (before accept/reject decision). If rejected, the archive exists but `session_end`'s fallback may assign plan_hash. This is acceptable — rejected plans with hash set don't cause harm because plan matching in context_selector requires content match.
+
+**Two restore paths:**
+- **source=clear** (plan/handoff acceptance): Plan auto-pasted by Claude Code (plans only). Hook injects task/git context and handoff content (dispatch by `next_artifact_type`).
+- **source=compact** (auto-compaction): Plan NOT auto-pasted. Hook inlines plan content via `buildRestoreSections(inline_plan=True)`.
+
 ## Architecture Decisions
 
 **Why folder sharding (not single file)?**
