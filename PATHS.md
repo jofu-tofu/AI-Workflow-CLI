@@ -6,7 +6,7 @@ Quick reference for terminal-based workflow operations.
 
 | Purpose | Location |
 |---------|----------|
-| **Workflows** | `_cc-native/workflows/*.md` |
+| **Workflows** | `_cc-native/plan-review/workflows/*.md` |
 | **Config** | `_cc-native/plan-review.config.json` |
 | **Output** | `_output/cc-native/plans/{date}/{slug}/` |
 | **Hooks** | `_cc-native/hooks/*.ts` |
@@ -35,7 +35,7 @@ Quick reference for terminal-based workflow operations.
 
 ```bash
 # Find canonical workflows
-ls _cc-native/workflows/
+ls _cc-native/plan-review/workflows/
 
 # Edit plan review config
 code _cc-native/plan-review.config.json

@@ -163,7 +163,7 @@ export function loadAgentLibrary(
   projDir: string,
   settings?: Record<string, unknown>,
 ): AgentConfig[] {
-  const agentsData = aggregateAgents(path.join(projDir, "_cc-native", "agents", "plan-review"));
+  const agentsData = aggregateAgents(path.join(projDir, "_cc-native", "plan-review", "agents", "plan-review"));
   const defaultModel = settings?.agentDefaults?.model ?? DEFAULT_AGENT_MODEL;
 
   if (!agentsData || agentsData.length === 0) {
