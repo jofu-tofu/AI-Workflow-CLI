@@ -12,9 +12,9 @@ import { execFileAsync, getInternalSubprocessEnv, shellQuoteWin } from "./subpro
 
 // Model configurations §6.1
 const MODELS: Record<string, string> = {
-  fast: "claude-3-haiku-20240307",
-  standard: "claude-sonnet-4-20250514",
-  smart: "claude-opus-4-20250514",
+  fast: "claude-haiku-4-5-20251001",
+  standard: "claude-sonnet-4-6",
+  smart: "claude-opus-4-6",
 };
 
 const TIMEOUTS: Record<string, number> = {

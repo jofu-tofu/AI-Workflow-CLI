@@ -311,15 +311,15 @@ function buildDeadEndsSection(deadEnds: DeadEnd[]): string
 
 **Note:** Currently not imported by any files. Moved here for logical grouping and completeness.
 
-## Command Integration
+## Skill Integration
 
 **Thin pointer pattern:**
 
-`.claude/commands/handoff.md` (user-facing, discoverable via `/`)
+`.claude/skills/handoff/SKILL.md` (user-facing, discoverable via `/`, `user-invocable: true`)
 → References `.aiwcli/_shared/handoff-system/workflows/handoff.md` (detailed procedural steps)
 
 **Benefits:**
-- Command files stay concise (easy to scan in `/` menu)
+- Skill files stay concise (easy to scan in `/` menu)
 - Workflow files can expand without bloating command discovery
 - Single source of truth for procedural details
 

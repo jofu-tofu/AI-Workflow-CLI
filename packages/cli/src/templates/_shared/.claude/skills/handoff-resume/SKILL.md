@@ -1,6 +1,7 @@
 ---
 name: handoff-resume
-description: Resume handoff
+description: Restore context from a handoff document and create ISC tasks to continue work
+user-invocable: true
 ---
 
 # Resume Handoff

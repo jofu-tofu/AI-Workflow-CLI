@@ -1,9 +1,10 @@
 ---
 name: handoff
-description: Create handoff document
+description: Create handoff document to preserve session context for future sessions
+user-invocable: true
 ---
 
-# Handoff Workflow
+# Handoff
 
 Generate a comprehensive handoff document for the next session. See `.aiwcli/_shared/handoff-system/workflows/handoff.md` for complete process documentation.
 
