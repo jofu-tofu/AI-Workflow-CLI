@@ -88,8 +88,26 @@ export function validateContextId(contextId: string): string {
 }
 
 /**
+ * Walk up from startDir until a directory containing `.aiwcli/` is found.
+ * Returns startDir itself if no anchor is found (fail-safe).
+ * See SPEC.md §2.2
+ */
+function findProjectRoot(startDir: string): string {
+  let dir = startDir;
+  while (true) {
+    if (fs.existsSync(path.join(dir, ".aiwcli"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break; // filesystem root reached
+    dir = parent;
+  }
+  return startDir; // fallback: no .aiwcli anchor found
+}
+
+/**
  * Get project root from environment or cwd.
- * Priority: CLAUDE_PROJECT_DIR > payload cwd > process.cwd()
+ * Priority: CLAUDE_PROJECT_DIR > walk up from payload cwd > walk up from process.cwd()
+ * Walks upward to find the nearest .aiwcli/ anchor, so cwd drift (e.g. after
+ * `cd packages/cli` in a Bash tool call) doesn't break hook resolution.
  * See SPEC.md §2.2
  */
 export function getProjectRoot(payloadCwd?: string): string {
@@ -104,8 +122,8 @@ export function getProjectRoot(payloadCwd?: string): string {
     }
   }
 
-  if (payloadCwd) return payloadCwd;
-  return process.cwd();
+  if (payloadCwd) return findProjectRoot(payloadCwd);
+  return findProjectRoot(process.cwd());
 }
 
 // §2.4 — Path functions
