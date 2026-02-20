@@ -45,18 +45,19 @@ export async function pruneGitignoreStaleEntries(targetDir: string): Promise<boo
         continue
       }
 
-      if (inAiwSection) {
-        // AIW section ends at empty line or another comment header
-        if (line === '' || (line.startsWith('#') && line !== AIW_GITIGNORE_HEADER)) {
-          inAiwSection = false
-          const {lines: filtered, pruned: sectionPruned} = await pruneSection(aiwSectionLines, targetDir) // eslint-disable-line no-await-in-loop
-          if (sectionPruned) pruned = true
-          newLines.push(...filtered, line)
-        } else {
-          aiwSectionLines.push(line)
-        }
-      } else {
+      if (!inAiwSection) {
         newLines.push(line)
+        continue
+      }
+
+      // AIW section ends at empty line or another comment header
+      if (line === '' || (line.startsWith('#') && line !== AIW_GITIGNORE_HEADER)) {
+        inAiwSection = false
+        const {lines: filtered, pruned: sectionPruned} = await pruneSection(aiwSectionLines, targetDir) // eslint-disable-line no-await-in-loop
+        if (sectionPruned) pruned = true
+        newLines.push(...filtered, line)
+      } else {
+        aiwSectionLines.push(line)
       }
     }
 

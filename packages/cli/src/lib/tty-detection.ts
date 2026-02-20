@@ -87,6 +87,7 @@ export function isQuietMode(flags?: {quiet?: boolean}): boolean {
  * Spinners only make sense in interactive terminals.
  * Automatically disabled in CI environments and quiet mode.
  * @param flags - Optional flags object with quiet mode
+ * @param flags.quiet - Quiet mode flag
  * @param proc - Optional process-like object for testing (defaults to global process)
  */
 export function shouldShowSpinners(flags?: {quiet?: boolean}, proc: ProcessLike = process): boolean {

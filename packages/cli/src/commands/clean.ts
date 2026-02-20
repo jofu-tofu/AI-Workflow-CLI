@@ -107,15 +107,7 @@ export default class CleanCommand extends BaseCommand {
       this.log('')
       this.logInfo(`Found ${totalItems} item(s) in ${allContents.length} output folder(s):`)
       this.log('')
-
-      for (const {items} of allContents) {
-        for (const item of items) {
-          const relativePath = item.path.replace(targetDir + '\\', '').replace(targetDir + '/', '')
-          const suffix = item.isDirectory ? '/' : ''
-          this.log(`  ${relativePath}${suffix}`)
-        }
-      }
-
+      this.displayContents(allContents, targetDir)
       this.log('')
 
       // Dry run - just show files without deleting
@@ -171,6 +163,25 @@ export default class CleanCommand extends BaseCommand {
       this.error(`Clean failed: ${err.message}`, {
         exit: EXIT_CODES.GENERAL_ERROR,
       })
+    }
+  }
+
+  /**
+   * Display contents of folders that will be deleted.
+   *
+   * @param allContents - Folders with their contents
+   * @param targetDir - Base directory for relative path display
+   */
+  private displayContents(
+    allContents: {folder: string; items: {isDirectory: boolean; path: string}[]}[],
+    targetDir: string,
+  ): void {
+    for (const {items} of allContents) {
+      for (const item of items) {
+        const relativePath = item.path.replace(targetDir + '\\', '').replace(targetDir + '/', '')
+        const suffix = item.isDirectory ? '/' : ''
+        this.log(`  ${relativePath}${suffix}`)
+      }
     }
   }
 

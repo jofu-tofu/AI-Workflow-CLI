@@ -208,6 +208,181 @@ async function removeDirectory(dir: string): Promise<void> {
 }
 
 /**
+ * Try to remove a directory if it is empty.
+ *
+ * @param dir - Directory to check and potentially remove
+ * @returns True if the directory was removed
+ */
+async function tryRemoveEmptyDir(dir: string): Promise<boolean> {
+  try {
+    if (await isDirectoryEmpty(dir)) {
+      await removeDirectory(dir)
+      return true
+    }
+  } catch {
+    // Directory doesn't exist or can't be accessed
+  }
+
+  return false
+}
+
+/**
+ * Check if an IDE folder will be empty after removing specified method folders.
+ * Counts method folders vs folders being deleted, then simulates settings cleanup.
+ *
+ * @param targetDir - Project root directory
+ * @param ideFolder - IDE folder configuration
+ * @param ideFolder.root - Root folder name (e.g., '.claude')
+ * @param ideFolder.settingsFile - Settings file name (e.g., 'settings.json')
+ * @param ideMethodFolders - IDE method folders being deleted
+ * @param methodsToRemove - Method names being removed
+ * @returns True if the IDE folder will be empty after removal
+ */
+async function checkIdeRemovalEligibility(
+  targetDir: string,
+  ideFolder: {root: string; settingsFile: string},
+  ideMethodFolders: string[],
+  methodsToRemove: string[],
+): Promise<boolean> {
+  const idePath = join(targetDir, ideFolder.root)
+  try {
+    const stat = await fs.stat(idePath)
+    if (!stat.isDirectory()) return false
+  } catch {
+    return false
+  }
+
+  // Count method folders vs folders being deleted
+  const counts = await countMethodFolderDeletions(idePath, ideMethodFolders)
+  if (counts.total === 0 || counts.total !== counts.deleted) return false
+
+  // Check if settings file would become empty after removing methods
+  return wouldSettingsBeEmpty(idePath, ideFolder.settingsFile, methodsToRemove)
+}
+
+/**
+ * Count total method folders and how many are being deleted in an IDE root.
+ *
+ * @param idePath - Path to IDE root folder
+ * @param ideMethodFolders - IDE method folders being deleted
+ * @returns Counts of total and deleted method folders
+ */
+async function countMethodFolderDeletions(
+  idePath: string,
+  ideMethodFolders: string[],
+): Promise<{deleted: number; total: number}> {
+  let total = 0
+  let deleted = 0
+
+  try {
+    const topEntries = await fs.readdir(idePath, {withFileTypes: true})
+    const subdirs = topEntries.filter((e) => e.isDirectory())
+
+    const subResults = await Promise.all(
+      subdirs.map(async (subdir) => {
+        const subdirPath = join(idePath, subdir.name)
+        try {
+          const entries = await fs.readdir(subdirPath, {withFileTypes: true})
+          const methodDirs = entries.filter((e) => e.isDirectory())
+          const deletedCount = methodDirs.filter((entry) =>
+            ideMethodFolders.includes(join(subdirPath, entry.name)),
+          ).length
+          return {deleted: deletedCount, total: methodDirs.length}
+        } catch {
+          return {deleted: 0, total: 0}
+        }
+      }),
+    )
+
+    for (const r of subResults) {
+      total += r.total
+      deleted += r.deleted
+    }
+  } catch {
+    return {deleted: 0, total: 0}
+  }
+
+  return {deleted, total}
+}
+
+/**
+ * Check if a settings file would be empty after removing specified methods and hooks.
+ *
+ * @param idePath - Path to IDE root folder
+ * @param settingsFile - Settings file name
+ * @param methodsToRemove - Method names being removed
+ * @returns True if settings would be empty
+ */
+async function wouldSettingsBeEmpty(
+  idePath: string,
+  settingsFile: string,
+  methodsToRemove: string[],
+): Promise<boolean> {
+  const settingsPath = join(idePath, settingsFile)
+  try {
+    const content = await fs.readFile(settingsPath, 'utf8')
+    const settings = JSON.parse(content)
+
+    if (settings.methods && typeof settings.methods === 'object') {
+      for (const method of methodsToRemove) {
+        delete settings.methods[method]
+      }
+
+      if (Object.keys(settings.methods).length === 0) {
+        delete settings.methods
+      }
+    }
+
+    if (settings.hooks && typeof settings.hooks === 'object') {
+      delete settings.hooks
+    }
+
+    return Object.keys(settings).length === 0
+  } catch {
+    return true
+  }
+}
+
+/**
+ * Check if a log file exceeds 1MB and needs rotation.
+ *
+ * @param logPath - Path to the log file
+ * @returns Log action info if rotation needed, null otherwise
+ */
+async function checkLogRotation(logPath: string): Promise<null | {path: string; sizeBytes: number}> {
+  try {
+    const stat = await fs.stat(logPath)
+    if (stat.size > 1_048_576) {
+      return {path: logPath, sizeBytes: stat.size}
+    }
+  } catch {
+    // Can't stat log file
+  }
+
+  return null
+}
+
+/**
+ * Check if a contexts directory has a non-empty _archive/ subdirectory.
+ *
+ * @param contextsPath - Path to the contexts directory
+ * @returns Archive info if found, null otherwise
+ */
+async function checkArchiveDir(contextsPath: string): Promise<null | {count: number; path: string}> {
+  const archivePath = join(contextsPath, '_archive')
+  try {
+    const entries = await fs.readdir(archivePath)
+    if (entries.length > 0) {
+      return {path: archivePath, count: entries.length}
+    }
+  } catch {
+    // No archive directory
+  }
+
+  return null
+}
+
+/**
  * Recursively remove files from targetDir that match files in sourceDir.
  * Only removes files that exist in the source template — user-created files are preserved.
  * Prunes empty directories after file removal.
@@ -319,171 +494,11 @@ export default class ClearCommand extends BaseCommand {
         return
       }
 
-      // Show what will be deleted
-      this.log('')
-
-      // Workflow folders (.aiwcli/_{method}/) - will be deleted entirely
-      if (workflowFolders.length > 0) {
-        this.logInfo(`Workflow folders to remove (${workflowFolders.length}):`)
-        for (const folder of workflowFolders) {
-          const folderName = folder.replace(targetDir + '\\', '').replace(targetDir + '/', '')
-          this.log(`  ${folderName}/`)
-        }
-
-        this.log('')
-      }
-
-      // Output folders (_output/{method}/) - will be deleted
-      if (outputMethodFolders.length > 0) {
-        this.logInfo(`Output folders to remove (${outputMethodFolders.length}):`)
-        for (const folder of outputMethodFolders) {
-          const folderName = folder.replace(targetDir + '\\', '').replace(targetDir + '/', '')
-          this.log(`  ${folderName}/`)
-        }
-
-        this.log('')
-      }
-
-      // IDE method folders (.claude/commands/{method}/, .windsurf/workflows/{method}/, etc.)
-      if (ideMethodFolders.length > 0) {
-        this.logInfo(`IDE method folders to remove (${ideMethodFolders.length}):`)
-        for (const folder of ideMethodFolders) {
-          const folderName = folder.replace(targetDir + '\\', '').replace(targetDir + '/', '')
-          this.log(`  ${folderName}/`)
-        }
-
-        this.log('')
-      }
-
-      // Extract method names for settings.json updates
+      // Display pending changes
       const methodsToRemove = this.extractMethodNames(workflowFolders)
-      if (methodsToRemove.length > 0) {
-        this.logInfo(`Will update settings files to remove method entries: ${methodsToRemove.join(', ')}`)
-        this.log('')
-      }
-
-      // Check if _output will be empty after clearing
-      const containerDir = join(targetDir, AIWCLI_CONTAINER)
-      const outputDir = join(containerDir, OUTPUT_FOLDER_NAME)
-      const allMethodFolders = await this.findOutputFolders(targetDir)
-      const willOutputBeEmpty =
-        allMethodFolders.length > 0 && allMethodFolders.length === outputMethodFolders.length
-
-      if (willOutputBeEmpty) {
-        this.logInfo(`${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder will be removed (will be empty)`)
-        this.log('')
-      }
-
-      // Check if IDE folders might be removed after clearing
-      // This happens when settings.json becomes empty and all subfolders are empty
-      const checkIdeRemoval = async (ideFolder: typeof IDE_FOLDERS.claude): Promise<boolean> => {
-        const idePath = join(targetDir, ideFolder.root)
-        // Check if IDE folder exists
-        try {
-          const stat = await fs.stat(idePath)
-          if (!stat.isDirectory()) return false
-        } catch {
-          return false
-        }
-
-        // Scan all subdirectories to count method folders vs folders being deleted
-        let totalMethodFolders = 0
-        let foldersBeingDeleted = 0
-        try {
-          const topEntries = await fs.readdir(idePath, {withFileTypes: true})
-          const subdirs = topEntries.filter((e) => e.isDirectory())
-
-          // Check each subdirectory for method folders
-          const subResults = await Promise.all(
-            subdirs.map(async (subdir) => {
-              const subdirPath = join(idePath, subdir.name)
-              try {
-                const entries = await fs.readdir(subdirPath, {withFileTypes: true})
-                const methodDirs = entries.filter((e) => e.isDirectory())
-                const deleted = methodDirs.filter((entry) => {
-                  const fullPath = join(subdirPath, entry.name)
-                  return ideMethodFolders.includes(fullPath)
-                }).length
-                return {deleted, total: methodDirs.length}
-              } catch {
-                return {deleted: 0, total: 0}
-              }
-            }),
-          )
-          for (const r of subResults) {
-            totalMethodFolders += r.total
-            foldersBeingDeleted += r.deleted
-          }
-        } catch {
-          return false
-        }
-
-        // If all method folders are being deleted, check if settings would be empty
-        if (totalMethodFolders > 0 && totalMethodFolders === foldersBeingDeleted) {
-          // Check if settings file would become empty after removing methods
-          const settingsPath = join(idePath, ideFolder.settingsFile)
-          try {
-            const content = await fs.readFile(settingsPath, 'utf8')
-            const settings = JSON.parse(content)
-            // Remove method entries from methods tracking object
-            if (settings.methods && typeof settings.methods === 'object') {
-              for (const method of methodsToRemove) {
-                if (method in settings.methods) {
-                  delete settings.methods[method]
-                }
-              }
-
-              // Remove methods object if empty
-              if (Object.keys(settings.methods).length === 0) {
-                delete settings.methods
-              }
-            }
-
-            // Remove hooks that would be empty
-            if (settings.hooks && typeof settings.hooks === 'object') {
-              // Simplified check - if hooks only contains method-related entries
-              delete settings.hooks
-            }
-
-            return Object.keys(settings).length === 0
-          } catch {
-            // Settings file doesn't exist or is invalid - would be considered empty
-            return true
-          }
-        }
-
-        return false
-      }
-
-      const [willClaudeFolderBeEmpty, willWindsurfFolderBeEmpty] = await Promise.all([
-        checkIdeRemoval(IDE_FOLDERS.claude),
-        checkIdeRemoval(IDE_FOLDERS.windsurf),
-      ])
-
-      if (willClaudeFolderBeEmpty) {
-        this.logInfo(`${IDE_FOLDERS.claude.root}/ folder will be removed (will be empty)`)
-        this.log('')
-      }
-
-      if (willWindsurfFolderBeEmpty) {
-        this.logInfo(`${IDE_FOLDERS.windsurf.root}/ folder will be removed (will be empty)`)
-        this.log('')
-      }
-
-      // Compute gitignore changes for dry-run display
-      const gitignoreSimulation = await computeGitignoreRemovals(targetDir)
-      if (gitignoreSimulation.toRemove.length > 0 || gitignoreSimulation.toKeep.length > 0) {
-        this.logInfo('Gitignore changes:')
-        for (const {entry, reason} of gitignoreSimulation.toKeep) {
-          this.log(`  keep ${entry}/ (${reason})`)
-        }
-
-        for (const entry of gitignoreSimulation.toRemove) {
-          this.log(`  remove ${entry}/`)
-        }
-
-        this.log('')
-      }
+      await this.displayPendingChanges(targetDir, {
+        workflowFolders, outputMethodFolders, ideMethodFolders, methodsToRemove,
+      })
 
       // Dry run - just show what would happen
       if (flags['dry-run']) {
@@ -491,10 +506,8 @@ export default class ClearCommand extends BaseCommand {
         return
       }
 
-      // Calculate total items for confirmation
-      const totalFolders = workflowFolders.length + outputMethodFolders.length + ideMethodFolders.length
-
       // Confirm deletion
+      const totalFolders = workflowFolders.length + outputMethodFolders.length + ideMethodFolders.length
       if (!flags.force) {
         const shouldDelete = await confirm({
           message: `Delete ${totalFolders} folder(s)?`,
@@ -507,205 +520,12 @@ export default class ClearCommand extends BaseCommand {
         }
       }
 
-      // Delete all folders in parallel
-      const deleteFolder = async (
-        folder: string,
-        type: string,
-      ): Promise<{folder: string; success: boolean; type: string}> => {
-        try {
-          await removeDirectory(folder)
-          this.logDebug(`Removed ${type} folder: ${folder}`)
-          return {folder, success: true, type}
-        } catch (error) {
-          const err = error as NodeJS.ErrnoException
-          this.logWarning(`Failed to delete ${folder}: ${err.message}`)
-          return {folder, success: false, type}
-        }
-      }
-
-      const deleteResults = await Promise.all([
-        ...workflowFolders.map((f) => deleteFolder(f, 'workflow')),
-        ...outputMethodFolders.map((f) => deleteFolder(f, 'output')),
-        ...ideMethodFolders.map((f) => deleteFolder(f, 'IDE method')),
-      ])
-
-      const deletedWorkflow = deleteResults.filter((r) => r.success && r.type === 'workflow').length
-      const deletedOutput = deleteResults.filter((r) => r.success && r.type === 'output').length
-      const deletedIde = deleteResults.filter((r) => r.success && r.type === 'IDE method').length
-
-      // Check if _output folder is now empty and remove it
-      let removedOutputDir = false
-      try {
-        if (await isDirectoryEmpty(outputDir)) {
-          await removeDirectory(outputDir)
-          this.logDebug(`Removed empty ${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder`)
-          removedOutputDir = true
-        }
-      } catch {
-        // _output doesn't exist or can't be accessed
-      }
-
-      // Check if .aiwcli container is now empty and remove it
-      let removedAiwcliContainer = false
-      try {
-        if (await isDirectoryEmpty(containerDir)) {
-          await removeDirectory(containerDir)
-          this.logDebug(`Removed empty ${AIWCLI_CONTAINER}/ folder`)
-          removedAiwcliContainer = true
-        }
-      } catch {
-        // .aiwcli doesn't exist or can't be accessed
-      }
-
-      // Smart gitignore removal: compute what should be removed based on disk state
-      const {toRemove, toKeep} = await computeGitignoreRemovals(targetDir)
-
-      for (const {entry, reason} of toKeep) {
-        this.logDebug(`Keeping ${entry}/ in .gitignore (${reason})`)
-      }
-
-      if (toRemove.length > 0) {
-        await removeGitignoreEntries(targetDir, toRemove)
-        this.logDebug(`Removed from .gitignore: ${toRemove.join(', ')}`)
-      }
-
-      // Prune stale gitignore entries as safety net
-      const pruned = await pruneGitignoreStaleEntries(targetDir)
-      if (pruned) {
-        this.logDebug('Pruned stale .gitignore entries')
-      }
-
-      // Reconstruct IDE settings from remaining templates
-      let updatedClaudeSettings = false
-      let updatedWindsurfSettings = false
-      if (methodsToRemove.length > 0) {
-        // Remove method entries from settings files first
-        await this.removeMethodEntries(targetDir, methodsToRemove)
-
-        // Get remaining installed methods
-        const allMethods = await getInstalledMethodNames(targetDir)
-        // Filter out methods being removed (in case disk scan still finds them)
-        const remainingTemplates = [...allMethods].filter(m => !methodsToRemove.includes(m))
-
-        // Determine which IDEs need reconstruction
-        const ides: string[] = []
-        if (await pathExists(join(targetDir, IDE_FOLDERS.claude.root))) {
-          ides.push('claude')
-        }
-
-        if (await pathExists(join(targetDir, IDE_FOLDERS.windsurf.root))) {
-          ides.push('windsurf')
-        }
-
-        if (ides.length > 0) {
-          await reconstructIdeSettings(targetDir, remainingTemplates, ides)
-          if (ides.includes('claude')) {
-            this.logDebug('Reconstructed .claude/settings.json (backup created)')
-            updatedClaudeSettings = true
-          }
-
-          if (ides.includes('windsurf')) {
-            this.logDebug('Reconstructed .windsurf/hooks.json (backup created)')
-            updatedWindsurfSettings = true
-          }
-        }
-      }
-
-      // Remove shared IDE content when no templates remain
-      if (methodsToRemove.length > 0) {
-        const allMethodsAfterRemove = await getInstalledMethodNames(targetDir)
-        const remainingAfterRemove = [...allMethodsAfterRemove].filter(m => !methodsToRemove.includes(m))
-
-        if (remainingAfterRemove.length === 0) {
-          await this.removeSharedIdeContent(targetDir)
-        }
-      }
-
-      // Clean up backup files created during reconstruction
-      const backupCleanups = Object.values(IDE_FOLDERS).map(async (ide) => {
-        const backupPath = join(targetDir, ide.root, `${ide.settingsFile}.backup`)
-        try {
-          await fs.rm(backupPath, {force: true})
-        } catch {
-          // Backup doesn't exist or can't be removed
-        }
-      })
-      await Promise.all(backupCleanups)
-
-      // Check if IDE folders should be fully deleted (empty settings + empty subfolders)
-      let removedClaudeDir = false
-      let removedWindsurfDir = false
-
-      if (await shouldDeleteIdeFolder(targetDir, IDE_FOLDERS.claude)) {
-        const claudeDirPath = join(targetDir, IDE_FOLDERS.claude.root)
-        try {
-          await removeDirectory(claudeDirPath)
-          this.logDebug(`Removed empty ${IDE_FOLDERS.claude.root}/ folder`)
-          removedClaudeDir = true
-          // If we deleted the whole folder, the settings update message is misleading
-          updatedClaudeSettings = false
-        } catch {
-          // Folder can't be removed
-        }
-      }
-
-      if (await shouldDeleteIdeFolder(targetDir, IDE_FOLDERS.windsurf)) {
-        const windsurfDirPath = join(targetDir, IDE_FOLDERS.windsurf.root)
-        try {
-          await removeDirectory(windsurfDirPath)
-          this.logDebug(`Removed empty ${IDE_FOLDERS.windsurf.root}/ folder`)
-          removedWindsurfDir = true
-          // If we deleted the whole folder, the settings update message is misleading
-          updatedWindsurfSettings = false
-        } catch {
-          // Folder can't be removed
-        }
-      }
-
-      // Report results
-      this.log('')
-      const parts: string[] = []
-      if (deletedWorkflow > 0) {
-        parts.push(`${deletedWorkflow} workflow folder(s)`)
-      }
-
-      if (deletedOutput > 0) {
-        parts.push(`${deletedOutput} output folder(s)`)
-      }
-
-      if (deletedIde > 0) {
-        parts.push(`${deletedIde} IDE method folder(s)`)
-      }
-
-      if (removedOutputDir) {
-        parts.push(`${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder`)
-      }
-
-      if (removedAiwcliContainer) {
-        parts.push(`${AIWCLI_CONTAINER}/ folder`)
-      }
-
-      if (removedClaudeDir) {
-        parts.push(`${IDE_FOLDERS.claude.root}/ folder`)
-      }
-
-      if (removedWindsurfDir) {
-        parts.push(`${IDE_FOLDERS.windsurf.root}/ folder`)
-      }
-
-      this.logSuccess(`Cleared: ${parts.join(', ')}.`)
-
-      if (toRemove.length > 0 || pruned) {
-        this.logSuccess('Updated .gitignore.')
-      }
-
-      if (updatedClaudeSettings) {
-        this.logSuccess('Updated .claude/settings.json (backup: settings.json.backup).')
-      }
-
-      if (updatedWindsurfSettings) {
-        this.logSuccess('Updated .windsurf/hooks.json (backup: hooks.json.backup).')
-      }
+      // Execute deletion and cleanup
+      const deleteCounts = await this.executeFolderDeletion(
+        workflowFolders, outputMethodFolders, ideMethodFolders,
+      )
+      const cleanupResult = await this.performPostDeleteCleanup(targetDir, methodsToRemove)
+      this.reportClearResults(deleteCounts, cleanupResult)
     } catch (error) {
       const err = error as NodeJS.ErrnoException
 
@@ -727,6 +547,7 @@ export default class ClearCommand extends BaseCommand {
    *
    * @param targetDir - Project root directory
    * @param flags - Command flags (dry-run, force)
+   * @param flags.force - Skip confirmation prompt
    */
   // eslint-disable-next-line complexity
   private async cleanRuntimeOutput(
@@ -765,29 +586,16 @@ export default class ClearCommand extends BaseCommand {
 
         // Log rotation: hook-log.jsonl > 1MB
         if (entry.isFile() && entry.name === 'hook-log.jsonl') {
-          try {
-            const stat = await fs.stat(entryPath) // eslint-disable-line no-await-in-loop
-            if (stat.size > 1_048_576) {
-              logAction = {path: entryPath, sizeBytes: stat.size}
-            }
-          } catch {
-            // Can't stat log file
-          }
-
+          logAction = await checkLogRotation(entryPath) // eslint-disable-line no-await-in-loop
           continue
         }
 
         // Archive cleanup: contexts/_archive/
         if (entry.isDirectory() && entry.name === 'contexts') {
-          const archivePath = join(entryPath, '_archive')
-          try {
-            const archiveEntries = await fs.readdir(archivePath) // eslint-disable-line no-await-in-loop
-            if (archiveEntries.length > 0) {
-              archiveDir = archivePath
-              archiveCount = archiveEntries.length
-            }
-          } catch {
-            // No archive directory
+          const result = await checkArchiveDir(entryPath) // eslint-disable-line no-await-in-loop
+          if (result) {
+            archiveDir = result.path
+            archiveCount = result.count
           }
         }
       }
@@ -914,6 +722,179 @@ export default class ClearCommand extends BaseCommand {
       this.logSuccess(`Output cleanup: ${parts.join(', ')}.`)
     } else {
       this.logInfo('No changes made.')
+    }
+  }
+
+  /**
+   * Clean up backup files created during settings reconstruction.
+   *
+   * @param targetDir - Project root directory
+   */
+  private async cleanupBackupFiles(targetDir: string): Promise<void> {
+    const cleanups = Object.values(IDE_FOLDERS).map(async (ide) => {
+      const backupPath = join(targetDir, ide.root, `${ide.settingsFile}.backup`)
+      try {
+        await fs.rm(backupPath, {force: true})
+      } catch {
+        // Backup doesn't exist or can't be removed
+      }
+    })
+    await Promise.all(cleanups)
+  }
+
+  /**
+   * Clean up gitignore entries and prune stale entries.
+   *
+   * @param targetDir - Project root directory
+   * @returns True if gitignore was updated
+   */
+  private async cleanupGitignore(targetDir: string): Promise<boolean> {
+    const {toRemove, toKeep} = await computeGitignoreRemovals(targetDir)
+
+    for (const {entry, reason} of toKeep) {
+      this.logDebug(`Keeping ${entry}/ in .gitignore (${reason})`)
+    }
+
+    if (toRemove.length > 0) {
+      await removeGitignoreEntries(targetDir, toRemove)
+      this.logDebug(`Removed from .gitignore: ${toRemove.join(', ')}`)
+    }
+
+    const pruned = await pruneGitignoreStaleEntries(targetDir)
+    if (pruned) {
+      this.logDebug('Pruned stale .gitignore entries')
+    }
+
+    return toRemove.length > 0 || pruned
+  }
+
+  /**
+   * Display a list of folders to remove.
+   *
+   * @param targetDir - Base directory for relative path display
+   * @param folders - Array of folder paths
+   * @param label - Label for the folder type
+   */
+  private displayFolderList(targetDir: string, folders: string[], label: string): void {
+    if (folders.length === 0) return
+
+    this.logInfo(`${label} to remove (${folders.length}):`)
+    for (const folder of folders) {
+      const folderName = folder.replace(targetDir + '\\', '').replace(targetDir + '/', '')
+      this.log(`  ${folderName}/`)
+    }
+
+    this.log('')
+  }
+
+  /**
+   * Display all pending changes before confirmation.
+   *
+   * @param targetDir - Project root directory
+   * @param folders - Discovered folders and methods to remove
+   * @param folders.workflowFolders - Workflow folders to remove
+   * @param folders.outputMethodFolders - Output method folders to remove
+   * @param folders.ideMethodFolders - IDE method folders to remove
+   * @param folders.methodsToRemove - Method names being removed
+   */
+  private async displayPendingChanges(
+    targetDir: string,
+    folders: {
+      ideMethodFolders: string[]
+      methodsToRemove: string[]
+      outputMethodFolders: string[]
+      workflowFolders: string[]
+    },
+  ): Promise<void> {
+    const {workflowFolders, outputMethodFolders, ideMethodFolders, methodsToRemove} = folders
+    this.log('')
+
+    this.displayFolderList(targetDir, workflowFolders, 'Workflow folders')
+    this.displayFolderList(targetDir, outputMethodFolders, 'Output folders')
+    this.displayFolderList(targetDir, ideMethodFolders, 'IDE method folders')
+
+    if (methodsToRemove.length > 0) {
+      this.logInfo(`Will update settings files to remove method entries: ${methodsToRemove.join(', ')}`)
+      this.log('')
+    }
+
+    // Check if _output will be empty after clearing
+    const allMethodFolders = await this.findOutputFolders(targetDir)
+    if (allMethodFolders.length > 0 && allMethodFolders.length === outputMethodFolders.length) {
+      this.logInfo(`${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder will be removed (will be empty)`)
+      this.log('')
+    }
+
+    // Check if IDE folders might be removed after clearing
+    const [willClaudeFolderBeEmpty, willWindsurfFolderBeEmpty] = await Promise.all([
+      checkIdeRemovalEligibility(targetDir, IDE_FOLDERS.claude, ideMethodFolders, methodsToRemove),
+      checkIdeRemovalEligibility(targetDir, IDE_FOLDERS.windsurf, ideMethodFolders, methodsToRemove),
+    ])
+
+    if (willClaudeFolderBeEmpty) {
+      this.logInfo(`${IDE_FOLDERS.claude.root}/ folder will be removed (will be empty)`)
+      this.log('')
+    }
+
+    if (willWindsurfFolderBeEmpty) {
+      this.logInfo(`${IDE_FOLDERS.windsurf.root}/ folder will be removed (will be empty)`)
+      this.log('')
+    }
+
+    // Compute gitignore changes for dry-run display
+    const gitignoreSimulation = await computeGitignoreRemovals(targetDir)
+    if (gitignoreSimulation.toRemove.length > 0 || gitignoreSimulation.toKeep.length > 0) {
+      this.logInfo('Gitignore changes:')
+      for (const {entry, reason} of gitignoreSimulation.toKeep) {
+        this.log(`  keep ${entry}/ (${reason})`)
+      }
+
+      for (const entry of gitignoreSimulation.toRemove) {
+        this.log(`  remove ${entry}/`)
+      }
+
+      this.log('')
+    }
+  }
+
+  /**
+   * Delete all discovered folders in parallel.
+   *
+   * @param workflowFolders - Workflow folders to delete
+   * @param outputMethodFolders - Output method folders to delete
+   * @param ideMethodFolders - IDE method folders to delete
+   * @returns Count of successfully deleted folders by type
+   */
+  private async executeFolderDeletion(
+    workflowFolders: string[],
+    outputMethodFolders: string[],
+    ideMethodFolders: string[],
+  ): Promise<{deletedIde: number; deletedOutput: number; deletedWorkflow: number}> {
+    const deleteFolder = async (
+      folder: string,
+      type: string,
+    ): Promise<{success: boolean; type: string}> => {
+      try {
+        await removeDirectory(folder)
+        this.logDebug(`Removed ${type} folder: ${folder}`)
+        return {success: true, type}
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException
+        this.logWarning(`Failed to delete ${folder}: ${err.message}`)
+        return {success: false, type}
+      }
+    }
+
+    const deleteResults = await Promise.all([
+      ...workflowFolders.map((f) => deleteFolder(f, 'workflow')),
+      ...outputMethodFolders.map((f) => deleteFolder(f, 'output')),
+      ...ideMethodFolders.map((f) => deleteFolder(f, 'IDE method')),
+    ])
+
+    return {
+      deletedWorkflow: deleteResults.filter((r) => r.success && r.type === 'workflow').length,
+      deletedOutput: deleteResults.filter((r) => r.success && r.type === 'output').length,
+      deletedIde: deleteResults.filter((r) => r.success && r.type === 'IDE method').length,
     }
   }
 
@@ -1059,23 +1040,129 @@ export default class ClearCommand extends BaseCommand {
       const entries = await fs.readdir(containerDir, {withFileTypes: true})
 
       for (const entry of entries) {
-        // Look for directories starting with underscore (workflow folders)
-        if (entry.isDirectory() && entry.name.startsWith('_') && entry.name !== OUTPUT_FOLDER_NAME) {
-          // If template specified, only include matching folder
-          if (template) {
-            if (entry.name === `_${template}`) {
-              foundFolders.push(join(containerDir, entry.name))
-            }
-          } else {
-            foundFolders.push(join(containerDir, entry.name))
-          }
+        if (!entry.isDirectory() || !entry.name.startsWith('_') || entry.name === OUTPUT_FOLDER_NAME) {
+          continue
         }
+
+        // If template specified, only include matching folder
+        if (template && entry.name !== `_${template}`) {
+          continue
+        }
+
+        foundFolders.push(join(containerDir, entry.name))
       }
     } catch {
       // Directory can't be read - return empty
     }
 
     return foundFolders
+  }
+
+  /**
+   * Perform all post-deletion cleanup: empty dir removal, gitignore, settings, IDE folders.
+   *
+   * @param targetDir - Project root directory
+   * @param methodsToRemove - Method names being removed
+   * @returns Cleanup result state
+   */
+  private async performPostDeleteCleanup(
+    targetDir: string,
+    methodsToRemove: string[],
+  ): Promise<{
+    gitignoreUpdated: boolean
+    removedAiwcliContainer: boolean
+    removedClaudeDir: boolean
+    removedOutputDir: boolean
+    removedWindsurfDir: boolean
+    updatedClaudeSettings: boolean
+    updatedWindsurfSettings: boolean
+  }> {
+    const containerDir = join(targetDir, AIWCLI_CONTAINER)
+    const outputDir = join(containerDir, OUTPUT_FOLDER_NAME)
+
+    // Check if _output folder is now empty and remove it
+    const removedOutputDir = await tryRemoveEmptyDir(outputDir)
+    if (removedOutputDir) {
+      this.logDebug(`Removed empty ${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder`)
+    }
+
+    // Check if .aiwcli container is now empty and remove it
+    const removedAiwcliContainer = await tryRemoveEmptyDir(containerDir)
+    if (removedAiwcliContainer) {
+      this.logDebug(`Removed empty ${AIWCLI_CONTAINER}/ folder`)
+    }
+
+    // Smart gitignore removal
+    const gitignoreUpdated = await this.cleanupGitignore(targetDir)
+
+    // Reconstruct IDE settings
+    let {updatedClaudeSettings, updatedWindsurfSettings} =
+      await this.reconstructSettingsAfterRemoval(targetDir, methodsToRemove)
+
+    // Clean up backup files
+    await this.cleanupBackupFiles(targetDir)
+
+    // Check if IDE folders should be fully deleted
+    const removedClaudeDir = await this.tryRemoveIdeFolder(targetDir, IDE_FOLDERS.claude)
+    if (removedClaudeDir) updatedClaudeSettings = false
+
+    const removedWindsurfDir = await this.tryRemoveIdeFolder(targetDir, IDE_FOLDERS.windsurf)
+    if (removedWindsurfDir) updatedWindsurfSettings = false
+
+    return {
+      removedOutputDir, removedAiwcliContainer, removedClaudeDir, removedWindsurfDir,
+      updatedClaudeSettings, updatedWindsurfSettings, gitignoreUpdated,
+    }
+  }
+
+  /**
+   * Reconstruct IDE settings after method removal.
+   *
+   * @param targetDir - Project root directory
+   * @param methodsToRemove - Methods being removed
+   * @returns Which IDE settings were updated
+   */
+  private async reconstructSettingsAfterRemoval(
+    targetDir: string,
+    methodsToRemove: string[],
+  ): Promise<{updatedClaudeSettings: boolean; updatedWindsurfSettings: boolean}> {
+    let updatedClaudeSettings = false
+    let updatedWindsurfSettings = false
+
+    if (methodsToRemove.length === 0) {
+      return {updatedClaudeSettings, updatedWindsurfSettings}
+    }
+
+    await this.removeMethodEntries(targetDir, methodsToRemove)
+
+    const allMethods = await getInstalledMethodNames(targetDir)
+    const remainingTemplates = [...allMethods].filter(m => !methodsToRemove.includes(m))
+
+    const ides: string[] = []
+    if (await pathExists(join(targetDir, IDE_FOLDERS.claude.root))) ides.push('claude')
+    if (await pathExists(join(targetDir, IDE_FOLDERS.windsurf.root))) ides.push('windsurf')
+
+    if (ides.length > 0) {
+      await reconstructIdeSettings(targetDir, remainingTemplates, ides)
+      if (ides.includes('claude')) {
+        this.logDebug('Reconstructed .claude/settings.json (backup created)')
+        updatedClaudeSettings = true
+      }
+
+      if (ides.includes('windsurf')) {
+        this.logDebug('Reconstructed .windsurf/hooks.json (backup created)')
+        updatedWindsurfSettings = true
+      }
+    }
+
+    // Remove shared IDE content when no templates remain
+    const allMethodsAfterRemove = await getInstalledMethodNames(targetDir)
+    const remainingAfterRemove = [...allMethodsAfterRemove].filter(m => !methodsToRemove.includes(m))
+    if (remainingAfterRemove.length === 0) {
+      await this.removeSharedIdeContent(targetDir)
+    }
+
+    return {updatedClaudeSettings, updatedWindsurfSettings}
   }
 
   /**
@@ -1128,6 +1215,84 @@ export default class ClearCommand extends BaseCommand {
       if (!(await pathExists(targetIdeFolder))) continue // eslint-disable-line no-await-in-loop
 
       await removeMatchingFiles(sharedIdeFolder, targetIdeFolder) // eslint-disable-line no-await-in-loop
+    }
+  }
+
+  /**
+   * Report the results of a clear operation.
+   *
+   * @param deleteCounts - Counts of deleted folders by type
+   * @param deleteCounts.deletedWorkflow - Number of workflow folders deleted
+   * @param deleteCounts.deletedOutput - Number of output folders deleted
+   * @param deleteCounts.deletedIde - Number of IDE method folders deleted
+   * @param cleanup - Cleanup operation results
+   * @param cleanup.gitignoreUpdated - Whether gitignore was updated
+   * @param cleanup.removedOutputDir - Whether _output dir was removed
+   * @param cleanup.removedAiwcliContainer - Whether .aiwcli dir was removed
+   * @param cleanup.removedClaudeDir - Whether .claude dir was removed
+   * @param cleanup.removedWindsurfDir - Whether .windsurf dir was removed
+   * @param cleanup.updatedClaudeSettings - Whether Claude settings were updated
+   * @param cleanup.updatedWindsurfSettings - Whether Windsurf settings were updated
+   */
+  private reportClearResults(
+    deleteCounts: {deletedIde: number; deletedOutput: number; deletedWorkflow: number},
+    cleanup: {
+      gitignoreUpdated: boolean
+      removedAiwcliContainer: boolean
+      removedClaudeDir: boolean
+      removedOutputDir: boolean
+      removedWindsurfDir: boolean
+      updatedClaudeSettings: boolean
+      updatedWindsurfSettings: boolean
+    },
+  ): void {
+    this.log('')
+    const parts: string[] = []
+    if (deleteCounts.deletedWorkflow > 0) parts.push(`${deleteCounts.deletedWorkflow} workflow folder(s)`)
+    if (deleteCounts.deletedOutput > 0) parts.push(`${deleteCounts.deletedOutput} output folder(s)`)
+    if (deleteCounts.deletedIde > 0) parts.push(`${deleteCounts.deletedIde} IDE method folder(s)`)
+    if (cleanup.removedOutputDir) parts.push(`${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder`)
+    if (cleanup.removedAiwcliContainer) parts.push(`${AIWCLI_CONTAINER}/ folder`)
+    if (cleanup.removedClaudeDir) parts.push(`${IDE_FOLDERS.claude.root}/ folder`)
+    if (cleanup.removedWindsurfDir) parts.push(`${IDE_FOLDERS.windsurf.root}/ folder`)
+
+    this.logSuccess(`Cleared: ${parts.join(', ')}.`)
+
+    if (cleanup.gitignoreUpdated) {
+      this.logSuccess('Updated .gitignore.')
+    }
+
+    if (cleanup.updatedClaudeSettings) {
+      this.logSuccess('Updated .claude/settings.json (backup: settings.json.backup).')
+    }
+
+    if (cleanup.updatedWindsurfSettings) {
+      this.logSuccess('Updated .windsurf/hooks.json (backup: hooks.json.backup).')
+    }
+  }
+
+  /**
+   * Try to remove an IDE folder if it should be deleted (empty settings + empty subfolders).
+   *
+   * @param targetDir - Project root directory
+   * @param ideFolder - IDE folder configuration
+   * @param ideFolder.root - Root folder name (e.g., '.claude')
+   * @param ideFolder.settingsFile - Settings file name (e.g., 'settings.json')
+   * @returns True if the folder was removed
+   */
+  private async tryRemoveIdeFolder(
+    targetDir: string,
+    ideFolder: {root: string; settingsFile: string},
+  ): Promise<boolean> {
+    if (!(await shouldDeleteIdeFolder(targetDir, ideFolder))) return false
+
+    const dirPath = join(targetDir, ideFolder.root)
+    try {
+      await removeDirectory(dirPath)
+      this.logDebug(`Removed empty ${ideFolder.root}/ folder`)
+      return true
+    } catch {
+      return false
     }
   }
 }

@@ -107,50 +107,7 @@ export default class Init extends BaseCommand {
 
       // If config is null, perform minimal install (shared folder only)
       if (!config) {
-        this.logInfo('Performing minimal installation (_shared folder only)...')
-        this.log('')
-
-        // Create .aiwcli container and install _shared
-        const resolver = new IdePathResolver(targetDir)
-        const containerDir = resolver.getAiwcliContainer()
-        await fs.mkdir(containerDir, {recursive: true})
-
-        const sharedDestPath = resolver.getSharedFolder()
-        const sharedExists = await pathExists(sharedDestPath)
-
-        if (sharedExists) {
-          this.logInfo('✓ _shared folder already exists - skipping')
-        } else {
-          const currentFilePath = fileURLToPath(import.meta.url)
-          const currentDir = dirname(currentFilePath)
-          const templatesRoot = join(dirname(dirname(currentDir)), 'templates')
-          const sharedSrcPath = join(templatesRoot, '_shared')
-
-          if (!(await pathExists(sharedSrcPath))) {
-            this.error(`Shared folder not found at ${sharedSrcPath}. This indicates a corrupted installation.`, {
-              exit: EXIT_CODES.ENVIRONMENT_ERROR,
-            })
-          }
-
-          await this.copyDirectory(sharedSrcPath, sharedDestPath, true)
-          this.logSuccess('✓ Installed _shared folder')
-        }
-
-        // Reconstruct settings from _shared template
-        await reconstructIdeSettings(targetDir, [], ['claude'])
-
-        // Update .gitignore if git repository exists
-        if (hasGit) {
-          await updateGitignore(targetDir, [...AIW_GITIGNORE_ENTRIES])
-          this.logSuccess('✓ .gitignore updated')
-        }
-
-        this.log('')
-        this.logSuccess('✓ Minimal installation completed successfully')
-        this.log('')
-        this.logInfo('Next steps:')
-        this.logInfo('  aiw init --method <template>    Install a full template method (cc-native)')
-        this.logInfo('  aiw init --interactive          Run interactive setup wizard')
+        await this.performMinimalInstall(targetDir, hasGit)
         return
       }
 
@@ -316,6 +273,59 @@ export default class Init extends BaseCommand {
     }
 
     return descriptions[template] || 'Custom template'
+  }
+
+  /**
+   * Perform minimal installation (_shared folder only, no template method).
+   *
+   * @param targetDir - Target directory for installation
+   * @param hasGit - Whether git repository exists
+   */
+  private async performMinimalInstall(targetDir: string, hasGit: boolean): Promise<void> {
+    this.logInfo('Performing minimal installation (_shared folder only)...')
+    this.log('')
+
+    // Create .aiwcli container and install _shared
+    const resolver = new IdePathResolver(targetDir)
+    const containerDir = resolver.getAiwcliContainer()
+    await fs.mkdir(containerDir, {recursive: true})
+
+    const sharedDestPath = resolver.getSharedFolder()
+    const sharedExists = await pathExists(sharedDestPath)
+
+    if (sharedExists) {
+      this.logInfo('✓ _shared folder already exists - skipping')
+    } else {
+      const currentFilePath = fileURLToPath(import.meta.url)
+      const currentDir = dirname(currentFilePath)
+      const templatesRoot = join(dirname(dirname(currentDir)), 'templates')
+      const sharedSrcPath = join(templatesRoot, '_shared')
+
+      if (!(await pathExists(sharedSrcPath))) {
+        this.error(`Shared folder not found at ${sharedSrcPath}. This indicates a corrupted installation.`, {
+          exit: EXIT_CODES.ENVIRONMENT_ERROR,
+        })
+      }
+
+      await this.copyDirectory(sharedSrcPath, sharedDestPath, true)
+      this.logSuccess('✓ Installed _shared folder')
+    }
+
+    // Reconstruct settings from _shared template
+    await reconstructIdeSettings(targetDir, [], ['claude'])
+
+    // Update .gitignore if git repository exists
+    if (hasGit) {
+      await updateGitignore(targetDir, [...AIW_GITIGNORE_ENTRIES])
+      this.logSuccess('✓ .gitignore updated')
+    }
+
+    this.log('')
+    this.logSuccess('✓ Minimal installation completed successfully')
+    this.log('')
+    this.logInfo('Next steps:')
+    this.logInfo('  aiw init --method <template>    Install a full template method (cc-native)')
+    this.logInfo('  aiw init --interactive          Run interactive setup wizard')
   }
 
   /**

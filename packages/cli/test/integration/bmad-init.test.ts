@@ -8,6 +8,7 @@ import {installBmad} from '../../src/lib/bmad-installer.js'
 import {updateGitignore} from '../../src/lib/gitignore-manager.js'
 import {cleanupTestDir, createTestDir, pathExists} from '../helpers/test-utils.js'
 
+// eslint-disable-next-line mocha/no-skipped-tests -- BMAD installer not yet implemented
 describe.skip('BMAD Installation Integration Tests', () => {
   let testDir: string
 

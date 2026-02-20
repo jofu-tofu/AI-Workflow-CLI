@@ -4,18 +4,16 @@
  */
 
 import { logInfo } from "../../../_shared/lib-ts/base/logger.js";
-
+import {
+  buildInlineReviewSummary,
+  extractTopIssuesText,
+} from "../../artifacts/lib/format.js";
 import type {
   ReviewerResult,
   CombinedReviewResult,
   CorroborationResult,
   IterationState,
 } from "../../lib-ts/types.js";
-import {
-  buildInlineReviewSummary,
-  extractTopIssuesText,
-} from "../../artifacts/lib/format.js";
-import { extractTopIssuesForTracker } from "./graduation.js";
 
 const HOOK = "output-builder";
 
@@ -28,7 +26,7 @@ const RESUBMIT_INSTRUCTION = "IMPORTANT: After revising the plan file, you MUST 
 
 /**
  * Truncate per-agent issues to top N by severity.
- * @mutates agentResults[name].data.issues in place.
+ * Mutates agentResults[name].data.issues in place.
  */
 export function truncateAgentIssues(
   agentResults: Record<string, ReviewerResult>,
@@ -52,7 +50,7 @@ export function truncateAgentIssues(
 
 /**
  * Override verdict to "fail" for agents exceeding high-issue threshold.
- * @mutates agentResults[name].verdict in place.
+ * Mutates agentResults[name].verdict in place.
  */
 export function overrideVerdictsByThreshold(
   agentResults: Record<string, ReviewerResult>,
@@ -94,18 +92,12 @@ export function buildReviewOutput(params: ReviewOutputParams): ReviewOutput {
   const { combinedResult, corroborationResult, iterationState } = params;
 
   const shouldDeny = corroborationResult.blocking.length > 0;
-  const reviewScore = shouldDeny ? 1.0 : 0.0;
+  const reviewScore = shouldDeny ? 1 : 0;
   const overall = corroborationResult.verdict;
 
-  // Build inline summary
-  const inlineSummary = buildInlineReviewSummary(combinedResult, 5, 800, corroborationResult);
+  // Build inline summary (no individual issues — those go in blockReason)
+  const inlineSummary = buildInlineReviewSummary(combinedResult, 0, 800, corroborationResult);
   const contextParts = [inlineSummary];
-
-  // Top issues
-  const topIssuesList = extractTopIssuesForTracker(combinedResult, 5);
-  if (topIssuesList.length > 0) {
-    contextParts.push(`\nTop high-severity issues:\n${topIssuesList.map(i => `- ${i}`).join("\n")}`);
-  }
   contextParts.push(`\nFull review: \`${params.reviewFile}\`\n`);
 
   const contextText = contextParts.join("");
@@ -113,11 +105,10 @@ export function buildReviewOutput(params: ReviewOutputParams): ReviewOutput {
 
   let blockReason: string;
   if (shouldDeny) {
-    const topIssuesText = extractTopIssuesText(combinedResult, 3, "high");
+    const topIssuesText = extractTopIssuesText(combinedResult, 15, "high");
     blockReason = `Plan review FAILED${iterInfo}. ` +
-      `Critical issues: ${topIssuesText}. ` +
-      `IMPORTANT: Read \`${params.highIssuesPath}\` for ALL high-severity issues — ` +
-      `this file contains only the most critical findings, no noise. ` +
+      `High-severity issues:\n${topIssuesText}\n\n` +
+      `Full details: \`${params.highIssuesPath}\`\n` +
       `${REVIEWER_CAVEAT} ` +
       `Revise the plan to address these issues, then call ExitPlanMode again. ` +
       RESUBMIT_INSTRUCTION;
