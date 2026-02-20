@@ -17,7 +17,7 @@ import {pathExists} from './paths.js'
  * @param projectDir - Project directory path
  * @returns Array of settings locations in order of precedence
  */
-async function discoverSettingsFiles(projectDir: string): Promise<SettingsLocation[]> {
+export async function discoverSettingsFiles(projectDir: string): Promise<SettingsLocation[]> {
   const locations: SettingsLocation[] = []
 
   // User settings (global)

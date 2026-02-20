@@ -93,7 +93,7 @@ export function advanceIterationState(
     lastPlanHash: planHash,
     lastPlanPath: planPath,
     graduated: [...state.graduated],
-    passStreaks: { ...(state.passStreaks ?? {}) },
+    passStreaks: { ...state.passStreaks },
   };
 
   if (!shouldDeny) {

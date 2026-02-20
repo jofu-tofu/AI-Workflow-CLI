@@ -3,19 +3,20 @@
  * SessionEnd hook: Save session state, assign plan fields (fallback),
  * stage has_plan/has_handoff for next session.
  */
-import * as fs from "node:fs";
 import * as crypto from "node:crypto";
+import * as fs from "node:fs";
 import * as path from "node:path";
-import {
-  loadHookInput, runHook, logDebug, logInfo, logWarn, logError, logDiagnostic,
-} from "../lib-ts/base/hook-utils.js";
+
 import { getProjectRoot, getContextDir } from "../lib-ts/base/constants.js";
+import { getGitState } from "../lib-ts/base/git-state.js";
+import {
+  loadHookInput, runHook, logDebug, logInfo, logError, logDiagnostic,
+} from "../lib-ts/base/hook-utils.js";
 import { nowIso } from "../lib-ts/base/utils.js";
 import { getContextBySessionId, saveState, determineArtifactType } from "../lib-ts/context/context-store.js";
 import {
   findLatestPlan, normalizePlanContent, generatePlanId, extractPlanAnchors,
 } from "../lib-ts/context/plan-manager.js";
-import { getGitState } from "../lib-ts/base/git-state.js";
 
 /**
  * Archive session transcript to context's session-transcripts/ folder.
@@ -62,8 +63,8 @@ function archiveTranscript(
   try {
     fs.copyFileSync(transcriptPath, archivePath);
     return archivePath;
-  } catch (e) {
-    logError("session_end", `Failed to copy transcript: ${e}`);
+  } catch (error) {
+    logError("session_end", `Failed to copy transcript: ${error}`);
     return null;
   }
 }
@@ -115,8 +116,8 @@ function main(): void {
       if (archived) {
         logInfo("session_end", `Archived transcript: ${path.basename(archived)}`);
       }
-    } catch (e) {
-      logError("session_end", `Transcript archival failed: ${e}`);
+    } catch (error) {
+      logError("session_end", `Transcript archival failed: ${error}`);
     }
   }
 
@@ -168,8 +169,8 @@ function main(): void {
         state.work_consumed = state.work_consumed ?? false; // CHANGED: unified flag
 
         logInfo("session_end", `Assigned plan fallback: hash=${planHash}`);
-      } catch (e) {
-        logError("session_end", `Failed to read plan: ${e}`);
+      } catch (error) {
+        logError("session_end", `Failed to read plan: ${error}`);
       }
     }
   }

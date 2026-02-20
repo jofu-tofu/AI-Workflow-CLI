@@ -3,19 +3,19 @@
  * SessionStart hook: Restore context after /clear (plan/handoff) or compaction.
  * Routes by source field to appropriate handler.
  */
-import {
-  loadHookInput, emitContext, runHook, runHookAsync,
-  logDebug, logInfo, logWarn, logError, logDiagnostic,
-} from "../lib-ts/base/hook-utils.js";
 import { getProjectRoot } from "../lib-ts/base/constants.js";
 import {
-  getContextBySessionId, getAllContexts, bindSession, updateMode, determineArtifactType,
-} from "../lib-ts/context/context-store.js";
+  loadHookInput, emitContext, runHookAsync,
+  logDebug, logInfo, logWarn, logDiagnostic,
+} from "../lib-ts/base/hook-utils.js";
 import {
   buildRestoreSections, formatHandoffContinuation, getModeDisplay,
   buildContextInventory,
 } from "../lib-ts/context/context-formatter.js";
-import type { ContextState } from "../lib-ts/types.js";
+import {
+  getContextBySessionId, getAllContexts, bindSession, updateMode, determineArtifactType,
+} from "../lib-ts/context/context-store.js";
+
 
 /**
  * Handle post-compaction restore: re-inject context that was lost during compaction.
@@ -148,15 +148,18 @@ async function main(): Promise<void> {
   logDiagnostic("session_start", "entry", `source=${source}, session=${sessionId}`);
 
   switch (source) {
-    case "compact":
-      handleCompactRestore(sessionId, projectRoot);
-      break;
-    case "clear":
+    case "clear": {
       await handleClearRestore(sessionId, projectRoot);
       break;
-    default:
+    }
+    case "compact": {
+      handleCompactRestore(sessionId, projectRoot);
+      break;
+    }
+    default: {
       logDebug("session_start", `Unhandled source: ${source}`);
       break;
+    }
   }
 }
 

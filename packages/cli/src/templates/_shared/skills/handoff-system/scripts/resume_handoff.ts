@@ -4,8 +4,8 @@
  * a structured briefing to stdout.
  *
  * Usage:
- *   bun .aiwcli/_shared/handoff-system/scripts/resume_handoff.ts <handoff_folder_or_index>
- *   bun .aiwcli/_shared/handoff-system/scripts/resume_handoff.ts --context <context_id>
+ *   bun .aiwcli/_shared/skills/handoff-system/scripts/resume_handoff.ts <handoff_folder_or_index>
+ *   bun .aiwcli/_shared/skills/handoff-system/scripts/resume_handoff.ts --context <context_id>
  *
  * If no args, auto-discovers the active context and finds the latest handoff.
  *
@@ -15,16 +15,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { getProjectRoot } from "../../lib-ts/base/constants.js";
+import { getGitStatusShort } from "../../lib-ts/base/git-state.js";
+import { eprint } from "../../lib-ts/base/utils.js";
+import { getContextBySessionId } from "../../lib-ts/context/context-store.js";
 import {
   findLatestHandoff,
   readHandoffSections,
   getHandoffTimestamp,
   getHandoffPlanReference,
 } from "../lib/handoff-reader.js";
-import { getProjectRoot } from "../../lib-ts/base/constants.js";
-import { getContextBySessionId } from "../../lib-ts/context/context-store.js";
-import { getGitStatusShort } from "../../lib-ts/base/git-state.js";
-import { eprint } from "../../lib-ts/base/utils.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

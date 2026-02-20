@@ -5,18 +5,17 @@
 
 import * as path from "node:path";
 
-import { logInfo } from "../../_shared/lib-ts/base/logger.js";
 
+import { aggregateAgents } from "./aggregate-agents.js";
+import { loadConfig, getDisplaySettings } from "./config.js";
+import { DEFAULT_REVIEW_ITERATIONS } from "./state.js";
 import type {
   AgentConfig,
-  OrchestratorConfig,
   ProviderConfig,
   ModelsConfig,
 } from "./types.js";
 import { DEFAULT_DISPLAY, DEFAULT_SANITIZATION } from "./types.js";
-import { loadConfig, getDisplaySettings } from "./config.js";
-import { aggregateAgents } from "./aggregate-agents.js";
-import { DEFAULT_REVIEW_ITERATIONS } from "./state.js";
+import { logInfo } from "../../_shared/lib-ts/base/logger.js";
 
 const HOOK = "settings";
 
@@ -125,11 +124,11 @@ export function loadSettings(projDir: string): Record<string, unknown> {
   }
   mergedAgent.display = getDisplaySettings(config, "agentReview");
   const configRecord = config as Record<string, unknown>;
-  mergedAgent.agentSelection = { ...DEFAULT_AGENT_SELECTION, ...((configRecord.agentSelection as Record<string, unknown>) ?? {}) };
-  mergedAgent.agentDefaults = { model: DEFAULT_AGENT_MODEL, ...((configRecord.agentDefaults as Record<string, unknown>) ?? {}) };
+  mergedAgent.agentSelection = { ...DEFAULT_AGENT_SELECTION, ...(configRecord.agentSelection as Record<string, unknown>) };
+  mergedAgent.agentDefaults = { model: DEFAULT_AGENT_MODEL, ...(configRecord.agentDefaults as Record<string, unknown>) };
   mergedAgent.complexityCategories = (configRecord.complexityCategories as string[]) ?? [...DEFAULT_COMPLEXITY_CATEGORIES];
-  mergedAgent.sanitization = { ...DEFAULT_SANITIZATION, ...((configRecord.sanitization as Record<string, unknown>) ?? {}) };
-  mergedAgent.reviewIterations = { ...DEFAULT_REVIEW_ITERATIONS, ...agentReview.reviewIterations ?? {} };
+  mergedAgent.sanitization = { ...DEFAULT_SANITIZATION, ...(configRecord.sanitization as Record<string, unknown>) };
+  mergedAgent.reviewIterations = { ...DEFAULT_REVIEW_ITERATIONS, ...agentReview.reviewIterations };
 
   const modelsRaw = (config as Record<string, unknown>).models ?? {};
   return { planReview: mergedPlan, agentReview: mergedAgent, models: modelsRaw };

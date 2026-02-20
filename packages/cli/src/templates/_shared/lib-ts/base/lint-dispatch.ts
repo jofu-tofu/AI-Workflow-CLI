@@ -4,10 +4,11 @@
  * See root CLAUDE.md for template sync targets.
  */
 
-import * as path from "node:path";
 import * as fs from "node:fs";
-import { findExecutable } from "./subprocess-utils.js";
+import * as path from "node:path";
+
 import { logDebug, logWarn } from "./logger.js";
+import { findExecutable } from "./subprocess-utils.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -222,14 +223,15 @@ export function runLinter(
   const args = config.buildArgs(filePath);
 
   try {
-    const result = Bun.spawnSync([binary, ...args], {
+    // eslint-disable-next-line no-undef -- Bun runtime global
+    const result = (Bun as any).spawnSync([binary, ...args], {
       cwd: projectRoot,
-      timeout: 8_000, // 8s soft limit (10s hook timeout is the hard kill)
+      timeout: 8000, // 8s soft limit (10s hook timeout is the hard kill)
       stdout: "pipe",
       stderr: "pipe",
     });
 
-    const exitCode = result.exitCode;
+    const {exitCode} = result;
     const stdout = result.stdout?.toString() ?? "";
     const stderr = result.stderr?.toString() ?? "";
 
@@ -245,8 +247,8 @@ export function runLinter(
     // Unknown exit code = crash/timeout → skip
     logWarn("lint-dispatch", `${config.name} exited with unexpected code ${exitCode} on ${filePath}`);
     return { errors: [] };
-  } catch (e) {
-    logWarn("lint-dispatch", `${config.name} execution failed: ${e}`);
+  } catch (error) {
+    logWarn("lint-dispatch", `${config.name} execution failed: ${error}`);
     return { errors: [] };
   }
 }

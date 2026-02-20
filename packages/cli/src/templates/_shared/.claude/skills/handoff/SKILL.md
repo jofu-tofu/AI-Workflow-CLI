@@ -6,7 +6,7 @@ user-invocable: true
 
 # Handoff
 
-Generate a comprehensive handoff document for the next session. See `.aiwcli/_shared/handoff-system/workflows/handoff.md` for complete process documentation.
+Generate a comprehensive handoff document for the next session. See `.aiwcli/_shared/skills/handoff-system/workflows/handoff.md` for complete process documentation.
 
 **Quick trigger:** `/handoff` or `/handoff path/to/PLAN.md`
 

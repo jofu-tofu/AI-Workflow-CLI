@@ -153,7 +153,7 @@ The closing `EOF` delimiter **MUST** be at column 0 (no leading spaces or tabs).
 
 **Correct Example:**
 ```bash
-bun .aiwcli/_shared/handoff-system/scripts/save_handoff.ts <<'EOF'
+bun .aiwcli/_shared/skills/handoff-system/scripts/save_handoff.ts <<'EOF'
 content here
 EOF
 ```
@@ -161,7 +161,7 @@ EOF
 
 **Wrong Example (will fail):**
 ```bash
-bun .aiwcli/_shared/handoff-system/scripts/save_handoff.ts <<'EOF'
+bun .aiwcli/_shared/skills/handoff-system/scripts/save_handoff.ts <<'EOF'
 content here
   EOF
 ```
@@ -172,7 +172,7 @@ content here
 Instead of writing the file directly, pipe your handoff content to the save script:
 
 ```bash
-bun .aiwcli/_shared/handoff-system/scripts/save_handoff.ts <<'EOF'
+bun .aiwcli/_shared/skills/handoff-system/scripts/save_handoff.ts <<'EOF'
 {Your complete handoff markdown content from Step 3}
 EOF
 ```

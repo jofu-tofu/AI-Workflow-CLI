@@ -1,11 +1,11 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "bun .aiwcli/_shared/scripts/status_line.ts"
+    "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/scripts/status_line.ts"
   },
   "fileSuggestion": {
     "type": "command",
-    "command": "bun .aiwcli/_shared/hooks-ts/file-suggestion.ts"
+    "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/file-suggestion.ts"
   },
   "hooks": {
     "UserPromptSubmit": [
@@ -13,7 +13,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun .aiwcli/_shared/hooks-ts/user_prompt_submit.ts",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/user_prompt_submit.ts",
             "timeout": 5000
           }
         ]
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun .aiwcli/_shared/hooks-ts/context_monitor.ts",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/context_monitor.ts",
             "timeout": 5000
           }
         ]
@@ -35,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun .aiwcli/_shared/hooks-ts/task_create_capture.ts",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/task_create_capture.ts",
             "timeout": 3000
           }
         ]
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun .aiwcli/_shared/hooks-ts/task_update_capture.ts",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/task_update_capture.ts",
             "timeout": 3000
           }
         ]
@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun .aiwcli/_shared/hooks-ts/archive_plan.ts",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/archive_plan.ts",
             "timeout": 5000
           }
         ]

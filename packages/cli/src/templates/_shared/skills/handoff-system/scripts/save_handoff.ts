@@ -3,12 +3,12 @@
  * Save a handoff document with folder-based sharding.
  *
  * Usage:
- *   bun .aiwcli/_shared/handoff-system/scripts/save_handoff.ts <<'EOF'
+ *   bun .aiwcli/_shared/skills/handoff-system/scripts/save_handoff.ts <<'EOF'
  *   # Your handoff markdown content here (with <!-- SECTION: name --> markers)
  *   EOF
  *
  * Or with a file:
- *   bun .aiwcli/_shared/handoff-system/scripts/save_handoff.ts < handoff.md
+ *   bun .aiwcli/_shared/skills/handoff-system/scripts/save_handoff.ts < handoff.md
  *
  * This script:
  * 1. Auto-resolves the active context ID
@@ -23,12 +23,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { getContext, saveState, getContextBySessionId, getAllContexts } from "../../lib-ts/context/context-store.js";
-import { getHandoffFolderPath, getProjectRoot } from "../../lib-ts/base/constants.js";
 import { atomicWrite } from "../../lib-ts/base/atomic-write.js";
-import { logInfo, logWarn, logError } from "../../lib-ts/base/logger.js";
+import { getHandoffFolderPath, getProjectRoot } from "../../lib-ts/base/constants.js";
 import { getGitStatusShort } from "../../lib-ts/base/git-state.js";
+import { logInfo, logWarn, logError } from "../../lib-ts/base/logger.js";
 import { eprint } from "../../lib-ts/base/utils.js";
+import { getContext, saveState, getContextBySessionId, getAllContexts } from "../../lib-ts/context/context-store.js";
 
 // ---------------------------------------------------------------------------
 // Parsing helpers
@@ -333,8 +333,8 @@ function main(): void {
       } else {
         logWarn("save_handoff", `Failed to copy plan to handoff: ${error}`);
       }
-    } catch (e) {
-      logWarn("save_handoff", `Plan update failed (non-critical): ${e}`);
+    } catch (error) {
+      logWarn("save_handoff", `Plan update failed (non-critical): ${error}`);
     }
   } else if (planPath) {
     // Fallback: copy unchanged plan if Claude didn't provide an update
@@ -346,8 +346,8 @@ function main(): void {
       } else {
         logWarn("save_handoff", `Failed to copy plan: ${error}`);
       }
-    } catch (e) {
-      logWarn("save_handoff", `Failed to read plan: ${e}`);
+    } catch (error) {
+      logWarn("save_handoff", `Failed to read plan: ${error}`);
     }
   }
 
@@ -384,13 +384,12 @@ function main(): void {
       // Append mode
       if (!fileContents[filename]) fileContents[filename] = [];
       fileContents[filename]!.push(sectionContent);
+    } else if (!fileContents[filename]) {
+      // Write mode with title — new file
+      fileContents[filename] = [`# ${title}`, "", sectionContent];
     } else {
-      // Write mode with title
-      if (!fileContents[filename]) {
-        fileContents[filename] = [`# ${title}`, "", sectionContent];
-      } else {
-        fileContents[filename] = [`# ${title}`, "", ...fileContents[filename]!, "", sectionContent];
-      }
+      // Write mode with title — prepend to existing
+      fileContents[filename] = [`# ${title}`, "", ...fileContents[filename]!, "", sectionContent];
     }
   }
 
@@ -449,8 +448,8 @@ function main(): void {
     } else {
       logWarn("save_handoff", `Could not load context state for ${contextId}`);
     }
-  } catch (e) {
-    logWarn("save_handoff", `Handoff saved but auto-resume won't work: ${e}`);
+  } catch (error) {
+    logWarn("save_handoff", `Handoff saved but auto-resume won't work: ${error}`);
   }
 
   // Output success message

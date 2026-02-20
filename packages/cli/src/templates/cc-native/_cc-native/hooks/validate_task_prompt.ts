@@ -20,8 +20,8 @@ import {
   emitContextAndBlock,
   getToolInput,
 } from "../../_shared/lib-ts/base/hook-utils.js";
-import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
 import { inference } from "../../_shared/lib-ts/base/inference.js";
+import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
 
 const VALIDATION_SYSTEM_PROMPT = `The sub-agent receives ONLY the prompt text — no conversation history, no prior context.
 
@@ -62,7 +62,7 @@ function main(): void {
     return;
   }
 
-  const output = result.output;
+  const {output} = result;
   if (output.includes("ok:false")) {
     // Extract the Retry line if present; fall back to full output
     const retryMatch = output.match(/Retry:.*$/m);

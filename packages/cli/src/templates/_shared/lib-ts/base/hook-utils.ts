@@ -12,7 +12,7 @@ import { getContextBySessionId } from "../context/context-store.js";
 import type { HookInput, HookOutput, PermissionRequestOutput } from "../types.js";
 
 // Re-export logger functions for convenience (matches Python hook_utils re-exports)
-export {          setSessionId };
+
 
 // Context window baseline: tokens not visible in hook data §5.9
 export const CONTEXT_BASELINE_TOKENS = 22_600;
@@ -281,23 +281,28 @@ export function emitPermissionDecision(
 export function emitBlock(reason: string, context?: string): void {
   const event = _lastHookEvent;
   switch (event) {
-    case "PermissionRequest":
+    case "PermissionRequest": {
       emitPermissionDecision("deny", { message: reason });
       break;
+    }
     case "PostToolUse":
-    case "PostToolUseFailure":
+    case "PostToolUseFailure": {
       emitBlockViaExit(reason, context);
       break;
-    case "PreToolUse":
+    }
+    case "PreToolUse": {
       emitContextAndBlock(context ?? reason, reason);
       break;
+    }
     case "Stop":
-    case "SubagentStop":
+    case "SubagentStop": {
       emitBlockTopLevel(reason);
       break;
-    case "UserPromptSubmit":
+    }
+    case "UserPromptSubmit": {
       emitBlockPrompt(reason, context);
       break;
+    }
     default: {
       logWarn(_cachedHookName ?? "unknown",
         `emitBlock() called from ${event ?? "unknown"} — no blocking mechanism exists for this event type, ignoring`);
@@ -597,4 +602,4 @@ function _drainAndExit(code: number): void {
   });
 }
 
-export {logInfo, logError, logBlocking, logHookError, logDiagnostic, setContextPath, hookLog, logDebug, logWarn} from "./logger.js";
+export {hookLog, logBlocking, logDebug, logDiagnostic, logError, logHookError, logInfo, logWarn, setContextPath, setSessionId} from "./logger.js";

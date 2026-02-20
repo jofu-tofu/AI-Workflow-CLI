@@ -5,6 +5,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+
 import { logWarn } from "../../../_shared/lib-ts/base/logger.js";
 
 // ---------------------------------------------------------------------------
@@ -46,12 +47,12 @@ export function writeReviewTracker(
 
   const previousHashes = extractPreviousHashes(existingContent);
   const hashChanged = previousHashes.length > 0 &&
-    previousHashes[previousHashes.length - 1] !== entry.planHash;
+    previousHashes.at(-1) !== entry.planHash;
 
   const lines: string[] = [];
-  const verdictEmoji = entry.decision === "allow" ? "\u2705" : "\u274c";
+  const verdictEmoji = entry.decision === "allow" ? "\u2705" : "\u274C";
   const changeNote = previousHashes.length > 0
-    ? (hashChanged ? "\u2705 Plan was revised (hash changed)" : "\u26a0\ufe0f Plan unchanged since last review")
+    ? (hashChanged ? "\u2705 Plan was revised (hash changed)" : "\u26A0\uFE0F Plan unchanged since last review")
     : "Initial review";
 
   lines.push(`## Iteration ${entry.iteration} \u2014 ${entry.timestamp} \u2014 ${verdictEmoji} ${entry.verdict.toUpperCase()}`);
@@ -87,8 +88,8 @@ export function writeReviewTracker(
 
   try {
     fs.writeFileSync(trackerPath, output, "utf-8");
-  } catch (e) {
-    logWarn("artifacts", `Failed to write review tracker: ${e}`);
+  } catch (error) {
+    logWarn("artifacts", `Failed to write review tracker: ${error}`);
   }
 }
 

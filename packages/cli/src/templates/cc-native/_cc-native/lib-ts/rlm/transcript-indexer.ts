@@ -12,18 +12,18 @@
  *   bun transcript-indexer.ts --batch --project=aiwcli   # Index matching project only
  */
 
-import { readdir, stat, mkdir, readFile, writeFile } from "fs/promises";
-import { createReadStream, existsSync, readFileSync } from "fs";
-import { join, basename } from "path";
-import { createInterface } from "readline";
+import { createReadStream, existsSync } from "node:fs";
+import { readdir, stat, mkdir, writeFile } from "node:fs/promises";
+import { join, basename } from "node:path";
+import { createInterface } from "node:readline";
+
+import { logInfo, logWarn, logError } from "./logger.js";
 import {
   CURRENT_SCHEMA_VERSION,
   CLAUDE_PROJECTS_DIR,
   RLM_INDEX_DIR,
   type SessionIndex,
-  type IndexSegment,
 } from "./types.js";
-import { logInfo, logWarn, logError, logDebug } from "./logger.js";
 
 const HOOK_NAME = "rlm_indexer";
 
@@ -39,10 +39,12 @@ const projectArg = args.find((a) => a.startsWith("--project="));
 const projectFilter = projectArg ? projectArg.split("=")[1] : null;
 
 if (isBatch) {
-  runBatch().catch((e) => {
-    logError(HOOK_NAME, `Fatal: ${e}`, { stderr: true });
+  try {
+    await runBatch();
+  } catch (error) {
+    logError(HOOK_NAME, `Fatal: ${error}`, { stderr: true });
     process.exitCode = 1;
-  });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -89,22 +91,24 @@ async function discoverSessions(): Promise<SessionFile[]> {
   return sessions;
 }
 
-function needsIndexing(session: SessionFile, sourceMtime: number): boolean {
+function needsIndexing(session: SessionFile, _sourceMtime: number): boolean {
   const indexPath = join(RLM_INDEX_DIR, session.project, `${session.sessionId}.index.json`);
   if (!existsSync(indexPath)) return true;
   try {
     // Fast path: Read only first 100 bytes to check schema_version
     // If version matches, skip without checking mtime (schema bumps trigger full reindex anyway)
-    const fd = require("fs").openSync(indexPath, "r");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- dynamic fs for perf
+    const nodeFs = require("node:fs");
+    const fd = nodeFs.openSync(indexPath, "r");
     const buffer = Buffer.alloc(100);
-    const bytesRead = require("fs").readSync(fd, buffer, 0, 100, 0);
-    require("fs").closeSync(fd);
+    const bytesRead = nodeFs.readSync(fd, buffer, 0, 100, 0);
+    nodeFs.closeSync(fd);
 
     const partial = buffer.toString("utf-8", 0, bytesRead);
     const versionMatch = partial.match(/"schema_version"\s*:\s*(\d+)/);
 
     // If version matches, skip (no mtime check needed - schema version bump handles major changes)
-    if (versionMatch && parseInt(versionMatch[1]) === CURRENT_SCHEMA_VERSION) {
+    if (versionMatch && parseInt(versionMatch[1], 10) === CURRENT_SCHEMA_VERSION) {
       return false; // Skip - index is current
     }
 
@@ -152,9 +156,9 @@ async function runBatch(): Promise<void> {
       if (indexed % 10 === 0 || indexed === 1) {
         logInfo(HOOK_NAME, `Indexing: ${indexed} indexed, ${skipped} skipped, ${errors} errors (of ${allSessions.length} total)`, { stderr: true });
       }
-    } catch (e) {
+    } catch (error) {
       errors++;
-      logError(HOOK_NAME, `Error indexing ${session.sessionId}: ${e}`);
+      logError(HOOK_NAME, `Error indexing ${session.sessionId}: ${error}`);
     }
   }
 
@@ -234,7 +238,7 @@ async function indexSession(session: SessionFile, sourceMtime: number): Promise<
         index.user_message_count++;
         const msg = obj.message as Record<string, unknown> | undefined;
         if (msg) {
-          const content = msg.content;
+          const {content} = msg;
           if (typeof content === "string") {
             const snippet = content.slice(0, 200);
             userSnippets.push(snippet);
@@ -244,7 +248,7 @@ async function indexSession(session: SessionFile, sourceMtime: number): Promise<
           } else if (Array.isArray(content)) {
             for (const block of content) {
               if (typeof block === "object" && block !== null && "text" in block) {
-                const text = (block as Record<string, unknown>).text;
+                const {text} = (block as Record<string, unknown>);
                 if (typeof text === "string") {
                   extractKeywords(text, keywordBag);
                   extractKeywords(text, segmentKeywordBag);
@@ -255,8 +259,8 @@ async function indexSession(session: SessionFile, sourceMtime: number): Promise<
           // Extract cwd for context
           const cwd = obj.cwd as string | undefined;
           if (cwd) {
-            const parts = cwd.replace(/\\/g, "/").split("/");
-            const last = parts[parts.length - 1];
+            const parts = cwd.replaceAll('\\', "/").split("/");
+            const last = parts.at(-1);
             if (last) addKeyword(keywordBag, last);
           }
           // Git branch
@@ -269,7 +273,7 @@ async function indexSession(session: SessionFile, sourceMtime: number): Promise<
         index.assistant_message_count++;
         const msg = obj.message as Record<string, unknown> | undefined;
         if (msg) {
-          const content = msg.content;
+          const {content} = msg;
           if (Array.isArray(content)) {
             for (const block of content) {
               if (typeof block !== "object" || block === null) continue;
@@ -340,19 +344,19 @@ async function indexSession(session: SessionFile, sourceMtime: number): Promise<
 // ---------------------------------------------------------------------------
 
 const STOP_WORDS = new Set([
-  "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-  "have", "has", "had", "do", "does", "did", "will", "would", "shall",
-  "should", "may", "might", "must", "can", "could", "of", "in", "to",
-  "for", "with", "on", "at", "from", "by", "about", "as", "into",
-  "through", "during", "before", "after", "above", "below", "between",
-  "and", "but", "or", "nor", "not", "no", "so", "yet", "both", "either",
-  "neither", "each", "every", "all", "any", "few", "more", "most", "other",
-  "some", "such", "than", "too", "very", "just", "also", "now", "then",
-  "here", "there", "when", "where", "why", "how", "what", "which", "who",
-  "this", "that", "these", "those", "it", "its", "i", "me", "my", "we",
-  "our", "you", "your", "he", "she", "they", "them", "their", "if",
-  "true", "false", "null", "undefined", "function", "return", "const",
-  "let", "var", "import", "export", "default", "class", "new", "type",
+  "a", "about", "above", "after", "all", "also", "an", "and", "any", "are",
+  "as", "at", "be", "been", "before", "being", "below", "between", "both",
+  "but", "by", "can", "class", "const", "could", "default", "did", "do",
+  "does", "during", "each", "either", "every", "export", "false", "few", "for",
+  "from", "function", "had", "has", "have", "he", "here",
+  "how", "i", "if", "import", "in", "into", "is", "it", "its", "just",
+  "let", "may", "me", "might", "more", "most", "must", "my", "neither",
+  "new", "no", "nor", "not", "now", "null", "of", "on", "or",
+  "other", "our", "return", "shall", "she", "should", "so", "some", "such",
+  "than", "that", "the", "their", "them", "then", "there", "these", "they", "this",
+  "those", "through", "to", "too", "true", "type", "undefined", "var", "very",
+  "was", "we", "were", "what", "when", "where", "which",
+  "who", "why", "will", "with", "would", "yet", "you", "your",
 ]);
 
 function extractKeywords(text: string, bag: Map<string, number>): void {
@@ -391,9 +395,9 @@ function extractToolMetadata(
   // File paths from Read, Edit, Write, Glob
   const filePath = input.file_path as string | undefined;
   if (filePath) {
-    const normalized = filePath.replace(/\\/g, "/");
+    const normalized = filePath.replaceAll('\\', "/");
     const parts = normalized.split("/");
-    const fileName = parts[parts.length - 1];
+    const fileName = parts.at(-1);
     if (fileName) {
       files.add(fileName);
       addKeyword(keywords, fileName.replace(/\.[^.]+$/, "")); // stem
@@ -443,4 +447,4 @@ async function writeIndex(project: string, sessionId: string, index: SessionInde
 // Exports for programmatic use
 // ---------------------------------------------------------------------------
 
-export { discoverSessions, indexSession, writeIndex, needsIndexing, runBatch };
+export { discoverSessions, indexSession, needsIndexing, runBatch, writeIndex };

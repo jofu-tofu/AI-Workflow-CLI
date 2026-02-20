@@ -47,7 +47,7 @@ Each hook has a single responsibility:
 | `user_prompt_submit.ts` | UserPromptSubmit (via determineContext) | Fallback: filters by `has_staged_work`, separates by `determineArtifactType()`, tries plan match (content-based), then handoff match (first-match). Sets `work_consumed=True`. |
 
 
-See `.aiwcli/_shared/handoff-system/CLAUDE.md` for full lifecycle details including restore paths, rejection handling, and design principles.
+See `.aiwcli/_shared/skills/handoff-system/CLAUDE.md` for full lifecycle details including restore paths, rejection handling, and design principles.
 
 ## System Co-location Pattern
 
@@ -63,7 +63,7 @@ Cohesive subsystems are organized as self-contained folders, following the hando
 ```
 
 **Existing systems following this pattern:**
-- `_shared/handoff-system/` — handoff creation and restoration
+- `_shared/skills/handoff-system/` — handoff creation and restoration
 - `_cc-native/plan-review/` — multi-agent plan review pipeline
 - `_cc-native/artifacts/` — review artifact generation and tracking
 - `_cc-native/lib-ts/rlm/` — retrieval-augmented learning memory
@@ -73,3 +73,25 @@ Claude Code hooks are path-referenced in `.claude/settings.json` at install time
 Moving a hook file requires settings.json updates — high blast-radius, fragile.
 Hooks live in `_shared/hooks-ts/` or `_cc-native/hooks/`. Each system's CLAUDE.md
 lists the hooks that invoke it under a "Hooks" section.
+
+## Context Tree
+
+Read the relevant CLAUDE.md before working in these areas:
+
+**`.aiwcli/` (working instance — edit here first, then sync to templates):**
+- `.aiwcli/_shared/hooks-ts/CLAUDE.md` — hook entry points, unified staging, mode transitions
+- `.aiwcli/_shared/lib-ts/CLAUDE.md` — full hook API: emit channels, logging, output schema
+- `.aiwcli/_shared/lib-ts/context/CLAUDE.md` — context selector, plan manager, task tracker
+- `.aiwcli/_shared/skills/handoff-system/CLAUDE.md` — handoff creation, section markers, restore spec
+- `.aiwcli/_cc-native/hooks/CLAUDE.md` — cc-native-specific hooks (plan review entry points)
+- `.aiwcli/_cc-native/lib-ts/CLAUDE.md` — plan review lib, types, feature flags, path validation
+- `.aiwcli/_cc-native/lib-ts/rlm/CLAUDE.md` — retrieval-augmented learning memory
+- `.aiwcli/_cc-native/plan-review/CLAUDE.md` — plan review pipeline, agent roles, verdict flow
+- `.aiwcli/_cc-native/plan-review/agents/CLAUDE.md` — plan review agent specs
+- `.aiwcli/_cc-native/artifacts/CLAUDE.md` — review artifact generation, public API
+
+**`packages/cli/` (CLI package — installs templates into user projects):**
+- `packages/cli/CLAUDE.md` — CLI commands, key lib files, template sync constraints
+- `packages/cli/src/templates/CLAUDE.md` — template directory structure
+
+These files are not auto-loaded. Read the relevant one before working in that subsystem.

@@ -9,8 +9,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { parseIsoTimestamp } from "../base/utils.js";
+
 import { getContextDir } from "../base/constants.js";
+import { parseIsoTimestamp } from "../base/utils.js";
 import type { ContextState, Task } from "../types.js";
 
 const MAX_PLAN_INLINE_CHARS = 30_000;
@@ -44,7 +45,7 @@ export function getModeDisplay(mode: string): string {
 export function formatRelativeTime(isoTimestamp: string | null): string {
   if (!isoTimestamp) return "unknown";
 
-  let dt = parseIsoTimestamp(isoTimestamp);
+  const dt = parseIsoTimestamp(isoTimestamp);
   if (!dt) return isoTimestamp.slice(0, 16);
 
   const now = new Date();
@@ -100,7 +101,7 @@ function readPlanContent(planPath: string): [string | null, boolean, number] {
 
 function modeLabel(ctx: ContextState): string {
   const d = getModeDisplay(ctx.mode ?? "idle");
-  return d ? d.replace(/^\[|\]$/g, "") : "Active";
+  return d ? d.replaceAll(/^\[|\]$/g, "") : "Active";
 }
 
 /**
@@ -119,7 +120,7 @@ export function buildRestoreSections(
     const savedAt = lastSession.saved_at ?? "";
     if (savedAt) {
       const reason = lastSession.save_reason ?? "";
-      const reasonDisplay = reason ? reason.replace(/_/g, " ") : "unknown";
+      const reasonDisplay = reason ? reason.replaceAll('_', " ") : "unknown";
       sections.push(`**Last session ended:** ${formatRelativeTime(savedAt)} (${reasonDisplay})`);
     }
   }
@@ -222,8 +223,8 @@ export function formatHandoffContinuation(ctx: ContextState, projectRoot?: strin
     } else {
       lines.push(`*Handoff document not found at \`${handoffPath}\`*`, "");
     }
-  } catch (e: any) {
-    lines.push(`*Handoff document at \`${handoffPath}\` could not be read: ${e}*`, "");
+  } catch (error: any) {
+    lines.push(`*Handoff document at \`${handoffPath}\` could not be read: ${error}*`, "");
   }
 
   const restore = buildRestoreSections(ctx, projectRoot, true);
@@ -266,8 +267,8 @@ export function formatContextList(contexts: ContextState[]): string {
   if (contexts.length === 0) return "No active contexts found.";
 
   const lines = ["## Active Contexts\n"];
-  for (let i = 0; i < contexts.length; i++) {
-    const ctx = contexts[i]!;
+  for (const [i, context_] of contexts.entries()) {
+    const ctx = context_!;
     const timeStr = formatRelativeTime(ctx.last_active);
     const md = getModeDisplay(ctx.mode ?? "idle");
     const si = md ? ` ${md}` : "";
@@ -349,11 +350,11 @@ export function formatContextPickerStderr(contexts: ContextState[]): string {
   ];
 
   let selectableCount = 0;
-  for (let i = 0; i < contexts.length; i++) {
-    const ctx = contexts[i]!;
+  for (const [i, context_] of contexts.entries()) {
+    const ctx = context_!;
     const timeStr = formatRelativeTime(ctx.last_active);
     const mode = ctx.mode ?? "idle";
-    const isSelectable = mode === "active" || !!ctx.handoff_path;
+    const isSelectable = mode === "active" || Boolean(ctx.handoff_path);
     if (isSelectable) selectableCount++;
 
     let status = "";
@@ -451,7 +452,7 @@ const KNOWN_FOLDERS: Record<string, string> = {
   "notes": "Analysis files, reports, and documentation that don't belong in the codebase",
 };
 
-function collectFolderPath(contextId: string, contextDir: string, state: ContextState): string | null {
+function collectFolderPath(contextId: string, contextDir: string, _state: ContextState): string | null {
   if (!fs.existsSync(contextDir)) return null;
   return `**Context folder:** \`${contextDir}\`\n**State file:** \`${path.join(contextDir, "state.json")}\` — contains session history, task records, plan/handoff metadata`;
 }
@@ -485,7 +486,7 @@ function countFilesRecursive(dirPath: string): number {
   return count;
 }
 
-function collectFolderInventory(contextId: string, contextDir: string, state: ContextState): string | null {
+function collectFolderInventory(contextId: string, contextDir: string, _state: ContextState): string | null {
   if (!fs.existsSync(contextDir)) return null;
   let entries: fs.Dirent[];
   try {
@@ -519,7 +520,7 @@ function collectSessionStats(contextId: string, contextDir: string, state: Conte
       transcriptCount = files.length;
       if (files.length > 1) {
         const oldest = files[0]!.slice(0, 10);
-        const newest = files[files.length - 1]!.slice(0, 10);
+        const newest = files.at(-1)!.slice(0, 10);
         if (oldest !== newest) timeRange = ` (${oldest} to ${newest})`;
       }
     } catch { /* ignore */ }
@@ -532,7 +533,7 @@ function collectSessionStats(contextId: string, contextDir: string, state: Conte
   return line;
 }
 
-function collectNotesGuidance(contextId: string, contextDir: string, state: ContextState): string | null {
+function collectNotesGuidance(contextId: string, contextDir: string, _state: ContextState): string | null {
   const notesDir = path.join(contextDir, "notes");
   return `**Notes:** Put notes and files that don't belong in the codebase here. Reference them in other documents as needed: \`${notesDir}\``;
 }

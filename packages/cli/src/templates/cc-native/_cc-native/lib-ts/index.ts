@@ -3,13 +3,6 @@
  * Re-exports the public API from all modules.
  */
 
-// Agent aggregation
-export {
-  aggregateAgents,
-  extractBody,
-  extractFrontmatter,
-} from "./aggregate-agents.js";
-
 // Artifacts
 export {
   buildCombinedJson,
@@ -21,6 +14,25 @@ export {
   generateReviewIndex,
   writeCombinedArtifacts,
 } from "../artifacts/lib/index.js";
+
+// Orchestrator
+export { buildOrchestratorSchema, runOrchestrator } from "../plan-review/lib/orchestrator.js";
+
+// Reviewers
+export {
+  AgentReviewer,
+  runAgentReview,
+} from "../plan-review/lib/reviewers/index.js";
+
+// Verdict aggregation
+export { computeReviewDecision, worstVerdict } from "../plan-review/lib/verdict.js";
+
+// Agent aggregation
+export {
+  aggregateAgents,
+  extractBody,
+  extractFrontmatter,
+} from "./aggregate-agents.js";
 
 // CC-native state
 export {
@@ -57,15 +69,6 @@ export { cleanupDebugFolder, debugLog, debugRaw, getDebugDir } from "./debug.js"
 
 // JSON parsing
 export { coerceToReview, parseJsonMaybe } from "./json-parser.js";
-
-// Orchestrator
-export { buildOrchestratorSchema, runOrchestrator } from "../plan-review/lib/orchestrator.js";
-
-// Reviewers
-export {
-  AgentReviewer,
-  runAgentReview,
-} from "../plan-review/lib/reviewers/index.js";
 
 // Iteration state
 export {
@@ -111,6 +114,3 @@ export {
   REVIEW_PROMPT_PREFIX,
   REVIEW_SCHEMA,
 } from "./types.js";
-
-// Verdict aggregation
-export { computeReviewDecision, worstVerdict } from "../plan-review/lib/verdict.js";

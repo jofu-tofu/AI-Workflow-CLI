@@ -16,13 +16,13 @@ Run the resume script to collect and format all handoff sections:
 
 **If `$ARGUMENTS` is provided:**
 ```bash
-bun .aiwcli/_shared/handoff-system/scripts/resume_handoff.ts "$ARGUMENTS"
+bun .aiwcli/_shared/skills/handoff-system/scripts/resume_handoff.ts "$ARGUMENTS"
 ```
 
 **If `$ARGUMENTS` is empty:**
 The script auto-discovers the active context ID programmatically — no manual lookup needed:
 ```bash
-bun .aiwcli/_shared/handoff-system/scripts/resume_handoff.ts
+bun .aiwcli/_shared/skills/handoff-system/scripts/resume_handoff.ts
 ```
 
 Present the script's output to the conversation. The output is already structured in priority order (dead ends first, then pending items, decisions, git delta, completed work, context notes).

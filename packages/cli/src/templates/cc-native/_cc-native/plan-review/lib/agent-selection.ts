@@ -5,7 +5,6 @@
 
 import { logDebug, logInfo, logWarn } from "../../../_shared/lib-ts/base/logger.js";
 import { findExecutable } from "../../../_shared/lib-ts/base/subprocess-utils.js";
-
 import type {
   AgentConfig,
   ModelsConfig,
@@ -31,7 +30,7 @@ export function resolveMandatoryAgents(
     return new Set(configValue as string[]);
   }
   if (!configValue || typeof configValue !== "object") {
-    return new Set(["handoff-readiness", "clarity-auditor", "skeptic"]);
+    return new Set(["clarity-auditor", "handoff-readiness", "skeptic"]);
   }
   const cfg = configValue as Record<string, string[]>;
   const names = new Set(cfg.always ?? []);
@@ -64,7 +63,7 @@ export function assignModelsToAgents(
       if (!found) {
         logWarn(HOOK, `Provider '${name}' enabled but CLI '${cliName}' not found on PATH — skipping`);
       }
-      return !!found;
+      return Boolean(found);
     });
 
   if (enabledProviders.length === 0) {

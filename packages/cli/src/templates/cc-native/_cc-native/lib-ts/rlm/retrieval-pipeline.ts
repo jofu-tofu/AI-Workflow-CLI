@@ -13,6 +13,11 @@
  */
 
 import { z } from "zod";
+
+import { hydeQueryEmbedding } from "./hyde.js";
+import { logInfo, logWarn, logError } from "./logger.js";
+import { checkOllamaHealth, embedOne } from "./ollama-client.js";
+import { loadTranscript } from "./transcript-loader.js";
 import {
   VECTOR_TOP_K,
   MAX_PARALLEL_SUMMARIZERS,
@@ -26,11 +31,7 @@ import {
   type RankedSession,
   type RetrievalResult,
 } from "./types.js";
-import { logInfo, logWarn, logError, logDebug } from "./logger.js";
-import { checkOllamaHealth, embedOne } from "./ollama-client.js";
 import { openVectorDb, searchKnn } from "./vector-store.js";
-import { loadTranscript } from "./transcript-loader.js";
-import { hydeQueryEmbedding } from "./hyde.js";
 
 const HOOK_NAME = "rlm_retrieve";
 
@@ -78,10 +79,12 @@ if (!query) {
   );
   process.exitCode = 1;
 } else {
-  runPipeline(query, topK, projectFilter).catch((e) => {
-    logError(HOOK_NAME, `Fatal: ${e}`, { stderr: true });
+  try {
+    await runPipeline(query, topK, projectFilter);
+  } catch (error) {
+    logError(HOOK_NAME, `Fatal: ${error}`, { stderr: true });
     process.exitCode = 1;
-  });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -127,8 +130,8 @@ async function runPipeline(
       });
       hydeTiming = Date.now() - hydeStart;
       logInfo(HOOK_NAME, `HyDE query embedding completed in ${hydeTiming}ms`);
-    } catch (e) {
-      logWarn(HOOK_NAME, `HyDE failed: ${e}, falling back to direct query embedding`);
+    } catch (error) {
+      logWarn(HOOK_NAME, `HyDE failed: ${error}, falling back to direct query embedding`);
       queryEmbedding = await embedOne(query);
     }
   } else {
@@ -182,7 +185,7 @@ async function runPipeline(
       }
     }
   }
-  const sessions = Array.from(sessionMap.values());
+  const sessions = [...sessionMap.values()];
   logInfo(
     HOOK_NAME,
     `Stage 2: ${results.length} chunks → ${sessions.length} sessions`,
@@ -254,10 +257,10 @@ async function summarizeSessions(
     const promises = batch.map(async (session) => {
       try {
         return await summarizeOneSession(query, session);
-      } catch (e) {
+      } catch (error) {
         logWarn(
           HOOK_NAME,
-          `Summarize failed for ${session.result.session_id}: ${e}`,
+          `Summarize failed for ${session.result.session_id}: ${error}`,
         );
         return null;
       }
@@ -397,8 +400,8 @@ async function rankSessions(
         key_findings: r.key_findings,
       };
     }).filter((r): r is RankedSession => r !== null);
-  } catch (e) {
-    logWarn(HOOK_NAME, `Rank parse failed: ${e}, marking all as relevant`);
+  } catch (error) {
+    logWarn(HOOK_NAME, `Rank parse failed: ${error}, marking all as relevant`);
     return summaries.map((s) => ({
       session_id: s.session_id,
       project: s.project,

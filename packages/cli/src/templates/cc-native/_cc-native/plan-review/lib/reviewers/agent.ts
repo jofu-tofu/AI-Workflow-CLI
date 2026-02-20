@@ -4,13 +4,13 @@
  * See cc-native-plan-review-spec.md §4.10
  */
 
-import { logWarn } from "../../../../_shared/lib-ts/base/logger.js";
-import type { AgentConfig, ReviewerResult, ReviewOptions } from "../../../lib-ts/types.js";
 import { ClaudeAgent } from "./providers/claude-agent.js";
 import { CodexAgent } from "./providers/codex-agent.js";
 import { GeminiAgent } from "./providers/gemini-agent.js";
 import type { Reviewer } from "./types.js";
 import { makeResult } from "./types.js";
+import { logWarn } from "../../../../_shared/lib-ts/base/logger.js";
+import type { AgentConfig, ReviewerResult, ReviewOptions } from "../../../lib-ts/types.js";
 
 /**
  * Agent reviewer — runs a CLI instance with a custom persona.
@@ -59,7 +59,6 @@ export async function runAgentReview(
         reviewer = new GeminiAgent(agent, schema, timeout, contextPath, sessionName);
         break;
       }
-      case "claude":
       default: {
         reviewer = new ClaudeAgent(agent, schema, timeout, contextPath, sessionName);
         break;

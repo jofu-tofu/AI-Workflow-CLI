@@ -6,15 +6,15 @@
  * Uses emitContext() for output — context text is passed via hookSpecificOutput JSON.
  * Catches BlockRequest and uses emitBlock() to block the prompt.
  */
-import {
-  loadHookInput, runHookAsync, logDebug, logInfo, logWarn, logBlocking, logDiagnostic, hookLog, emitContext, emitBlock,
-} from "../lib-ts/base/hook-utils.js";
 import { getProjectRoot } from "../lib-ts/base/constants.js";
+import {
+  loadHookInput, runHookAsync, logDebug, logInfo, logWarn, hookLog, emitContext, emitBlock,
+} from "../lib-ts/base/hook-utils.js";
+import { buildContextInventory } from "../lib-ts/context/context-formatter.js";
+import { determineContext, BlockRequest } from "../lib-ts/context/context-selector.js";
 import {
   getContextBySessionId, bindSession, maybeActivate, saveState,
 } from "../lib-ts/context/context-store.js";
-import { determineContext, BlockRequest } from "../lib-ts/context/context-selector.js";
-import { buildContextInventory } from "../lib-ts/context/context-formatter.js";
 
 async function asyncMain(): Promise<void> {
   const payload = loadHookInput();
@@ -39,8 +39,8 @@ async function asyncMain(): Promise<void> {
     // Returning user — context already bound (stderr: false to avoid "hook error" display)
     try {
       maybeActivate(existingCtx.id, permissionMode, projectRoot, "user_prompt_submit");
-    } catch (e) {
-      hookLog("warn", "user_prompt_submit", `maybeActivate failed (non-critical): ${e}`, { stderr: false });
+    } catch (error) {
+      hookLog("warn", "user_prompt_submit", `maybeActivate failed (non-critical): ${error}`, { stderr: false });
     }
     hookLog("debug", "user_prompt_submit", `Session bound to ${existingCtx.id}`, { stderr: false });
   } else if (prompt) {
@@ -73,15 +73,15 @@ async function asyncMain(): Promise<void> {
           const inventory = buildContextInventory(boundState, projectRoot);
           if (inventory) outputs.push(inventory);
         }
-      } catch (e) {
-        logWarn("user_prompt_submit", `Inventory failed (non-critical): ${e}`);
+      } catch (error) {
+        logWarn("user_prompt_submit", `Inventory failed (non-critical): ${error}`);
       }
-    } catch (e) {
-      if (e instanceof BlockRequest) {
-        emitBlock((e as Error).message);
+    } catch (error) {
+      if (error instanceof BlockRequest) {
+        emitBlock((error as Error).message);
         return;
       }
-      throw e; // Re-throw unexpected errors
+      throw error; // Re-throw unexpected errors
     }
   }
 

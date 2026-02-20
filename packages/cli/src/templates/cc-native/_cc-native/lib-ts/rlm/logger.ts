@@ -25,16 +25,18 @@ try {
   logDebug = mod.logDebug;
 } catch {
   // Fallback: minimal stderr+file logger for standalone CLI execution
-  const fallback = (level: string) => {
-    return (hookName: string, message: string, opts?: Record<string, unknown>) => {
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- must be inside catch for conditional init
+  const fallback = (level: string) => (hookName: string, message: string, opts?: Record<string, unknown>) => {
       const shouldStderr = opts?.stderr === true || level === "error";
       if (shouldStderr) {
         process.stderr.write(`[${hookName}] ${message}\n`);
       }
       // Also try JSONL file logging
       try {
-        const fs = require("fs");
-        const path = require("path");
+        // eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- dynamic require in fallback path
+        const fs = require("node:fs");
+        // eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- dynamic require in fallback path
+        const path = require("node:path");
         const logDir = path.join(process.cwd(), "_output");
         fs.mkdirSync(logDir, { recursive: true });
         const entry = JSON.stringify({
@@ -48,11 +50,10 @@ try {
         // Never crash on logging failure
       }
     };
-  };
   logInfo = fallback("info");
   logWarn = fallback("warn");
   logError = fallback("error");
   logDebug = fallback("debug");
 }
 
-export { logInfo, logWarn, logError, logDebug };
+export { logDebug, logError, logInfo, logWarn };

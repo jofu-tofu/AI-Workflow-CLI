@@ -13,10 +13,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { atomicWrite } from "../base/atomic-write.js";
-import { getContextDir, getContextPlansDir, sanitizeTitle } from "../base/constants.js";
+import { getContextPlansDir, sanitizeTitle } from "../base/constants.js";
 import { logDebug, logInfo, logWarn, logError } from "../base/logger.js";
 import { generateSlug } from "../base/utils.js";
-import type { ContextState } from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Plan archival
@@ -144,6 +143,7 @@ export function findLatestPlan(
   // 1. Check state.json plan_path first
   try {
     // Dynamic import to avoid circular dependency at module level
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- dynamic require to avoid circular dependency
     const stateIo = require("../base/state-io.js");
     const state = stateIo.readStateJson(contextId, projectRoot);
     if (state?.plan_path && fs.existsSync(state.plan_path)) {

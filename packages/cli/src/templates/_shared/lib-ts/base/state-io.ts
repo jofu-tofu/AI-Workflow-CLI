@@ -6,8 +6,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getContextDir } from "./constants.js";
+
 import { atomicWrite } from "./atomic-write.js";
+import { getContextDir } from "./constants.js";
 import { logWarn } from "./logger.js";
 import type { ContextState, Mode } from "../types.js";
 
@@ -121,8 +122,8 @@ export function readStateJson(
     const data = JSON.parse(raw) as Record<string, any>;
     migrateConsumedFlags(data); // Migrate before dictToState
     return dictToState(data);
-  } catch (e: any) {
-    logWarn("state_io", `Failed to read state.json for '${contextId}': ${e}`);
+  } catch (error: any) {
+    logWarn("state_io", `Failed to read state.json for '${contextId}': ${error}`);
     return null;
   }
 }

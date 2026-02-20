@@ -6,11 +6,12 @@
 
 import * as path from "node:path";
 
-import { aggregateAgents } from "../../lib-ts/aggregate-agents.js";
 import { runAgentReview } from "./reviewers/index.js";
 import { QUESTIONS_SCHEMA } from "./reviewers/schemas.js";
-import type { AgentConfig, ModelsConfig } from "../../lib-ts/types.js";
 import { logInfo, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
+import { findExecutable } from "../../../_shared/lib-ts/base/subprocess-utils.js";
+import { aggregateAgents } from "../../lib-ts/aggregate-agents.js";
+import type { AgentConfig } from "../../lib-ts/types.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,8 +26,6 @@ export interface PlanQuestionsResult {
 // ---------------------------------------------------------------------------
 // Provider assignment (local copy — avoids circular import from hook)
 // ---------------------------------------------------------------------------
-
-import { findExecutable } from "../../../_shared/lib-ts/base/subprocess-utils.js";
 
 function assignProvider(agent: AgentConfig): AgentConfig {
   // Default to claude provider with the agent's configured model

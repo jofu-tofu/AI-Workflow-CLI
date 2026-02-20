@@ -6,17 +6,18 @@
  * work to a new session (typically due to context window limits).
  */
 
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as crypto from "node:crypto";
-import { getContextHandoffsDir, getContextDir } from "../base/constants.js";
+
 import { atomicWrite } from "../base/atomic-write.js";
+import { getContextHandoffsDir, getContextDir } from "../base/constants.js";
 import { logInfo, logError } from "../base/logger.js";
 import { nowIso } from "../base/utils.js";
-import { getContext, saveState } from "../context/context-store.js";
+import { getContext } from "../context/context-store.js";
 import { getTasks } from "../context/task-tracker.js";
 import { renderTaskList, formatContinuationHeader, formatReason } from "../templates/formatters.js";
-import type { HandoffDocument, Task } from "../types.js";
+import type { HandoffDocument } from "../types.js";
 
 /**
  * Generate and save a handoff document for a context.

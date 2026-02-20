@@ -10,6 +10,7 @@
  * Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}/reviews/
  */
 
+import { getProjectRoot, getAiwcliDir } from "../../_shared/lib-ts/base/constants.js";
 import {
   loadHookInput,
   runHookAsync,
@@ -20,9 +21,8 @@ import {
   emitContextAndBlock,
 } from "../../_shared/lib-ts/base/hook-utils.js";
 import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
-import { getProjectRoot, getAiwcliDir } from "../../_shared/lib-ts/base/constants.js";
-import { runReviewPipeline } from "../plan-review/lib/review-pipeline.js";
 import type { PipelineResult } from "../lib-ts/types.js";
+import { runReviewPipeline } from "../plan-review/lib/review-pipeline.js";
 
 const HOOK = "cc-native-plan-review";
 
@@ -59,13 +59,15 @@ async function main(): Promise<void> {
   });
 
   switch (result.action) {
-    case "skip":
+    case "block": {
+      emitContextAndBlock(result.contextText, result.blockReason);
+      break;
+    }
+    case "skip": {
       logInfo(HOOK, `Skipping: ${result.reason}`);
       emitContext(`[Plan Review Skipped] ${result.reason}`);
       break;
-    case "block":
-      emitContextAndBlock(result.contextText, result.blockReason);
-      break;
+    }
     default: {
       const _exhaustive: never = result;
       logWarn(HOOK, `Unhandled pipeline action: ${(_exhaustive as { action: string }).action}`);

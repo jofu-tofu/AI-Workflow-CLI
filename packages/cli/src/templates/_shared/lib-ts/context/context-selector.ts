@@ -14,6 +14,15 @@
  */
 
 import * as crypto from "node:crypto";
+
+import {
+  formatActiveContextReminder,
+  formatContextCreated,
+  formatContextPickerStderr,
+  formatCommandFeedback,
+  formatHandoffContinuation,
+  formatPlanContinuation,
+} from "./context-formatter.js";
 import {
   getContext,
   getAllContexts,
@@ -25,18 +34,9 @@ import {
   updateMode,
   determineArtifactType,
 } from "./context-store.js";
-import {
-  formatActiveContextReminder,
-  formatContextCreated,
-  formatContextPickerStderr,
-  formatCommandFeedback,
-  formatHandoffContinuation,
-  formatPlanContinuation,
-  formatActiveContinuation,
-} from "./context-formatter.js";
 import { normalizePlanContent } from "./plan-manager.js";
+import { logDebug, logInfo, logError } from "../base/logger.js";
 import { isInternalCall } from "../base/subprocess-utils.js";
-import { logDebug, logInfo, logWarn, logError } from "../base/logger.js";
 import type { ContextState, CaretCommand } from "../types.js";
 
 /** Minimum characters required for new context description. */
@@ -277,9 +277,9 @@ function matchPlanContent(prompt: string, hasPlanContexts: ContextState[]): Cont
   }
 
   // Tier 4 (legacy): Signature match
-  const promptHead = prompt.slice(0, 500);
+  const promptHead = new Set(prompt.slice(0, 500));
   for (const ctx of hasPlanContexts) {
-    if (ctx.plan_signature && promptHead.includes(ctx.plan_signature)) {
+    if (ctx.plan_signature && promptHead.has(ctx.plan_signature)) {
       logDebug("context_selector", `Tier 4 legacy signature match: ${ctx.id}`);
       return ctx;
     }
@@ -302,8 +302,8 @@ function createNewContext(
     newCtx.mode = "active";
     logInfo("context_selector", `Auto-created context: ${newCtx.id}`);
     return [newCtx.id, "auto_created", formatContextCreated(newCtx)];
-  } catch (e: any) {
-    logError("context_selector", `Primary context creation failed: ${e}`);
+  } catch (error: any) {
+    logError("context_selector", `Primary context creation failed: ${error}`);
     try {
       const now = new Date();
       const yy = String(now.getFullYear()).slice(2);
@@ -323,8 +323,8 @@ function createNewContext(
       newCtx.mode = "active";
       logInfo("context_selector", `Fallback context created: ${newCtx.id}`);
       return [newCtx.id, "auto_created_fallback", formatContextCreated(newCtx)];
-    } catch (e2: any) {
-      logError("context_selector", `ALL context creation failed: ${e2}`);
+    } catch (error: any) {
+      logError("context_selector", `ALL context creation failed: ${error}`);
       return [null, "creation_failed", null];
     }
   }

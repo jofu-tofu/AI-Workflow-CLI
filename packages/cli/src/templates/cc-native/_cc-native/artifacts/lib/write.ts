@@ -5,16 +5,17 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { atomicWrite } from "../../../_shared/lib-ts/base/atomic-write.js";
-import { logDebug, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
-import { sanitizeFilename } from "../../../_shared/lib-ts/base/constants.js";
-import { ENABLE_ROBUST_PLAN_WRITES } from "../../lib-ts/constants.js";
-import type { CombinedReviewResult, CorroborationResult } from "../../lib-ts/types.js";
+
 import {
   formatCombinedMarkdown,
   buildCombinedJson,
   generateReviewIndex,
 } from "./format.js";
+import { atomicWrite } from "../../../_shared/lib-ts/base/atomic-write.js";
+import { sanitizeFilename } from "../../../_shared/lib-ts/base/constants.js";
+import { logDebug, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
+import { ENABLE_ROBUST_PLAN_WRITES } from "../../lib-ts/constants.js";
+import type { CombinedReviewResult, CorroborationResult } from "../../lib-ts/types.js";
 
 // ---------------------------------------------------------------------------
 // Artifact Writing
@@ -44,9 +45,9 @@ export function writeCombinedArtifacts(
 
   try {
     fs.mkdirSync(outDir, { recursive: true });
-  } catch (e: unknown) {
-    logError("utils", `Cannot create directory ${outDir}: ${e}`);
-    throw e;
+  } catch (error: unknown) {
+    logError("utils", `Cannot create directory ${outDir}: ${error}`);
+    throw error;
   }
 
   // JSON write
@@ -63,8 +64,8 @@ export function writeCombinedArtifacts(
   const reviewerOutputDir = path.join(outDir, "reviewer-output");
   try {
     fs.mkdirSync(reviewerOutputDir, { recursive: true });
-  } catch (e) {
-    logWarn("artifacts", `Failed to create reviewer-output dir: ${e}`);
+  } catch (error) {
+    logWarn("artifacts", `Failed to create reviewer-output dir: ${error}`);
   }
   for (const [name, r] of Object.entries(result.agents)) {
     if (r.data) {
@@ -97,9 +98,9 @@ export function writeFile(filePath: string, content: string): void {
     } else {
       fs.writeFileSync(filePath, content, "utf-8");
     }
-  } catch (e: unknown) {
-    logError("utils", `Failed to write ${path.basename(filePath)}: ${e}`);
-    throw e;
+  } catch (error: unknown) {
+    logError("utils", `Failed to write ${path.basename(filePath)}: ${error}`);
+    throw error;
   }
 }
 
@@ -113,7 +114,7 @@ export function writeFileNonCritical(filePath: string, content: string): void {
     } else {
       fs.writeFileSync(filePath, content, "utf-8");
     }
-  } catch (e: unknown) {
-    logWarn("utils", `Failed to write ${path.basename(filePath)}: ${e}`);
+  } catch (error: unknown) {
+    logWarn("utils", `Failed to write ${path.basename(filePath)}: ${error}`);
   }
 }

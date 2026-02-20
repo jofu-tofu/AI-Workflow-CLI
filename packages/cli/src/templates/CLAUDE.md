@@ -220,7 +220,7 @@ Cohesive subsystems are organized as self-contained folders, following the hando
 ```
 
 **Existing systems following this pattern:**
-- `_shared/handoff-system/` — handoff creation and restoration
+- `_shared/skills/handoff-system/` — handoff creation and restoration
 - `_cc-native/plan-review/` — multi-agent plan review pipeline
 - `_cc-native/artifacts/` — review artifact generation and tracking
 - `_cc-native/lib-ts/rlm/` — retrieval-augmented learning memory

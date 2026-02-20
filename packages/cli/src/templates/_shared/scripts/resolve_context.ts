@@ -11,9 +11,9 @@
  *
  * Requires CLAUDE_SESSION_ID environment variable (set by Claude Code).
  */
-import { getContextBySessionId } from "../lib-ts/context/context-store.js";
 import { getProjectRoot } from "../lib-ts/base/constants.js";
 import { eprint } from "../lib-ts/base/utils.js";
+import { getContextBySessionId } from "../lib-ts/context/context-store.js";
 
 const projectRoot = getProjectRoot(process.cwd());
 const sessionId = process.env.CLAUDE_SESSION_ID;

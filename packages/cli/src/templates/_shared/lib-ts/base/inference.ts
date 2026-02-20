@@ -5,6 +5,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+
 import { logDebug, logWarn } from "./logger.js";
 import { STOP_WORDS } from "./stop-words.js";
 import type { InferenceResult } from "../types.js";
@@ -44,7 +45,6 @@ export function inference(
 
   try {
     const isWin = process.platform === "win32";
-    let stdout: string;
 
     // On Windows with shell:true, Node.js sets windowsVerbatimArguments —
     // args are joined with spaces, NOT individually quoted. We must manually
@@ -53,10 +53,10 @@ export function inference(
     const empty = isWin ? '""' : "";
     let promptArg = fullPrompt;
     if (isWin) {
-      promptArg = '"' + fullPrompt.replace(/\r?\n/g, " ").replace(/"/g, '""') + '"';
+      promptArg = '"' + fullPrompt.replaceAll(/\r?\n/g, " ").replaceAll('"', '""') + '"';
     }
 
-    stdout = execFileSync(
+    const stdout = execFileSync(
       "claude",
       ["--model", model, "--print", "--setting-sources", empty, "-p", "--no-session-persistence", promptArg],
       {
@@ -74,10 +74,10 @@ export function inference(
       output: stdout.trim(),
       latency_ms: latencyMs,
     };
-  } catch (e: any) {
+  } catch (error: any) {
     const latencyMs = Date.now() - startTime;
 
-    if (e.code === "ETIMEDOUT" || e.killed) {
+    if (error.code === "ETIMEDOUT" || error.killed) {
       return {
         success: false,
         output: "",
@@ -86,7 +86,7 @@ export function inference(
       };
     }
 
-    if (e.code === "ENOENT") {
+    if (error.code === "ENOENT") {
       return {
         success: false,
         output: "",
@@ -96,11 +96,11 @@ export function inference(
     }
 
     // Non-zero exit code
-    if (e.status !== undefined && e.status !== 0) {
+    if (error.status !== undefined && error.status !== 0) {
       return {
         success: false,
-        output: (e.stdout ?? "").toString().trim(),
-        error: (e.stderr ?? "").toString().trim() || `Exit code: ${e.status}`,
+        output: (error.stdout ?? "").toString().trim(),
+        error: (error.stderr ?? "").toString().trim() || `Exit code: ${error.status}`,
         latency_ms: latencyMs,
       };
     }
@@ -108,7 +108,7 @@ export function inference(
     return {
       success: false,
       output: "",
-      error: String(e),
+      error: String(error),
       latency_ms: latencyMs,
     };
   }
@@ -140,7 +140,7 @@ export function generateSemanticSummary(
   if (!result.success || !result.output) return null;
 
   let summary = result.output.trim();
-  summary = summary.replace(/^["']+|["']+$/g, "");
+  summary = summary.replaceAll(/^["']+|["']+$/g, "");
   summary = summary.replace(/[.!?]+$/, "");
 
   // Filter stop words
@@ -221,11 +221,11 @@ export function generateContextIdSlug(
   if (!slug) slug = raw;
 
   // Clean up
-  slug = slug.replace(/^["'`]+|["'`]+$/g, "");
+  slug = slug.replaceAll(/^["'`]+|["'`]+$/g, "");
   slug = slug.replace(/[.!?]+$/, "");
-  slug = slug.replace(/-/g, " ");
-  slug = slug.replace(/[^a-zA-Z0-9 ]/g, "");
-  slug = slug.replace(/\s+/g, " ").trim();
+  slug = slug.replaceAll('-', " ");
+  slug = slug.replaceAll(/[^a-zA-Z0-9 ]/g, "");
+  slug = slug.replaceAll(/\s+/g, " ").trim();
 
   const words = slug.split(" ");
 
@@ -263,7 +263,7 @@ export async function inferenceAsync(
   const isWin = process.platform === "win32";
   const empty = isWin ? '""' : "";
   const promptArg = isWin
-    ? shellQuoteWin(fullPrompt.replace(/\r?\n/g, " "))
+    ? shellQuoteWin(fullPrompt.replaceAll(/\r?\n/g, " "))
     : fullPrompt;
 
   const result = await execFileAsync(

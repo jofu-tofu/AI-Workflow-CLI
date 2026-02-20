@@ -199,7 +199,7 @@ export function lintTemplateMethod(
 /**
  * Lint all template methods in a templates directory
  */
-function lintAllTemplates(templatesDir: string): Map<string, LintViolation[]> {
+export function lintAllTemplates(templatesDir: string): Map<string, LintViolation[]> {
   const results = new Map<string, LintViolation[]>();
   const methods = ['cc-native'];
 

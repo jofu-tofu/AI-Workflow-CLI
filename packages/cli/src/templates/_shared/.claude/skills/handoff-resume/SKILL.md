@@ -6,7 +6,7 @@ user-invocable: true
 
 # Resume Handoff
 
-Restore context from a handoff document and create ISC tasks. See `.aiwcli/_shared/handoff-system/workflows/handoff-resume.md` for complete process documentation.
+Restore context from a handoff document and create ISC tasks. See `.aiwcli/_shared/skills/handoff-system/workflows/handoff-resume.md` for complete process documentation.
 
 **Quick trigger:** `/handoff-resume` or `/handoff-resume path/to/handoff`
 

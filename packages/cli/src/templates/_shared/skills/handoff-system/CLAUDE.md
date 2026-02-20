@@ -173,7 +173,7 @@ If `plan_hash` differs from `plan_hash_consumed`, new plan detected:
 
 **Usage:**
 ```bash
-bun .aiwcli/_shared/handoff-system/scripts/save_handoff.ts [--context-id ID] [--session-id SID] < handoff.md
+bun .aiwcli/_shared/skills/handoff-system/scripts/save_handoff.ts [--context-id ID] [--session-id SID] < handoff.md
 ```
 
 **Stdin format:**
@@ -209,13 +209,13 @@ If timestamp folder exists, appends `-2`, `-3`, etc.
 **Usage:**
 ```bash
 # Auto-discover from current session
-bun .aiwcli/_shared/handoff-system/scripts/resume_handoff.ts
+bun .aiwcli/_shared/skills/handoff-system/scripts/resume_handoff.ts
 
 # Explicit handoff path
-bun .aiwcli/_shared/handoff-system/scripts/resume_handoff.ts path/to/handoff/index.md
+bun .aiwcli/_shared/skills/handoff-system/scripts/resume_handoff.ts path/to/handoff/index.md
 
 # Explicit context
-bun .aiwcli/_shared/handoff-system/scripts/resume_handoff.ts --context context-id
+bun .aiwcli/_shared/skills/handoff-system/scripts/resume_handoff.ts --context context-id
 ```
 
 **Output format (to stdout):**
@@ -257,7 +257,7 @@ Uses `CLAUDE_SESSION_ID` env var → lookup context → find latest handoff in `
 
 ### handoff-reader.ts
 
-**Location:** `_shared/handoff-system/lib/handoff-reader.ts`
+**Location:** `_shared/skills/handoff-system/lib/handoff-reader.ts`
 
 **Exports:**
 
@@ -292,7 +292,7 @@ const SECTION_FILES = {
 
 ### document-generator.ts
 
-**Location:** `_shared/handoff-system/lib/document-generator.ts`
+**Location:** `_shared/skills/handoff-system/lib/document-generator.ts`
 
 **Exports:**
 
@@ -316,7 +316,7 @@ function buildDeadEndsSection(deadEnds: DeadEnd[]): string
 **Thin pointer pattern:**
 
 `.claude/skills/handoff/SKILL.md` (user-facing, discoverable via `/`, `user-invocable: true`)
-→ References `.aiwcli/_shared/handoff-system/workflows/handoff.md` (detailed procedural steps)
+→ References `.aiwcli/_shared/skills/handoff-system/workflows/handoff.md` (detailed procedural steps)
 
 **Benefits:**
 - Skill files stay concise (easy to scan in `/` menu)
@@ -325,7 +325,7 @@ function buildDeadEndsSection(deadEnds: DeadEnd[]): string
 
 **Example reference format:**
 ```markdown
-See `.aiwcli/_shared/handoff-system/workflows/handoff.md` for complete process documentation.
+See `.aiwcli/_shared/skills/handoff-system/workflows/handoff.md` for complete process documentation.
 ```
 
 ## Testing
@@ -406,7 +406,7 @@ Expected: No import errors, clean execution.
 ## Gotchas
 
 **Template sync is mandatory:**
-Both `.aiwcli/_shared/handoff-system/` (working copy) and `packages/cli/src/templates/_shared/handoff-system/` (template source) must stay in sync per CLAUDE.md template sync rules.
+Both `.aiwcli/_shared/skills/handoff-system/` (working copy) and `packages/cli/src/templates/_shared/skills/handoff-system/` (template source) must stay in sync per CLAUDE.md template sync rules.
 
 **Import paths after move:**
 - From `scripts/resume_handoff.ts` → `lib/handoff-reader.ts`: `../lib/handoff-reader.js`
@@ -418,7 +418,7 @@ Both `.aiwcli/_shared/handoff-system/` (working copy) and `packages/cli/src/temp
 - No direct handoff-reader dependency in hooks
 
 **Command file script paths are absolute:**
-- Reference from project root: `.aiwcli/_shared/handoff-system/scripts/save_handoff.ts`
+- Reference from project root: `.aiwcli/_shared/skills/handoff-system/scripts/save_handoff.ts`
 - NOT relative to command file location
 
 **Section markers must be HTML comments:**

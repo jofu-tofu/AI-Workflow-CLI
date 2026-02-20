@@ -11,11 +11,12 @@
  *   bun transcript-loader.ts <jsonl-path> --lines=46-120
  */
 
-import { createReadStream } from "fs";
-import { createInterface } from "readline";
-import { basename } from "path";
+import { createReadStream } from "node:fs";
+import { basename } from "node:path";
+import { createInterface } from "node:readline";
+
+import { logInfo, logError } from "./logger.js";
 import { MAX_LOADER_CHARS, type LoadedSegment } from "./types.js";
-import { logInfo, logWarn, logError } from "./logger.js";
 
 const HOOK_NAME = "rlm_loader";
 
@@ -35,17 +36,16 @@ if (linesArg) {
 }
 
 if (jsonlPath && !process.env.RLM_LIB_MODE) {
-  loadTranscript(jsonlPath, lineRange)
-    .then((seg) => {
-      process.stdout.write(seg.content);
-      if (seg.truncated) {
-        logInfo(HOOK_NAME, "Output truncated at 50K chars", { stderr: true });
-      }
-    })
-    .catch((e) => {
-      logError(HOOK_NAME, `Load failed: ${e}`, { stderr: true });
-      process.exitCode = 1;
-    });
+  try {
+    const seg = await loadTranscript(jsonlPath, lineRange);
+    process.stdout.write(seg.content);
+    if (seg.truncated) {
+      logInfo(HOOK_NAME, "Output truncated at 50K chars", { stderr: true });
+    }
+  } catch (error) {
+    logError(HOOK_NAME, `Load failed: ${error}`, { stderr: true });
+    process.exitCode = 1;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -135,9 +135,9 @@ async function loadTranscript(
   }
 
   // Derive project from path
-  const pathParts = filePath.replace(/\\/g, "/").split("/");
+  const pathParts = filePath.replaceAll('\\', "/").split("/");
   const projectsIdx = pathParts.indexOf("projects");
-  if (projectsIdx >= 0 && projectsIdx + 1 < pathParts.length) {
+  if (projectsIdx !== -1 && projectsIdx + 1 < pathParts.length) {
     project = pathParts[projectsIdx + 1];
   }
 
@@ -155,7 +155,7 @@ async function loadTranscript(
 // ---------------------------------------------------------------------------
 
 function extractContent(msg: Record<string, unknown>): string | null {
-  const content = msg.content;
+  const {content} = msg;
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     const texts: string[] = [];
@@ -187,7 +187,7 @@ function extractAssistantContent(msg: Record<string, unknown>): {
   text: string;
   toolUses: ToolUse[];
 } {
-  const content = msg.content;
+  const {content} = msg;
   let text = "";
   const toolUses: ToolUse[] = [];
 
@@ -219,26 +219,36 @@ function extractAssistantContent(msg: Record<string, unknown>): {
 function summarizeToolInput(toolName: string, input?: Record<string, unknown>): string {
   if (!input) return "";
   switch (toolName) {
-    case "Read":
-      return input.file_path ? `${input.file_path}` : "";
-    case "Write":
-      return input.file_path ? `${input.file_path}` : "";
-    case "Edit":
-      return input.file_path ? `${input.file_path}` : "";
-    case "Bash":
+    case "Bash": {
       return input.command ? `${(input.command as string).slice(0, 80)}` : "";
-    case "Glob":
+    }
+    case "Edit": {
+      return input.file_path ? `${input.file_path}` : "";
+    }
+    case "Glob": {
       return input.pattern ? `${input.pattern}` : "";
-    case "Grep":
+    }
+    case "Grep": {
       return input.pattern ? `/${input.pattern}/` : "";
-    case "Task":
+    }
+    case "Read": {
+      return input.file_path ? `${input.file_path}` : "";
+    }
+    case "Task": {
       return input.description ? `${input.description}` : "";
-    case "WebSearch":
-      return input.query ? `"${input.query}"` : "";
-    case "WebFetch":
+    }
+    case "WebFetch": {
       return input.url ? `${input.url}` : "";
-    default:
+    }
+    case "WebSearch": {
+      return input.query ? `"${input.query}"` : "";
+    }
+    case "Write": {
+      return input.file_path ? `${input.file_path}` : "";
+    }
+    default: {
       return Object.keys(input).slice(0, 3).join(", ");
+    }
   }
 }
 

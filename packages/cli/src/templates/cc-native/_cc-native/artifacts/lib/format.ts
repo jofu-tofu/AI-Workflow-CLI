@@ -4,13 +4,13 @@
  */
 
 import { sanitizeFilename } from "../../../_shared/lib-ts/base/constants.js";
+import { DEFAULT_DISPLAY } from "../../lib-ts/types.js";
 import type {
   CombinedReviewResult,
   ReviewerResult,
   DisplaySettings,
   CorroborationResult,
 } from "../types.js";
-import { DEFAULT_DISPLAY } from "../../lib-ts/types.js";
 
 // ---------------------------------------------------------------------------
 // Markdown Formatting
@@ -204,9 +204,11 @@ export function buildInlineReviewSummary(
     parts.push(line);
   }
 
-  const remaining = highIssues.length - maxIssues;
-  if (remaining > 0) {
-    parts.push(`  ...and ${remaining} more`);
+  if (maxIssues > 0) {
+    const remaining = highIssues.length - maxIssues;
+    if (remaining > 0) {
+      parts.push(`  ...and ${remaining} more`);
+    }
   }
 
   let result = parts.join("\n");
@@ -236,15 +238,15 @@ export function extractTopIssuesText(
         const text = String(issue.issue ?? "").trim();
         if (text) {
           issues.push(`[${r.name}] ${text}`);
-          break; // first high issue per reviewer only
         }
       }
+      if (issues.length >= maxCount) break;
     }
     if (issues.length >= maxCount) break;
   }
 
   if (issues.length === 0) return "Review found critical issues";
-  return issues.join("; ");
+  return issues.map(i => `- ${i}`).join("\n");
 }
 
 /**

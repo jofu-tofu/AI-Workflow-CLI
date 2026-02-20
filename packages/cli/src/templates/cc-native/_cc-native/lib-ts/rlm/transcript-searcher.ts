@@ -11,12 +11,11 @@
  *   bun transcript-searcher.ts "plan review" --project=aiwcli
  */
 
-import { readdir, readFile } from "fs/promises";
-import { existsSync } from "fs";
-import { join } from "path";
-import { logInfo, logWarn, logError, logDebug } from "./logger.js";
+import { existsSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 
-const HOOK_NAME = "rlm_searcher";
+import { logInfo, logWarn, logError } from "./logger.js";
 import {
   CURRENT_SCHEMA_VERSION,
   CLAUDE_PROJECTS_DIR,
@@ -27,6 +26,8 @@ import {
   type SearchResult,
   type IndexSegment,
 } from "./types.js";
+
+const HOOK_NAME = "rlm_searcher";
 
 // ---------------------------------------------------------------------------
 // CLI entry
@@ -40,20 +41,19 @@ const projectArg = args.find((a) => a.startsWith("--project="));
 const projectFilter = projectArg ? projectArg.split("=")[1] : null;
 
 if (query && !process.env.RLM_LIB_MODE) {
-  search(query, { topN, projectFilter })
-    .then((results) => {
-      if (typeof results === "string") {
-        logWarn(HOOK_NAME, results, { stderr: true });
-        process.exitCode = 1;
-      } else {
-        logInfo(HOOK_NAME, `Search returned ${results.length} results`);
-        process.stdout.write(JSON.stringify(results, null, 2) + "\n");
-      }
-    })
-    .catch((e) => {
-      logError(HOOK_NAME, `Search failed: ${e}`, { stderr: true });
+  try {
+    const results = await search(query, { topN, projectFilter });
+    if (typeof results === "string") {
+      logWarn(HOOK_NAME, results, { stderr: true });
       process.exitCode = 1;
-    });
+    } else {
+      logInfo(HOOK_NAME, `Search returned ${results.length} results`);
+      process.stdout.write(JSON.stringify(results, null, 2) + "\n");
+    }
+  } catch (error) {
+    logError(HOOK_NAME, `Search failed: ${error}`, { stderr: true });
+    process.exitCode = 1;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +251,7 @@ function tokenize(query: string): string[] {
   return query
     .toLowerCase()
     .split(/\s+/)
-    .map((t) => t.replace(/[^a-z0-9_-]/g, ""))
+    .map((t) => t.replaceAll(/[^a-z0-9_-]/g, ""))
     .filter((t) => t.length >= 2);
 }
 
@@ -271,4 +271,4 @@ function insertSorted(arr: SearchResult[], item: SearchResult, maxSize: number):
 // Exports
 // ---------------------------------------------------------------------------
 
-export { search, scoreIndex, tokenize, type SearchOptions };
+export { scoreIndex, search, type SearchOptions, tokenize };

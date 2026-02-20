@@ -7,17 +7,39 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { resolveMandatoryAgents, assignModelsToAgents, selectAgents } from "./agent-selection.js";
+import { computeCorroboratedDecision } from "./corroboration.js";
+import { computePassEligible, extractTopIssuesForTracker, advanceIterationState } from "./graduation.js";
+import { runOrchestrator } from "./orchestrator.js";
+import { truncateAgentIssues, overrideVerdictsByThreshold, buildReviewOutput } from "./output-builder.js";
+import { runPlanQuestions } from "./plan-questions.js";
+import { runAgentReview } from "./reviewers/index.js";
+import { getContextReviewsDir, getContextDir, getReviewFolderPath } from "../../../_shared/lib-ts/base/constants.js";
+import { logDiagnostic } from "../../../_shared/lib-ts/base/hook-utils.js";
 import {
   logDebug,
   logInfo,
   logWarn,
   logError,
 } from "../../../_shared/lib-ts/base/logger.js";
-import { logDiagnostic } from "../../../_shared/lib-ts/base/hook-utils.js";
 import { eprint } from "../../../_shared/lib-ts/base/utils.js";
-import { getContextReviewsDir, getContextDir, getReviewFolderPath } from "../../../_shared/lib-ts/base/constants.js";
 import { getContextBySessionId, getAllContexts } from "../../../_shared/lib-ts/context/context-store.js";
-
+import type { ContextState } from "../../../_shared/lib-ts/types.js";
+import { writeCombinedArtifacts, buildCorroborationReport, buildHighIssuesDocument, writeReviewTracker } from "../../artifacts/lib/index.js";
+import type { ReviewTrackerEntry } from "../../artifacts/lib/index.js";
+import {
+  isPlanAlreadyReviewed,
+  wasPlanPreviouslyDenied,
+  getLastPlanReview,
+  markPlanReviewed,
+  wasPlanQuestionsAgentAsked,
+  markQuestionsAsked,
+  resetPlanQuestionsAsked,
+} from "../../lib-ts/cc-native-state.js";
+import { debugLog } from "../../lib-ts/debug.js";
+import { discoverPlan } from "../../lib-ts/plan-discovery.js";
+import { loadSettings, loadModelsConfig, loadAgentLibrary, DEFAULT_ORCHESTRATOR } from "../../lib-ts/settings.js";
+import { DEFAULT_REVIEW_ITERATIONS, loadIterationState, saveIterationState } from "../../lib-ts/state.js";
 import type {
   AgentConfig,
   OrchestratorConfig,
@@ -29,32 +51,6 @@ import type {
   PipelineResult,
 } from "../../lib-ts/types.js";
 import { REVIEW_SCHEMA } from "../../lib-ts/types.js";
-import type { ContextState } from "../../../_shared/lib-ts/types.js";
-
-import { discoverPlan } from "../../lib-ts/plan-discovery.js";
-import { loadSettings, loadModelsConfig, loadAgentLibrary, DEFAULT_ORCHESTRATOR } from "../../lib-ts/settings.js";
-import { resolveMandatoryAgents, assignModelsToAgents, selectAgents } from "./agent-selection.js";
-import { computePassEligible, extractTopIssuesForTracker, advanceIterationState } from "./graduation.js";
-import { truncateAgentIssues, overrideVerdictsByThreshold, buildReviewOutput } from "./output-builder.js";
-import { DEFAULT_REVIEW_ITERATIONS, loadIterationState, saveIterationState } from "../../lib-ts/state.js";
-
-import {
-  isPlanAlreadyReviewed,
-  wasPlanPreviouslyDenied,
-  getLastPlanReview,
-  markPlanReviewed,
-  wasPlanQuestionsAgentAsked,
-  markQuestionsAsked,
-  resetPlanQuestionsAsked,
-} from "../../lib-ts/cc-native-state.js";
-
-import { computeCorroboratedDecision } from "./corroboration.js";
-import { runOrchestrator } from "./orchestrator.js";
-import { debugLog } from "../../lib-ts/debug.js";
-import { writeCombinedArtifacts, buildCorroborationReport, buildHighIssuesDocument, writeReviewTracker } from "../../artifacts/lib/index.js";
-import type { ReviewTrackerEntry } from "../../artifacts/lib/index.js";
-import { runAgentReview } from "./reviewers/index.js";
-import { runPlanQuestions } from "./plan-questions.js";
 
 const HOOK = "review-pipeline";
 
@@ -143,7 +139,7 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
       current: 1, max: 1, complexity: "medium",
       history: [], graduated: [], passStreaks: {},
       lastPlanHash: "", lastPlanPath: "",
-      sessionId: sessionId,
+      sessionId,
     };
     saveIterationState(reviewsDir, iterationState);
   }
@@ -156,7 +152,7 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
       current: 1, max: 1, complexity: "medium",
       history: [], graduated: [], passStreaks: {},
       lastPlanHash: "", lastPlanPath: "",
-      sessionId: sessionId,
+      sessionId,
     };
     saveIterationState(reviewsDir, iterationState);
     resetPlanQuestionsAsked(sessionId, base);
@@ -213,10 +209,10 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
         contextText: "[Plan Review] Plan content unchanged since last review which found issues.",
         blockReason: "Plan unchanged since denial. Modify the plan to address review findings, then attempt ExitPlanMode again.",
       };
-    } else {
+    } 
       const verdict = lastReview?.iteration?.latest_verdict || "pass";
       return { action: "skip", reason: `Plan already reviewed (verdict: ${verdict}). Skipping re-review.` };
-    }
+    
   }
 
   // 7. Iteration bounds check
@@ -316,7 +312,7 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
     // Update iteration state with complexity/max
     const reviewIterations: Record<string, number> = {
       ...DEFAULT_REVIEW_ITERATIONS,
-      ...(agentSettings.reviewIterations ?? {}),
+      ...agentSettings.reviewIterations,
     };
     iterationState.complexity = detectedComplexity;
     iterationState.max = reviewIterations[detectedComplexity] ?? iterationState.max;
@@ -401,8 +397,8 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
   };
 
   const displaySettings = {
-    ...(planSettings.display ?? {}),
-    ...(agentSettings.display ?? {}),
+    ...planSettings.display,
+    ...agentSettings.display,
   };
   const combinedSettings = { display: displaySettings };
 
@@ -427,8 +423,8 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
   try {
     fs.writeFileSync(path.join(reviewFolder, "plan.md"), plan, "utf-8");
     logDebug(HOOK, `Saved plan snapshot: ${path.join(reviewFolder, "plan.md")}`);
-  } catch (e) {
-    logWarn(HOOK, `Failed to save plan snapshot: ${e}`);
+  } catch (error) {
+    logWarn(HOOK, `Failed to save plan snapshot: ${error}`);
   }
 
   // Build high-issues document
@@ -438,7 +434,7 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
 
   // 15. Build output
   const shouldDeny = corroborationResult.blocking.length > 0;
-  const reviewScore = shouldDeny ? 1.0 : 0.0;
+  const reviewScore = shouldDeny ? 1 : 0;
   const denyReason = shouldDeny ? "corroborated_issues" : "no_corroboration";
 
   logInfo(HOOK, `REVIEW_DECISION: verdict=${combinedResult.overall_verdict}, deny=${shouldDeny}, reason=${denyReason}, score=${reviewScore.toFixed(2)}`);

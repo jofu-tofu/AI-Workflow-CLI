@@ -11,10 +11,10 @@ import { formatLintErrors, getLinterForFile, runLinter } from "../lib-ts/base/li
 
 // Extensions with no lint value
 const SKIP_EXTENSIONS = new Set([
-  ".md", ".txt", ".env", ".toml", ".yaml", ".yml", ".lock",
-  ".svg", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp",
-  ".woff", ".woff2", ".eot", ".ttf", ".otf",
-  ".map", ".min.js", ".min.css",
+  ".env", ".eot", ".gif", ".ico", ".jpeg", ".jpg", ".lock",
+  ".map", ".md", ".min.css", ".min.js", ".otf", ".png", ".svg",
+  ".toml", ".ttf", ".txt", ".webp", ".woff",
+  ".woff2", ".yaml", ".yml",
 ]);
 
 // Path segments that should never be linted

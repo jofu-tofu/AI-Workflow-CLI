@@ -17,7 +17,7 @@ import { AGENT_REVIEW_PROMPT_PREFIX } from "../schemas.js";
 import { makeResult } from "../types.js";
 
 /** Temp directory for Codex schema/output files */
-const tmpDir: string | null = null;
+const _tmpDir: string | null = null;
 
 /**
  * Codex CLI-based agent reviewer.

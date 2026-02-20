@@ -26,14 +26,14 @@ const childProcesses = new Set<ChildProcess>();
  * Called by exit and signal handlers.
  */
 function cleanupChildren(): void {
-  childProcesses.forEach((child) => {
+  for (const child of childProcesses) {
     try {
       // Use SIGKILL for forceful termination (important on Windows with shell)
       child.kill("SIGKILL");
     } catch {
       // Ignore errors (child may have already exited)
     }
-  });
+  }
   childProcesses.clear();
 }
 
@@ -229,7 +229,7 @@ export function execFileAsync(
     });
 
     // Pipe input to stdin if provided
-    if (options?.input != null && child.stdin) {
+    if (options?.input !== null && options?.input !== undefined && child.stdin) {
       child.stdin.write(options.input);
       child.stdin.end();
     }
