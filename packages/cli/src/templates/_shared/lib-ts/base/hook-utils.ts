@@ -431,6 +431,13 @@ export function runHook(
   _earlyReadInput(prefetchedInput);
   _cachedHookName = hookName;
 
+  // Ensure cwd is project root so relative paths in hooks resolve correctly,
+  // even when cwd has drifted via `cd` in a Bash tool call.
+  try {
+    const projectRoot = getProjectRoot(_prefetchedInput?.cwd);
+    if (process.cwd() !== projectRoot) process.chdir(projectRoot);
+  } catch { /* non-fatal — proceed with current cwd */ }
+
   const startTime = performance.now();
   const template = detectTemplate();
   const event = _lastHookEvent ?? "unknown";
@@ -481,6 +488,13 @@ export function runHookAsync(
 ): void {
   _earlyReadInput(prefetchedInput);
   _cachedHookName = hookName;
+
+  // Ensure cwd is project root so relative paths in hooks resolve correctly,
+  // even when cwd has drifted via `cd` in a Bash tool call.
+  try {
+    const projectRoot = getProjectRoot(_prefetchedInput?.cwd);
+    if (process.cwd() !== projectRoot) process.chdir(projectRoot);
+  } catch { /* non-fatal — proceed with current cwd */ }
 
   const startTime = performance.now();
   const template = detectTemplate();

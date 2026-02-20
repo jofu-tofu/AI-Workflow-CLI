@@ -22,7 +22,10 @@ import { findLatestPlan } from "../lib-ts/context/plan-manager.js";
 // Path setup
 // ---------------------------------------------------------------------------
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname);
-const OUTPUT_DIR = path.join(".", "_output");
+// Resolve project root from script location (.aiwcli/_shared/scripts/) so paths
+// work even when cwd has drifted via `cd` in a Bash tool call.
+const PROJECT_ROOT = path.resolve(SCRIPT_DIR, "..", "..", "..");
+const OUTPUT_DIR = path.join(PROJECT_ROOT, "_output");
 const CACHE_DIR = path.join(OUTPUT_DIR, "cache");
 const STATUSLINE_CACHE = path.join(CACHE_DIR, ".statusline-cache.json");
 
@@ -342,89 +345,97 @@ function getGitStatus(cwd: string): GitStatus | null {
   return status;
 }
 
-function renderGit(mode: string, git: GitStatus, dirName: string): void {
-  const totalChanged = git.modified + git.staged;
-  const statusIcon = (totalChanged > 0 || git.untracked > 0) ? "*" : "\u2713";
+function renderGit(mode: string, git: GitStatus | null, dirName: string): void {
+  const totalChanged = git ? git.modified + git.staged : 0;
+  const statusIcon = git && (totalChanged > 0 || git.untracked > 0) ? "*" : "\u2713";
 
   switch (mode) {
   case "micro": {
-    let line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET} ${GIT_VALUE}${git.branch}${RESET}`;
-    if (git.age_display) {
-      line += ` ${git.age_color}${git.age_display}${RESET}`;
-    }
-    line += " ";
-    if (statusIcon === "\u2713") {
-      line += `${GIT_CLEAN}${statusIcon}${RESET}`;
-    } else {
-      line += `${GIT_MODIFIED}${statusIcon}${totalChanged}${RESET}`;
+    let line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET}`;
+    if (git) {
+      line += ` ${GIT_VALUE}${git.branch}${RESET}`;
+      if (git.age_display) {
+        line += ` ${git.age_color}${git.age_display}${RESET}`;
+      }
+      line += " ";
+      if (statusIcon === "\u2713") {
+        line += `${GIT_CLEAN}${statusIcon}${RESET}`;
+      } else {
+        line += `${GIT_MODIFIED}${statusIcon}${totalChanged}${RESET}`;
+      }
     }
     console.log(line);
-  
+
   break;
   }
   case "mini": {
-    let line =
-      `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET} ` +
-      `${SLATE_600}\u2502${RESET} ${GIT_VALUE}${git.branch}${RESET}`;
-    if (git.age_display) {
-      line += ` ${SLATE_600}\u2502${RESET} ${git.age_color}${git.age_display}${RESET}`;
-    }
-    line += ` ${SLATE_600}\u2502${RESET} `;
-    if (statusIcon === "\u2713") {
-      line += `${GIT_CLEAN}${statusIcon}${RESET}`;
-    } else {
-      line += `${GIT_MODIFIED}${statusIcon}${totalChanged}${RESET}`;
-      if (git.untracked > 0) {
-        line += ` ${GIT_ADDED}+${git.untracked}${RESET}`;
+    let line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET}`;
+    if (git) {
+      line += ` ${SLATE_600}\u2502${RESET} ${GIT_VALUE}${git.branch}${RESET}`;
+      if (git.age_display) {
+        line += ` ${SLATE_600}\u2502${RESET} ${git.age_color}${git.age_display}${RESET}`;
+      }
+      line += ` ${SLATE_600}\u2502${RESET} `;
+      if (statusIcon === "\u2713") {
+        line += `${GIT_CLEAN}${statusIcon}${RESET}`;
+      } else {
+        line += `${GIT_MODIFIED}${statusIcon}${totalChanged}${RESET}`;
+        if (git.untracked > 0) {
+          line += ` ${GIT_ADDED}+${git.untracked}${RESET}`;
+        }
       }
     }
     console.log(line);
-  
+
   break;
   }
   case "nano": {
-    let line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET} ${GIT_VALUE}${git.branch}${RESET} `;
-    if (statusIcon === "\u2713") {
-      line += `${GIT_CLEAN}\u2713${RESET}`;
-    } else {
-      line += `${GIT_MODIFIED}*${totalChanged}${RESET}`;
+    let line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET}`;
+    if (git) {
+      line += ` ${GIT_VALUE}${git.branch}${RESET} `;
+      if (statusIcon === "\u2713") {
+        line += `${GIT_CLEAN}\u2713${RESET}`;
+      } else {
+        line += `${GIT_MODIFIED}*${totalChanged}${RESET}`;
+      }
     }
     console.log(line);
-  
+
   break;
   }
   default: {
-    let line =
-      `${GIT_PRIMARY}\u25C8${RESET} ${GIT_PRIMARY}PWD:${RESET} ${GIT_DIR}${dirName}${RESET} ` +
-      `${SLATE_600}\u2502${RESET} ` +
-      `${GIT_PRIMARY}Branch:${RESET} ${GIT_VALUE}${git.branch}${RESET}`;
-    if (git.age_display) {
-      line += ` ${SLATE_600}\u2502${RESET} ${GIT_PRIMARY}Age:${RESET} ${git.age_color}${git.age_display}${RESET}`;
-    }
-    if (git.stash_count > 0) {
-      line += ` ${SLATE_600}\u2502${RESET} ${GIT_PRIMARY}Stash:${RESET} ${GIT_STASH}${git.stash_count}${RESET}`;
-    }
+    let line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_PRIMARY}PWD:${RESET} ${GIT_DIR}${dirName}${RESET}`;
+    if (git) {
+      line += ` ${SLATE_600}\u2502${RESET} ` +
+        `${GIT_PRIMARY}Branch:${RESET} ${GIT_VALUE}${git.branch}${RESET}`;
+      if (git.age_display) {
+        line += ` ${SLATE_600}\u2502${RESET} ${GIT_PRIMARY}Age:${RESET} ${git.age_color}${git.age_display}${RESET}`;
+      }
+      if (git.stash_count > 0) {
+        line += ` ${SLATE_600}\u2502${RESET} ${GIT_PRIMARY}Stash:${RESET} ${GIT_STASH}${git.stash_count}${RESET}`;
+      }
 
-    if (totalChanged > 0 || git.untracked > 0) {
-      line += ` ${SLATE_600}\u2502${RESET} `;
-      if (totalChanged > 0) {
-        line += `${GIT_PRIMARY}Mod:${RESET} ${GIT_MODIFIED}${totalChanged}${RESET}`;
+      if (totalChanged > 0 || git.untracked > 0) {
+        line += ` ${SLATE_600}\u2502${RESET} `;
+        if (totalChanged > 0) {
+          line += `${GIT_PRIMARY}Mod:${RESET} ${GIT_MODIFIED}${totalChanged}${RESET}`;
+        }
+        if (git.untracked > 0) {
+          if (totalChanged > 0) line += " ";
+          line += `${GIT_PRIMARY}New:${RESET} ${GIT_ADDED}${git.untracked}${RESET}`;
+        }
+      } else {
+        line += ` ${SLATE_600}\u2502${RESET} ${GIT_CLEAN}\u2713 clean${RESET}`;
       }
-      if (git.untracked > 0) {
-        if (totalChanged > 0) line += " ";
-        line += `${GIT_PRIMARY}New:${RESET} ${GIT_ADDED}${git.untracked}${RESET}`;
-      }
-    } else {
-      line += ` ${SLATE_600}\u2502${RESET} ${GIT_CLEAN}\u2713 clean${RESET}`;
-    }
 
-    if (git.ahead > 0 || git.behind > 0) {
-      line += ` ${SLATE_600}\u2502${RESET} ${GIT_PRIMARY}Sync:${RESET} `;
-      if (git.ahead > 0) {
-        line += `${GIT_CLEAN}\u2191${git.ahead}${RESET}`;
-      }
-      if (git.behind > 0) {
-        line += `${GIT_STASH}\u2193${git.behind}${RESET}`;
+      if (git.ahead > 0 || git.behind > 0) {
+        line += ` ${SLATE_600}\u2502${RESET} ${GIT_PRIMARY}Sync:${RESET} `;
+        if (git.ahead > 0) {
+          line += `${GIT_CLEAN}\u2191${git.ahead}${RESET}`;
+        }
+        if (git.behind > 0) {
+          line += `${GIT_STASH}\u2193${git.behind}${RESET}`;
+        }
       }
     }
     console.log(line);
@@ -684,11 +695,9 @@ function main(): void {
   // Render context section
   renderContext(mode, contextPct, contextK, maxK, timeDisplay, modelName);
 
-  // Render git section
+  // Render PWD + git section (PWD always shown, git stats only when in a repo)
   const git = getGitStatus(currentDir);
-  if (git) {
-    renderGit(mode, git, dirName);
-  }
+  renderGit(mode, git, dirName);
 
   // Render context manager line (line 3) with separator
   console.log(SEPARATOR);
