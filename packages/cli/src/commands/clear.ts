@@ -1,7 +1,7 @@
 import {promises as fs} from 'node:fs'
 import {join} from 'node:path'
 
-import {confirm} from '@inquirer/prompts'
+import confirm from '@inquirer/confirm'
 import {Flags} from '@oclif/core'
 
 import BaseCommand from '../lib/base-command.js'

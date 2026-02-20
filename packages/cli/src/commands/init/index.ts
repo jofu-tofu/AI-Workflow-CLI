@@ -2,7 +2,10 @@ import {promises as fs} from 'node:fs'
 import {basename, dirname, join} from 'node:path'
 import {fileURLToPath} from 'node:url'
 
-import {checkbox, confirm, input, select} from '@inquirer/prompts'
+import checkbox from '@inquirer/checkbox'
+import confirm from '@inquirer/confirm'
+import input from '@inquirer/input'
+import select from '@inquirer/select'
 import {Flags} from '@oclif/core'
 
 import BaseCommand from '../../lib/base-command.js'
