@@ -23,12 +23,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { atomicWrite } from "../../lib-ts/base/atomic-write.js";
-import { getHandoffFolderPath, getProjectRoot } from "../../lib-ts/base/constants.js";
-import { getGitStatusShort } from "../../lib-ts/base/git-state.js";
-import { logInfo, logWarn, logError } from "../../lib-ts/base/logger.js";
-import { eprint } from "../../lib-ts/base/utils.js";
-import { getContext, saveState, getContextBySessionId, getAllContexts } from "../../lib-ts/context/context-store.js";
+import { atomicWrite } from "../../../lib-ts/base/atomic-write.js";
+import { getHandoffFolderPath, getProjectRoot } from "../../../lib-ts/base/constants.js";
+import { getGitStatusShort } from "../../../lib-ts/base/git-state.js";
+import { logInfo, logWarn, logError } from "../../../lib-ts/base/logger.js";
+import { eprint } from "../../../lib-ts/base/utils.js";
+import { getContext, saveState, getContextBySessionId, getAllContexts } from "../../../lib-ts/context/context-store.js";
 
 // ---------------------------------------------------------------------------
 // Parsing helpers

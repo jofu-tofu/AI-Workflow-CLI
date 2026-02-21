@@ -13,6 +13,7 @@ When a Claude Code agent exits plan mode (`ExitPlanMode`), the plan review hook 
 ```
 plan-review/
 ├── CLAUDE.md            ← This file
+├── CODING-STANDARDS-CHECKLIST.md ← Standards injected during plan mode via plan_questions_early.ts
 ├── agents/
 │   ├── CLAUDE.md        ← Agent file format, frontmatter fields, selection rules
 │   ├── PLAN-ORCHESTRATOR.md   ← Orchestrator agent (complexity analysis)

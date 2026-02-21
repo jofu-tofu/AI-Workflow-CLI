@@ -13,6 +13,30 @@ import { getProjectRoot } from "../../_shared/lib-ts/base/constants.js";
 import { loadHookInput, runHook, logDebug, logInfo, emitContext } from "../../_shared/lib-ts/base/hook-utils.js";
 import { wasEarlyQuestionsAsked } from "../lib-ts/cc-native-state.js";
 
+// Unconditional injection by design — no code-detection gate.
+// "When this plan involves code" is self-selecting; non-code plans ignore it.
+// Soft framing per Anthropic Claude 4.x best practices (avoid MUST/MANDATORY overtriggering).
+// Motivation per standard enables generalization better than threats.
+// Generalizability disclaimer: not all codebases need all standards.
+const CODING_STANDARDS_NUDGE = `## Coding Standards for Code Changes
+
+When this plan creates or modifies production code, apply these standards — they address the
+most common plan review failure modes:
+
+1. **Test-First Design** — Design interfaces from the test perspective first. Plans that
+   describe "implement then test" consistently fail review. Structure tests before implementation.
+2. **File Structure Fit** — Verify where similar things already live in this project before
+   proposing new files. Agents commonly pick plausible-but-wrong locations that don't match
+   existing conventions.
+3. **Extensibility Analysis** — Identify what features most commonly follow this one. Designs
+   that resist extension require expensive rewrites later.
+
+These standards apply to production code in established codebases. For prototypes, scripts,
+or exploratory work, use judgment on which apply.
+
+**Full checklist:** \`.aiwcli/_cc-native/plan-review/CODING-STANDARDS-CHECKLIST.md\`
+Read this file for detailed guidance on each standard.`;
+
 const PHASE_A_PROMPT = `## Plan Mode: Narrow the Approach After Exploration
 
 After exploring the codebase, use AskUserQuestion — one call, 3-4 questions — before drafting the plan.
@@ -56,6 +80,7 @@ function main(): void {
 
   logInfo("plan_questions_early", "Plan mode detected, injecting Phase A prompt");
   emitContext(PHASE_A_PROMPT);
+  emitContext(CODING_STANDARDS_NUDGE);
 }
 
 runHook(main, "plan_questions_early");

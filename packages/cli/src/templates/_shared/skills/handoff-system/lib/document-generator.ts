@@ -10,14 +10,14 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { atomicWrite } from "../base/atomic-write.js";
-import { getContextHandoffsDir, getContextDir } from "../base/constants.js";
-import { logInfo, logError } from "../base/logger.js";
-import { nowIso } from "../base/utils.js";
-import { getContext } from "../context/context-store.js";
-import { getTasks } from "../context/task-tracker.js";
-import { renderTaskList, formatContinuationHeader, formatReason } from "../templates/formatters.js";
-import type { HandoffDocument } from "../types.js";
+import { atomicWrite } from "../../../lib-ts/base/atomic-write.js";
+import { getContextHandoffsDir, getContextDir } from "../../../lib-ts/base/constants.js";
+import { logInfo, logError } from "../../../lib-ts/base/logger.js";
+import { nowIso } from "../../../lib-ts/base/utils.js";
+import { getContext } from "../../../lib-ts/context/context-store.js";
+import { getTasks } from "../../../lib-ts/context/task-tracker.js";
+import { renderTaskList, formatContinuationHeader, formatReason } from "../../../lib-ts/templates/formatters.js";
+import type { HandoffDocument } from "../../../lib-ts/types.js";
 
 /**
  * Generate and save a handoff document for a context.

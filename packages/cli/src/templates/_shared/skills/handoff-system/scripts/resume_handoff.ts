@@ -15,10 +15,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { getProjectRoot } from "../../lib-ts/base/constants.js";
-import { getGitStatusShort } from "../../lib-ts/base/git-state.js";
-import { eprint } from "../../lib-ts/base/utils.js";
-import { getContextBySessionId } from "../../lib-ts/context/context-store.js";
+import { getProjectRoot } from "../../../lib-ts/base/constants.js";
+import { getGitStatusShort } from "../../../lib-ts/base/git-state.js";
+import { eprint } from "../../../lib-ts/base/utils.js";
+import { getContextBySessionId } from "../../../lib-ts/context/context-store.js";
 import {
   findLatestHandoff,
   readHandoffSections,

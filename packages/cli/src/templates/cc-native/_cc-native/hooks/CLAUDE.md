@@ -9,8 +9,11 @@
 | Hook | Trigger | Purpose |
 |------|---------|---------|
 | `cc-native-plan-review.ts` | PreToolUse: ExitPlanMode | Questions gate + plan review before user approval |
-| `add_plan_context.ts` | PostToolUse: AskUserQuestion, PreToolUse: Task | Mark questions asked; nudge Plan subagent to ask questions first |
+| `mark_questions_asked.ts` | PostToolUse: AskUserQuestion | Marks questions-asked state after user answers |
+| `enhance_plan_post_subagent.ts` | PostToolUse: Task | Post-subagent plan enhancement |
+| `enhance_plan_post_write.ts` | PostToolUse: Write | Post-write plan enhancement |
 | `plan_questions_early.ts` | UserPromptSubmit | Inject Phase A clarification prompt in plan mode |
+| `validate_task_prompt.ts` | PreToolUse: TaskCreate | Validates task creation prompts |
 
 ### Plan Review Architecture
 
@@ -217,7 +220,7 @@ Validate TypeScript syntax after editing hooks:
 bun --print "import('.aiwcli/_cc-native/hooks/cc-native-plan-review.ts')" 2>&1 | head -5
 
 # Or check imports resolve (dry run)
-bun build --no-bundle .aiwcli/_cc-native/hooks/add_plan_context.ts --outdir /dev/null 2>&1
+bun build --no-bundle .aiwcli/_cc-native/hooks/mark_questions_asked.ts --outdir /dev/null 2>&1
 ```
 
 Hooks fail silently on import errors — verify after any import path changes.
@@ -235,3 +238,30 @@ Hooks fail silently on import errors — verify after any import path changes.
 | 2026-02-10 | **Migrated cc-native hooks from Python to TypeScript.** `cc-native-plan-review.ts` (async, parallel agent reviews via `Promise.all()`), `add_plan_context.ts`, `plan_questions_early.ts`. All hooks use `runHook()`/`runHookAsync()` entry points. Library code in `_cc-native/lib-ts/` (18 files). Settings.json updated to use `bun` runner. Python `.py` files kept as fallback until TS hooks verified. |
 | 2026-02-10 | Flipped TS logger stderr default to opt-in (`opts?.stderr === true`). Added `logBlocking()` for intentional stderr visibility. Removed redundant `{stderr: false}` from hook-utils.ts, user_prompt_submit.ts, context_monitor.ts. Added "Hook Error Visibility" section documenting visibility tiers and exit code behavior. |
 | 2026-02-10 | Fixed `debug.py` `context_path` crash. Added local try/catch around `maybeActivate` in `user_prompt_submit.ts` and `context_monitor.ts` to prevent stderr error display on non-critical I/O failures. Removed dead `context_path` from `_emitHookEnd` in `hook-utils.ts`. Added "Error Handling" section to CLAUDE.md. |
+| 2026-02-21 | **Coding standards nudge injected in plan mode.** `plan_questions_early.ts` now emits `CODING_STANDARDS_NUDGE` after Phase A prompt — covers test-first design, file structure fit, and extensibility analysis. Standards reference doc at `plan-review/CODING-STANDARDS-CHECKLIST.md`. Post-write self-check added to `plan-enhancement.ts` `getPlanQualityReviewContext()`. |
+| 2026-02-21 | **ContextLayer Audit:** Updated hook roster — removed stale `add_plan_context.ts`, added `mark_questions_asked.ts`, `enhance_plan_post_subagent.ts`, `enhance_plan_post_write.ts`, `validate_task_prompt.ts`. |
+
+---
+## Context Maintenance
+
+**After modifying files in this directory:** scan the entries above — if any claim is now
+false or incomplete, update this file before ending the task. Do not defer.
+
+**Add** an entry only if an agent would fail without knowing it, it is not obvious from
+the code, and it belongs at this scope (project-wide rule → root CLAUDE.md; WHY decision
+→ inline comment or ADR; inferable from code → nowhere).
+
+**Remove** any entry that fails the falsifiability test: if removing it would not change
+how an agent acts here, remove it. If a convention here conflicts with the codebase,
+the codebase wins — update this file, do not work around it. Prune aggressively.
+
+**Staleness anchor:** This file assumes `cc-native-plan-review.ts` exists. If it doesn't, this file
+is stale — update or regenerate before relying on it.
+
+**Trigger Audit or Generate:**
+- Rename/move files or dirs → Audit
+- >20% of files changed → Generate
+- 30+ days without touching this file → Audit
+- Agent mistake caused by this file → fix immediately, then Audit
+
+<!-- context-layer: generated=2026-02-10 | last-audited=2026-02-21 | version=2 | dir-commits-at-audit=58 -->

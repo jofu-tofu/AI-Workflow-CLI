@@ -9,9 +9,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { getContextHandoffsDir } from "../../lib-ts/base/constants.js";
-import { getContext } from "../../lib-ts/context/context-store.js";
-import type { HandoffSections } from "../../lib-ts/types.js";
+import { getContextHandoffsDir } from "../../../lib-ts/base/constants.js";
+import { getContext } from "../../../lib-ts/context/context-store.js";
+import type { HandoffSections } from "../../../lib-ts/types.js";
 
 /**
  * Find the most recent handoff folder for a context.

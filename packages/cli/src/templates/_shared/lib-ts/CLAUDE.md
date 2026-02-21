@@ -311,6 +311,7 @@ Use this table to find the right file. Read the source for full API details.
 | `git-state.ts` | Git snapshot | `captureGitState()` |
 | `subprocess-utils.ts` | Recursive call guard | `isInternalCall()` |
 | `stop-words.ts` | Word list for ID generation | Used by `utils.ts` internally |
+| `lint-dispatch.ts` | Post-edit lint dispatching | `dispatchLint()` |
 
 ### `context/` — Context State Management
 
@@ -322,11 +323,10 @@ Use this table to find the right file. Read the source for full API details.
 | `plan-manager.ts` | Plan lifecycle (archive, hash, sign) | `archivePlan()`, `computePlanHash()` |
 | `task-tracker.ts` | Task CRUD on state.json | `addTask()`, `updateTask()`, `getTasks()` |
 
-### `handoff/` and `templates/`
+### `templates/`
 
 | File | Purpose | Key Exports |
 |------|---------|-------------|
-| `handoff/document-generator.ts` | Handoff document generation | `generateHandoffDocument()` |
 | `templates/formatters.ts` | Display constants, mode maps, icons | `MODE_MAP`, `STATUS_ICONS` |
 | `templates/plan-context.ts` | Plan evaluation templates | `PLAN_EVALUATION_REMINDER` |
 
@@ -365,3 +365,28 @@ These run for ALL templates. Method-specific hooks live in `_{method}/hooks/`.
 | `HOOK_LOG_LEVEL=warn` | Minimum log level (default: `debug`) |
 | `HOOK_ERROR_LOG_DISABLE=1` | Legacy alias for `HOOK_LOG_DISABLE` |
 | `_CC_INTERNAL=1` | Marks subprocess calls (checked by `isInternalCall()`) |
+
+---
+## Context Maintenance
+
+**After modifying files in this directory:** scan the entries above — if any claim is now
+false or incomplete, update this file before ending the task. Do not defer.
+
+**Add** an entry only if an agent would fail without knowing it, it is not obvious from
+the code, and it belongs at this scope (project-wide rule → root CLAUDE.md; WHY decision
+→ inline comment or ADR; inferable from code → nowhere).
+
+**Remove** any entry that fails the falsifiability test: if removing it would not change
+how an agent acts here, remove it. If a convention here conflicts with the codebase,
+the codebase wins — update this file, do not work around it. Prune aggressively.
+
+**Staleness anchor:** This file assumes `base/hook-utils.ts` exists. If it doesn't, this file
+is stale — update or regenerate before relying on it.
+
+**Trigger Audit or Generate:**
+- Rename/move files or dirs → Audit
+- >20% of files changed → Generate
+- 30+ days without touching this file → Audit
+- Agent mistake caused by this file → fix immediately, then Audit
+
+<!-- context-layer: generated=2026-02-14 | last-audited=2026-02-21 | version=2 | dir-commits-at-audit=29 -->

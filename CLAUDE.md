@@ -17,6 +17,7 @@ Changes to the working directory (`.aiwcli/`) should also be applied to the temp
 - `.aiwcli/_cc-native/lib-ts/**/*.ts` → `packages/cli/src/templates/cc-native/_cc-native/lib-ts/`
 - `.aiwcli/_cc-native/plan-review/**` → `packages/cli/src/templates/cc-native/_cc-native/plan-review/`
 - `.aiwcli/_cc-native/artifacts/**` → `packages/cli/src/templates/cc-native/_cc-native/artifacts/`
+- `.aiwcli/_shared/skills/handoff-system/**/*.ts` → `packages/cli/src/templates/_shared/skills/handoff-system/`
 - `.claude/settings.json` → `packages/cli/src/templates/cc-native/.claude/settings.json`
 
 **When to sync:**
@@ -26,6 +27,22 @@ Changes to the working directory (`.aiwcli/`) should also be applied to the temp
 - Updating settings.json hook configurations
 
 **Note:** The `dist/` directory is auto-generated during build - only update `src/templates/`.
+
+## Import Validation
+
+`.aiwcli/tsconfig.json` enables `tsc --noEmit` checking across all hooks and scripts. This catches broken imports that Biome and ESLint cannot detect (neither resolves import paths against the filesystem).
+
+**To validate imports:**
+```bash
+cd .aiwcli && bunx tsc --noEmit 2>&1 | grep TS2307
+```
+
+**Common import path mistakes:**
+- Files in `_shared/skills/{system}/scripts/` or `_shared/skills/{system}/lib/` need `../../../lib-ts/` to reach `_shared/lib-ts/` (3 levels up: scripts → system → skills → _shared)
+- Files in `_shared/hooks-ts/` need `../lib-ts/` (1 level up)
+- Files in `_cc-native/hooks/` need `../../_shared/lib-ts/` (2 levels up)
+
+**Requires:** `bun-types` (installed as dev dependency at project root)
 
 ## Hook Development
 
@@ -79,19 +96,44 @@ lists the hooks that invoke it under a "Hooks" section.
 Read the relevant CLAUDE.md before working in these areas:
 
 **`.aiwcli/` (working instance — edit here first, then sync to templates):**
-- `.aiwcli/_shared/hooks-ts/CLAUDE.md` — hook entry points, unified staging, mode transitions
 - `.aiwcli/_shared/lib-ts/CLAUDE.md` — full hook API: emit channels, logging, output schema
 - `.aiwcli/_shared/lib-ts/context/CLAUDE.md` — context selector, plan manager, task tracker
 - `.aiwcli/_shared/skills/handoff-system/CLAUDE.md` — handoff creation, section markers, restore spec
+- `.aiwcli/_shared/skills/meta-plan/CLAUDE.md` — prompt amplifier for complex problems
 - `.aiwcli/_cc-native/hooks/CLAUDE.md` — cc-native-specific hooks (plan review entry points)
-- `.aiwcli/_cc-native/lib-ts/CLAUDE.md` — plan review lib, types, feature flags, path validation
 - `.aiwcli/_cc-native/lib-ts/rlm/CLAUDE.md` — retrieval-augmented learning memory
 - `.aiwcli/_cc-native/plan-review/CLAUDE.md` — plan review pipeline, agent roles, verdict flow
 - `.aiwcli/_cc-native/plan-review/agents/CLAUDE.md` — plan review agent specs
 - `.aiwcli/_cc-native/artifacts/CLAUDE.md` — review artifact generation, public API
+- `.aiwcli/_cc-native/agents/CLAUDE.md` — plan review agent roster and design decisions
 
 **`packages/cli/` (CLI package — installs templates into user projects):**
 - `packages/cli/CLAUDE.md` — CLI commands, key lib files, template sync constraints
 - `packages/cli/src/templates/CLAUDE.md` — template directory structure
 
 These files are not auto-loaded. Read the relevant one before working in that subsystem.
+
+---
+## Context Maintenance
+
+**After modifying files in this directory:** scan the entries above — if any claim is now
+false or incomplete, update this file before ending the task. Do not defer.
+
+**Add** an entry only if an agent would fail without knowing it, it is not obvious from
+the code, and it belongs at this scope (project-wide rule → root CLAUDE.md; WHY decision
+→ inline comment or ADR; inferable from code → nowhere).
+
+**Remove** any entry that fails the falsifiability test: if removing it would not change
+how an agent acts here, remove it. If a convention here conflicts with the codebase,
+the codebase wins — update this file, do not work around it. Prune aggressively.
+
+**Staleness anchor:** This file assumes `DEVELOPMENT.md` exists. If it doesn't, this file
+is stale — update or regenerate before relying on it.
+
+**Trigger Audit or Generate:**
+- Rename/move files or dirs → Audit
+- >20% of files changed → Generate
+- 30+ days without touching this file → Audit
+- Agent mistake caused by this file → fix immediately, then Audit
+
+<!-- context-layer: generated=2026-02-18 | last-audited=2026-02-21 | version=2 | dir-commits-at-audit=14 -->
