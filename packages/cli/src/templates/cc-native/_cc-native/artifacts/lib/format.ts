@@ -10,7 +10,7 @@ import type {
   ReviewerResult,
   DisplaySettings,
   CorroborationResult,
-} from "../types.js";
+} from "../../lib-ts/types.js";
 
 // ---------------------------------------------------------------------------
 // Markdown Formatting
