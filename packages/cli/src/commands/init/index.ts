@@ -280,6 +280,32 @@ export default class Init extends BaseCommand {
   }
 
   /**
+   * Install the global resolve-run.ts script to ~/.aiwcli/bin/.
+   *
+   * This resolver allows hook and status line commands to find the project root
+   * regardless of cwd drift (e.g., after `cd` in a Bash tool call).
+   * Always overwrites to ensure the latest version is installed.
+   */
+  private async installGlobalResolver(): Promise<void> {
+    try {
+      const currentFilePath = fileURLToPath(import.meta.url)
+      const currentDir = dirname(currentFilePath)
+      const templatesRoot = join(dirname(dirname(currentDir)), 'templates')
+      const resolverSrc = join(templatesRoot, '_shared', 'scripts', 'resolve-run.ts')
+
+      const globalBinDir = join(homedir(), '.aiwcli', 'bin')
+      const resolverDest = join(globalBinDir, 'resolve-run.ts')
+
+      await fs.mkdir(globalBinDir, {recursive: true})
+      await fs.copyFile(resolverSrc, resolverDest)
+      this.logSuccess('✓ Global resolver installed (~/.aiwcli/bin/resolve-run.ts)')
+    } catch (error) {
+      const err = error as Error
+      this.warn(`Failed to install global resolver: ${err.message}`)
+    }
+  }
+
+  /**
    * Perform minimal installation (_shared folder only, no template method).
    *
    * @param targetDir - Target directory for installation
@@ -517,32 +543,6 @@ export default class Init extends BaseCommand {
       username,
       projectName,
       confirmed,
-    }
-  }
-
-  /**
-   * Install the global resolve-run.ts script to ~/.aiwcli/bin/.
-   *
-   * This resolver allows hook and status line commands to find the project root
-   * regardless of cwd drift (e.g., after `cd` in a Bash tool call).
-   * Always overwrites to ensure the latest version is installed.
-   */
-  private async installGlobalResolver(): Promise<void> {
-    try {
-      const currentFilePath = fileURLToPath(import.meta.url)
-      const currentDir = dirname(currentFilePath)
-      const templatesRoot = join(dirname(dirname(currentDir)), 'templates')
-      const resolverSrc = join(templatesRoot, '_shared', 'scripts', 'resolve-run.ts')
-
-      const globalBinDir = join(homedir(), '.aiwcli', 'bin')
-      const resolverDest = join(globalBinDir, 'resolve-run.ts')
-
-      await fs.mkdir(globalBinDir, {recursive: true})
-      await fs.copyFile(resolverSrc, resolverDest)
-      this.logSuccess('✓ Global resolver installed (~/.aiwcli/bin/resolve-run.ts)')
-    } catch (error) {
-      const err = error as Error
-      this.warn(`Failed to install global resolver: ${err.message}`)
     }
   }
 

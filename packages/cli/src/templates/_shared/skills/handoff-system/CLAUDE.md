@@ -89,7 +89,7 @@ plan_document: {path to plan file if exists}
 
 ### Creation Flow (save_handoff.ts script)
 
-**Trigger:** `/handoff` command invokes script with stdin markdown
+**Trigger:** `/aiwcli-shared:handoff` command invokes script with stdin markdown
 
 **Process:**
 1. Parse frontmatter and section markers from stdin
@@ -307,7 +307,7 @@ function buildDeadEndsSection(deadEnds: DeadEnd[]): string
 // ... (other section builders)
 ```
 
-**Used by:** `/handoff` workflow to programmatically generate handoff content before piping to `save_handoff.ts`.
+**Used by:** `/aiwcli-shared:handoff` workflow to programmatically generate handoff content before piping to `save_handoff.ts`.
 
 **Note:** Currently not imported by any files. Moved here for logical grouping and completeness.
 
@@ -315,7 +315,7 @@ function buildDeadEndsSection(deadEnds: DeadEnd[]): string
 
 **Thin pointer pattern:**
 
-`.claude/skills/handoff/SKILL.md` (user-facing, discoverable via `/`, `user-invocable: true`)
+`.claude/plugins/aiwcli-shared/skills/handoff/SKILL.md` (user-facing, discoverable via `/`, `user-invocable: true`)
 → References `.aiwcli/_shared/skills/handoff-system/workflows/handoff.md` (detailed procedural steps)
 
 **Benefits:**

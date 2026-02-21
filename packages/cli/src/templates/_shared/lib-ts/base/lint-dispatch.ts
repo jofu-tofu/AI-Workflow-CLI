@@ -115,6 +115,40 @@ function parseCppcheckOutput(_stdout: string, stderr: string, _exitCode: number)
   return errors;
 }
 
+function parseEslintOutput(stdout: string, _stderr: string, _exitCode: number): LintError[] {
+  try {
+    const files: any[] = JSON.parse(stdout);
+    const messages: any[] = files?.[0]?.messages ?? [];
+    return messages.map((m) => ({
+      line: m.line ?? 0,
+      column: m.column ?? undefined,
+      severity: m.severity === 2 ? "error" as const : "warning" as const,
+      message: m.message ?? "Unknown issue",
+      rule: m.ruleId ?? undefined,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+const RUSTFMT_DIFF_RE = /^Diff in (.+) at line (\d+)/;
+
+function parseRustfmtOutput(stdout: string, _stderr: string, _exitCode: number): LintError[] {
+  const errors: LintError[] = [];
+  for (const line of stdout.split("\n")) {
+    const m = RUSTFMT_DIFF_RE.exec(line.trim());
+    if (m) {
+      errors.push({
+        line: parseInt(m[2]!, 10),
+        severity: "warning",
+        message: "Formatting differs from rustfmt style",
+        rule: "rustfmt",
+      });
+    }
+  }
+  return errors;
+}
+
 // ─── Dispatch Table ─────────────────────────────────────────────────────────
 
 const LINTERS: LinterConfig[] = [
@@ -161,6 +195,24 @@ const LINTERS: LinterConfig[] = [
     binaryName: "cppcheck",
     buildArgs: (filePath) => ["--enable=warning,style", "--template=gcc", filePath],
     parseOutput: parseCppcheckOutput,
+    lintExitCodes: [1],
+  },
+  {
+    name: "eslint",
+    extensions: [".svelte"],
+    source: "system",
+    binaryName: "eslint",
+    buildArgs: (filePath) => ["--format", "json", "--no-fix", filePath],
+    parseOutput: parseEslintOutput,
+    lintExitCodes: [1],
+  },
+  {
+    name: "rustfmt",
+    extensions: [".rs"],
+    source: "system",
+    binaryName: "rustfmt",
+    buildArgs: (filePath) => ["--check", filePath],
+    parseOutput: parseRustfmtOutput,
     lintExitCodes: [1],
   },
 ];

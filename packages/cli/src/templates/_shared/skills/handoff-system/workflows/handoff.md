@@ -4,8 +4,8 @@ Generate a handoff document summarizing the current session's work, decisions, a
 
 ## Triggers
 
-- `/handoff` command
-- `/handoff path/to/PLAN.md` - with plan document integration
+- `/aiwcli-shared:handoff` command
+- `/aiwcli-shared:handoff path/to/PLAN.md` - with plan document integration
 - Phrases like "write a handoff", "create a session summary", "document what we did", "end session with notes"
 
 ## Arguments

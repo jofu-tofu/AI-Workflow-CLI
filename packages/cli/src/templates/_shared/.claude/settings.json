@@ -14,14 +14,14 @@
           {
             "type": "command",
             "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/user_prompt_submit.ts",
-            "timeout": 5000
+            "timeout": 10000
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Task|Read|Bash|WebFetch|Edit|Write|NotebookEdit",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
@@ -50,6 +50,61 @@
           }
         ]
       },
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/archive_plan.ts",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/lint_after_edit.ts",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/session_start.ts",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/session_end.ts",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/pre_compact.ts",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
       {
         "matcher": "ExitPlanMode",
         "hooks": [

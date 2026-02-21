@@ -20,7 +20,7 @@ const SAVE_STATE_THRESHOLD = 60;
 const CONTEXT_WARNING_30 = "## Context Window: ~30% Remaining\n\n" +
   "This session is approaching its context limit. Consider:\n\n" +
   "- Completing your current task, then pausing for the user to decide next steps\n" +
-  "- If significant work remains, mention that `/handoff` can capture progress " +
+  "- If significant work remains, mention that `/aiwcli-shared:handoff` can capture progress " +
   "for a fresh session\n\n" +
   "Do not rush or cut corners — finish the current task properly. " +
   "Just be aware that starting large new tasks may not complete before context runs out.";
@@ -29,7 +29,7 @@ const CONTEXT_WARNING_15 = "## Context Window: ~15% Remaining — Wrap Up Now\n\
   "Context is critically low. After completing your current step:\n\n" +
   "1. **Stop taking on new work**\n" +
   "2. Summarize what was accomplished and what remains\n" +
-  "3. Offer to run `/handoff` so progress transfers to a fresh session\n\n" +
+  "3. Offer to run `/aiwcli-shared:handoff` so progress transfers to a fresh session\n\n" +
   "Do not start new multi-step tasks. Focus on clean closure.";
 
 const WARNING_THRESHOLDS = [
