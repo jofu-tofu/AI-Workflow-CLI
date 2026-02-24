@@ -199,6 +199,15 @@ function isWideChar(cp: number): boolean {
 	);
 }
 
+function measureWidth(str: string): number {
+	const stripped = str.replace(ANSI_RE, "");
+	let w = 0;
+	for (const ch of stripped) {
+		w += isWideChar(ch.codePointAt(0) ?? 0) ? 2 : 1;
+	}
+	return w;
+}
+
 function truncateToWidth(str: string, maxWidth: number): string {
 	// Walk through string preserving ANSI codes (zero-width) and measuring visible chars
 	let w = 0;
@@ -244,9 +253,8 @@ function truncateToWidth(str: string, maxWidth: number): string {
 // Separator (dynamic width)
 // ---------------------------------------------------------------------------
 
-function makeSeparator(termWidth: number): string {
-	const w = Math.min(termWidth, 120);
-	return `${SLATE_600}${"─".repeat(w)}${RESET}`;
+function makeSeparator(width: number): string {
+	return `${SLATE_600}${"─".repeat(Math.max(1, width))}${RESET}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -276,7 +284,7 @@ function renderContext(
 	contextK: number,
 	maxK: number,
 	modelName: string,
-): void {
+): string {
 	let pctColor: string;
 	if (contextPct <= 33) pctColor = EMERALD;
 	else if (contextPct <= 66) pctColor = AMBER;
@@ -342,8 +350,7 @@ function renderContext(
 		}
 	}
 
-	console.log(truncateToWidth(line, termWidth));
-	console.log(makeSeparator(termWidth));
+	return truncateToWidth(line, termWidth);
 }
 
 // ---------------------------------------------------------------------------
@@ -461,14 +468,16 @@ function renderGit(
 	termWidth: number,
 	git: GitStatus | null,
 	dirName: string,
-): void {
+): string {
 	const totalChanged = git ? git.modified + git.staged : 0;
 	const statusIcon =
 		git && (totalChanged > 0 || git.untracked > 0) ? "*" : "\u2713";
 
+	let line: string;
+
 	switch (mode) {
 		case "micro": {
-			let line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET}`;
+			line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET}`;
 			if (git) {
 				line += ` ${GIT_VALUE}${git.branch}${RESET}`;
 				if (git.age_display) {
@@ -481,12 +490,10 @@ function renderGit(
 					line += `${GIT_MODIFIED}${statusIcon}${totalChanged}${RESET}`;
 				}
 			}
-			console.log(truncateToWidth(line, termWidth));
-
 			break;
 		}
 		case "mini": {
-			let line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET}`;
+			line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET}`;
 			if (git) {
 				line += ` ${SLATE_600}\u2502${RESET} ${GIT_VALUE}${git.branch}${RESET}`;
 				if (git.age_display) {
@@ -502,12 +509,10 @@ function renderGit(
 					}
 				}
 			}
-			console.log(truncateToWidth(line, termWidth));
-
 			break;
 		}
 		case "nano": {
-			let line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET}`;
+			line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_DIR}${dirName}${RESET}`;
 			if (git) {
 				line += ` ${GIT_VALUE}${git.branch}${RESET} `;
 				if (statusIcon === "\u2713") {
@@ -516,12 +521,10 @@ function renderGit(
 					line += `${GIT_MODIFIED}*${totalChanged}${RESET}`;
 				}
 			}
-			console.log(truncateToWidth(line, termWidth));
-
 			break;
 		}
 		default: {
-			let line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_PRIMARY}PWD:${RESET} ${GIT_DIR}${dirName}${RESET}`;
+			line = `${GIT_PRIMARY}\u25C8${RESET} ${GIT_PRIMARY}PWD:${RESET} ${GIT_DIR}${dirName}${RESET}`;
 			if (git) {
 				line +=
 					` ${SLATE_600}\u2502${RESET} ` +
@@ -556,9 +559,10 @@ function renderGit(
 					}
 				}
 			}
-			console.log(truncateToWidth(line, termWidth));
 		}
 	}
+
+	return truncateToWidth(line, termWidth);
 }
 
 // ---------------------------------------------------------------------------
@@ -587,7 +591,7 @@ function renderContextManager(
 	mode: string,
 	contextId: string,
 	contextState: Record<string, unknown> | null,
-): void {
+): string {
 	// Strip YYMMDD-HHMM- timestamp prefix from context ID for display
 	let displayId = contextId.replace(/^\d{6}-\d{4}-/, "");
 	if (!displayId) displayId = contextId;
@@ -651,46 +655,22 @@ function renderContextManager(
 	}
 
 	switch (mode) {
-		case "micro": {
-			console.log(
-				`${CTX_ACCENT}\u25C6${RESET} ${SLATE_400}${truncatedId}${RESET}${modeBadge}`,
-			);
-
-			break;
-		}
-		case "mini": {
-			console.log(
-				`${CTX_ACCENT}\u25C6${RESET} ${SLATE_400}${truncatedId}${RESET}` +
-					`${modeBadge}${planPart}`,
-			);
-
-			break;
-		}
-		case "nano": {
-			console.log(
-				`${CTX_ACCENT}\u25C6${RESET} ${SLATE_400}${truncatedId}${RESET}${modeBadge}`,
-			);
-
-			break;
-		}
-		default: {
-			console.log(
-				`${CTX_ACCENT}\u25C6${RESET} ${CTX_SECONDARY}Context:${RESET} ${SLATE_300}${truncatedId}${RESET}` +
-					`${modeBadge}${planPart}`,
-			);
-		}
+		case "micro":
+		case "nano":
+			return `${CTX_ACCENT}\u25C6${RESET} ${SLATE_400}${truncatedId}${RESET}${modeBadge}`;
+		case "mini":
+			return `${CTX_ACCENT}\u25C6${RESET} ${SLATE_400}${truncatedId}${RESET}${modeBadge}${planPart}`;
+		default:
+			return `${CTX_ACCENT}\u25C6${RESET} ${CTX_SECONDARY}Context:${RESET} ${SLATE_300}${truncatedId}${RESET}${modeBadge}${planPart}`;
 	}
 }
 
-function renderNoContext(mode: string): void {
+function renderNoContext(mode: string): string {
 	const warn = `${ROSE}\u26A0 ${RESET}`;
 	if (mode === "normal") {
-		console.log(
-			`${warn} ${ROSE}NO CONTEXT${RESET} ${SLATE_500}\u2014 type ^ for context manager${RESET}`,
-		);
-	} else {
-		console.log(`${warn} ${ROSE}NO CONTEXT${RESET}`);
+		return `${warn} ${ROSE}NO CONTEXT${RESET} ${SLATE_500}\u2014 type ^ for context manager${RESET}`;
 	}
+	return `${warn} ${ROSE}NO CONTEXT${RESET}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -826,21 +806,31 @@ function main(): void {
 	// Resolve context ID for display and persistence
 	const contextId = resolveContextId(sessionId);
 
-	// Render context section
-	renderContext(mode, termWidth, contextPct, contextK, maxK, modelName);
-
-	// Render PWD + git section (PWD always shown, git stats only when in a repo)
+	// Render content lines first, then size separators to match the widest one
+	const contextLine = renderContext(mode, termWidth, contextPct, contextK, maxK, modelName);
 	const git = getGitStatus(currentDir);
-	renderGit(mode, termWidth, git, dirName);
+	const gitLine = renderGit(mode, termWidth, git, dirName);
 
-	// Render context manager line (line 3) with separator
-	console.log(makeSeparator(termWidth));
+	let ctxMgrLine: string;
 	if (contextId) {
 		const contextState = loadContextState(contextId);
-		renderContextManager(mode, contextId, contextState);
+		ctxMgrLine = renderContextManager(mode, contextId, contextState);
 	} else {
-		renderNoContext(mode);
+		ctxMgrLine = renderNoContext(mode);
 	}
+
+	// Measure visible width of each content line and size separators to the widest
+	const maxContentWidth = Math.max(
+		measureWidth(contextLine),
+		measureWidth(gitLine),
+		measureWidth(ctxMgrLine),
+	);
+	const sep = makeSeparator(maxContentWidth);
+
+	const lines = [contextLine, sep, gitLine, sep, ctxMgrLine];
+
+	// Single atomic write — prevents partial output if process is interrupted
+	process.stdout.write(lines.join("\n") + "\n");
 
 	// Persist context_window to state.json
 	if (contextId) {
