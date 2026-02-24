@@ -71,7 +71,7 @@ export const DEFAULT_COMPLEXITY_CATEGORIES = ["code", "infrastructure", "documen
 export const DEFAULT_MODELS_CONFIG: ModelsConfig = {
   providers: {
     claude: { enabled: true, models: ["sonnet"] },
-    codex: { enabled: true, models: ["gpt-5.1-codex-mini"] },
+    codex: { enabled: true, models: ["codex-mini-latest"] },
   },
 };
 

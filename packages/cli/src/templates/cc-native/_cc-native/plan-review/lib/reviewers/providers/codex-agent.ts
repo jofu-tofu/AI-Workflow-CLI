@@ -8,7 +8,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { logDebug, logWarn } from "../../../../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv, execFileAsync } from "../../../../../_shared/lib-ts/base/subprocess-utils.js";
+import { getInternalSubprocessEnv, execFileAsync, normalizePathForCli, shellQuoteWin } from "../../../../../_shared/lib-ts/base/subprocess-utils.js";
 import { debugLog, debugRaw } from "../../../../lib-ts/debug.js";
 import { parseJsonMaybe, coerceToReview } from "../../../../lib-ts/json-parser.js";
 import type { ReviewerResult } from "../../../../lib-ts/types.js";
@@ -35,9 +35,12 @@ export class CodexAgent extends BaseCliAgent<ReviewerResult> {
     const outPath = path.join(this.tempDir, "output.json");
     fs.writeFileSync(schemaPath, JSON.stringify(this.schema, null, 2), "utf-8");
 
-    const cmdArgs = ["exec", "--sandbox", "read-only"];
+    const normalizedSchema = shellQuoteWin(normalizePathForCli(schemaPath));
+    const normalizedOut = shellQuoteWin(normalizePathForCli(outPath));
+
+    const cmdArgs = ["exec", "--sandbox", "read-only", "--reasoning", "medium"];
     if (this.agent.model) cmdArgs.push("--model", this.agent.model);
-    cmdArgs.push("--output-schema", schemaPath, "-o", outPath, "-");
+    cmdArgs.push("--output-schema", normalizedSchema, "-o", normalizedOut, "-");
 
     return cmdArgs;
   }

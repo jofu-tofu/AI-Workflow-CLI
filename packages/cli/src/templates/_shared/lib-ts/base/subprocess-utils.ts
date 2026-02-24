@@ -138,6 +138,17 @@ export function isExecSyncError(e: unknown): e is ExecSyncError {
  * On non-Windows platforms, returns the string unchanged (execFile
  * handles quoting automatically without shell).
  */
+/**
+ * Normalize a file path for CLI subprocess usage.
+ * Replaces backslashes with forward slashes on Windows to avoid
+ * cmd.exe escape interpretation issues. No-op on other platforms.
+ * Forward slashes are valid path separators on Windows in all modern CLIs.
+ */
+export function normalizePathForCli(p: string): string {
+  if (process.platform !== "win32") return p;
+  return p.replaceAll("\\", "/");
+}
+
 export function shellQuoteWin(arg: string): string {
   if (process.platform !== "win32") return arg;
   return '"' + arg.replaceAll('"', '""') + '"';

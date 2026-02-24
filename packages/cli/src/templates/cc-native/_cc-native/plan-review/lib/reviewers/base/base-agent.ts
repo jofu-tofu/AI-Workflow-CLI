@@ -5,7 +5,7 @@
  */
 
 import { logDebug, logInfo, logWarn, logError } from "../../../../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv, findExecutable, execFileAsync } from "../../../../../_shared/lib-ts/base/subprocess-utils.js";
+import { getInternalSubprocessEnv, findExecutable, execFileAsync, normalizePathForCli } from "../../../../../_shared/lib-ts/base/subprocess-utils.js";
 import { debugLog, debugRaw } from "../../../../lib-ts/debug.js";
 import type { AgentConfig } from "../../../../lib-ts/types.js";
 
@@ -176,7 +176,8 @@ export abstract class BaseCliAgent<T> {
 
     // 3. Execute subprocess
     const env = getInternalSubprocessEnv();
-    const result = await execFileAsync(cliPath, args, {
+    const normalizedCliPath = normalizePathForCli(cliPath);
+    const result = await execFileAsync(normalizedCliPath, args, {
       input: prompt,
       timeout: this.timeout * 1000,
       env: env as Record<string, string>,
