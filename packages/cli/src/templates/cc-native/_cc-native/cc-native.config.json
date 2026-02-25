@@ -7,7 +7,7 @@
       },
       "codex": {
         "enabled": true,
-        "models": ["gpt-5"]
+        "models": ["gpt-5.2"]
       }
     }
   },
