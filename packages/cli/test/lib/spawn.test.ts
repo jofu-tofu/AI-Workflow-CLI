@@ -44,8 +44,12 @@ describe('spawn.ts - Process spawning utilities', () => {
         expect.fail('Expected ProcessSpawnError to be thrown')
       } catch (error) {
         expect(error).to.be.instanceOf(ProcessSpawnError)
-        expect((error as Error).message).to.include('Command not found')
-        expect((error as Error).message).to.include('Install Claude Code from https://claude.ai/download')
+        // Some environments (e.g. WSL) return EACCES instead of ENOENT
+        const message = (error as Error).message
+        expect(message).to.satisfy(
+          (m: string) => m.includes('Command not found') || m.includes('Permission denied'),
+          `Expected "Command not found" or "Permission denied", got: ${message}`,
+        )
       }
     })
 

@@ -9,7 +9,7 @@
 import {execSync} from 'node:child_process'
 import {randomUUID} from 'node:crypto'
 import {promises as fs} from 'node:fs'
-import {platform, tmpdir} from 'node:os'
+import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
 import {expect} from 'chai'
@@ -17,10 +17,6 @@ import {expect} from 'chai'
 import BranchCommand from '../../src/commands/branch.js'
 import {runCommand} from '../helpers/run-command.js'
 import {cleanupTestDir, createTestGitRepo, getAbsoluteBinPath} from '../helpers/test-utils.js'
-
-// Platform-specific bin path for CLI invocation (only for tests requiring real subprocess)
-const isWindows = platform() === 'win32'
-const bin = isWindows ? String.raw`.\bin\dev.cmd` : './bin/dev.js'
 
 describe('branch command', () => {
   describe('command metadata and help', () => {
@@ -173,8 +169,10 @@ describe('branch command', () => {
     })
 
     it('should error when branch name is not provided', () => {
+      const absoluteBin = getAbsoluteBinPath()
       try {
-        execSync(`${bin} branch --delete`, {
+        execSync(`node "${absoluteBin}" branch --delete`, {
+          cwd: testDir,
           encoding: 'utf8',
           stdio: ['pipe', 'pipe', 'pipe'],
         })

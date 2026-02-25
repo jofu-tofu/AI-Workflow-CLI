@@ -8,6 +8,18 @@ import {expect} from 'chai'
 
 import ClearCommand from '../../src/commands/clear.js'
 
+/**
+ * Get the concatenated source of all prototype methods on the ClearCommand class.
+ * This captures implementation details in private methods that `run()` delegates to.
+ */
+function getClassSource(): string {
+  const proto = ClearCommand.prototype as unknown as Record<string, unknown>
+  return Object.getOwnPropertyNames(proto)
+    .filter((name) => typeof proto[name] === 'function')
+    .map((name) => (proto[name] as Function).toString()) // eslint-disable-line @typescript-eslint/ban-types
+    .join('\n')
+}
+
 describe('clear command', () => {
   describe('command metadata', () => {
     it('should have static description field', () => {
@@ -96,103 +108,90 @@ describe('clear command', () => {
   })
 
   describe('implementation verification', () => {
+    let source: string
+
+    before(() => {
+      source = getClassSource()
+    })
+
     it('should find output folders', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('findOutputFolders')
     })
 
     it('should find workflow folders', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('findWorkflowFolders')
     })
 
     it('should find IDE method folders', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('findIdeMethodFolders')
     })
 
     it('should handle folder deletion', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('removeDirectory')
     })
 
-    it('should update gitignore after clearing', () => {
-      const source = ClearCommand.prototype.run.toString()
-      expect(source).to.include('removeGitignoreEntries')
+    it('should update git exclude after clearing', () => {
+      expect(source).to.include('removeExcludeEntries')
     })
 
     it('should reconstruct IDE settings after clearing', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('reconstructIdeSettings')
     })
 
     it('should extract method names for settings update', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('extractMethodNames')
     })
 
     it('should handle errors with proper exit codes', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('ENVIRONMENT_ERROR')
       expect(source).to.include('GENERAL_ERROR')
     })
 
     it('should support confirmation prompt unless force flag', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('confirm')
       expect(source).to.include('force')
     })
 
     it('should support template filtering', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('flags.template')
     })
 
     it('should check if output folder is empty and remove it', () => {
-      const source = ClearCommand.prototype.run.toString()
-      expect(source).to.include('isDirectoryEmpty')
+      expect(source).to.include('tryRemoveEmptyDir')
     })
 
     it('should report IDE method folder deletions', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('deletedIde')
     })
 
     it('should report settings.json updates', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('updatedClaudeSettings')
       expect(source).to.include('updatedWindsurfSettings')
     })
 
     it('should check if IDE folders should be fully deleted', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('shouldDeleteIdeFolder')
     })
 
     it('should track removal of .claude folder', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('removedClaudeDir')
     })
 
     it('should track removal of .windsurf folder', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('removedWindsurfDir')
     })
 
     it('should preview IDE folder removal in dry-run mode', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('willClaudeFolderBeEmpty')
       expect(source).to.include('willWindsurfFolderBeEmpty')
     })
 
     it('should handle --output flag for runtime output cleanup', () => {
-      const source = ClearCommand.prototype.run.toString()
       expect(source).to.include('cleanRuntimeOutput')
     })
 
-    it('should prune stale gitignore entries after clearing', () => {
-      const source = ClearCommand.prototype.run.toString()
-      expect(source).to.include('pruneGitignoreStaleEntries')
+    it('should prune stale git exclude entries after clearing', () => {
+      expect(source).to.include('pruneExcludeStaleEntries')
     })
   })
 })

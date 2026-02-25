@@ -1,34 +1,70 @@
+import {execFile} from 'node:child_process'
 import {promises as fs} from 'node:fs'
-import {join} from 'node:path'
+import {isAbsolute, join} from 'node:path'
+import {promisify} from 'node:util'
 
 import {pathExists} from './paths.js'
 
+const execFileAsync = promisify(execFile)
+
 /**
- * AIW gitignore section header marker
+ * AIW exclude section header marker
  */
-const AIW_GITIGNORE_HEADER = '# AIW Installation'
+const AIW_EXCLUDE_HEADER = '# AIW Installation'
 
-/** Standard gitignore entries managed by AIW */
-export const AIW_GITIGNORE_ENTRIES = ['.aiwcli', '_output', '.claude', '.windsurf']
+/** Standard exclude entries managed by AIW */
+export const AIW_EXCLUDE_ENTRIES = ['.aiwcli', '_output', '.claude', '.windsurf']
 
-/** Entries that should NEVER be removed from gitignore, even on clear */
+/** Entries that should NEVER be removed from exclude, even on clear */
 const AIW_PERMANENT_ENTRIES = ['_output']
 
 /**
- * Prune stale entries from the AIW Installation section in .gitignore.
+ * Resolve the git directory for a given target directory.
+ * Handles normal repos, worktrees, and submodules via `git rev-parse --git-dir`.
+ *
+ * @param targetDir - Directory to resolve git dir for
+ * @returns Absolute path to the git directory, or null if not a git repo
+ */
+export async function resolveGitDir(targetDir: string): Promise<string | null> {
+  try {
+    const {stdout} = await execFileAsync('git', ['rev-parse', '--git-dir'], {cwd: targetDir})
+    const gitDir = stdout.trim()
+    return isAbsolute(gitDir) ? gitDir : join(targetDir, gitDir)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Get the path to the exclude file within the git directory.
+ */
+function getExcludePath(gitDir: string): string {
+  return join(gitDir, 'info', 'exclude')
+}
+
+/**
+ * Ensure the info/ directory exists within the git directory.
+ */
+async function ensureInfoDir(gitDir: string): Promise<void> {
+  await fs.mkdir(join(gitDir, 'info'), {recursive: true})
+}
+
+/**
+ * Prune stale entries from the AIW Installation section in git exclude file.
  * Checks each entry against disk existence and removes entries whose paths don't exist.
  * Removes the entire section if no entries remain after pruning.
  *
- * @param targetDir - Directory containing .gitignore
+ * @param gitDir - Git directory (contains info/exclude)
+ * @param targetDir - Project root directory (for disk-existence checks)
  * @returns True if any entries were pruned
  */
-export async function pruneGitignoreStaleEntries(targetDir: string): Promise<boolean> {
-  const gitignorePath = join(targetDir, '.gitignore')
+export async function pruneExcludeStaleEntries(gitDir: string, targetDir: string): Promise<boolean> {
+  const excludePath = getExcludePath(gitDir)
 
   try {
-    const content = await fs.readFile(gitignorePath, 'utf8')
+    const content = await fs.readFile(excludePath, 'utf8')
 
-    if (!content.includes(AIW_GITIGNORE_HEADER)) {
+    if (!content.includes(AIW_EXCLUDE_HEADER)) {
       return false
     }
 
@@ -39,7 +75,7 @@ export async function pruneGitignoreStaleEntries(targetDir: string): Promise<boo
     let pruned = false
 
     for (const line of lines) {
-      if (line === AIW_GITIGNORE_HEADER) {
+      if (line === AIW_EXCLUDE_HEADER) {
         inAiwSection = true
         aiwSectionLines.push(line)
         continue
@@ -51,7 +87,7 @@ export async function pruneGitignoreStaleEntries(targetDir: string): Promise<boo
       }
 
       // AIW section ends at empty line or another comment header
-      if (line === '' || (line.startsWith('#') && line !== AIW_GITIGNORE_HEADER)) {
+      if (line === '' || (line.startsWith('#') && line !== AIW_EXCLUDE_HEADER)) {
         inAiwSection = false
         const {lines: filtered, pruned: sectionPruned} = await pruneSection(aiwSectionLines, targetDir) // eslint-disable-line no-await-in-loop
         if (sectionPruned) pruned = true
@@ -81,7 +117,7 @@ export async function pruneGitignoreStaleEntries(targetDir: string): Promise<boo
       result = ''
     }
 
-    await fs.writeFile(gitignorePath, result, 'utf8')
+    await fs.writeFile(excludePath, result, 'utf8')
     return true
   } catch {
     return false
@@ -90,7 +126,7 @@ export async function pruneGitignoreStaleEntries(targetDir: string): Promise<boo
 
 /**
  * Prune stale entries from a parsed AIW section.
- * Checks each gitignore pattern against disk existence.
+ * Checks each exclude pattern against disk existence.
  */
 async function pruneSection(
   sectionLines: string[],
@@ -101,7 +137,7 @@ async function pruneSection(
 
   for (const line of sectionLines) {
     // Always keep the header
-    if (line === AIW_GITIGNORE_HEADER) {
+    if (line === AIW_EXCLUDE_HEADER) {
       filtered.push(line)
       continue
     }
@@ -129,7 +165,7 @@ function cleanupEmptySections(content: string): string {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] as string
 
-    if (line === AIW_GITIGNORE_HEADER) {
+    if (line === AIW_EXCLUDE_HEADER) {
       // Look ahead to see if there are any patterns
       const nextLine = lines[i + 1]
       if (nextLine === undefined || nextLine === '' || nextLine.startsWith('#')) {
@@ -150,22 +186,23 @@ function cleanupEmptySections(content: string): string {
 }
 
 /**
- * Update .gitignore with patterns for installed folders.
+ * Update git exclude file with patterns for installed folders.
  *
- * Creates .gitignore if it doesn't exist, or appends to existing file.
+ * Creates exclude file if it doesn't exist, or appends to existing file.
  * Prevents duplicate patterns by checking each pattern individually.
  *
- * @param targetDir - Directory containing .gitignore file
- * @param folders - List of folder names to add as gitignore patterns (e.g., ['_bmad', '.claude'])
+ * @param gitDir - Git directory (contains info/exclude)
+ * @param folders - List of folder names to add as exclude patterns (e.g., ['.aiwcli', '.claude'])
  */
-export async function updateGitignore(targetDir: string, folders: string[]): Promise<void> {
-  const gitignorePath = join(targetDir, '.gitignore')
+export async function updateGitExclude(gitDir: string, folders: string[]): Promise<void> {
+  await ensureInfoDir(gitDir)
+  const excludePath = getExcludePath(gitDir)
 
   try {
-    // Try to read existing .gitignore
-    const existing = await fs.readFile(gitignorePath, 'utf8')
+    // Try to read existing exclude file
+    const existing = await fs.readFile(excludePath, 'utf8')
 
-    // Filter out patterns that already exist in .gitignore
+    // Filter out patterns that already exist in exclude file
     const newPatterns = folders.filter((folder) => {
       const pattern = `${folder}/`
       // Check if this exact pattern exists in the file
@@ -204,17 +241,17 @@ export async function updateGitignore(targetDir: string, folders: string[]): Pro
       updatedContent = existing + separator + `# AIW Installation\n${patterns}\n`
     }
 
-    await fs.writeFile(gitignorePath, updatedContent, 'utf8')
+    await fs.writeFile(excludePath, updatedContent, 'utf8')
   } catch {
-    // .gitignore doesn't exist, create it
+    // Exclude file doesn't exist, create it
     const patterns = folders.map((folder) => `${folder}/`).join('\n')
     const patternsBlock = `# AIW Installation\n${patterns}`
-    await fs.writeFile(gitignorePath, patternsBlock + '\n', 'utf8')
+    await fs.writeFile(excludePath, patternsBlock + '\n', 'utf8')
   }
 }
 
 /**
- * Compute which AIW gitignore entries should be removed during clear.
+ * Compute which AIW exclude entries should be removed during clear.
  * Returns a simulation result — the caller decides whether to apply.
  *
  * Logic per entry:
@@ -222,27 +259,29 @@ export async function updateGitignore(targetDir: string, folders: string[]): Pro
  * - If directory exists and is non-empty → keep (reason: "directory has content")
  * - Otherwise → mark for removal
  *
- * @param targetDir - Directory containing .gitignore
+ * @param gitDir - Git directory (contains info/exclude)
+ * @param targetDir - Project root directory (for disk-existence checks)
  * @param permanentEntries - Entries that should never be removed (defaults to AIW_PERMANENT_ENTRIES)
  * @returns Lists of entries to remove and entries to keep with reasons
  */
-export async function computeGitignoreRemovals(
+export async function computeExcludeRemovals(
+  gitDir: string,
   targetDir: string,
   permanentEntries: string[] = AIW_PERMANENT_ENTRIES,
 ): Promise<{toKeep: Array<{entry: string; reason: string}>; toRemove: string[]}> {
-  const gitignorePath = join(targetDir, '.gitignore')
+  const excludePath = getExcludePath(gitDir)
   const toRemove: string[] = []
   const toKeep: Array<{entry: string; reason: string}> = []
 
-  // Read AIW section entries from .gitignore
+  // Read AIW section entries from exclude file
   let content: string
   try {
-    content = await fs.readFile(gitignorePath, 'utf8')
+    content = await fs.readFile(excludePath, 'utf8')
   } catch {
     return {toRemove, toKeep}
   }
 
-  if (!content.includes(AIW_GITIGNORE_HEADER)) {
+  if (!content.includes(AIW_EXCLUDE_HEADER)) {
     return {toRemove, toKeep}
   }
 
@@ -252,13 +291,13 @@ export async function computeGitignoreRemovals(
   const aiwEntries: string[] = []
 
   for (const line of lines) {
-    if (line === AIW_GITIGNORE_HEADER) {
+    if (line === AIW_EXCLUDE_HEADER) {
       inAiwSection = true
       continue
     }
 
     if (inAiwSection) {
-      if (line === '' || (line.startsWith('#') && line !== AIW_GITIGNORE_HEADER)) {
+      if (line === '' || (line.startsWith('#') && line !== AIW_EXCLUDE_HEADER)) {
         inAiwSection = false
       } else {
         // Strip trailing slash to get the directory name
@@ -305,19 +344,19 @@ export async function computeGitignoreRemovals(
 }
 
 /**
- * Remove specific entries from the AIW section in .gitignore.
+ * Remove specific entries from the AIW section in git exclude file.
  * Cleans up the section header if no entries remain.
  *
- * @param targetDir - Directory containing .gitignore
+ * @param gitDir - Git directory (contains info/exclude)
  * @param entriesToRemove - Entry names to remove (without trailing slash)
  */
-export async function removeGitignoreEntries(targetDir: string, entriesToRemove: string[]): Promise<void> {
-  const gitignorePath = join(targetDir, '.gitignore')
+export async function removeExcludeEntries(gitDir: string, entriesToRemove: string[]): Promise<void> {
+  const excludePath = getExcludePath(gitDir)
 
   try {
-    const content = await fs.readFile(gitignorePath, 'utf8')
+    const content = await fs.readFile(excludePath, 'utf8')
 
-    if (!content.includes(AIW_GITIGNORE_HEADER)) {
+    if (!content.includes(AIW_EXCLUDE_HEADER)) {
       return
     }
 
@@ -328,18 +367,18 @@ export async function removeGitignoreEntries(targetDir: string, entriesToRemove:
     const aiwSectionLines: string[] = []
 
     for (const line of lines) {
-      if (line === AIW_GITIGNORE_HEADER) {
+      if (line === AIW_EXCLUDE_HEADER) {
         inAiwSection = true
         aiwSectionLines.push(line)
         continue
       }
 
       if (inAiwSection) {
-        if (line === '' || (line.startsWith('#') && line !== AIW_GITIGNORE_HEADER)) {
+        if (line === '' || (line.startsWith('#') && line !== AIW_EXCLUDE_HEADER)) {
           inAiwSection = false
           // Filter the AIW section
           const filtered = aiwSectionLines.filter(
-            (l) => l === AIW_GITIGNORE_HEADER || !patternsToRemove.has(l),
+            (l) => l === AIW_EXCLUDE_HEADER || !patternsToRemove.has(l),
           )
           newLines.push(...filtered, line)
         } else {
@@ -353,7 +392,7 @@ export async function removeGitignoreEntries(targetDir: string, entriesToRemove:
     // Handle AIW section at end of file
     if (inAiwSection) {
       const filtered = aiwSectionLines.filter(
-        (l) => l === AIW_GITIGNORE_HEADER || !patternsToRemove.has(l),
+        (l) => l === AIW_EXCLUDE_HEADER || !patternsToRemove.has(l),
       )
       newLines.push(...filtered)
     }
@@ -365,8 +404,8 @@ export async function removeGitignoreEntries(targetDir: string, entriesToRemove:
       result = ''
     }
 
-    await fs.writeFile(gitignorePath, result, 'utf8')
+    await fs.writeFile(excludePath, result, 'utf8')
   } catch {
-    // .gitignore doesn't exist or can't be read
+    // Exclude file doesn't exist or can't be read
   }
 }

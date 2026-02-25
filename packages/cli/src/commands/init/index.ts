@@ -10,7 +10,7 @@ import select from '@inquirer/select'
 import {Flags} from '@oclif/core'
 
 import BaseCommand from '../../lib/base-command.js'
-import {AIW_GITIGNORE_ENTRIES, updateGitignore} from '../../lib/gitignore-manager.js'
+import {AIW_EXCLUDE_ENTRIES, resolveGitDir, updateGitExclude} from '../../lib/git-exclude-manager.js'
 import {IdePathResolver} from '../../lib/ide-path-resolver.js'
 import {pathExists} from '../../lib/paths.js'
 import {getTargetSettingsFile, readClaudeSettings, writeClaudeSettings} from '../../lib/settings-hierarchy.js'
@@ -28,19 +28,7 @@ const AVAILABLE_IDES = [
   {value: 'windsurf', name: 'Windsurf', description: 'Codeium Windsurf IDE'},
 ]
 
-/**
- * Detect if current directory is a git repository.
- * Checks for .git directory existence.
- */
-async function detectGitRepository(targetDir: string): Promise<boolean> {
-  try {
-    const gitPath = join(targetDir, '.git')
-    await fs.access(gitPath)
-    return true
-  } catch {
-    return false
-  }
-}
+// detectGitRepository replaced by resolveGitDir from git-exclude-manager
 
 /**
  * Extract project name from directory path.
@@ -101,14 +89,14 @@ export default class Init extends BaseCommand {
       const availableTemplates = await getAvailableTemplates()
 
       // Check git repository early (needed by both install paths)
-      const hasGit = await detectGitRepository(targetDir)
+      const gitDir = await resolveGitDir(targetDir)
 
       // Resolve installation configuration from flags or interactive wizard
       const config = await this.resolveInstallationConfig(flags, targetDir, availableTemplates)
 
       // If config is null, perform minimal install (shared folder only)
       if (!config) {
-        await this.performMinimalInstall(targetDir, hasGit)
+        await this.performMinimalInstall(targetDir, gitDir)
         return
       }
 
@@ -175,9 +163,9 @@ export default class Init extends BaseCommand {
         templatePath,
       })
 
-      // Collect all folders that need gitignore entries
+      // Collect all folders that need exclude entries
       // The .aiwcli/ container holds all template infrastructure and runtime data
-      const foldersForGitignore: string[] = [...AIW_GITIGNORE_ENTRIES]
+      const foldersForExclude: string[] = [...AIW_EXCLUDE_ENTRIES]
 
       // Report installation results
       if (result.installedFolders.length > 0) {
@@ -187,13 +175,13 @@ export default class Init extends BaseCommand {
       // Install global resolver for cwd-drift-proof hook/status line commands
       await this.installGlobalResolver()
 
-      // Perform post-installation actions (settings tracking, hook merging, gitignore updates)
+      // Perform post-installation actions (settings tracking, hook merging, git exclude updates)
       await this.performPostInstallActions({
         targetDir,
         method,
         ides,
-        hasGit,
-        foldersForGitignore,
+        gitDir,
+        foldersForExclude,
       })
 
       this.log('')
@@ -309,9 +297,9 @@ export default class Init extends BaseCommand {
    * Perform minimal installation (_shared folder only, no template method).
    *
    * @param targetDir - Target directory for installation
-   * @param hasGit - Whether git repository exists
+   * @param gitDir - Resolved git directory path, or null if not a git repo
    */
-  private async performMinimalInstall(targetDir: string, hasGit: boolean): Promise<void> {
+  private async performMinimalInstall(targetDir: string, gitDir: string | null): Promise<void> {
     this.logInfo('Performing minimal installation (_shared folder only)...')
     this.log('')
 
@@ -347,10 +335,10 @@ export default class Init extends BaseCommand {
     // Reconstruct settings from _shared template
     await reconstructIdeSettings(targetDir, [], ['claude'])
 
-    // Update .gitignore if git repository exists
-    if (hasGit) {
-      await updateGitignore(targetDir, [...AIW_GITIGNORE_ENTRIES])
-      this.logSuccess('✓ .gitignore updated')
+    // Update git exclude if git repository exists
+    if (gitDir) {
+      await updateGitExclude(gitDir, [...AIW_EXCLUDE_ENTRIES])
+      this.logSuccess('✓ git exclude updated')
     }
 
     this.log('')
@@ -373,17 +361,17 @@ export default class Init extends BaseCommand {
    * @param config.targetDir - Project directory
    * @param config.method - Method name that was installed
    * @param config.ides - IDEs that were configured
-   * @param config.hasGit - Whether git repository exists
-   * @param config.foldersForGitignore - Folders to add to .gitignore
+   * @param config.gitDir - Resolved git directory path, or null if not a git repo
+   * @param config.foldersForExclude - Folders to add to git exclude
    */
   private async performPostInstallActions(config: {
-    foldersForGitignore: string[]
-    hasGit: boolean
+    foldersForExclude: string[]
+    gitDir: string | null
     ides: string[]
     method: string
     targetDir: string
   }): Promise<void> {
-    const {targetDir, method, ides, hasGit, foldersForGitignore} = config
+    const {targetDir, method, ides, gitDir, foldersForExclude} = config
 
     // Track method installation in settings.json first (so reconstructor can read methods list)
     await this.trackMethodInstallation(targetDir, method, ides)
@@ -397,10 +385,10 @@ export default class Init extends BaseCommand {
     await reconstructIdeSettings(targetDir, activeTemplates, ides)
     this.logSuccess('✓ Reconstructed IDE settings from active templates')
 
-    // Update .gitignore if git repository exists
-    if (hasGit) {
-      await updateGitignore(targetDir, foldersForGitignore)
-      this.logSuccess('✓ .gitignore updated')
+    // Update git exclude if git repository exists
+    if (gitDir) {
+      await updateGitExclude(gitDir, foldersForExclude)
+      this.logSuccess('✓ git exclude updated')
     }
   }
 

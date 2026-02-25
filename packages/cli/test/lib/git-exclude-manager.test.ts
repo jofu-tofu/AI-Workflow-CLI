@@ -4,34 +4,38 @@ import {join} from 'node:path'
 import {expect} from 'chai'
 import {afterEach, beforeEach, describe, it} from 'mocha'
 
-import {updateGitignore} from '../../src/lib/gitignore-manager.js'
+import {updateGitExclude} from '../../src/lib/git-exclude-manager.js'
 import {cleanupTestDir, createTestDir, pathExists} from '../helpers/test-utils.js'
 
-describe('Gitignore Manager', () => {
+describe('Git Exclude Manager', () => {
   let testDir: string
+  let gitDir: string
+  let excludePath: string
 
   beforeEach(async () => {
-    testDir = await createTestDir('aiw-gitignore-test')
+    testDir = await createTestDir('aiw-git-exclude-test')
+    gitDir = join(testDir, '.git')
+    await fs.mkdir(join(gitDir, 'info'), {recursive: true})
+    excludePath = join(gitDir, 'info', 'exclude')
   })
 
   afterEach(async () => {
     await cleanupTestDir(testDir)
   })
 
-  describe('updateGitignore', () => {
-    it('should create .gitignore when it does not exist', async () => {
-      const gitignorePath = join(testDir, '.gitignore')
-      expect(await pathExists(gitignorePath)).to.be.false
+  describe('updateGitExclude', () => {
+    it('should create exclude file when it does not exist', async () => {
+      expect(await pathExists(excludePath)).to.be.false
 
-      await updateGitignore(testDir, ['_bmad', '.claude'])
+      await updateGitExclude(gitDir, ['_bmad', '.claude'])
 
-      expect(await pathExists(gitignorePath)).to.be.true
+      expect(await pathExists(excludePath)).to.be.true
     })
 
     it('should add folder patterns with trailing slashes', async () => {
-      await updateGitignore(testDir, ['_bmad', '.claude', '_bmad-output'])
+      await updateGitExclude(gitDir, ['_bmad', '.claude', '_bmad-output'])
 
-      const content = await fs.readFile(join(testDir, '.gitignore'), 'utf8')
+      const content = await fs.readFile(excludePath, 'utf8')
 
       expect(content).to.include('_bmad/')
       expect(content).to.include('.claude/')
@@ -39,22 +43,20 @@ describe('Gitignore Manager', () => {
     })
 
     it('should add AIW Installation header', async () => {
-      await updateGitignore(testDir, ['_bmad'])
+      await updateGitExclude(gitDir, ['_bmad'])
 
-      const content = await fs.readFile(join(testDir, '.gitignore'), 'utf8')
+      const content = await fs.readFile(excludePath, 'utf8')
 
       expect(content).to.include('# AIW Installation')
     })
 
-    it('should append to existing .gitignore', async () => {
-      const gitignorePath = join(testDir, '.gitignore')
+    it('should append to existing exclude file', async () => {
+      // Create existing exclude file
+      await fs.writeFile(excludePath, 'node_modules/\n.env\n', 'utf8')
 
-      // Create existing .gitignore
-      await fs.writeFile(gitignorePath, 'node_modules/\n.env\n', 'utf8')
+      await updateGitExclude(gitDir, ['_bmad', '.claude'])
 
-      await updateGitignore(testDir, ['_bmad', '.claude'])
-
-      const content = await fs.readFile(gitignorePath, 'utf8')
+      const content = await fs.readFile(excludePath, 'utf8')
 
       // Should contain both old and new patterns
       expect(content).to.include('node_modules/')
@@ -64,18 +66,16 @@ describe('Gitignore Manager', () => {
     })
 
     it('should not duplicate patterns if already present', async () => {
-      const gitignorePath = join(testDir, '.gitignore')
-
       // First installation
-      await updateGitignore(testDir, ['_bmad', '.claude'])
+      await updateGitExclude(gitDir, ['_bmad', '.claude'])
 
-      const firstContent = await fs.readFile(gitignorePath, 'utf8')
+      const firstContent = await fs.readFile(excludePath, 'utf8')
       const firstHeaderCount = (firstContent.match(/# AIW Installation/g) || []).length
 
       // Second installation attempt
-      await updateGitignore(testDir, ['_bmad', '.claude'])
+      await updateGitExclude(gitDir, ['_bmad', '.claude'])
 
-      const secondContent = await fs.readFile(gitignorePath, 'utf8')
+      const secondContent = await fs.readFile(excludePath, 'utf8')
       const secondHeaderCount = (secondContent.match(/# AIW Installation/g) || []).length
 
       // Header should only appear once
@@ -87,9 +87,9 @@ describe('Gitignore Manager', () => {
     })
 
     it('should handle multiple folder patterns', async () => {
-      await updateGitignore(testDir, ['_bmad', '_bmad-output', '.claude', 'bmad-output', '**/bmad-output'])
+      await updateGitExclude(gitDir, ['_bmad', '_bmad-output', '.claude', 'bmad-output', '**/bmad-output'])
 
-      const content = await fs.readFile(join(testDir, '.gitignore'), 'utf8')
+      const content = await fs.readFile(excludePath, 'utf8')
 
       expect(content).to.include('_bmad/')
       expect(content).to.include('_bmad-output/')
@@ -99,19 +99,17 @@ describe('Gitignore Manager', () => {
     })
 
     it('should handle empty folder list', async () => {
-      await updateGitignore(testDir, [])
+      await updateGitExclude(gitDir, [])
 
-      const content = await fs.readFile(join(testDir, '.gitignore'), 'utf8')
+      const content = await fs.readFile(excludePath, 'utf8')
 
       // Should create file with header but no patterns
       expect(content).to.include('# AIW Installation')
       expect(content.trim()).to.equal('# AIW Installation')
     })
 
-    it('should preserve existing .gitignore content structure', async () => {
-      const gitignorePath = join(testDir, '.gitignore')
-
-      // Create .gitignore with specific structure
+    it('should preserve existing exclude file content structure', async () => {
+      // Create exclude file with specific structure
       const existingContent = `# Build outputs
 dist/
 build/
@@ -123,11 +121,11 @@ node_modules/
 .env
 .env.local`
 
-      await fs.writeFile(gitignorePath, existingContent, 'utf8')
+      await fs.writeFile(excludePath, existingContent, 'utf8')
 
-      await updateGitignore(testDir, ['_bmad'])
+      await updateGitExclude(gitDir, ['_bmad'])
 
-      const newContent = await fs.readFile(gitignorePath, 'utf8')
+      const newContent = await fs.readFile(excludePath, 'utf8')
 
       // Original content should be preserved
       expect(newContent).to.include('# Build outputs')
@@ -141,15 +139,13 @@ node_modules/
     })
 
     it('should add header even if patterns already exist', async () => {
-      const gitignorePath = join(testDir, '.gitignore')
-
-      // Create .gitignore with _bmad/ but no header (edge case)
-      await fs.writeFile(gitignorePath, '_bmad/\n', 'utf8')
+      // Create exclude file with _bmad/ but no header (edge case)
+      await fs.writeFile(excludePath, '_bmad/\n', 'utf8')
 
       // Should add header and new patterns
-      await updateGitignore(testDir, ['_bmad', '.claude'])
+      await updateGitExclude(gitDir, ['_bmad', '.claude'])
 
-      const content = await fs.readFile(gitignorePath, 'utf8')
+      const content = await fs.readFile(excludePath, 'utf8')
 
       // Should have AIW Installation header
       expect(content).to.include('# AIW Installation')
@@ -159,9 +155,9 @@ node_modules/
     })
 
     it('should format patterns with newlines correctly', async () => {
-      await updateGitignore(testDir, ['_bmad', '.claude'])
+      await updateGitExclude(gitDir, ['_bmad', '.claude'])
 
-      const content = await fs.readFile(join(testDir, '.gitignore'), 'utf8')
+      const content = await fs.readFile(excludePath, 'utf8')
 
       // Should have proper newline formatting
       expect(content).to.match(/# AIW Installation\n_bmad\/\n\.claude\/\n/)
@@ -171,18 +167,16 @@ node_modules/
     })
 
     it('should add only missing patterns when some already exist', async () => {
-      const gitignorePath = join(testDir, '.gitignore')
-
       // First installation with .aiwcli
-      await updateGitignore(testDir, ['.aiwcli'])
+      await updateGitExclude(gitDir, ['.aiwcli'])
 
-      const firstContent = await fs.readFile(gitignorePath, 'utf8')
+      const firstContent = await fs.readFile(excludePath, 'utf8')
       const firstLineCount = firstContent.split('\n').filter((line) => line.trim()).length
 
       // Second installation with .aiwcli (existing) and _bmad (new)
-      await updateGitignore(testDir, ['.aiwcli', '_bmad'])
+      await updateGitExclude(gitDir, ['.aiwcli', '_bmad'])
 
-      const secondContent = await fs.readFile(gitignorePath, 'utf8')
+      const secondContent = await fs.readFile(excludePath, 'utf8')
 
       // .aiwcli should appear exactly once
       const aiwcliMatches = secondContent.match(/\.aiwcli\//g) || []
@@ -198,6 +192,17 @@ node_modules/
       // Should have added only one new line (_bmad/)
       const secondLineCount = secondContent.split('\n').filter((line) => line.trim()).length
       expect(secondLineCount).to.equal(firstLineCount + 1)
+    })
+
+    it('should create info/ directory if it does not exist', async () => {
+      // Remove the info dir we created in beforeEach
+      await fs.rm(join(gitDir, 'info'), {recursive: true})
+
+      await updateGitExclude(gitDir, ['.aiwcli'])
+
+      expect(await pathExists(excludePath)).to.be.true
+      const content = await fs.readFile(excludePath, 'utf8')
+      expect(content).to.include('.aiwcli/')
     })
   })
 })

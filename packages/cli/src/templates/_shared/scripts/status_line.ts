@@ -654,6 +654,7 @@ function renderContextManager(
 		planPart = ` ${SLATE_600}\u2502${RESET} ${CTX_SECONDARY}Plan:${RESET} ${SLATE_300}${truncatedPlan}${RESET}`;
 	}
 
+	// Note: termWidth not available here — caller truncates via main()
 	switch (mode) {
 		case "micro":
 		case "nano":
@@ -806,7 +807,7 @@ function main(): void {
 	// Resolve context ID for display and persistence
 	const contextId = resolveContextId(sessionId);
 
-	// Render content lines first, then size separators to match the widest one
+	// Render content lines first, truncate all to terminal width, then size separators
 	const contextLine = renderContext(mode, termWidth, contextPct, contextK, maxK, modelName);
 	const git = getGitStatus(currentDir);
 	const gitLine = renderGit(mode, termWidth, git, dirName);
@@ -814,16 +815,19 @@ function main(): void {
 	let ctxMgrLine: string;
 	if (contextId) {
 		const contextState = loadContextState(contextId);
-		ctxMgrLine = renderContextManager(mode, contextId, contextState);
+		ctxMgrLine = truncateToWidth(renderContextManager(mode, contextId, contextState), termWidth);
 	} else {
-		ctxMgrLine = renderNoContext(mode);
+		ctxMgrLine = truncateToWidth(renderNoContext(mode), termWidth);
 	}
 
-	// Measure visible width of each content line and size separators to the widest
-	const maxContentWidth = Math.max(
-		measureWidth(contextLine),
-		measureWidth(gitLine),
-		measureWidth(ctxMgrLine),
+	// Measure visible width of each content line, cap separator at terminal width
+	const maxContentWidth = Math.min(
+		termWidth,
+		Math.max(
+			measureWidth(contextLine),
+			measureWidth(gitLine),
+			measureWidth(ctxMgrLine),
+		),
 	);
 	const sep = makeSeparator(maxContentWidth);
 

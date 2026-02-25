@@ -5,7 +5,7 @@ import confirm from '@inquirer/confirm'
 import {Flags} from '@oclif/core'
 
 import BaseCommand from '../lib/base-command.js'
-import {computeGitignoreRemovals, pruneGitignoreStaleEntries, removeGitignoreEntries} from '../lib/gitignore-manager.js'
+import {computeExcludeRemovals, pruneExcludeStaleEntries, removeExcludeEntries, resolveGitDir} from '../lib/git-exclude-manager.js'
 import {pathExists} from '../lib/paths.js'
 import {getSharedTemplatePath} from '../lib/template-resolver.js'
 import {reconstructIdeSettings} from '../lib/template-settings-reconstructor.js'
@@ -743,26 +743,29 @@ export default class ClearCommand extends BaseCommand {
   }
 
   /**
-   * Clean up gitignore entries and prune stale entries.
+   * Clean up git exclude entries and prune stale entries.
    *
    * @param targetDir - Project root directory
-   * @returns True if gitignore was updated
+   * @returns True if git exclude was updated
    */
-  private async cleanupGitignore(targetDir: string): Promise<boolean> {
-    const {toRemove, toKeep} = await computeGitignoreRemovals(targetDir)
+  private async cleanupGitExclude(targetDir: string): Promise<boolean> {
+    const gitDir = await resolveGitDir(targetDir)
+    if (!gitDir) return false
+
+    const {toRemove, toKeep} = await computeExcludeRemovals(gitDir, targetDir)
 
     for (const {entry, reason} of toKeep) {
-      this.logDebug(`Keeping ${entry}/ in .gitignore (${reason})`)
+      this.logDebug(`Keeping ${entry}/ in git exclude (${reason})`)
     }
 
     if (toRemove.length > 0) {
-      await removeGitignoreEntries(targetDir, toRemove)
-      this.logDebug(`Removed from .gitignore: ${toRemove.join(', ')}`)
+      await removeExcludeEntries(gitDir, toRemove)
+      this.logDebug(`Removed from git exclude: ${toRemove.join(', ')}`)
     }
 
-    const pruned = await pruneGitignoreStaleEntries(targetDir)
+    const pruned = await pruneExcludeStaleEntries(gitDir, targetDir)
     if (pruned) {
-      this.logDebug('Pruned stale .gitignore entries')
+      this.logDebug('Pruned stale git exclude entries')
     }
 
     return toRemove.length > 0 || pruned
@@ -841,15 +844,16 @@ export default class ClearCommand extends BaseCommand {
       this.log('')
     }
 
-    // Compute gitignore changes for dry-run display
-    const gitignoreSimulation = await computeGitignoreRemovals(targetDir)
-    if (gitignoreSimulation.toRemove.length > 0 || gitignoreSimulation.toKeep.length > 0) {
-      this.logInfo('Gitignore changes:')
-      for (const {entry, reason} of gitignoreSimulation.toKeep) {
+    // Compute git exclude changes for dry-run display
+    const gitDir = await resolveGitDir(targetDir)
+    const excludeSimulation = gitDir ? await computeExcludeRemovals(gitDir, targetDir) : {toRemove: [], toKeep: []}
+    if (excludeSimulation.toRemove.length > 0 || excludeSimulation.toKeep.length > 0) {
+      this.logInfo('Git exclude changes:')
+      for (const {entry, reason} of excludeSimulation.toKeep) {
         this.log(`  keep ${entry}/ (${reason})`)
       }
 
-      for (const entry of gitignoreSimulation.toRemove) {
+      for (const entry of excludeSimulation.toRemove) {
         this.log(`  remove ${entry}/`)
       }
 
@@ -1059,7 +1063,7 @@ export default class ClearCommand extends BaseCommand {
   }
 
   /**
-   * Perform all post-deletion cleanup: empty dir removal, gitignore, settings, IDE folders.
+   * Perform all post-deletion cleanup: empty dir removal, git exclude, settings, IDE folders.
    *
    * @param targetDir - Project root directory
    * @param methodsToRemove - Method names being removed
@@ -1069,7 +1073,7 @@ export default class ClearCommand extends BaseCommand {
     targetDir: string,
     methodsToRemove: string[],
   ): Promise<{
-    gitignoreUpdated: boolean
+    gitExcludeUpdated: boolean
     removedAiwcliContainer: boolean
     removedClaudeDir: boolean
     removedOutputDir: boolean
@@ -1092,8 +1096,8 @@ export default class ClearCommand extends BaseCommand {
       this.logDebug(`Removed empty ${AIWCLI_CONTAINER}/ folder`)
     }
 
-    // Smart gitignore removal
-    const gitignoreUpdated = await this.cleanupGitignore(targetDir)
+    // Smart git exclude removal
+    const gitExcludeUpdated = await this.cleanupGitExclude(targetDir)
 
     // Reconstruct IDE settings
     let {updatedClaudeSettings, updatedWindsurfSettings} =
@@ -1111,7 +1115,7 @@ export default class ClearCommand extends BaseCommand {
 
     return {
       removedOutputDir, removedAiwcliContainer, removedClaudeDir, removedWindsurfDir,
-      updatedClaudeSettings, updatedWindsurfSettings, gitignoreUpdated,
+      updatedClaudeSettings, updatedWindsurfSettings, gitExcludeUpdated,
     }
   }
 
@@ -1226,7 +1230,7 @@ export default class ClearCommand extends BaseCommand {
    * @param deleteCounts.deletedOutput - Number of output folders deleted
    * @param deleteCounts.deletedIde - Number of IDE method folders deleted
    * @param cleanup - Cleanup operation results
-   * @param cleanup.gitignoreUpdated - Whether gitignore was updated
+   * @param cleanup.gitExcludeUpdated - Whether git exclude was updated
    * @param cleanup.removedOutputDir - Whether _output dir was removed
    * @param cleanup.removedAiwcliContainer - Whether .aiwcli dir was removed
    * @param cleanup.removedClaudeDir - Whether .claude dir was removed
@@ -1237,7 +1241,7 @@ export default class ClearCommand extends BaseCommand {
   private reportClearResults(
     deleteCounts: {deletedIde: number; deletedOutput: number; deletedWorkflow: number},
     cleanup: {
-      gitignoreUpdated: boolean
+      gitExcludeUpdated: boolean
       removedAiwcliContainer: boolean
       removedClaudeDir: boolean
       removedOutputDir: boolean
@@ -1258,8 +1262,8 @@ export default class ClearCommand extends BaseCommand {
 
     this.logSuccess(`Cleared: ${parts.join(', ')}.`)
 
-    if (cleanup.gitignoreUpdated) {
-      this.logSuccess('Updated .gitignore.')
+    if (cleanup.gitExcludeUpdated) {
+      this.logSuccess('Updated git exclude.')
     }
 
     if (cleanup.updatedClaudeSettings) {

@@ -5,7 +5,7 @@ import {expect} from 'chai'
 import {afterEach, beforeEach, describe, it} from 'mocha'
 
 import {installBmad} from '../../src/lib/bmad-installer.js'
-import {updateGitignore} from '../../src/lib/gitignore-manager.js'
+import {updateGitExclude} from '../../src/lib/git-exclude-manager.js'
 import {cleanupTestDir, createTestDir, pathExists} from '../helpers/test-utils.js'
 
 // eslint-disable-next-line mocha/no-skipped-tests -- BMAD installer not yet implemented
@@ -98,44 +98,53 @@ describe.skip('BMAD Installation Integration Tests', () => {
     expect(manifest).to.include('version: 6.0.0-alpha.22')
   })
 
-  it('should create .gitignore with BMAD patterns when it does not exist', async () => {
-    await updateGitignore(testDir, ['_bmad', '_bmad-output', 'bmad-output', '**/bmad-output'])
+  it('should create git exclude with BMAD patterns when it does not exist', async () => {
+    const gitDir = join(testDir, '.git')
+    await fs.mkdir(join(gitDir, 'info'), {recursive: true})
 
-    const gitignore = await fs.readFile(join(testDir, '.gitignore'), 'utf8')
-    expect(gitignore).to.include('# AIW Installation')
-    expect(gitignore).to.include('_bmad/')
-    expect(gitignore).to.include('_bmad-output/')
-    expect(gitignore).to.include('bmad-output/')
+    await updateGitExclude(gitDir, ['_bmad', '_bmad-output', 'bmad-output', '**/bmad-output'])
+
+    const exclude = await fs.readFile(join(gitDir, 'info', 'exclude'), 'utf8')
+    expect(exclude).to.include('# AIW Installation')
+    expect(exclude).to.include('_bmad/')
+    expect(exclude).to.include('_bmad-output/')
+    expect(exclude).to.include('bmad-output/')
   })
 
-  it('should append to existing .gitignore without duplication', async () => {
+  it('should append to existing git exclude without duplication', async () => {
+    const gitDir = join(testDir, '.git')
+    await fs.mkdir(join(gitDir, 'info'), {recursive: true})
+    const excludePath = join(gitDir, 'info', 'exclude')
     const existingContent = '# My project\nnode_modules/\ndist/\n'
-    await fs.writeFile(join(testDir, '.gitignore'), existingContent, 'utf8')
+    await fs.writeFile(excludePath, existingContent, 'utf8')
 
-    await updateGitignore(testDir, ['_bmad', '_bmad-output'])
+    await updateGitExclude(gitDir, ['_bmad', '_bmad-output'])
 
-    const gitignore = await fs.readFile(join(testDir, '.gitignore'), 'utf8')
+    const exclude = await fs.readFile(excludePath, 'utf8')
 
     // Should preserve existing content
-    expect(gitignore).to.include('# My project')
-    expect(gitignore).to.include('node_modules/')
-    expect(gitignore).to.include('dist/')
+    expect(exclude).to.include('# My project')
+    expect(exclude).to.include('node_modules/')
+    expect(exclude).to.include('dist/')
 
     // Should add AIW patterns
-    expect(gitignore).to.include('# AIW Installation')
-    expect(gitignore).to.include('_bmad/')
+    expect(exclude).to.include('# AIW Installation')
+    expect(exclude).to.include('_bmad/')
   })
 
   it('should not duplicate AIW patterns if already present', async () => {
+    const gitDir = join(testDir, '.git')
+    await fs.mkdir(join(gitDir, 'info'), {recursive: true})
+    const excludePath = join(gitDir, 'info', 'exclude')
     const existingContent = '# My project\nnode_modules/\n\n# AIW Installation\n_bmad/\n_bmad-output/\n'
-    await fs.writeFile(join(testDir, '.gitignore'), existingContent, 'utf8')
+    await fs.writeFile(excludePath, existingContent, 'utf8')
 
-    await updateGitignore(testDir, ['_bmad', '_bmad-output'])
+    await updateGitExclude(gitDir, ['_bmad', '_bmad-output'])
 
-    const gitignore = await fs.readFile(join(testDir, '.gitignore'), 'utf8')
+    const exclude = await fs.readFile(excludePath, 'utf8')
 
     // Should not add duplicate patterns
-    const matches = gitignore.match(/# AIW Installation/g)
+    const matches = exclude.match(/# AIW Installation/g)
     expect(matches).to.have.lengthOf(1, 'AIW patterns should only appear once')
   })
 
