@@ -2,12 +2,12 @@
   "models": {
     "providers": {
       "claude": {
-        "enabled": true,
+        "enabled": false,
         "models": ["sonnet"]
       },
       "codex": {
         "enabled": true,
-        "models": ["codex-mini-latest"]
+        "models": ["gpt-5"]
       }
     }
   },
