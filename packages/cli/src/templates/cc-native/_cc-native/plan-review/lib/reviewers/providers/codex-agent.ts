@@ -38,7 +38,7 @@ export class CodexAgent extends BaseCliAgent<ReviewerResult> {
     const normalizedSchema = shellQuoteWin(normalizePathForCli(schemaPath));
     const normalizedOut = shellQuoteWin(normalizePathForCli(outPath));
 
-    const cmdArgs = ["exec", "--sandbox", "read-only", "--reasoning", "medium"];
+    const cmdArgs = ["exec", "--sandbox", "read-only"];
     if (this.agent.model) cmdArgs.push("--model", this.agent.model);
     cmdArgs.push("--output-schema", normalizedSchema, "-o", normalizedOut, "-");
 
