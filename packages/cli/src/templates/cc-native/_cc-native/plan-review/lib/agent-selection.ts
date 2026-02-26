@@ -47,35 +47,67 @@ export function resolveMandatoryAgents(
 // Model Assignment
 // ---------------------------------------------------------------------------
 
+/** Provider priority order: codex first (cheaper/faster), claude as fallback */
+const PROVIDER_PRIORITY = ["codex", "claude"];
+
 /**
- * Randomly assign enabled providers and models to agents.
- * Filters to providers whose CLI is available on PATH.
+ * Assign providers and models to agents.
+ * When preflightAvailable is provided, filters to only models that passed preflight.
+ * Providers are ordered by PROVIDER_PRIORITY (codex first, claude fallback).
+ * All agents get the first available provider; random model within that provider.
  */
 export function assignModelsToAgents(
   agents: AgentConfig[],
   modelsConfig: ModelsConfig,
+  preflightAvailable?: Map<string, Set<string>>,
 ): AgentConfig[] {
-  const enabledProviders = Object.entries(modelsConfig.providers)
+  let enabledProviders = Object.entries(modelsConfig.providers)
     .filter(([name, config]) => {
       if (!config.enabled || config.models.length === 0) return false;
       const cliName = name === "claude" ? "claude" : name;
       const found = findExecutable(cliName);
       if (!found) {
         logWarn(HOOK, `Provider '${name}' enabled but CLI '${cliName}' not found on PATH — skipping`);
+        return false;
       }
-      return Boolean(found);
-    });
+      return true;
+    })
+    .map(([name, config]) => {
+      // Filter models by preflight results when available
+      if (preflightAvailable) {
+        const passedModels = preflightAvailable.get(name);
+        if (!passedModels || passedModels.size === 0) {
+          logWarn(HOOK, `Provider '${name}' has no models that passed preflight — skipping`);
+          return null;
+        }
+        const filteredModels = config.models.filter(m => passedModels.has(m));
+        if (filteredModels.length === 0) {
+          logWarn(HOOK, `Provider '${name}': none of its configured models passed preflight — skipping`);
+          return null;
+        }
+        return [name, { ...config, models: filteredModels }] as [string, typeof config];
+      }
+      return [name, config] as [string, typeof config];
+    })
+    .filter((entry): entry is [string, { enabled: boolean; models: string[] }] => entry !== null);
+
+  // Sort by provider priority (codex first)
+  enabledProviders.sort((a, b) => {
+    const aIdx = PROVIDER_PRIORITY.indexOf(a[0]);
+    const bIdx = PROVIDER_PRIORITY.indexOf(b[0]);
+    return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+  });
 
   if (enabledProviders.length === 0) {
     logWarn(HOOK, "No providers with available CLI found, falling back to Claude with agent defaults");
     return agents.map(a => ({ ...a, provider: "claude" }));
   }
 
+  // Assign all agents to the first (highest-priority) available provider
+  const [providerName, providerConfig] = enabledProviders[0]!;
+  logInfo(HOOK, `Using provider: ${providerName} (models: ${providerConfig.models.join(", ")})`);
+
   return agents.map(agent => {
-    const idx = Math.floor(Math.random() * enabledProviders.length);
-    const entry = enabledProviders[idx];
-    if (!entry) return { ...agent, provider: "claude" };
-    const [providerName, providerConfig] = entry;
     const modelIdx = Math.floor(Math.random() * providerConfig.models.length);
     const model = providerConfig.models[modelIdx] ?? providerConfig.models[0] ?? agent.model;
     return { ...agent, provider: providerName, model };

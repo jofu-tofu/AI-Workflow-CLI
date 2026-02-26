@@ -2,12 +2,12 @@
   "models": {
     "providers": {
       "claude": {
-        "enabled": false,
+        "enabled": true,
         "models": ["sonnet"]
       },
       "codex": {
         "enabled": true,
-        "models": ["gpt-5.2"]
+        "models": ["codex-mini-latest"]
       }
     }
   },
@@ -28,6 +28,10 @@
       "enabled": true,
       "model": "opus",
       "timeout": 60
+    },
+    "preflight": {
+      "enabled": true,
+      "timeoutMs": 15000
     },
     "legacyMode": false,
     "mandatoryAgents": {

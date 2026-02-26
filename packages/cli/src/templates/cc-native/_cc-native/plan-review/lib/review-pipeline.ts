@@ -8,6 +8,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { resolveMandatoryAgents, assignModelsToAgents, selectAgents } from "./agent-selection.js";
+import { runPreflight } from "./preflight.js";
 import { computeCorroboratedDecision } from "./corroboration.js";
 import { computePassEligible, extractTopIssuesForTracker, advanceIterationState } from "./graduation.js";
 import { runOrchestrator } from "./orchestrator.js";
@@ -225,6 +226,28 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
   const agentResults: Record<string, ReviewerResult> = {};
   let detectedComplexity = "medium";
 
+  // Preflight: validate provider+model combos before committing agents or orchestrator
+  const preflightEnabled = (agentSettings.preflight as Record<string, unknown>)?.enabled ?? true;
+  let preflightAvailable: Map<string, Set<string>> | undefined;
+
+  if (preflightEnabled && agentReviewEnabled) {
+    logInfo(HOOK, "=== PREFLIGHT: Checking provider availability ===");
+    const preflightTimeoutMs = (agentSettings.preflight as Record<string, unknown>)?.timeoutMs as number | undefined;
+    const modelsConfig = loadModelsConfig(settings);
+    const preflightReport = await runPreflight(modelsConfig, preflightTimeoutMs);
+
+    if (preflightReport.allFailed) {
+      logWarn(HOOK, "All providers failed preflight checks");
+      // Preflight failures skip review rather than block because an unavailable
+      // reviewer is worse than no reviewer. A permanently broken config will
+      // silently pass all plans — mitigated by the log warnings above.
+      eprint("[plan-review] All AI providers unavailable. Skipping review.");
+      return { action: "skip", reason: "No AI providers passed preflight. Check CLI, API keys, model access, and quota." };
+    }
+
+    preflightAvailable = preflightReport.available;
+  }
+
   // 7. PHASE 1: Orchestrator
   const graduatedSet = new Set(iterationState.graduated);
   if (graduatedSet.size > 0) {
@@ -254,10 +277,20 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
   const phase1Promises: Array<{ name: string; promise: Promise<ReviewerResult | OrchestratorResult> }> = [];
 
   if (orchestratorConfig.enabled && enabledAgents.length > 0 && !legacyMode) {
-    phase1Promises.push({
-      name: "orchestrator",
-      promise: runOrchestrator(plan, enabledAgents, orchestratorConfig, agentSettings, alwaysMandatory),
-    });
+    // Guard orchestrator against preflight failures (always uses claude provider)
+    const orchProvider = "claude";
+    const orchModel = orchestratorConfig.model;
+    const orchPassed = !preflightAvailable ||
+      (preflightAvailable.has(orchProvider) && preflightAvailable.get(orchProvider)!.has(orchModel));
+
+    if (!orchPassed) {
+      logWarn(HOOK, `Orchestrator model ${orchProvider}:${orchModel} failed preflight, skipping`);
+    } else {
+      phase1Promises.push({
+        name: "orchestrator",
+        promise: runOrchestrator(plan, enabledAgents, orchestratorConfig, agentSettings, alwaysMandatory),
+      });
+    }
   }
 
   logInfo(HOOK, `=== PHASE 1: Running ${phase1Promises.length} tasks in parallel ===`);
@@ -318,9 +351,9 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
     iterationState.max = reviewIterations[detectedComplexity] ?? iterationState.max;
     logDebug(HOOK, `Iteration state: ${iterationState.current}/${iterationState.max} (${detectedComplexity})`);
 
-    // Assign random providers + models
+    // Assign providers + models (filtered by preflight results if available)
     const modelsConfig = loadModelsConfig(settings);
-    selectedAgents = assignModelsToAgents(selectedAgents, modelsConfig);
+    selectedAgents = assignModelsToAgents(selectedAgents, modelsConfig, preflightAvailable);
     logInfo(HOOK, `Model assignments: ${selectedAgents.map(a => `${a.name}→${a.provider}:${a.model}`).join(", ")}`);
 
     // 9. PHASE 3: Run agents

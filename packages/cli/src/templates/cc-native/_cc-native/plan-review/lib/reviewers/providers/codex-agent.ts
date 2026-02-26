@@ -16,6 +16,20 @@ import { BaseCliAgent, type ExecResult } from "../base/base-agent.js";
 import { AGENT_REVIEW_PROMPT_PREFIX } from "../schemas.js";
 import { makeResult } from "../types.js";
 
+// ---------------------------------------------------------------------------
+// Preflight (standalone — no instance needed)
+// ---------------------------------------------------------------------------
+
+export const CODEX_PREFLIGHT_INPUT = "Respond with exactly: ok";
+
+export function codexPreflightArgs(model: string): string[] {
+  return ["exec", "--sandbox", "read-only", "--model", model, "-"];
+}
+
+// ---------------------------------------------------------------------------
+// Agent Class
+// ---------------------------------------------------------------------------
+
 /** Temp directory for Codex schema/output files */
 const _tmpDir: string | null = null;
 

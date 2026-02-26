@@ -327,3 +327,24 @@ export interface IterationAdvancement {
   updatedState: IterationState;
   newGraduates: string[];
 }
+
+// ---------------------------------------------------------------------------
+// Preflight Types
+// ---------------------------------------------------------------------------
+
+/** Result from a single provider+model preflight check */
+export interface PreflightCheckResult {
+  provider: string;
+  model: string;
+  available: boolean;
+  latencyMs: number;
+  error?: string;
+}
+
+/** Aggregated preflight report across all provider+model combos */
+export interface PreflightReport {
+  checks: PreflightCheckResult[];
+  available: Map<string, Set<string>>;  // provider → set of working models
+  allFailed: boolean;
+  totalMs: number;
+}

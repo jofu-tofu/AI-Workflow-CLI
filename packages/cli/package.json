@@ -1,7 +1,7 @@
 {
   "name": "aiwcli",
   "description": "AI Workflow CLI - Command-line interface for AI-powered workflows",
-  "version": "0.13.6",
+  "version": "0.13.7",
   "author": "jofu-tofu",
   "bin": {
     "aiw": "bin/run.js"

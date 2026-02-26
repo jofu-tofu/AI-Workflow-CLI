@@ -15,6 +15,27 @@ import { makeResult } from "../types.js";
  * Claude CLI-based agent reviewer.
  * Extends BaseCliAgent with Claude-specific prompt and argument handling.
  */
+// ---------------------------------------------------------------------------
+// Preflight (standalone — no instance needed)
+// ---------------------------------------------------------------------------
+
+export const CLAUDE_PREFLIGHT_INPUT = "Respond with exactly: ok";
+
+export function claudePreflightArgs(model: string): string[] {
+  return [
+    "--model", model,
+    "--max-turns", "1",
+    "--output-format", "json",
+    "--setting-sources", process.platform === "win32" ? '""' : "",
+    "-p",
+    "--no-session-persistence",
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Agent Class
+// ---------------------------------------------------------------------------
+
 export class ClaudeAgent extends BaseCliAgent<ReviewerResult> {
   protected buildCliArgs(): string[] {
     const schemaJson = JSON.stringify(this.schema);
