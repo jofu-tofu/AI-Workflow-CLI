@@ -7,7 +7,8 @@
       },
       "codex": {
         "enabled": true,
-        "models": ["codex-mini-latest"]
+        "models": ["gpt-5.3-codex"],
+        "reasoningEffort": "low"
       }
     }
   },

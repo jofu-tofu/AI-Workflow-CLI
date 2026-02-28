@@ -89,7 +89,7 @@ export function assignModelsToAgents(
       }
       return [name, config] as [string, typeof config];
     })
-    .filter((entry): entry is [string, { enabled: boolean; models: string[] }] => entry !== null);
+    .filter((entry): entry is [string, { enabled: boolean; models: string[]; reasoningEffort?: string }] => entry !== null);
 
   // Sort by provider priority (codex first)
   enabledProviders.sort((a, b) => {
@@ -110,7 +110,7 @@ export function assignModelsToAgents(
   return agents.map(agent => {
     const modelIdx = Math.floor(Math.random() * providerConfig.models.length);
     const model = providerConfig.models[modelIdx] ?? providerConfig.models[0] ?? agent.model;
-    return { ...agent, provider: providerName, model };
+    return { ...agent, provider: providerName, model, reasoningEffort: providerConfig.reasoningEffort };
   });
 }
 

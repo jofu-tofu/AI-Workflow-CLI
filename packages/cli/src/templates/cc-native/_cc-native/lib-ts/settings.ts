@@ -149,6 +149,7 @@ export function loadModelsConfig(settings: Record<string, unknown>): ModelsConfi
     providers[name] = {
       enabled: c.enabled !== false,
       models: Array.isArray(c.models) ? (c.models as string[]).filter(Boolean) : [],
+      ...(typeof c.reasoningEffort === "string" && { reasoningEffort: c.reasoningEffort }),
     };
   }
   return { providers };

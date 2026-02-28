@@ -127,6 +127,7 @@ export interface AgentConfig {
   categories: string[];
   description: string;
   system_prompt: string; // Markdown body content for --system-prompt
+  reasoningEffort?: string; // e.g. "low", "medium", "high" — passed to codex -c model_reasoning_effort
 }
 
 /** Configuration for the plan orchestrator */
@@ -140,6 +141,7 @@ export interface OrchestratorConfig {
 export interface ProviderConfig {
   enabled: boolean;
   models: string[];
+  reasoningEffort?: string; // e.g. "low", "medium", "high" — codex model_reasoning_effort
 }
 
 /** Model provider pool configuration */
