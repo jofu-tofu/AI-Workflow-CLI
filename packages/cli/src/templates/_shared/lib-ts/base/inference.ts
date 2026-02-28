@@ -23,6 +23,7 @@ const TIMEOUTS: Record<string, number> = {
   standard: 30,
   smart: 90,
 };
+const CONTEXT_ID_PRIMARY_MODEL = "gpt-5.3-codex";
 
 /**
  * Run inference using the claude CLI.
@@ -33,9 +34,10 @@ export function inference(
   userPrompt: string,
   level = "fast",
   timeout?: number,
+  options?: { model?: string },
 ): InferenceResult {
   const startTime = Date.now();
-  const model = MODELS[level] ?? MODELS.fast;
+  const model = options?.model ?? MODELS[level] ?? MODELS.fast;
   const timeoutSec = timeout ?? TIMEOUTS[level] ?? TIMEOUTS.fast;
   const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
 
@@ -189,7 +191,7 @@ Respond with ONLY a JSON object: {"slug": "your 8-12 word phrase here"}`;
 
 /**
  * Generate a 5-12 word context ID slug from a user prompt.
- * Uses Haiku (fast tier) for low latency.
+ * Uses 5.3 Codex Spark first, then falls back to current fast tier for resilience.
  * See SPEC.md §6.3
  */
 export function generateContextIdSlug(
@@ -198,7 +200,20 @@ export function generateContextIdSlug(
 ): string | null {
   const truncated = prompt.slice(0, 500);
 
-  const result = inference(CONTEXT_ID_SLUG_PROMPT, truncated, "fast", timeout);
+  const sparkResult = inference(
+    CONTEXT_ID_SLUG_PROMPT,
+    truncated,
+    "fast",
+    timeout,
+    { model: CONTEXT_ID_PRIMARY_MODEL },
+  );
+  if (!sparkResult.success || !sparkResult.output) {
+    logWarn(
+      "inference",
+      `Context ID slug Spark (${CONTEXT_ID_PRIMARY_MODEL}) failed or returned empty output. Falling back to ${MODELS.fast}`,
+    );
+  }
+  const result = sparkResult.success && sparkResult.output ? sparkResult : inference(CONTEXT_ID_SLUG_PROMPT, truncated, "fast", timeout);
 
   if (!result.success || !result.output) {
     logWarn("inference", `Context ID slug inference failed: ${result.error}`);
@@ -250,9 +265,10 @@ export async function inferenceAsync(
   userPrompt: string,
   level = "fast",
   timeout?: number,
+  options?: { model?: string },
 ): Promise<InferenceResult> {
   const startTime = Date.now();
-  const model = (level in MODELS ? MODELS[level] : undefined) ?? MODELS.fast;
+  const model = options?.model ?? (level in MODELS ? MODELS[level] : undefined) ?? MODELS.fast;
   const timeoutSec = timeout ?? (level in TIMEOUTS ? TIMEOUTS[level] : undefined) ?? TIMEOUTS.fast;
   const timeoutMs = timeoutSec * 1000;
   const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
