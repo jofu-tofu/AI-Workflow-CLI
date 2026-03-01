@@ -48,6 +48,15 @@ cd .aiwcli && bunx tsc --noEmit 2>&1 | grep TS2307
 
 See `.aiwcli/_cc-native/hooks/CLAUDE.md` for hook entry points, logging standard, import patterns, debugging, and DO NOT list.
 
+## Runtime Compatibility
+
+`.claude/settings.json` hook wiring in this repo is Claude Code-specific.
+
+- Claude Code: uses hook lifecycle events from `.claude/settings.json` (for example `PreToolUse`, `PostToolUse`, `PermissionRequest`, `UserPromptSubmit`)
+- OpenCode: uses `opencode.json` configuration, permission rules, and plugin events (for example `tool.execute.before`, `tool.execute.after`, `permission.asked`)
+
+When behavior differs between runtimes, verify the runtime's native config surface first before assuming a hook regression.
+
 ## Plan & Handoff Lifecycle (Unified System - v0.13.0+)
 
 **Unified staging mode:** `has_staged_work` replaces `has_plan` and `has_handoff`. Single mode with explicit artifact type tracking via `next_artifact_type` field. Latest artifact wins - only ONE artifact staged at a time.
@@ -136,4 +145,7 @@ is stale — update or regenerate before relying on it.
 - 30+ days without touching this file → Audit
 - Agent mistake caused by this file → fix immediately, then Audit
 
-<!-- context-layer: generated=2026-02-18 | last-audited=2026-02-21 | version=2 | dir-commits-at-audit=14 -->
+**Runtime mismatch check:**
+- If behavior differs between OpenCode and Claude Code, verify runtime-level config first (`opencode.json` + plugins/events vs `.claude/settings.json` hooks) before debugging hook code.
+
+<!-- context-layer: generated=2026-02-18 | last-audited=2026-02-28 | version=3 | dir-commits-at-audit=14 -->

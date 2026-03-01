@@ -299,7 +299,7 @@ function renderContext(
 			line =
 				`${CTX_PRIMARY}\u25C9${RESET} ${CTX_ACCENT}${shortModel}${RESET} ` +
 				`${SLATE_600}\u2502${RESET} ` +
-				`${bar} ${pctColor}${contextPct}%${RESET} ${SLATE_500}(${contextK}k)${RESET}`;
+				`${bar} ${pctColor}${contextPct}%${RESET} ${SLATE_500}(${contextK}k/${maxK}k)${RESET}`;
 
 			break;
 		}
