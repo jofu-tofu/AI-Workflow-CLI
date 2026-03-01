@@ -18,6 +18,7 @@ import {
 import { getProjectRoot } from "../../../lib-ts/base/constants.js";
 import { resolveCodexModel, codexReplSpec, buildCliInvocation, isCodexSandbox, type CodexSandbox } from "../../../lib-ts/base/cli-args.js";
 import { logDebug, logWarn } from "../../../lib-ts/base/logger.js";
+import { displayPath } from "../../../lib-ts/base/utils.js";
 import { getContextBySessionId, getContext } from "../../../lib-ts/context/context-store.js";
 import { buildExternalAgentContext } from "../../../lib-ts/context/context-formatter.js";
 import { findLatestPlan } from "../../../lib-ts/context/plan-manager.js";
@@ -148,7 +149,7 @@ if (args[0] === "plan") {
   }
 
   promptPath = planPath;
-  console.log(`Found plan: ${planPath.replaceAll("\\", "/")}`);
+  console.log(`Found plan: ${displayPath(planPath)}`);
 
 } else if (args[0] === "--file") {
   if (!args[1]) {

@@ -70,6 +70,14 @@ export function parseIsoTimestamp(isoStr: string): Date | null {
 }
 
 /**
+ * Normalize a filesystem path for display — always uses forward slashes.
+ * No-op on Unix; converts backslashes on Windows.
+ */
+export function displayPath(p: string): string {
+  return p.replaceAll("\\", "/");
+}
+
+/**
  * Clean text for stop-word matching in slug generation.
  * Strips apostrophes (i'm -> im), removes punctuation, normalizes whitespace.
  * See SPEC.md §14.2

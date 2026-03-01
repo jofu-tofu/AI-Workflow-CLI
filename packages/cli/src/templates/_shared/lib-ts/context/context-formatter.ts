@@ -11,15 +11,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { getContextDir } from "../base/constants.js";
-import { parseIsoTimestamp } from "../base/utils.js";
+import { displayPath, parseIsoTimestamp } from "../base/utils.js";
 import type { ContextState, Task } from "../types.js";
 
 const MAX_PLAN_INLINE_CHARS = 30_000;
 
-/** Normalize path for display in markdown — always use forward slashes regardless of platform. */
-function displayPath(p: string): string {
-  return p.replaceAll("\\", "/");
-}
 
 // ---------------------------------------------------------------------------
 // Mode display
