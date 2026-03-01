@@ -20,6 +20,7 @@ Changes to the working directory (`.aiwcli/`) should also be applied to the temp
 - `.aiwcli/_shared/skills/handoff-system/**/*.ts` → `packages/cli/src/templates/_shared/skills/handoff-system/`
 - `.aiwcli/_shared/skills/meta-plan/**` → `packages/cli/src/templates/_shared/skills/meta-plan/`
 - `.aiwcli/_shared/skills/prompt-codex/**` → `packages/cli/src/templates/_shared/skills/prompt-codex/`
+- `.claude/skills/codex/SKILL.md` → `packages/cli/src/templates/cc-native/.claude/skills/codex/SKILL.md`
 - `.claude/settings.json` → `packages/cli/src/templates/cc-native/.claude/settings.json`
 
 **When to sync:**
