@@ -3,9 +3,9 @@
  * Launch Codex in a tmux pane and inject a prompt into its REPL.
  *
  * Usage:
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] plan
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] --file <path>
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] <inline text...>
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--context <id>] plan
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--context <id>] --file <path>
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--context <id>] <inline text...>
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -18,8 +18,10 @@ import {
 import { getProjectRoot } from "../../../lib-ts/base/constants.js";
 import { resolveCodexModel, codexReplSpec, buildCliInvocation, isCodexSandbox, type CodexSandbox } from "../../../lib-ts/base/cli-args.js";
 import { logDebug, logWarn } from "../../../lib-ts/base/logger.js";
-import { getContextBySessionId } from "../../../lib-ts/context/context-store.js";
+import { getContextBySessionId, getContext } from "../../../lib-ts/context/context-store.js";
+import { buildExternalAgentContext } from "../../../lib-ts/context/context-formatter.js";
 import { findLatestPlan } from "../../../lib-ts/context/plan-manager.js";
+import type { ContextState } from "../../../lib-ts/types.js";
 
 /** Codex-specific model abbreviations. Checked before tier resolution. */
 const CODEX_ALIASES: Record<string, string> = {
@@ -70,13 +72,14 @@ function findLatestPlanByMtime(projectRoot: string): string | null {
 const rawArgs = process.argv.slice(2);
 
 if (rawArgs.length === 0) {
-  eprint("Usage: launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] plan | --file <path> | <text...>");
+  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--context <id>] plan | --file <path> | <text...>");
   process.exit(1);
 }
 
-// Extract --model and --sandbox flags before mode dispatch
+// Extract --model, --sandbox, and --context flags before mode dispatch
 let modelFlag: string | undefined;
 let sandboxFlag: CodexSandbox | undefined;
+let contextFlag: string | undefined;
 const args: string[] = [];
 
 for (let i = 0; i < rawArgs.length; i++) {
@@ -89,13 +92,15 @@ for (let i = 0; i < rawArgs.length; i++) {
       process.exit(1);
     }
     sandboxFlag = val;
+  } else if (rawArgs[i] === "--context" && i + 1 < rawArgs.length) {
+    contextFlag = rawArgs[++i];
   } else {
     args.push(rawArgs[i]);
   }
 }
 
 if (args.length === 0) {
-  eprint("Usage: launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] plan | --file <path> | <text...>");
+  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--context <id>] plan | --file <path> | <text...>");
   process.exit(1);
 }
 
@@ -113,16 +118,24 @@ let tempFile: string | null = null;
 
 const projectRoot = getProjectRoot(process.cwd());
 
+// Context lookup — available for all modes (orientation header + plan discovery)
+// --context flag preferred (passed by skill caller); CLAUDE_SESSION_ID as fallback (hooks only)
+let ctx: ContextState | null = null;
+if (contextFlag) {
+  ctx = getContext(contextFlag, projectRoot) ?? null;
+} else {
+  const sessionId = process.env.CLAUDE_SESSION_ID;
+  if (sessionId) {
+    ctx = getContextBySessionId(sessionId, projectRoot) ?? null;
+  }
+}
+
 if (args[0] === "plan") {
   // Plan discovery: context system first, mtime fallback second
-  const sessionId = process.env.CLAUDE_SESSION_ID;
   let planPath: string | null = null;
 
-  if (sessionId) {
-    const ctx = getContextBySessionId(sessionId, projectRoot);
-    if (ctx) {
-      planPath = findLatestPlan(ctx.id, projectRoot);
-    }
+  if (ctx) {
+    planPath = findLatestPlan(ctx.id, projectRoot);
   }
 
   if (!planPath) {
@@ -155,6 +168,24 @@ if (args[0] === "plan") {
   tempFile = path.join(os.tmpdir(), `codex-prompt-${Date.now()}.md`);
   fs.writeFileSync(tempFile, text, "utf-8");
   promptPath = tempFile;
+}
+
+// Prepend context orientation if available — graceful degradation on failure
+if (ctx && promptPath) {
+  try {
+    const orientation = buildExternalAgentContext(ctx, projectRoot);
+    const original = fs.readFileSync(promptPath, "utf-8");
+    const combined = `${orientation}\n\n---\n\n${original}`;
+    const contextPromptPath = path.join(os.tmpdir(), `codex-ctx-prompt-${Date.now()}.md`);
+    fs.writeFileSync(contextPromptPath, combined, "utf-8");
+    if (tempFile) {
+      try { fs.unlinkSync(tempFile); } catch { /* ignore */ }
+    }
+    promptPath = contextPromptPath;
+    tempFile = contextPromptPath;
+  } catch {
+    logWarn("codex-skill", `Context orientation prepend failed for ${ctx.id}, continuing without header`);
+  }
 }
 
 // ---------------------------------------------------------------------------

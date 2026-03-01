@@ -238,6 +238,29 @@ export function formatHandoffContinuation(ctx: ContextState, projectRoot?: strin
 }
 
 /**
+ * Build lightweight orientation for external agents (Codex, etc.).
+ * Tells the agent where the context folder and key paths are — no session state.
+ */
+export function buildExternalAgentContext(
+  ctx: ContextState,
+  projectRoot: string,
+): string {
+  const contextDir = getContextDir(ctx.id, projectRoot);
+  const notesDir = path.join(contextDir, "notes");
+  const lines = [
+    "## Project Context",
+    "",
+    `- **Context ID:** ${ctx.id}`,
+    `- **Context folder:** ${contextDir}`,
+    `- **Notes folder:** ${notesDir}`,
+  ];
+  if (ctx.summary) {
+    lines.push(`- **Summary:** ${ctx.summary}`);
+  }
+  return lines.join("\n");
+}
+
+/**
  * Format output for pending plan implementation (mode=has_plan).
  * See SPEC.md §11.6
  */

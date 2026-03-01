@@ -36,6 +36,7 @@ bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|i
 - `base/cli-args.ts` — `resolveCodexModel()`, `codexReplSpec()`, `buildCliInvocation()`, `isCodexSandbox()`
 - `base/logger.ts` — `logDebug()`, `logWarn()` (injection diagnostics)
 - `context/context-store.ts` — `getContextBySessionId()`
+- `context/context-formatter.ts` — `buildExternalAgentContext()` (orientation header for Codex)
 - `context/plan-manager.ts` — `findLatestPlan()`
 
 **Design decisions:**
