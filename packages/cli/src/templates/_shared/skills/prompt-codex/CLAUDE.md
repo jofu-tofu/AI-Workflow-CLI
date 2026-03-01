@@ -24,7 +24,7 @@ bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|i
 - `plan` — discover active plan via context system, inject into Codex REPL
 - `--file <path>` — inject file contents into Codex REPL
 - `<text...>` — join remaining args as inline prompt, write to temp file, inject
-- `--model <tier|id>` — model tier (`fast`/`standard`/`smart`) or full model ID. Tiers resolve via `resolveModelForProvider()` to Codex models (e.g., `fast` → `gpt-5.3-codex-spark`, `standard`/`smart` → `gpt-5.3-codex`). Omitted = Codex default.
+- `--model <alias|tier|id>` — Aliases: `spark` → `gpt-5.3-codex-spark`, `codex` → `gpt-5.3-codex`, `gpt` → `gpt-5.2`. Tiers: `fast`/`standard`/`smart` (resolved via `resolveModelForProvider()`). Or any full model ID. Aliases are checked first (local `CODEX_ALIASES` constant in `launch-codex.ts`), then tiers, then pass-through. Omitted = Codex default.
 - `--sandbox <mode>` — `read-only`, `workspace-write`, or `danger-full-access`. Default is `danger-full-access` for implementation handoffs.
 
 **Plan discovery order:**
@@ -33,7 +33,8 @@ bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|i
 
 **Dependencies (all from `_shared/lib-ts/`):**
 - `base/tmux-driver.ts` — `launchDriverInTmuxOrFallback()`, `getTmuxAvailability()`
-- `base/cli-args.ts` — `isModelTier()`, `resolveModelForProvider()`
+- `base/cli-args.ts` — `resolveCodexModel()`, `codexReplSpec()`, `buildCliInvocation()`, `isCodexSandbox()`
+- `base/logger.ts` — `logDebug()`, `logWarn()` (injection diagnostics)
 - `context/context-store.ts` — `getContextBySessionId()`
 - `context/plan-manager.ts` — `findLatestPlan()`
 

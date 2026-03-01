@@ -31,6 +31,20 @@ export interface SendToPaneOptions {
   retryDelayMs?: number;
 }
 
+export interface SendToPaneResult {
+  success: boolean;
+  /** Which step failed, if any */
+  failedAt?: "prompt-wait" | "load-buffer" | "paste-buffer" | "send-enter";
+  /** ms spent waiting for REPL prompt */
+  promptWaitMs?: number;
+  /** Last 200 chars of pane content at time of prompt-wait timeout */
+  paneTailOnTimeout?: string;
+  /** stderr from the failed tmux command, if any */
+  tmuxStderr?: string;
+  /** Whether retry Enter was sent */
+  retrySent?: boolean;
+}
+
 export interface LaunchDriverOptions {
   toolName: string;
   toolBin?: string;
@@ -58,6 +72,7 @@ export interface LaunchDriverResult {
   exitCode?: number;
   reason?: string;
   stderr?: string;
+  sendDiagnostics?: SendToPaneResult;
 }
 
 export interface TmuxAvailability {
@@ -179,33 +194,42 @@ export async function sendFileToPane(
   paneId: string,
   filePath: string,
   options?: SendToPaneOptions,
-): Promise<boolean> {
-  if (!fs.existsSync(filePath)) return false;
+): Promise<SendToPaneResult> {
+  if (!fs.existsSync(filePath)) return { success: false, failedAt: "load-buffer", tmuxStderr: "file not found" };
 
-  await waitForReplPrompt(tmuxPath, paneId, options?.waitForPromptMs ?? 12000);
+  const startTime = Date.now();
+  const promptReady = await waitForReplPrompt(tmuxPath, paneId, options?.waitForPromptMs ?? 12000);
+  const promptWaitMs = Date.now() - startTime;
+
+  if (!promptReady) {
+    const snapshot = await capturePaneText(tmuxPath, paneId);
+    const paneTailOnTimeout = snapshot.slice(-200);
+    return { success: false, failedAt: "prompt-wait", promptWaitMs, paneTailOnTimeout };
+  }
 
   const bufferName = `aiwcli-pane-${Date.now()}`;
   const load = await execFileAsync(tmuxPath, ["load-buffer", "-b", bufferName, filePath], {
     timeout: 3000,
   });
-  if (load.exitCode !== 0) return false;
+  if (load.exitCode !== 0) return { success: false, failedAt: "load-buffer", promptWaitMs, tmuxStderr: load.stderr };
 
   const paste = await execFileAsync(tmuxPath, ["paste-buffer", "-d", "-p", "-b", bufferName, "-t", paneId], {
     timeout: 3000,
   });
-  if (paste.exitCode !== 0) return false;
+  if (paste.exitCode !== 0) return { success: false, failedAt: "paste-buffer", promptWaitMs, tmuxStderr: paste.stderr };
 
   await sleep(options?.postPasteDelayMs ?? 500);
 
   const firstEnter = await execFileAsync(tmuxPath, ["send-keys", "-t", paneId, "Enter"], {
     timeout: 3000,
   });
-  if (firstEnter.exitCode !== 0) return false;
+  if (firstEnter.exitCode !== 0) return { success: false, failedAt: "send-enter", promptWaitMs, tmuxStderr: firstEnter.stderr };
 
   if (options?.retryEnter === false) {
-    return true;
+    return { success: true, promptWaitMs, retrySent: false };
   }
 
+  let retrySent = false;
   await sleep(options?.retryDelayMs ?? 1200);
   const snapshot = await capturePaneText(tmuxPath, paneId);
   const lastFewLines = snapshot.split(/\r?\n/).slice(-5).join("\n");
@@ -213,10 +237,11 @@ export async function sendFileToPane(
     const secondEnter = await execFileAsync(tmuxPath, ["send-keys", "-t", paneId, "Enter"], {
       timeout: 3000,
     });
-    if (secondEnter.exitCode !== 0) return false;
+    if (secondEnter.exitCode !== 0) return { success: false, failedAt: "send-enter", promptWaitMs, tmuxStderr: secondEnter.stderr };
+    retrySent = true;
   }
 
-  return true;
+  return { success: true, promptWaitMs, retrySent };
 }
 
 export async function launchDriverInTmuxOrFallback(
@@ -292,17 +317,26 @@ export async function launchDriverInTmuxOrFallback(
 
     const paneId = getLastLine(split.stdout);
     if (mode === "repl" && options.sendPromptInRepl !== false && paneId && options.promptPath) {
-      const sent = await sendFileToPane(tmux.tmuxPath, paneId, options.promptPath);
-      if (!sent) {
+      const sendResult = await sendFileToPane(tmux.tmuxPath, paneId, options.promptPath);
+      if (!sendResult.success) {
         return {
           launched: true,
           usedTmux: true,
           mode,
           toolPath,
           paneId,
-          reason: "launched, but prompt injection failed",
+          reason: `launched, but prompt injection failed at ${sendResult.failedAt}`,
+          sendDiagnostics: sendResult,
         };
       }
+      return {
+        launched: true,
+        usedTmux: true,
+        mode,
+        toolPath,
+        paneId: paneId || undefined,
+        sendDiagnostics: sendResult,
+      };
     }
 
     return {

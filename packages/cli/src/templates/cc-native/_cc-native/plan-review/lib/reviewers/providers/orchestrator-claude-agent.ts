@@ -4,8 +4,8 @@
  */
 
 import { buildCliInvocation, reviewSpec } from "../../../../../_shared/lib-ts/base/cli-args.js";
-import type { ExecutionBackend } from "../../../../../_shared/lib-ts/base/execution-backend.js";
-import type { ExecutionResult } from "../../../../../_shared/lib-ts/base/execution-backend.js";
+import type { ExecutionBackend } from "../../../../../_shared/lib-ts/agent-exec/execution-backend.js";
+import type { ExecutionResult } from "../../../../../_shared/lib-ts/agent-exec/execution-backend.js";
 import { logDebug } from "../../../../../_shared/lib-ts/base/logger.js";
 import { debugLog, debugRaw } from "../../../../lib-ts/debug.js";
 import { parseCliOutput } from "../../../../lib-ts/cli-output-parser.js";

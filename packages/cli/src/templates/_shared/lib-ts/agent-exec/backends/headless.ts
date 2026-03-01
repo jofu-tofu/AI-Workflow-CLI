@@ -6,7 +6,7 @@
 
 import * as fs from "node:fs";
 
-import { execFileAsync } from "../subprocess-utils.js";
+import { execFileAsync } from "../../base/subprocess-utils.js";
 import type { ExecutionBackend, ExecutionRequest, ExecutionResult } from "../execution-backend.js";
 
 export class HeadlessBackend implements ExecutionBackend {

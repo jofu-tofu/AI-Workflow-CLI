@@ -15,6 +15,13 @@ export type InvocationMode = "structured" | "print" | "preflight";
 export type CliProvider = "claude" | "codex";
 export type ModelTier = "fast" | "standard" | "smart";
 
+const VALID_SANDBOXES = ["read-only", "workspace-write", "danger-full-access"] as const;
+export type CodexSandbox = (typeof VALID_SANDBOXES)[number];
+
+export function isCodexSandbox(value: string): value is CodexSandbox {
+  return (VALID_SANDBOXES as readonly string[]).includes(value);
+}
+
 export interface CliArgSpec {
   provider: CliProvider;
   model: string | ModelTier;
@@ -22,9 +29,18 @@ export interface CliArgSpec {
   jsonSchema?: Record<string, unknown>;
   maxTurns?: number;
   systemPrompt?: string;
-  sandbox?: "read-only" | "workspace-write" | "danger-full-access";
+  sandbox?: CodexSandbox;
   outputSchemaPath?: string;
   outputFilePath?: string;
+  extraArgs?: string[];
+}
+
+/** Codex REPL spec — model optional (Codex uses its default when omitted). */
+export interface CodexReplSpec {
+  provider: "codex";
+  mode: "repl";
+  model?: string | ModelTier;
+  sandbox?: CodexSandbox;
   extraArgs?: string[];
 }
 
@@ -78,23 +94,34 @@ export function getTierTimeout(tier: ModelTier): number {
   return TIER_TIMEOUTS[tier];
 }
 
+/** Resolve a Codex model: tier resolution + pass-through. No aliases (those are skill-specific). */
+export function resolveCodexModel(input: string): string {
+  if (isModelTier(input)) return CODEX_MODEL_TIERS[input as ModelTier];
+  return input;
+}
+
 // ---------------------------------------------------------------------------
 // Core Builder
 // ---------------------------------------------------------------------------
 
-export function buildCliInvocation(spec: CliArgSpec): CliInvocation {
-  const resolvedModel = resolveModelForProvider(spec.model, spec.provider);
-  const isWin = process.platform === "win32";
-  const empty = isWin ? '""' : "";
-
+export function buildCliInvocation(spec: CliArgSpec | CodexReplSpec): CliInvocation {
   const env = getInternalSubprocessEnv();
   delete env.ANTHROPIC_API_KEY;
 
-  if (spec.provider === "claude") {
-    return buildClaudeInvocation(spec, resolvedModel, isWin, empty, env);
+  if (spec.mode === "repl") {
+    const resolvedModel = spec.model ? resolveModelForProvider(spec.model, spec.provider) : undefined;
+    return buildCodexReplInvocation(spec, resolvedModel, env);
   }
 
-  return buildCodexInvocation(spec, resolvedModel, env);
+  const resolvedModel = resolveModelForProvider((spec as CliArgSpec).model, spec.provider);
+  const isWin = process.platform === "win32";
+  const empty = isWin ? '""' : "";
+
+  if (spec.provider === "claude") {
+    return buildClaudeInvocation(spec as CliArgSpec, resolvedModel, isWin, empty, env);
+  }
+
+  return buildCodexInvocation(spec as CliArgSpec, resolvedModel, env);
 }
 
 function buildClaudeInvocation(
@@ -167,6 +194,18 @@ function buildCodexInvocation(
   return { cliName: "codex", args, needsShell: false, env };
 }
 
+function buildCodexReplInvocation(
+  spec: CodexReplSpec,
+  model: string | undefined,
+  env: Record<string, string | undefined>,
+): CliInvocation {
+  const args: string[] = [];
+  if (spec.sandbox) args.push("--sandbox", spec.sandbox);
+  if (model) args.push("--model", model);
+  if (spec.extraArgs) args.push(...spec.extraArgs);
+  return { cliName: "codex", args, needsShell: false, env };
+}
+
 // ---------------------------------------------------------------------------
 // Convenience Presets
 // ---------------------------------------------------------------------------
@@ -215,6 +254,18 @@ export function reviewSpec(
     mode: "structured",
     jsonSchema: schema,
     systemPrompt,
+  };
+}
+
+export function codexReplSpec(
+  model?: string,
+  sandbox?: CodexSandbox,
+): CodexReplSpec {
+  return {
+    provider: "codex",
+    mode: "repl",
+    model,
+    sandbox,
   };
 }
 

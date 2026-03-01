@@ -3,7 +3,7 @@
  * Placeholder for future implementation.
  */
 
-import type { ExecutionResult } from "../../../../../_shared/lib-ts/base/execution-backend.js";
+import type { ExecutionResult } from "../../../../../_shared/lib-ts/agent-exec/execution-backend.js";
 import type { ReviewerResult } from "../../../../lib-ts/types.js";
 import { BaseCliAgent } from "../base/base-agent.js";
 import { makeResult } from "../types.js";

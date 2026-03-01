@@ -4,7 +4,7 @@
  * See cc-native-plan-review-spec.md §4.10
  */
 
-import type { ExecutionBackend } from "../../../../_shared/lib-ts/base/execution-backend.js";
+import type { ExecutionBackend } from "../../../../_shared/lib-ts/agent-exec/execution-backend.js";
 import { logWarn } from "../../../../_shared/lib-ts/base/logger.js";
 import { debugLog, debugRaw } from "../../../lib-ts/debug.js";
 import type { AgentConfig, ReviewerResult, ReviewOptions } from "../../../lib-ts/types.js";

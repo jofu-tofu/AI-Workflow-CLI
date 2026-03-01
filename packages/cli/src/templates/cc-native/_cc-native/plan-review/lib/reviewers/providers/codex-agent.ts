@@ -8,7 +8,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { buildCliInvocation } from "../../../../../_shared/lib-ts/base/cli-args.js";
-import type { ExecutionResult } from "../../../../../_shared/lib-ts/base/execution-backend.js";
+import type { ExecutionResult } from "../../../../../_shared/lib-ts/agent-exec/execution-backend.js";
 import { logDebug, logWarn } from "../../../../../_shared/lib-ts/base/logger.js";
 import { getInternalSubprocessEnv, normalizePathForCli, shellQuoteWin } from "../../../../../_shared/lib-ts/base/subprocess-utils.js";
 import { debugLog, debugRaw } from "../../../../lib-ts/debug.js";
