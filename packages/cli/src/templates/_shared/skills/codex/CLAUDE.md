@@ -7,19 +7,19 @@ Launch Codex CLI in a tmux pane and inject a prompt into its REPL.
 ```
 codex/
 ├── CLAUDE.md       ← This file
+├── lib/
+│   └── codex-watcher.ts  ← Reusable watch/summarize library
 └── scripts/
-    ├── launch-codex.ts  ← CLI entry point
-    └── watch-codex.ts   ← Capture watcher and summarizer
+    └── launch-codex.ts   ← Single entry point (launch + optional watch)
 ```
 
 ## Script: launch-codex.ts
 
 **Usage:**
 ```bash
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--full-auto] plan
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--full-auto] --file <path>
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--full-auto] <inline text...>
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--full-auto] [--capture] <mode>
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--no-yolo] [--no-watch] [--context <id>] plan
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--no-yolo] [--no-watch] [--context <id>] --file <path>
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--no-yolo] [--no-watch] [--context <id>] <inline text...>
 ```
 
 **Args:**
@@ -30,11 +30,7 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 - `--sandbox <mode>` — `read-only`, `workspace-write`, or `danger-full-access`. Default is `danger-full-access` for implementation handoffs.
 - `--prompt <text>` — append extra instructions under `## Additional Instructions` after the main prompt body.
 - `--no-yolo` — Disable YOLO mode (on by default). YOLO maps to Codex CLI's `--dangerously-bypass-approvals-and-sandbox`. Use `--no-yolo` to restore normal approval prompts.
-- `--capture` — Best-effort session capture. On success, prints:
-  - `CODEX_CAPTURE_PANE=<pane_id>`
-  - `CODEX_CAPTURE_SESSION_ID=<session_id>`
-  - `CODEX_CAPTURE_SESSION_FILE=<session_file>`
-  These are consumed by the skill prompt to run `watch-codex.ts` as a background task.
+- `--no-watch` — Disable watch/summarize mode. Launch exits immediately after Codex starts.
 
 **Plan discovery order:**
 1. `CLAUDE_SESSION_ID` env → `getContextBySessionId()` → `findLatestPlan(contextId)`
@@ -48,25 +44,34 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 - `context/context-formatter.ts` — `buildExternalAgentContext()` (orientation header for Codex)
 - `context/plan-manager.ts` — `findLatestPlan()`
 
+**Watch behavior (single entry point):**
+- Watch is enabled by default.
+- `launch-codex.ts` launches Codex, waits for pane close (or timeout), and prints a summary.
+- Summary cascade:
+  1. Spark transcript summary from session file
+  2. `codex exec resume <session_id>` summary
+  3. Transcript-line fallback
+  4. Static `Summary unavailable` message
+- Watch flow is best-effort and does not change launch success semantics.
+
 **Design decisions:**
 - Always creates a new tmux pane (no pane reuse/tracking)
 - No exec fallback — REPL mode requires tmux
 - `_shared` only — never imports from `_cc-native`
 - Temp file cleanup after injection confirmed
 
-## Script: watch-codex.ts
+## Library: lib/codex-watcher.ts
 
-**Usage:**
-```bash
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/watch-codex.ts <pane_id> <session_id> <session_file>
-```
+Reusable side-effect-free watch/summarize functions used by launch flow:
+- `waitForPaneClose(paneId, timeoutMs?)`
+- `summarizeViaSessionFileSpark(sessionFile)`
+- `summarizeViaResume(sessionId)`
+- `summarizeFromSessionFileFallback(sessionFile)`
+- `collectTranscriptLines(sessionFile)`
 
-**Behavior:**
-- Polls tmux until `<pane_id>` closes
-- Primary: parses `<session_file>` transcript and summarizes via Spark (`inference()` + `CODEX_MODELS.spark`)
-- Fallback: runs `codex exec resume <session_id>` if transcript summarization fails
-- Final fallback: emits concise transcript lines directly from `<session_file>`
+Constants and helper utilities are exported for reuse and testing (`POLL_INTERVAL_MS`, `SUMMARY_UNAVAILABLE_MESSAGE`, `normalizeText`, `looksLikeBadSummary`, etc.).
 
 **Resilience policy:**
-- Capture path is best-effort and never blocks Codex launch
-- Watcher exits cleanly on poll/summary/parse failures with fallback text
+- Watch path is best-effort and never fails a successful launch
+- Pane-wait timeout defaults to 4 hours; when reached, summarization continues with available transcript state
+- Summary functions degrade through layered fallbacks and end with static message

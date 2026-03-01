@@ -3,9 +3,9 @@
  * Launch Codex in a tmux pane and inject a prompt into its REPL.
  *
  * Usage:
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--context <id>] [--prompt <text>] plan
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--context <id>] [--prompt <text>] --file <path>
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--context <id>] [--prompt <text>] <inline text...>
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--no-watch] [--context <id>] [--prompt <text>] plan
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--no-watch] [--context <id>] [--prompt <text>] --file <path>
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--no-watch] [--context <id>] [--prompt <text>] <inline text...>
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -179,7 +179,7 @@ function findLatestPlanByMtime(projectRoot: string): string | null {
 const rawArgs = process.argv.slice(2);
 
 if (rawArgs.length === 0) {
-  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--no-yolo] [--capture] [--context <id>] [--prompt <text>] plan | --file <path> | <text...>");
+  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--no-yolo] [--no-watch] [--context <id>] [--prompt <text>] plan | --file <path> | <text...>");
   process.exit(1);
 }
 
@@ -189,7 +189,7 @@ let sandboxFlag: CodexSandbox | undefined;
 let contextFlag: string | undefined;
 let extraPrompt: string | undefined;
 let yolo = true;
-let capture = false;
+let watch = true;
 const args: string[] = [];
 
 for (let i = 0; i < rawArgs.length; i++) {
@@ -213,15 +213,15 @@ for (let i = 0; i < rawArgs.length; i++) {
     yolo = true;
   } else if (rawArgs[i] === "--no-yolo") {
     yolo = false;
-  } else if (rawArgs[i] === "--capture") {
-    capture = true;
+  } else if (rawArgs[i] === "--no-watch") {
+    watch = false;
   } else {
     args.push(rawArgs[i]);
   }
 }
 
 if (args.length === 0) {
-  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--no-yolo] [--capture] [--context <id>] [--prompt <text>] plan | --file <path> | <text...>");
+  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--no-yolo] [--no-watch] [--context <id>] [--prompt <text>] plan | --file <path> | <text...>");
   process.exit(1);
 }
 
@@ -353,6 +353,7 @@ const result = await launchDriverInTmuxOrFallback({
   toolName: "codex",
   mode: "repl",
   args: codexArgs,
+  splitFlag: "auto",
   promptPath,
   sendPromptInRepl: true,
   allowExecFallback: false,
@@ -385,21 +386,32 @@ if (result.paneId) {
   console.log("Codex launched in tmux pane.");
 }
 
-if (capture && result.paneId) {
+if (watch && result.paneId) {
   try {
+    const {
+      SUMMARY_UNAVAILABLE_MESSAGE,
+      summarizeFromSessionFileFallback,
+      summarizeViaResume,
+      summarizeViaSessionFileSpark,
+      waitForPaneClose,
+    } = await import("../lib/codex-watcher.js");
+
     const sessionInfo = await waitForCaptureSession(projectRoot, launchStartedAtMs);
-    if (sessionInfo) {
-      console.log(`CODEX_CAPTURE_PANE=${result.paneId}`);
-      console.log(`CODEX_CAPTURE_SESSION_ID=${sessionInfo.sessionId}`);
-      console.log(`CODEX_CAPTURE_SESSION_FILE=${sessionInfo.sessionFile}`);
-    } else {
-      logWarn(
-        "codex-skill",
-        `Capture session discovery failed for pane ${result.paneId} in ${SESSION_DISCOVERY_TIMEOUT_MS}ms`,
-      );
-    }
+    await waitForPaneClose(result.paneId);
+
+    const sessionFile = sessionInfo?.sessionFile ?? "";
+    const sessionId = sessionInfo?.sessionId ?? "";
+    const summary = summarizeViaSessionFileSpark(sessionFile)
+      ?? (sessionId ? await summarizeViaResume(sessionId) : null)
+      ?? summarizeFromSessionFileFallback(sessionFile)
+      ?? SUMMARY_UNAVAILABLE_MESSAGE;
+
+    console.log("\n--- Codex Session Summary ---");
+    console.log(summary);
   } catch (error) {
-    logWarn("codex-skill", `Capture session discovery threw for ${result.paneId}: ${String(error)}`);
+    logWarn("codex-skill", `Watch flow failed for ${result.paneId}: ${String(error)}`);
+    console.log("\n--- Codex Session Summary ---");
+    console.log("Codex session completed. Summary unavailable.");
   }
 }
 

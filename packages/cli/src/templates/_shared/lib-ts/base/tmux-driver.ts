@@ -12,9 +12,11 @@
 import * as fs from "node:fs";
 
 import { execFileAsync, findExecutable } from "./subprocess-utils.js";
+import { findBestSplit, listPanes } from "./tmux-pane-placement.js";
 
 export type DriverMode = "exec" | "repl";
 export type TmuxSplitFlag = "-h" | "-v";
+export type TmuxSplitOption = TmuxSplitFlag | "auto";
 
 export interface DriverPreflightResult {
   available: boolean;
@@ -53,7 +55,7 @@ export interface LaunchDriverOptions {
   env?: Record<string, string>;
   promptPath?: string;
   sendPromptInRepl?: boolean;
-  splitFlag?: string;
+  splitFlag?: TmuxSplitOption;
   splitTarget?: string;
   autoClose?: boolean;
   holdPane?: boolean;
@@ -163,6 +165,54 @@ export function quoteForSh(input: string): string {
 
 export function normalizeSplitFlag(value: string | undefined): TmuxSplitFlag {
   return value?.trim() === "-v" ? "-v" : "-h";
+}
+
+function splitFlagFromDimensions(width: number, height: number): TmuxSplitFlag {
+  return width >= height ? "-h" : "-v";
+}
+
+async function resolveSplitFlagForTargetPane(
+  tmuxPath: string,
+  splitTarget: string,
+): Promise<TmuxSplitFlag | null> {
+  const size = await execFileAsync(
+    tmuxPath,
+    ["display-message", "-p", "-t", splitTarget, "#{pane_width} #{pane_height}"],
+    { timeout: 3000 },
+  );
+  if (size.exitCode !== 0) return null;
+
+  const parts = size.stdout.trim().split(/\s+/);
+  if (parts.length < 2) return null;
+
+  const width = Number.parseInt(parts[0] ?? "", 10);
+  const height = Number.parseInt(parts[1] ?? "", 10);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+
+  return splitFlagFromDimensions(width, height);
+}
+
+async function resolveAutoSplit(
+  tmuxPath: string,
+  splitTarget?: string,
+): Promise<{ splitFlag: TmuxSplitFlag; splitTarget?: string }> {
+  const explicitTarget = splitTarget?.trim();
+  if (explicitTarget) {
+    const splitFlag = await resolveSplitFlagForTargetPane(tmuxPath, explicitTarget);
+    return {
+      splitFlag: splitFlag ?? "-h",
+      splitTarget: explicitTarget,
+    };
+  }
+
+  const panes = await listPanes(tmuxPath);
+  const placement = findBestSplit(panes);
+  if (!placement) return { splitFlag: "-h" };
+
+  return {
+    splitFlag: placement.splitFlag,
+    splitTarget: placement.targetPane,
+  };
 }
 
 export function isTruthy(value: string | undefined): boolean {
@@ -287,8 +337,25 @@ export async function launchDriverInTmuxOrFallback(
 
   const tmux = getTmuxAvailability();
   if (tmux.available && tmux.tmuxPath) {
-    const splitFlag = normalizeSplitFlag(options.splitFlag);
-    const splitTarget = options.splitTarget?.trim();
+    const requestedSplitFlag = options.splitFlag;
+    const explicitSplitTarget = options.splitTarget?.trim();
+    let splitFlag: TmuxSplitFlag;
+    let splitTarget: string | undefined;
+
+    if (requestedSplitFlag === "auto") {
+      try {
+        const resolved = await resolveAutoSplit(tmux.tmuxPath, explicitSplitTarget);
+        splitFlag = resolved.splitFlag;
+        splitTarget = resolved.splitTarget;
+      } catch {
+        splitFlag = "-h";
+        splitTarget = explicitSplitTarget;
+      }
+    } else {
+      splitFlag = normalizeSplitFlag(requestedSplitFlag);
+      splitTarget = explicitSplitTarget;
+    }
+
     const baseCmd = buildToolCommand(toolPath, args, envVars, mode, options.promptPath);
     const holdMessage = options.holdMessage ?? "[aiwcli] Driver exited. Pane held open.";
     const paneBody = wrapPaneCommand(

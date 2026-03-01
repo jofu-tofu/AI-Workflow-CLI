@@ -1,31 +1,71 @@
 # /codex
 
-| Command | Description |
-|---|---|
-| `bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--prompt <text>] plan` | Launch Codex REPL with active plan. |
-| `bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--prompt <text>] --file <path>` | Launch Codex REPL with file contents. |
-| `bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--prompt <text>] <inline text...>` | Launch Codex REPL with inline prompt. |
+## Role
 
-- `--model`: model tier (`fast`/`standard`/`smart`) resolves to `gpt-5.3-codex-spark` / `gpt-5.3-codex`, or any explicit Codex model id. Aliases: `spark`, `codex`, `gpt`.
-- `--sandbox`: `read-only`, `workspace-write`, or `danger-full-access`. Default is `danger-full-access` for implementation handoffs.
-- `--prompt <text>`: Append extra instructions after the main prompt. Inserted under an `## Additional Instructions` heading.
-- YOLO mode is **on by default** — bypasses all approvals and sandbox (`--dangerously-bypass-approvals-and-sandbox`). Use `--no-yolo` to disable.
-- `--capture`: best-effort session capture. If setup succeeds, launch output includes:
-  - `CODEX_CAPTURE_PANE=<pane_id>`
-  - `CODEX_CAPTURE_SESSION_ID=<session_id>`
-  - `CODEX_CAPTURE_SESSION_FILE=<path>`
+You are the orchestrator. Each Codex launch spawns an implementation sub-agent. Delegate implementation work to Codex, then review results when summaries arrive.
 
-If launch output includes `CODEX_CAPTURE_PANE` and `CODEX_CAPTURE_SESSION_ID`:
+The script blocks until Codex exits and prints a session summary. Run with Bash `run_in_background: true` so you stay unblocked and receive the summary as a background task notification.
 
-1. Parse pane/session metadata from stdout.
-2. Start a background watcher:
-```bash
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/watch-codex.ts <pane_id> <session_id> <session_file>
+## Command
+
 ```
-Use `Bash` with `run_in_background: true`.
-3. Tell the user: `Codex is running in the tmux pane. I'll receive a summary when you exit.`
-4. Continue with other work; the background task output will arrive as a notification.
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [flags] <mode>
+```
 
-Watcher behavior:
-- Primary: summarize from `CODEX_CAPTURE_SESSION_FILE` with Spark.
-- Fallback: use `codex exec resume <session_id>` if transcript summarization fails.
+**Modes:** `plan` | `--file <path>` | `<inline text...>`
+
+**Flags:**
+- `--context <id>` — Project orientation for the sub-agent. Pass when implementing a plan so Codex understands the project structure.
+- `--prompt <text>` — Scope the agent's work. Direct each instance to a specific plan section or task.
+- `--model <name>` — Aliases: `spark`, `codex`, `gpt`. Tiers: `fast`, `standard`, `smart`. Or any full model ID.
+- `--sandbox <mode>` — `read-only`, `workspace-write`, `danger-full-access`.
+- `--no-yolo` — Disable YOLO mode (on by default).
+- `--no-watch` — Fire-and-forget: exit immediately after launch, skip waiting for summary.
+
+## Delegation Patterns
+
+### One-shot
+
+For small or tightly coupled plans. One sub-agent implements the whole plan.
+
+```bash
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts --context <ctx-id> plan
+```
+
+Run with `run_in_background: true`. Wait for the summary. Review the changes.
+
+### Parallel
+
+For plans with independent sections. Each sub-agent owns one section, scoped by `--prompt`.
+
+```bash
+# Sub-agent A — section 1
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts \
+  --context <ctx-id> --prompt "Implement section 1: Extract watch logic into lib/codex-watcher.ts" plan
+
+# Sub-agent B — section 3
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts \
+  --context <ctx-id> --prompt "Implement section 3: Update launch-codex.ts arg parsing" plan
+```
+
+Run each with `run_in_background: true`. Summaries arrive as separate background task notifications. When all complete, review for conflicts between agents, then verify with tests or import checks.
+
+### Ad-hoc
+
+For tasks outside a plan. Pass inline text or a file path.
+
+```bash
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts \
+  "Fix the failing test in auth.ts"
+
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts \
+  --file path/to/task-description.md
+```
+
+## Orchestrator Checklist
+
+- **Delegate implementation.** If the work involves writing code and Codex can handle it, send it to Codex.
+- **Split independent sections** into parallel sub-agents for faster execution.
+- **Pass `--context`** when implementing a plan — Codex needs project orientation to make good decisions.
+- **Scope with `--prompt`** when running parallel agents — each sub-agent performs better when it knows exactly which section it owns.
+- **Review results** when summaries arrive. Check for merge conflicts between parallel agents, then verify with `tsc --noEmit`, tests, or manual inspection.
