@@ -8,7 +8,8 @@ Launch Codex CLI in a tmux pane and inject a prompt into its REPL.
 prompt-codex/
 ├── CLAUDE.md       ← This file
 └── scripts/
-    └── launch-codex.ts  ← CLI entry point
+    ├── launch-codex.ts  ← CLI entry point
+    └── watch-codex.ts   ← Capture watcher and summarizer
 ```
 
 ## Script: launch-codex.ts
@@ -18,6 +19,7 @@ prompt-codex/
 bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--full-auto] plan
 bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--full-auto] --file <path>
 bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--full-auto] <inline text...>
+bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--full-auto] [--capture] <mode>
 ```
 
 **Args:**
@@ -27,6 +29,11 @@ bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|i
 - `--model <alias|tier|id>` — Aliases: `spark` → `gpt-5.3-codex-spark`, `codex` → `gpt-5.3-codex`, `gpt` → `gpt-5.2`. Tiers: `fast`/`standard`/`smart` (resolved via `resolveModelForProvider()`). Or any full model ID. Aliases are checked first (local `CODEX_ALIASES` constant in `launch-codex.ts`), then tiers, then pass-through. Omitted = Codex default.
 - `--sandbox <mode>` — `read-only`, `workspace-write`, or `danger-full-access`. Default is `danger-full-access` for implementation handoffs.
 - `--no-yolo` — Disable YOLO mode (on by default). YOLO maps to Codex CLI's `--dangerously-bypass-approvals-and-sandbox`. Use `--no-yolo` to restore normal approval prompts.
+- `--capture` — Best-effort session capture. On success, prints:
+  - `CODEX_CAPTURE_PANE=<pane_id>`
+  - `CODEX_CAPTURE_SESSION_ID=<session_id>`
+  - `CODEX_CAPTURE_SESSION_FILE=<session_file>`
+  These are consumed by the skill prompt to run `watch-codex.ts` as a background task.
 
 **Plan discovery order:**
 1. `CLAUDE_SESSION_ID` env → `getContextBySessionId()` → `findLatestPlan(contextId)`
@@ -45,3 +52,20 @@ bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|i
 - No exec fallback — REPL mode requires tmux
 - `_shared` only — never imports from `_cc-native`
 - Temp file cleanup after injection confirmed
+
+## Script: watch-codex.ts
+
+**Usage:**
+```bash
+bun .aiwcli/_shared/skills/prompt-codex/scripts/watch-codex.ts <pane_id> <session_id> <session_file>
+```
+
+**Behavior:**
+- Polls tmux until `<pane_id>` closes
+- Primary: parses `<session_file>` transcript and summarizes via Spark (`inference()` + `CODEX_MODELS.spark`)
+- Fallback: runs `codex exec resume <session_id>` if transcript summarization fails
+- Final fallback: emits concise transcript lines directly from `<session_file>`
+
+**Resilience policy:**
+- Capture path is best-effort and never blocks Codex launch
+- Watcher exits cleanly on poll/summary/parse failures with fallback text

@@ -3,9 +3,9 @@
  * Launch Codex in a tmux pane and inject a prompt into its REPL.
  *
  * Usage:
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--context <id>] plan
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--context <id>] --file <path>
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--context <id>] <inline text...>
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--context <id>] plan
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--context <id>] --file <path>
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--context <id>] <inline text...>
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -32,12 +32,117 @@ const CODEX_ALIASES: Record<string, string> = {
   gpt: CODEX_MODELS.gpt,
 };
 
+const SESSION_DISCOVERY_TIMEOUT_MS = 12000;
+const SESSION_DISCOVERY_POLL_MS = 250;
+const SESSION_MTIME_WINDOW_MS = 120000;
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function eprint(...args: unknown[]): void {
   process.stderr.write(args.map(String).join(" ") + "\n");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function collectSessionJsonlFiles(rootDir: string): string[] {
+  if (!fs.existsSync(rootDir)) return [];
+  const stack: string[] = [rootDir];
+  const files: string[] = [];
+
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    if (!dir) continue;
+    let entries: fs.Dirent[] = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+      } else if (entry.isFile() && entry.name.endsWith(".jsonl")) {
+        files.push(fullPath);
+      }
+    }
+  }
+
+  return files;
+}
+
+function samePath(a: string, b: string): boolean {
+  const left = path.resolve(a);
+  const right = path.resolve(b);
+  if (process.platform === "win32") {
+    return left.toLowerCase() === right.toLowerCase();
+  }
+  return left === right;
+}
+
+function readSessionMeta(sessionFile: string): { sessionId: string; cwd: string } | null {
+  try {
+    const raw = fs.readFileSync(sessionFile, "utf-8");
+    const firstLine = raw.split(/\r?\n/).find((line) => line.trim().length > 0);
+    if (!firstLine) return null;
+    const parsed = JSON.parse(firstLine);
+    if (parsed?.type !== "session_meta") return null;
+    const sessionId = parsed?.payload?.id;
+    const cwd = parsed?.payload?.cwd;
+    if (typeof sessionId !== "string" || typeof cwd !== "string") return null;
+    return { sessionId, cwd };
+  } catch {
+    return null;
+  }
+}
+
+function findLatestSessionCandidate(
+  projectRoot: string,
+  launchStartedAtMs: number,
+): { sessionId: string; sessionFile: string } | null {
+  const sessionsRoot = path.join(os.homedir(), ".codex", "sessions");
+  const files = collectSessionJsonlFiles(sessionsRoot);
+  if (files.length === 0) return null;
+
+  const candidates: Array<{ sessionId: string; sessionFile: string; mtimeMs: number }> = [];
+  for (const sessionFile of files) {
+    let mtimeMs = 0;
+    try {
+      mtimeMs = fs.statSync(sessionFile).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (mtimeMs < launchStartedAtMs - SESSION_MTIME_WINDOW_MS) continue;
+
+    const meta = readSessionMeta(sessionFile);
+    if (!meta) continue;
+    if (!samePath(meta.cwd, projectRoot)) continue;
+
+    candidates.push({ sessionId: meta.sessionId, sessionFile, mtimeMs });
+  }
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const best = candidates[0];
+  return best ? { sessionId: best.sessionId, sessionFile: best.sessionFile } : null;
+}
+
+async function waitForCaptureSession(
+  projectRoot: string,
+  launchStartedAtMs: number,
+): Promise<{ sessionId: string; sessionFile: string } | null> {
+  const deadline = Date.now() + SESSION_DISCOVERY_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const candidate = findLatestSessionCandidate(projectRoot, launchStartedAtMs);
+    if (candidate) return candidate;
+    await sleep(SESSION_DISCOVERY_POLL_MS);
+  }
+  return findLatestSessionCandidate(projectRoot, launchStartedAtMs);
 }
 
 /** Fallback plan discovery: scan all context plan dirs by mtime. */
@@ -74,7 +179,7 @@ function findLatestPlanByMtime(projectRoot: string): string | null {
 const rawArgs = process.argv.slice(2);
 
 if (rawArgs.length === 0) {
-  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--no-yolo] [--context <id>] plan | --file <path> | <text...>");
+  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--no-yolo] [--capture] [--context <id>] plan | --file <path> | <text...>");
   process.exit(1);
 }
 
@@ -83,6 +188,7 @@ let modelFlag: string | undefined;
 let sandboxFlag: CodexSandbox | undefined;
 let contextFlag: string | undefined;
 let yolo = true;
+let capture = false;
 const args: string[] = [];
 
 for (let i = 0; i < rawArgs.length; i++) {
@@ -101,13 +207,15 @@ for (let i = 0; i < rawArgs.length; i++) {
     yolo = true;
   } else if (rawArgs[i] === "--no-yolo") {
     yolo = false;
+  } else if (rawArgs[i] === "--capture") {
+    capture = true;
   } else {
     args.push(rawArgs[i]);
   }
 }
 
 if (args.length === 0) {
-  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--no-yolo] [--context <id>] plan | --file <path> | <text...>");
+  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--no-yolo] [--capture] [--context <id>] plan | --file <path> | <text...>");
   process.exit(1);
 }
 
@@ -217,6 +325,7 @@ if (sandboxFlag) console.log(`Sandbox: ${sandboxFlag}`);
 if (resolvedModel) console.log(`Model: ${resolvedModel}${modelFlag !== resolvedModel ? ` (from "${modelFlag}")` : ""}`);
 
 logDebug("codex-skill", `Launching: model=${resolvedModel ?? "default"}, sandbox=${sandboxFlag ?? "default"}, yolo=${yolo}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
+const launchStartedAtMs = Date.now();
 
 const result = await launchDriverInTmuxOrFallback({
   toolName: "codex",
@@ -252,6 +361,24 @@ if (result.paneId) {
   console.log(`Codex launched in tmux pane: ${result.paneId}`);
 } else {
   console.log("Codex launched in tmux pane.");
+}
+
+if (capture && result.paneId) {
+  try {
+    const sessionInfo = await waitForCaptureSession(projectRoot, launchStartedAtMs);
+    if (sessionInfo) {
+      console.log(`CODEX_CAPTURE_PANE=${result.paneId}`);
+      console.log(`CODEX_CAPTURE_SESSION_ID=${sessionInfo.sessionId}`);
+      console.log(`CODEX_CAPTURE_SESSION_FILE=${sessionInfo.sessionFile}`);
+    } else {
+      logWarn(
+        "codex-skill",
+        `Capture session discovery failed for pane ${result.paneId} in ${SESSION_DISCOVERY_TIMEOUT_MS}ms`,
+      );
+    }
+  } catch (error) {
+    logWarn("codex-skill", `Capture session discovery threw for ${result.paneId}: ${String(error)}`);
+  }
 }
 
 if (result.reason) {
