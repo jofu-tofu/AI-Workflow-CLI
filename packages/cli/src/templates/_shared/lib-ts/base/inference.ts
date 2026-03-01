@@ -18,8 +18,9 @@ import {
   getTierTimeout,
   TIER_TIMEOUTS,
 } from "./cli-args.js";
+import { CODEX_MODELS } from "./models.js";
 
-const CONTEXT_ID_PRIMARY_MODEL = "gpt-5.3-codex";
+const CONTEXT_ID_PRIMARY_MODEL = CODEX_MODELS.spark;
 
 /**
  * Run inference using the claude CLI.

@@ -17,6 +17,7 @@ import {
 } from "../../../lib-ts/base/tmux-driver.js";
 import { getProjectRoot } from "../../../lib-ts/base/constants.js";
 import { resolveCodexModel, codexReplSpec, buildCliInvocation, isCodexSandbox, type CodexSandbox } from "../../../lib-ts/base/cli-args.js";
+import { CODEX_MODELS } from "../../../lib-ts/base/models.js";
 import { logDebug, logWarn } from "../../../lib-ts/base/logger.js";
 import { displayPath } from "../../../lib-ts/base/utils.js";
 import { getContextBySessionId, getContext } from "../../../lib-ts/context/context-store.js";
@@ -26,9 +27,9 @@ import type { ContextState } from "../../../lib-ts/types.js";
 
 /** Codex-specific model abbreviations. Checked before tier resolution. */
 const CODEX_ALIASES: Record<string, string> = {
-  spark: "gpt-5.3-codex-spark",
-  codex: "gpt-5.3-codex",
-  gpt: "gpt-5.2",
+  spark: CODEX_MODELS.spark,
+  codex: CODEX_MODELS.codex,
+  gpt: CODEX_MODELS.gpt,
 };
 
 // ---------------------------------------------------------------------------

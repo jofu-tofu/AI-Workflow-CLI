@@ -16,6 +16,7 @@ import type {
 } from "./types.js";
 import { DEFAULT_DISPLAY, DEFAULT_SANITIZATION } from "./types.js";
 import { logInfo } from "../../_shared/lib-ts/base/logger.js";
+import { CODEX_MODELS } from "../../_shared/lib-ts/base/models.js";
 
 const HOOK = "settings";
 
@@ -71,7 +72,7 @@ export const DEFAULT_COMPLEXITY_CATEGORIES = ["code", "infrastructure", "documen
 export const DEFAULT_MODELS_CONFIG: ModelsConfig = {
   providers: {
     claude: { enabled: false, models: ["sonnet"] },
-    codex: { enabled: true, models: ["gpt-5.3-codex"] },
+    codex: { enabled: true, models: [CODEX_MODELS.codex] },
   },
 };
 

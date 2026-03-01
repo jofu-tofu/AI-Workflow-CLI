@@ -6,6 +6,9 @@
 
 import type { PreflightCommandConfig } from "./preflight.js";
 import { getInternalSubprocessEnv, shellQuoteWin } from "./subprocess-utils.js";
+import { CLAUDE_MODELS, CODEX_MODELS } from "./models.js";
+
+export { CLAUDE_MODELS, CODEX_MODELS };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,15 +59,15 @@ export interface CliInvocation {
 // ---------------------------------------------------------------------------
 
 export const MODEL_TIERS: Record<ModelTier, string> = {
-  fast: "claude-haiku-4-5-20251001",
-  standard: "claude-sonnet-4-6",
-  smart: "claude-opus-4-6",
+  fast: CLAUDE_MODELS.haiku,
+  standard: CLAUDE_MODELS.sonnet,
+  smart: CLAUDE_MODELS.opus,
 };
 
 export const CODEX_MODEL_TIERS: Record<ModelTier, string> = {
-  fast: "gpt-5.3-codex-spark",
-  standard: "gpt-5.3-codex",
-  smart: "gpt-5.3-codex",
+  fast: CODEX_MODELS.spark,
+  standard: CODEX_MODELS.codex,
+  smart: CODEX_MODELS.codex,
 };
 
 export const TIER_TIMEOUTS: Record<ModelTier, number> = {
