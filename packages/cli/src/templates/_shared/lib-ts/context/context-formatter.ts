@@ -16,6 +16,11 @@ import type { ContextState, Task } from "../types.js";
 
 const MAX_PLAN_INLINE_CHARS = 30_000;
 
+/** Normalize path for display in markdown — always use forward slashes regardless of platform. */
+function displayPath(p: string): string {
+  return p.replaceAll("\\", "/");
+}
+
 // ---------------------------------------------------------------------------
 // Mode display
 // ---------------------------------------------------------------------------
@@ -160,17 +165,17 @@ export function buildRestoreSections(
     if (inlinePlan) {
       const [content, truncated, totalChars] = readPlanContent(planPath);
       if (content) {
-        let header = `Plan loaded from: \`${planPath}\``;
+        let header = `Plan loaded from: \`${displayPath(planPath)}\``;
         if (truncated) header += ` (truncated, ${totalChars} chars total)`;
         sections.push("", "### Plan", header, "", content);
         if (truncated) {
-          sections.push(`\n*Plan truncated at ${MAX_PLAN_INLINE_CHARS} characters. Full plan at: \`${planPath}\`*`);
+          sections.push(`\n*Plan truncated at ${MAX_PLAN_INLINE_CHARS} characters. Full plan at: \`${displayPath(planPath)}\`*`);
         }
       } else {
-        sections.push("", "### Plan", `*Plan file not found at \`${planPath}\`.*`);
+        sections.push("", "### Plan", `*Plan file not found at \`${displayPath(planPath)}\`.*`);
       }
     } else {
-      sections.push("", "### Plan", `Read the plan at: \`${planPath}\``);
+      sections.push("", "### Plan", `Read the plan at: \`${displayPath(planPath)}\``);
     }
   }
 
@@ -221,10 +226,10 @@ export function formatHandoffContinuation(ctx: ContextState, projectRoot?: strin
     if (handoffPath && fs.existsSync(handoffPath)) {
       lines.push("### Previous Session Handoff", "", fs.readFileSync(handoffPath, "utf-8"), "");
     } else {
-      lines.push(`*Handoff document not found at \`${handoffPath}\`*`, "");
+      lines.push(`*Handoff document not found at \`${displayPath(handoffPath)}\`*`, "");
     }
   } catch (error: any) {
-    lines.push(`*Handoff document at \`${handoffPath}\` could not be read: ${error}*`, "");
+    lines.push(`*Handoff document at \`${displayPath(handoffPath)}\` could not be read: ${error}*`, "");
   }
 
   const restore = buildRestoreSections(ctx, projectRoot, true);
@@ -251,8 +256,8 @@ export function buildExternalAgentContext(
     "## Project Context",
     "",
     `- **Context ID:** ${ctx.id}`,
-    `- **Context folder:** ${contextDir}`,
-    `- **Notes folder:** ${notesDir}`,
+    `- **Context folder:** ${displayPath(contextDir)}`,
+    `- **Notes folder:** ${displayPath(notesDir)}`,
   ];
   if (ctx.summary) {
     lines.push(`- **Summary:** ${ctx.summary}`);
@@ -477,18 +482,18 @@ const KNOWN_FOLDERS: Record<string, string> = {
 
 function collectFolderPath(contextId: string, contextDir: string, _state: ContextState): string | null {
   if (!fs.existsSync(contextDir)) return null;
-  return `**Context folder:** \`${contextDir}\`\n**State file:** \`${path.join(contextDir, "state.json")}\` — contains session history, task records, plan/handoff metadata`;
+  return `**Context folder:** \`${displayPath(contextDir)}\`\n**State file:** \`${displayPath(path.join(contextDir, "state.json"))}\` — contains session history, task records, plan/handoff metadata`;
 }
 
 function collectStatePointers(contextId: string, contextDir: string, state: ContextState): string | null {
   const pointers: string[] = [];
   if (state.plan_path) {
     const exists = fs.existsSync(state.plan_path);
-    pointers.push(`- **Active plan:** \`${state.plan_path}\`${exists ? "" : " (not found)"}`);
+    pointers.push(`- **Active plan:** \`${displayPath(state.plan_path)}\`${exists ? "" : " (not found)"}`);
   }
   if (state.handoff_path) {
     const exists = fs.existsSync(state.handoff_path);
-    pointers.push(`- **Active handoff:** \`${state.handoff_path}\`${exists ? "" : " (not found)"}`);
+    pointers.push(`- **Active handoff:** \`${displayPath(state.handoff_path)}\`${exists ? "" : " (not found)"}`);
   }
   if (pointers.length === 0) return null;
   return "**Key artifacts:**\n" + pointers.join("\n");
@@ -558,7 +563,7 @@ function collectSessionStats(contextId: string, contextDir: string, state: Conte
 
 function collectNotesGuidance(contextId: string, contextDir: string, _state: ContextState): string | null {
   const notesDir = path.join(contextDir, "notes");
-  return `**Notes:** Put notes and files that don't belong in the codebase here. Reference them in other documents as needed: \`${notesDir}\``;
+  return `**Notes:** Put notes and files that don't belong in the codebase here. Reference them in other documents as needed: \`${displayPath(notesDir)}\``;
 }
 
 /** Ordered list of inventory collectors. Append new collectors here. */

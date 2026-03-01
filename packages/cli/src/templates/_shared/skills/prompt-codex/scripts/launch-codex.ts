@@ -148,7 +148,7 @@ if (args[0] === "plan") {
   }
 
   promptPath = planPath;
-  console.log(`Found plan: ${planPath}`);
+  console.log(`Found plan: ${planPath.replaceAll("\\", "/")}`);
 
 } else if (args[0] === "--file") {
   if (!args[1]) {
