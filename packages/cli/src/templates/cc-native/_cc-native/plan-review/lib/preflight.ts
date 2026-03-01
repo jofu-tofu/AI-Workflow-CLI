@@ -2,10 +2,14 @@
  * Preflight health checks for plan review agents.
  * Validates provider+model combos work before committing agents to them.
  * Runs minimal "ping" requests in parallel per unique provider:model combo.
+ *
+ * Uses shared checkProviderModel() from _shared/lib-ts/base/preflight.ts.
+ * This module provides the batch orchestrator and provider registry specific
+ * to the plan review pipeline.
  */
 
-import { logInfo, logWarn, logDebug } from "../../../_shared/lib-ts/base/logger.js";
-import { findExecutable, execFileAsync, getInternalSubprocessEnv } from "../../../_shared/lib-ts/base/subprocess-utils.js";
+import { logInfo, logWarn } from "../../../_shared/lib-ts/base/logger.js";
+import { checkProviderModel, type PreflightCommandConfig } from "../../../_shared/lib-ts/base/preflight.js";
 import type { ModelsConfig, PreflightCheckResult, PreflightReport } from "../../lib-ts/types.js";
 import { claudePreflightArgs, CLAUDE_PREFLIGHT_INPUT } from "./reviewers/providers/claude-agent.js";
 import { codexPreflightArgs, CODEX_PREFLIGHT_INPUT } from "./reviewers/providers/codex-agent.js";
@@ -14,84 +18,13 @@ const HOOK = "preflight";
 const DEFAULT_TIMEOUT_MS = 15000;
 
 // ---------------------------------------------------------------------------
-// Provider Registry
+// Provider Registry (plan-review-specific)
 // ---------------------------------------------------------------------------
-
-interface PreflightCommandConfig {
-  cliName: string;
-  buildArgs: (model: string) => string[];
-  input: string;
-}
 
 const PREFLIGHT_COMMANDS: Record<string, PreflightCommandConfig> = {
   claude: { cliName: "claude", buildArgs: claudePreflightArgs, input: CLAUDE_PREFLIGHT_INPUT },
   codex:  { cliName: "codex",  buildArgs: codexPreflightArgs,  input: CODEX_PREFLIGHT_INPUT },
 };
-
-// ---------------------------------------------------------------------------
-// Error Classification
-// ---------------------------------------------------------------------------
-
-function classifyError(stderr: string, exitCode: number | null, killed: boolean, signal: string | null): string {
-  if (killed || signal === "SIGTERM") return "Preflight timed out";
-  if (/model.*not found|not available/i.test(stderr)) return "Model not available for this account";
-  if (/rate limit|429/i.test(stderr)) return "Rate limited";
-  if (/auth|api key|401/i.test(stderr)) return "Authentication failed";
-  if (/quota|billing/i.test(stderr)) return "Quota/billing issue";
-  return `Exit code ${exitCode}`;
-}
-
-// ---------------------------------------------------------------------------
-// Single Check
-// ---------------------------------------------------------------------------
-
-async function checkProviderModel(
-  provider: string,
-  model: string,
-  timeoutMs: number,
-): Promise<PreflightCheckResult> {
-  const config = PREFLIGHT_COMMANDS[provider];
-  if (!config) {
-    return { provider, model, available: false, latencyMs: 0, error: `Unknown provider: ${provider}` };
-  }
-
-  const cliPath = findExecutable(config.cliName);
-  if (!cliPath) {
-    return { provider, model, available: false, latencyMs: 0, error: `CLI '${config.cliName}' not found on PATH` };
-  }
-
-  const start = Date.now();
-  try {
-    const env = getInternalSubprocessEnv();
-    const result = await execFileAsync(cliPath, config.buildArgs(model), {
-      input: config.input,
-      timeout: timeoutMs,
-      env: env as Record<string, string>,
-      maxBuffer: 1 * 1024 * 1024,
-      shell: process.platform === "win32",
-    });
-
-    const latencyMs = Date.now() - start;
-
-    if (result.killed || result.signal === "SIGTERM") {
-      return { provider, model, available: false, latencyMs, error: "Preflight timed out" };
-    }
-
-    if (result.exitCode !== 0) {
-      const error = classifyError(result.stderr, result.exitCode, result.killed, result.signal);
-      logWarn(HOOK, `${provider}:${model} failed: ${error} (stderr: ${result.stderr.slice(-200)})`);
-      return { provider, model, available: false, latencyMs, error };
-    }
-
-    logDebug(HOOK, `${provider}:${model} passed (${latencyMs}ms)`);
-    return { provider, model, available: true, latencyMs };
-  } catch (err) {
-    const latencyMs = Date.now() - start;
-    const error = err instanceof Error ? err.message : String(err);
-    logWarn(HOOK, `${provider}:${model} exception: ${error}`);
-    return { provider, model, available: false, latencyMs, error };
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Run All Checks
@@ -130,9 +63,11 @@ export async function runPreflight(
 
   logInfo(HOOK, `Checking ${checks.length} provider:model combo(s): ${checks.map(c => `${c.provider}:${c.model}`).join(", ")}`);
 
-  // Run all checks in parallel
+  // Run all checks in parallel (pass provider-specific config from registry)
   const results = await Promise.all(
-    checks.map(({ provider, model }) => checkProviderModel(provider, model, effectiveTimeout)),
+    checks.map(({ provider, model }) =>
+      checkProviderModel(provider, model, PREFLIGHT_COMMANDS[provider]!, effectiveTimeout, HOOK),
+    ),
   );
 
   // Build available map

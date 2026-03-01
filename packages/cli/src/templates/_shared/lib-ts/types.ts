@@ -184,3 +184,7 @@ export interface CaretCommand {
   new_context_desc: string | null;
   remaining_prompt: string;
 }
+
+// §1.12 — Preflight types (shared across hooks)
+// Re-exported from base/preflight.ts for convenience
+export type { PreflightCommandConfig, PreflightCheckResult } from "./base/preflight.js";

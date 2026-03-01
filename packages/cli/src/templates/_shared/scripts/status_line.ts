@@ -59,41 +59,60 @@ const CACHE_DIR = path.join(OUTPUT_DIR, "cache");
 const STATUSLINE_CACHE = path.join(CACHE_DIR, ".statusline-cache.json");
 
 // ---------------------------------------------------------------------------
-// NO_COLOR support (https://no-color.org)
+// Color level detection (truecolor → 256-color → basic 16 → none)
 // ---------------------------------------------------------------------------
-const NO_COLOR = Boolean(process.env.NO_COLOR);
+type ColorLevel = 0 | 1 | 2 | 3;
 
-const RESET = NO_COLOR ? "" : "\u001B[0m";
+function detectColorLevel(): ColorLevel {
+	if (process.env.NO_COLOR) return 0;
+	const fc = process.env.FORCE_COLOR;
+	if (fc !== undefined) return Math.min(3, Math.max(0, parseInt(fc, 10) || 0)) as ColorLevel;
+	const ct = process.env.COLORTERM ?? "";
+	if (ct === "truecolor" || ct === "24bit") return 3;
+	if ((process.env.TERM ?? "").includes("256color")) return 2;
+	return 1;
+}
+
+const COLOR_LEVEL = detectColorLevel();
+
+function fg(r: number, g: number, b: number, x256: number, b16: number): string {
+	if (COLOR_LEVEL === 0) return "";
+	if (COLOR_LEVEL === 3) return `\u001B[38;2;${r};${g};${b}m`;
+	if (COLOR_LEVEL === 2) return `\u001B[38;5;${x256}m`;
+	return `\u001B[${b16}m`;
+}
+
+const RESET = COLOR_LEVEL === 0 ? "" : "\u001B[0m";
 
 // Structural
-const SLATE_300 = NO_COLOR ? "" : "\u001B[38;2;203;213;225m";
-const SLATE_400 = NO_COLOR ? "" : "\u001B[38;2;148;163;184m";
-const SLATE_500 = NO_COLOR ? "" : "\u001B[38;2;100;116;139m";
-const SLATE_600 = NO_COLOR ? "" : "\u001B[38;2;71;85;105m";
+const SLATE_300 = fg(203, 213, 225, 188, 37);
+const SLATE_400 = fg(148, 163, 184, 146, 37);
+const SLATE_500 = fg(100, 116, 139, 103, 90);
+const SLATE_600 = fg(71, 85, 105, 240, 90);
 
 // Semantic
-const EMERALD = NO_COLOR ? "" : "\u001B[38;2;74;222;128m";
-const ROSE = NO_COLOR ? "" : "\u001B[38;2;251;113;133m";
-const AMBER = NO_COLOR ? "" : "\u001B[38;2;251;191;36m";
+const EMERALD = fg(74, 222, 128, 79, 92);
+const ROSE = fg(251, 113, 133, 211, 91);
+const AMBER = fg(251, 191, 36, 221, 93);
 
 // Context colors
-const CTX_PRIMARY = NO_COLOR ? "" : "\u001B[38;2;129;140;248m";
-const CTX_SECONDARY = NO_COLOR ? "" : "\u001B[38;2;165;180;252m";
-const CTX_ACCENT = NO_COLOR ? "" : "\u001B[38;2;139;92;246m";
-const CTX_BUCKET_EMPTY = NO_COLOR ? "" : "\u001B[38;2;75;82;95m";
+const CTX_PRIMARY = fg(129, 140, 248, 147, 94);
+const CTX_SECONDARY = fg(165, 180, 252, 153, 94);
+const CTX_ACCENT = fg(139, 92, 246, 141, 35);
+const CTX_BUCKET_EMPTY = fg(75, 82, 95, 239, 90);
 
 // Git colors
-const GIT_PRIMARY = NO_COLOR ? "" : "\u001B[38;2;56;189;248m";
-const GIT_VALUE = NO_COLOR ? "" : "\u001B[38;2;186;230;253m";
-const GIT_DIR = NO_COLOR ? "" : "\u001B[38;2;147;197;253m";
-const GIT_CLEAN = NO_COLOR ? "" : "\u001B[38;2;125;211;252m";
-const GIT_MODIFIED = NO_COLOR ? "" : "\u001B[38;2;96;165;250m";
-const GIT_ADDED = NO_COLOR ? "" : "\u001B[38;2;59;130;246m";
-const GIT_STASH = NO_COLOR ? "" : "\u001B[38;2;165;180;252m";
-const GIT_AGE_FRESH = NO_COLOR ? "" : "\u001B[38;2;125;211;252m";
-const GIT_AGE_RECENT = NO_COLOR ? "" : "\u001B[38;2;96;165;250m";
-const GIT_AGE_STALE = NO_COLOR ? "" : "\u001B[38;2;59;130;246m";
-const GIT_AGE_OLD = NO_COLOR ? "" : "\u001B[38;2;99;102;241m";
+const GIT_PRIMARY = fg(56, 189, 248, 81, 96);
+const GIT_VALUE = fg(186, 230, 253, 195, 96);
+const GIT_DIR = fg(147, 197, 253, 153, 94);
+const GIT_CLEAN = fg(125, 211, 252, 117, 96);
+const GIT_MODIFIED = fg(96, 165, 250, 111, 94);
+const GIT_ADDED = fg(59, 130, 246, 75, 34);
+const GIT_STASH = fg(165, 180, 252, 153, 94);
+const GIT_AGE_FRESH = fg(125, 211, 252, 117, 96);
+const GIT_AGE_RECENT = fg(96, 165, 250, 111, 94);
+const GIT_AGE_STALE = fg(59, 130, 246, 75, 34);
+const GIT_AGE_OLD = fg(99, 102, 241, 105, 35);
 
 // ---------------------------------------------------------------------------
 // Display modes
@@ -127,7 +146,7 @@ function getDisplayMode(width: number): string {
 // ---------------------------------------------------------------------------
 
 function getBucketColor(pos: number, maxPos: number): string {
-	if (NO_COLOR) return "";
+	if (COLOR_LEVEL === 0) return "";
 	const pct = Math.floor((pos * 100) / maxPos);
 
 	let b: number;
@@ -150,7 +169,17 @@ function getBucketColor(pos: number, maxPos: number): string {
 		b = 60 + Math.floor(((68 - 60) * t) / 34);
 	}
 
-	return `\u001B[38;2;${r};${g};${b}m`;
+	if (COLOR_LEVEL === 3) return `\u001B[38;2;${r};${g};${b}m`;
+	if (COLOR_LEVEL === 2) {
+		const ri = Math.round(r / 51);
+		const gi = Math.round(g / 51);
+		const bi = Math.round(b / 51);
+		return `\u001B[38;5;${16 + 36 * ri + 6 * gi + bi}m`;
+	}
+	// Level 1: three-band semantic mapping
+	if (pct <= 33) return `\u001B[92m`; // bright green
+	if (pct <= 66) return `\u001B[93m`; // bright yellow
+	return `\u001B[91m`; // bright red
 }
 
 // ---------------------------------------------------------------------------

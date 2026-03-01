@@ -1,3 +1,6 @@
+import {execSync} from 'node:child_process'
+import {basename} from 'node:path'
+
 import {Flags} from '@oclif/core'
 
 import BaseCommand from '../lib/base-command.js'
@@ -17,22 +20,26 @@ import {EXIT_CODES} from '../types/index.js'
  */
 export default class LaunchCommand extends BaseCommand {
   static override description =
-    'Launch Claude Code or Codex with AIW configuration (sandbox disabled, supports parallel sessions)\n\n' +
+    'Launch Claude Code or Codex with AIW configuration (sandbox disabled, tmux-first by default)\n\n' +
     'FLAGS\n' +
     '  --codex/-c: Launch Codex instead of Claude Code (uses --yolo flag)\n' +
-    '  --new/-n: Open a new terminal in the current directory and launch there\n\n' +
+    '  --new/-n: Open a new terminal in the current directory and launch there\n' +
+    '  --no-tmux/-t: Launch directly in current shell instead of auto-launching tmux\n' +
+    '  --tmux-session/-s: tmux session name to reuse when auto-launching tmux (default is fresh session per launch)\n\n' +
     'EXIT CODES\n' +
     '  0  Success - AI assistant launched and exited successfully\n' +
     '  1  General error - unexpected runtime failure\n' +
     '  2  Invalid usage - check your arguments and flags\n' +
-    '  3  Environment error - CLI not found (install Claude Code from https://claude.ai/download or Codex from npm)'
+    '  3  Environment error - CLI/tmux not found (install Claude Code from https://claude.ai/download, Codex from npm, tmux from your package manager)'
 static override examples = [
-    '<%= config.bin %> <%= command.id %>',
+    '<%= config.bin %> <%= command.id %>  # Auto-launches tmux with a fresh session when not already in tmux',
     '<%= config.bin %> <%= command.id %> --codex  # Launch Codex with --yolo flag',
     '<%= config.bin %> <%= command.id %> -c  # Short form for --codex',
     '<%= config.bin %> <%= command.id %> --new  # Launch in a new terminal window',
     '<%= config.bin %> <%= command.id %> -n  # Short form for --new',
     '<%= config.bin %> <%= command.id %> --codex --new  # Launch Codex in new terminal',
+    '<%= config.bin %> <%= command.id %> --no-tmux  # Run directly in current shell',
+    '<%= config.bin %> <%= command.id %> --tmux-session aiw-main  # Reuse/attach explicit tmux session name',
     '<%= config.bin %> <%= command.id %> --debug  # Enable verbose logging',
     '# Check exit code in Bash\n<%= config.bin %> <%= command.id %>\necho $?',
     '# Check exit code in PowerShell\n<%= config.bin %> <%= command.id %>\necho $LASTEXITCODE',
@@ -49,6 +56,16 @@ static override flags = {
       description: 'Open a new terminal in the current directory and run aiw launch there',
       default: false,
     }),
+    'no-tmux': Flags.boolean({
+      char: 't',
+      description: 'Launch directly in current shell instead of auto-launching tmux',
+      default: false,
+    }),
+    'tmux-session': Flags.string({
+      char: 's',
+      description: 'tmux session name to reuse when auto-launching tmux (default: new aiw-<current-dir>-<unique> session)',
+      required: false,
+    }),
   }
 
   async run(): Promise<void> {
@@ -59,6 +76,10 @@ static override flags = {
     const cliCommand = useCodex ? 'codex' : 'claude'
     const cliArgs = useCodex ? ['--yolo'] : ['--dangerously-skip-permissions']
     const launchFlag = useCodex ? '--codex' : ''
+    const disableTmux = flags['no-tmux']
+    const insideTmux = Boolean(process.env.TMUX)
+    const interactiveTty = Boolean(process.stdin.isTTY && process.stdout.isTTY)
+    const shouldAutoTmux = !flags.new && !disableTmux && !insideTmux && interactiveTty
 
     // Handle --new flag: launch in a new terminal
     if (flags.new) {
@@ -105,7 +126,38 @@ static override flags = {
       // Spawn AI CLI with sandbox permissions disabled
       // AIW hook system provides safety guardrails
       // Continue launch regardless of version check result (graceful degradation)
-      exitCode = await spawnProcess(cliCommand, cliArgs)
+      if (shouldAutoTmux) {
+        if (!this.isTmuxAvailable()) {
+          this.error(
+            'tmux is required for default launch mode but was not found on PATH.\n' +
+              'Install tmux, or rerun with --no-tmux to launch directly.',
+            {exit: EXIT_CODES.ENVIRONMENT_ERROR},
+          )
+        }
+
+        const shellCommand = this.buildTmuxShellCommand(cliCommand, cliArgs)
+        const sessionFromFlag = flags['tmux-session']?.trim()
+
+        if (sessionFromFlag && sessionFromFlag.length > 0) {
+          const sessionName = this.sanitizeTmuxSessionName(sessionFromFlag)
+          this.logInfo(`Launching in tmux session: ${sessionName} (reuse/attach)`)
+          exitCode = await spawnProcess('tmux', ['new-session', '-A', '-s', sessionName, shellCommand])
+        } else {
+          const sessionBase = `aiw-${basename(process.cwd())}`
+          const sessionName = this.buildUniqueTmuxSessionName(sessionBase)
+          this.logInfo(`Launching in new tmux session: ${sessionName}`)
+          exitCode = await spawnProcess('tmux', ['new-session', '-s', sessionName, shellCommand])
+        }
+      } else {
+        if (disableTmux) this.debug('tmux launch disabled via --no-tmux')
+        else if (insideTmux) {
+          this.debug('Already inside tmux; launching directly in current pane')
+          this.enableTmuxMouseIfPossible()
+        }
+        else if (!interactiveTty) this.debug('Non-interactive terminal detected; launching directly')
+
+        exitCode = await spawnProcess(cliCommand, cliArgs)
+      }
     } catch (error) {
       if (error instanceof ProcessSpawnError) {
         // Actionable error message (already includes installation link)
@@ -118,5 +170,51 @@ static override flags = {
 
     // Pass through Claude Code's exit code (outside try-catch to avoid catching exit)
     this.exit(exitCode)
+  }
+
+  private buildTmuxShellCommand(command: string, args: string[]): string {
+    const launchCommand = [command, ...args].map((part) => this.shellQuote(part)).join(' ')
+    return `tmux set-option -g mouse on >/dev/null 2>&1 || true; exec ${launchCommand}`
+  }
+
+  private isTmuxAvailable(): boolean {
+    try {
+      const cmd = process.platform === 'win32' ? 'where tmux' : 'which tmux'
+      execSync(cmd, {stdio: 'ignore'})
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private sanitizeTmuxSessionName(input: string): string {
+    const trimmed = input.trim().toLowerCase()
+    const safe = trimmed
+      .replaceAll(/[^a-z0-9_-]/g, '-')
+      .replaceAll(/-+/g, '-')
+      .replaceAll(/^[-_]+|[-_]+$/g, '')
+    return safe || 'aiw'
+  }
+
+  private buildUniqueTmuxSessionName(base: string): string {
+    const safeBase = this.sanitizeTmuxSessionName(base)
+    const timestamp = Date.now().toString(36)
+    const pid = process.pid.toString(36)
+    return this.sanitizeTmuxSessionName(`${safeBase}-${timestamp}-${pid}`)
+  }
+
+  private enableTmuxMouseIfPossible(): void {
+    if (!this.isTmuxAvailable()) return
+
+    try {
+      execSync('tmux set-option -g mouse on', {stdio: 'ignore'})
+      this.debug('Enabled tmux mouse support (set-option -g mouse on)')
+    } catch {
+      this.debug('Could not enable tmux mouse support automatically')
+    }
+  }
+
+  private shellQuote(input: string): string {
+    return `'${input.replaceAll("'", `'"'"'`)}'`
   }
 }

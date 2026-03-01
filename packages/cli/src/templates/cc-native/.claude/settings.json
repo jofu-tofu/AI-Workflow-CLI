@@ -1,6 +1,23 @@
 {
+  "statusLine": {
+    "type": "command",
+    "command": "NO_COLOR= FORCE_COLOR=2 bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/scripts/status_line.ts"
+  },
+  "fileSuggestion": {
+    "type": "command",
+    "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/file-suggestion.ts"
+  },
   "hooks": {
     "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/user_prompt_submit.ts",
+            "timeout": 10000
+          }
+        ]
+      },
       {
         "hooks": [
           {
@@ -12,6 +29,56 @@
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/context_monitor.ts",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "TaskCreate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/task_create_capture.ts",
+            "timeout": 3000
+          }
+        ]
+      },
+      {
+        "matcher": "TaskUpdate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/task_update_capture.ts",
+            "timeout": 3000
+          }
+        ]
+      },
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/archive_plan.ts",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/lint_after_edit.ts",
+            "timeout": 10000
+          }
+        ]
+      },
       {
         "matcher": "AskUserQuestion",
         "hooks": [
@@ -40,6 +107,51 @@
             "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_cc-native/hooks/enhance_plan_post_subagent.ts",
             "timeout": 10000,
             "blockOnFail": false
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/session_start.ts",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/session_end.ts",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/pre_compact.ts",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/archive_plan.ts",
+            "timeout": 5000
           }
         ]
       }
@@ -83,5 +195,13 @@
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
-  "enabledPlugins": {}
+  "enabledPlugins": {},
+  "methods": {
+    "cc-native": {
+      "ides": [
+        "claude"
+      ],
+      "installedAt": "2026-02-21T16:59:33.520Z"
+    }
+  }
 }

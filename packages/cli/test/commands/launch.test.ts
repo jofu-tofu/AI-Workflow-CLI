@@ -213,4 +213,58 @@ describe('launch command', () => {
       // The platform-specific logic is encapsulated in lib/terminal.ts
     })
   })
+
+  describe('tmux-first launch flags', () => {
+    it('should have --no-tmux flag defined', () => {
+      expect(LaunchCommand.flags).to.have.property('no-tmux')
+    })
+
+    it('should have -t as short form for --no-tmux', () => {
+      const flag = LaunchCommand.flags['no-tmux'] as {char?: string}
+      expect(flag).to.have.property('char', 't')
+    })
+
+    it('should have --tmux-session flag defined', () => {
+      expect(LaunchCommand.flags).to.have.property('tmux-session')
+    })
+
+    it('should have -s as short form for --tmux-session', () => {
+      const flag = LaunchCommand.flags['tmux-session'] as {char?: string}
+      expect(flag).to.have.property('char', 's')
+    })
+
+    it('should include tmux flags in description', () => {
+      expect(LaunchCommand.description).to.include('--no-tmux')
+      expect(LaunchCommand.description).to.include('--tmux-session')
+    })
+
+    it('implementation references tmux launch path', () => {
+      const source = LaunchCommand.prototype.run.toString()
+      expect(source).to.include('shouldAutoTmux')
+      expect(source).to.include('new-session')
+      expect(source).to.include('tmux')
+    })
+
+    it('implementation creates a fresh tmux session by default', () => {
+      const source = LaunchCommand.prototype.run.toString()
+      expect(source).to.include('buildUniqueTmuxSessionName')
+      expect(source).to.include("['new-session', '-s'")
+    })
+
+    it('implementation reuses explicit tmux session names', () => {
+      const source = LaunchCommand.prototype.run.toString()
+      expect(source).to.include('sessionFromFlag')
+      expect(source).to.include("['new-session', '-A', '-s'")
+    })
+
+    it('implementation enables tmux mouse support in launched tmux panes', () => {
+      const source = LaunchCommand.prototype.run.toString()
+      expect(source).to.include('buildTmuxShellCommand')
+    })
+
+    it('implementation enables tmux mouse support when already inside tmux', () => {
+      const source = LaunchCommand.prototype.run.toString()
+      expect(source).to.include('enableTmuxMouseIfPossible')
+    })
+  })
 })

@@ -20,6 +20,7 @@ oclif-based CLI (`aiw`). Installs cc-native and other templates into user projec
 | `src/lib/template-installer.ts` | Template installation: status check, file copying, merge logic |
 | `src/lib/ide-path-resolver.ts` | Path resolution for `.aiwcli/` and IDE-specific directories |
 | `src/lib/settings-hierarchy.ts` | Merge settings across all active installed templates |
+| `src/templates/_shared/lib-ts/base/tmux-driver.ts` | Shared tmux pane launch/injection/fallback helpers for template hooks |
 | `src/templates/` | Template source files (kept in sync with `.aiwcli/`) |
 
 ## Constraints
