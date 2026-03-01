@@ -7,24 +7,16 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
+import { buildCliInvocation } from "../../../../../_shared/lib-ts/base/cli-args.js";
+import type { ExecutionResult } from "../../../../../_shared/lib-ts/base/execution-backend.js";
 import { logDebug, logWarn } from "../../../../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv, execFileAsync, normalizePathForCli, shellQuoteWin } from "../../../../../_shared/lib-ts/base/subprocess-utils.js";
+import { getInternalSubprocessEnv, normalizePathForCli, shellQuoteWin } from "../../../../../_shared/lib-ts/base/subprocess-utils.js";
 import { debugLog, debugRaw } from "../../../../lib-ts/debug.js";
 import { parseJsonMaybe, coerceToReview } from "../../../../lib-ts/json-parser.js";
 import type { ReviewerResult } from "../../../../lib-ts/types.js";
-import { BaseCliAgent, type ExecResult } from "../base/base-agent.js";
+import { BaseCliAgent } from "../base/base-agent.js";
 import { AGENT_REVIEW_PROMPT_PREFIX } from "../schemas.js";
 import { makeResult } from "../types.js";
-
-// ---------------------------------------------------------------------------
-// Preflight (standalone — no instance needed)
-// ---------------------------------------------------------------------------
-
-export const CODEX_PREFLIGHT_INPUT = "Respond with exactly: ok";
-
-export function codexPreflightArgs(model: string): string[] {
-  return ["exec", "--sandbox", "read-only", "--model", model, "-"];
-}
 
 // ---------------------------------------------------------------------------
 // Agent Class
@@ -52,12 +44,14 @@ export class CodexAgent extends BaseCliAgent<ReviewerResult> {
     const normalizedSchema = shellQuoteWin(normalizePathForCli(schemaPath));
     const normalizedOut = shellQuoteWin(normalizePathForCli(outPath));
 
-    const cmdArgs = ["exec", "--sandbox", "read-only"];
-    if (this.agent.model) cmdArgs.push("--model", this.agent.model);
-    if (this.agent.reasoningEffort) cmdArgs.push("-c", `model_reasoning_effort="${this.agent.reasoningEffort}"`);
-    cmdArgs.push("--output-schema", normalizedSchema, "-o", normalizedOut, "-");
-
-    return cmdArgs;
+    return buildCliInvocation({
+      provider: "codex",
+      model: this.agent.model,
+      mode: "structured",
+      sandbox: "read-only",
+      outputSchemaPath: normalizedSchema,
+      outputFilePath: normalizedOut,
+    }).args;
   }
 
   protected buildPrompt(plan: string): string {
@@ -92,7 +86,7 @@ export class CodexAgent extends BaseCliAgent<ReviewerResult> {
     return makeResult(this.agent.name, ok, verdict, norm, raw, err);
   }
 
-  protected extractOutput(result: ExecResult): { raw: string; err: string } {
+  protected extractOutput(result: ExecutionResult): { raw: string; err: string } {
     const outPath = this.getOutputPath();
     let raw = "";
     const outExists = fs.existsSync(outPath);
@@ -134,7 +128,7 @@ export class CodexAgent extends BaseCliAgent<ReviewerResult> {
     return makeResult(this.agent.name, false, type, {}, "", message);
   }
 
-  protected parseOutput(raw: string, result: ExecResult): Record<string, unknown> | null {
+  protected parseOutput(raw: string, result: ExecutionResult): Record<string, unknown> | null {
     return parseJsonMaybe(raw) ?? parseJsonMaybe(result.stdout);
   }
 
@@ -157,10 +151,13 @@ export class CodexAgent extends BaseCliAgent<ReviewerResult> {
 
     try {
       const env = getInternalSubprocessEnv();
-      const result = await execFileAsync(cliPath, args, {
+      const normalizedCliPath = normalizePathForCli(cliPath);
+      const result = await this.backend.execute({
+        cliPath: normalizedCliPath,
+        args,
         input: prompt,
-        timeout: this.timeout * 1000,
         env: env as Record<string, string>,
+        timeoutMs: this.timeout * 1000,
         maxBuffer: 10 * 1024 * 1024,
         shell: process.platform === "win32",
       });

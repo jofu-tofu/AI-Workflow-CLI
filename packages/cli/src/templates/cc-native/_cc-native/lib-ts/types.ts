@@ -7,6 +7,10 @@
 // Re-export shared types used by cc-native consumers
 export type { ContextState, HookInput, HookOutput } from "../../_shared/lib-ts/types.js";
 
+// Import AgentConfig for local use and re-export
+import type { AgentConfig as _AgentConfig } from "../../_shared/lib-ts/types.js";
+export type AgentConfig = _AgentConfig;
+
 // ---------------------------------------------------------------------------
 // Verdict & Decision Types
 // ---------------------------------------------------------------------------
@@ -118,17 +122,7 @@ export interface ReviewDecisionResult {
 // Agent & Orchestrator Configuration
 // ---------------------------------------------------------------------------
 
-/** Configuration for a Claude Code review agent */
-export interface AgentConfig {
-  name: string;
-  model: string;
-  provider: string; // e.g. "claude" | "codex" — assigned at runtime by assignModelsToAgents()
-  focus: string;
-  categories: string[];
-  description: string;
-  system_prompt: string; // Markdown body content for --system-prompt
-  reasoningEffort?: string; // e.g. "low", "medium", "high" — passed to codex -c model_reasoning_effort
-}
+// AgentConfig re-exported from _shared/lib-ts/types.ts above
 
 /** Configuration for the plan orchestrator */
 export interface OrchestratorConfig {
@@ -141,7 +135,6 @@ export interface OrchestratorConfig {
 export interface ProviderConfig {
   enabled: boolean;
   models: string[];
-  reasoningEffort?: string; // e.g. "low", "medium", "high" — codex model_reasoning_effort
 }
 
 /** Model provider pool configuration */

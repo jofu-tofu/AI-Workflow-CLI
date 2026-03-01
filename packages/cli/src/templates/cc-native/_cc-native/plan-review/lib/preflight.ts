@@ -8,22 +8,21 @@
  * to the plan review pipeline.
  */
 
+import { preflightCommandConfig } from "../../../_shared/lib-ts/base/cli-args.js";
 import { logInfo, logWarn } from "../../../_shared/lib-ts/base/logger.js";
 import { checkProviderModel, type PreflightCommandConfig } from "../../../_shared/lib-ts/base/preflight.js";
 import type { ModelsConfig, PreflightCheckResult, PreflightReport } from "../../lib-ts/types.js";
-import { claudePreflightArgs, CLAUDE_PREFLIGHT_INPUT } from "./reviewers/providers/claude-agent.js";
-import { codexPreflightArgs, CODEX_PREFLIGHT_INPUT } from "./reviewers/providers/codex-agent.js";
 
 const HOOK = "preflight";
 const DEFAULT_TIMEOUT_MS = 15000;
 
 // ---------------------------------------------------------------------------
-// Provider Registry (plan-review-specific)
+// Provider Registry (built from centralized cli-args)
 // ---------------------------------------------------------------------------
 
 const PREFLIGHT_COMMANDS: Record<string, PreflightCommandConfig> = {
-  claude: { cliName: "claude", buildArgs: claudePreflightArgs, input: CLAUDE_PREFLIGHT_INPUT },
-  codex:  { cliName: "codex",  buildArgs: codexPreflightArgs,  input: CODEX_PREFLIGHT_INPUT },
+  claude: preflightCommandConfig("claude"),
+  codex:  preflightCommandConfig("codex"),
 };
 
 // ---------------------------------------------------------------------------

@@ -18,6 +18,8 @@ Changes to the working directory (`.aiwcli/`) should also be applied to the temp
 - `.aiwcli/_cc-native/plan-review/**` → `packages/cli/src/templates/cc-native/_cc-native/plan-review/`
 - `.aiwcli/_cc-native/artifacts/**` → `packages/cli/src/templates/cc-native/_cc-native/artifacts/`
 - `.aiwcli/_shared/skills/handoff-system/**/*.ts` → `packages/cli/src/templates/_shared/skills/handoff-system/`
+- `.aiwcli/_shared/skills/meta-plan/**` → `packages/cli/src/templates/_shared/skills/meta-plan/`
+- `.aiwcli/_shared/skills/prompt-codex/**` → `packages/cli/src/templates/_shared/skills/prompt-codex/`
 - `.claude/settings.json` → `packages/cli/src/templates/cc-native/.claude/settings.json`
 
 **When to sync:**
@@ -93,6 +95,8 @@ Cohesive subsystems are organized as self-contained folders, following the hando
 - `_cc-native/plan-review/` — multi-agent plan review pipeline
 - `_cc-native/artifacts/` — review artifact generation and tracking
 - `_cc-native/lib-ts/rlm/` — retrieval-augmented learning memory
+- `_shared/skills/prompt-codex/` — Codex tmux launcher skill
+- `_shared/skills/meta-plan/` — prompt amplification for complex problems
 
 **Hooks are NOT co-located with their owning system.**
 Claude Code hooks are path-referenced in `.claude/settings.json` at install time.
@@ -110,12 +114,15 @@ Read the relevant CLAUDE.md before working in these areas:
 - `.aiwcli/_shared/lib-ts/context/CLAUDE.md` — context selector, plan manager, task tracker
 - `.aiwcli/_shared/skills/handoff-system/CLAUDE.md` — handoff creation, section markers, restore spec
 - `.aiwcli/_shared/skills/meta-plan/CLAUDE.md` — prompt amplifier for complex problems
+- `.aiwcli/_cc-native/CLAUDE.md` — cc-native method overview, `_shared/` bridge, import patterns
 - `.aiwcli/_cc-native/hooks/CLAUDE.md` — cc-native-specific hooks (plan review entry points)
+- `.aiwcli/_cc-native/lib-ts/CLAUDE.md` — cc-native library module reference
 - `.aiwcli/_cc-native/lib-ts/rlm/CLAUDE.md` — retrieval-augmented learning memory
 - `.aiwcli/_cc-native/plan-review/CLAUDE.md` — plan review pipeline, agent roles, verdict flow
 - `.aiwcli/_cc-native/plan-review/agents/CLAUDE.md` — plan review agent specs
 - `.aiwcli/_cc-native/artifacts/CLAUDE.md` — review artifact generation, public API
 - `.aiwcli/_cc-native/agents/CLAUDE.md` — plan review agent roster and design decisions
+- `.aiwcli/_shared/skills/prompt-codex/CLAUDE.md` — Codex tmux launcher skill
 
 **`packages/cli/` (CLI package — installs templates into user projects):**
 - `packages/cli/CLAUDE.md` — CLI commands, key lib files, template sync constraints
@@ -149,4 +156,4 @@ is stale — update or regenerate before relying on it.
 **Runtime mismatch check:**
 - If behavior differs between OpenCode and Claude Code, verify runtime-level config first (`opencode.json` + plugins/events vs `.claude/settings.json` hooks) before debugging hook code.
 
-<!-- context-layer: generated=2026-02-18 | last-audited=2026-02-28 | version=3 | dir-commits-at-audit=14 -->
+<!-- context-layer: generated=2026-02-18 | last-audited=2026-03-01 | version=4 | dir-commits-at-audit=15 -->

@@ -188,3 +188,16 @@ export interface CaretCommand {
 // §1.12 — Preflight types (shared across hooks)
 // Re-exported from base/preflight.ts for convenience
 export type { PreflightCommandConfig, PreflightCheckResult } from "./base/preflight.js";
+
+// §1.13 — Agent configuration (shared across templates)
+
+/** Configuration for a CLI review agent */
+export interface AgentConfig {
+  name: string;
+  model: string;
+  provider: string; // e.g. "claude" | "codex" — assigned at runtime by assignModelsToAgents()
+  focus: string;
+  categories: string[];
+  description: string;
+  system_prompt: string; // Markdown body content for --system-prompt
+}

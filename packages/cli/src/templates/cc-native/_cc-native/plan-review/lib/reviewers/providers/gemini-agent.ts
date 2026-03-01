@@ -3,6 +3,7 @@
  * Placeholder for future implementation.
  */
 
+import type { ExecutionResult } from "../../../../../_shared/lib-ts/base/execution-backend.js";
 import type { ReviewerResult } from "../../../../lib-ts/types.js";
 import { BaseCliAgent } from "../base/base-agent.js";
 import { makeResult } from "../types.js";
@@ -33,7 +34,7 @@ export class GeminiAgent extends BaseCliAgent<ReviewerResult> {
     return makeResult(this.agent.name, false, type, {}, "", message);
   }
 
-  protected parseOutput(_raw: string, _result: unknown): Record<string, unknown> | null {
+  protected parseOutput(_raw: string, _result: ExecutionResult): Record<string, unknown> | null {
     throw new Error("GeminiAgent not implemented");
   }
 }

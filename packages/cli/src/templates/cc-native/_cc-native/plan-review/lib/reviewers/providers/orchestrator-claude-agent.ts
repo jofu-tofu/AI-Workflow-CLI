@@ -3,8 +3,11 @@
  * Analyzes plan complexity and selects reviewer agents via Claude CLI.
  */
 
+import { buildCliInvocation, reviewSpec } from "../../../../../_shared/lib-ts/base/cli-args.js";
+import type { ExecutionBackend } from "../../../../../_shared/lib-ts/base/execution-backend.js";
+import type { ExecutionResult } from "../../../../../_shared/lib-ts/base/execution-backend.js";
 import { logDebug } from "../../../../../_shared/lib-ts/base/logger.js";
-import { shellQuoteWin } from "../../../../../_shared/lib-ts/base/subprocess-utils.js";
+import { debugLog, debugRaw } from "../../../../lib-ts/debug.js";
 import { parseCliOutput } from "../../../../lib-ts/cli-output-parser.js";
 import type { AgentConfig, OrchestratorResult, ComplexityCategory } from "../../../../lib-ts/types.js";
 import { BaseCliAgent } from "../base/base-agent.js";
@@ -51,6 +54,7 @@ export class OrchestratorClaudeAgent extends BaseCliAgent<OrchestratorResult> {
     timeout: number,
     contextPath?: string,
     sessionName?: string,
+    backend?: ExecutionBackend,
   ) {
     // Build schema dynamically based on valid agent names
     const nonMandatory = agentLibrary.filter(
@@ -63,7 +67,10 @@ export class OrchestratorClaudeAgent extends BaseCliAgent<OrchestratorResult> {
       ? buildOrchestratorSchema(validNames, categories)
       : ORCHESTRATOR_SCHEMA;
 
-    super(agent, schema, timeout, contextPath, sessionName);
+    super({
+      agent, schema, timeout, contextPath, sessionName,
+      debugLogger: { log: debugLog, raw: debugRaw },
+    }, backend);
 
     this.nonMandatory = nonMandatory;
     this.validNames = validNames;
@@ -79,8 +86,6 @@ export class OrchestratorClaudeAgent extends BaseCliAgent<OrchestratorResult> {
   }
 
   protected buildCliArgs(): string[] {
-    const schemaJson = JSON.stringify(this.schema);
-
     const systemPrompt = `You are a plan orchestrator for code review. Your job is to analyze plans and select appropriate reviewer agents.
 
 You MUST call StructuredOutput immediately with your analysis. Do NOT ask questions or use any other tools.
@@ -91,16 +96,9 @@ When selecting agents:
 - Only select agents whose categories match the plan category
 - Fewer agents for simple plans, more for complex plans`;
 
-    return [
-      "--model", this.agent.model,
-      "--output-format", "json",
-      "--json-schema", shellQuoteWin(schemaJson),
-      "--max-turns", "3",
-      "--setting-sources", process.platform === "win32" ? '""' : "",
-      "--system-prompt", shellQuoteWin(systemPrompt),
-      "-p",
-      "--no-session-persistence", // Prevent subprocess from creating session records
-    ];
+    return buildCliInvocation(
+      reviewSpec("claude", this.agent.model, this.schema, systemPrompt),
+    ).args;
   }
 
   protected buildPrompt(plan: string): string {
@@ -180,7 +178,7 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning`
     );
   }
 
-  protected parseOutput(raw: string, _result: unknown): Record<string, unknown> | null {
+  protected parseOutput(raw: string, _result: ExecutionResult): Record<string, unknown> | null {
     return parseCliOutput(raw);
   }
 

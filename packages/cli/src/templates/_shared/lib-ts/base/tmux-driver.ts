@@ -190,7 +190,7 @@ export async function sendFileToPane(
   });
   if (load.exitCode !== 0) return false;
 
-  const paste = await execFileAsync(tmuxPath, ["paste-buffer", "-d", "-b", bufferName, "-t", paneId], {
+  const paste = await execFileAsync(tmuxPath, ["paste-buffer", "-d", "-p", "-b", bufferName, "-t", paneId], {
     timeout: 3000,
   });
   if (paste.exitCode !== 0) return false;
@@ -208,7 +208,8 @@ export async function sendFileToPane(
 
   await sleep(options?.retryDelayMs ?? 1200);
   const snapshot = await capturePaneText(tmuxPath, paneId);
-  if (REPL_PROMPT_REGEX.test(snapshot) && !snapshot.includes(REPL_ACTIVITY_HINT)) {
+  const lastFewLines = snapshot.split(/\r?\n/).slice(-5).join("\n");
+  if (REPL_PROMPT_REGEX.test(lastFewLines) && !lastFewLines.includes(REPL_ACTIVITY_HINT)) {
     const secondEnter = await execFileAsync(tmuxPath, ["send-keys", "-t", paneId, "Enter"], {
       timeout: 3000,
     });

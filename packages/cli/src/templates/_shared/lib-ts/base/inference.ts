@@ -9,20 +9,16 @@ import { execFileSync } from "node:child_process";
 import { logDebug, logWarn } from "./logger.js";
 import { STOP_WORDS } from "./stop-words.js";
 import type { InferenceResult } from "../types.js";
-import { execFileAsync, getInternalSubprocessEnv, shellQuoteWin } from "./subprocess-utils.js";
+import { execFileAsync } from "./subprocess-utils.js";
+import {
+  buildCliInvocation,
+  inferenceSpec,
+  isModelTier,
+  resolveModel,
+  getTierTimeout,
+  TIER_TIMEOUTS,
+} from "./cli-args.js";
 
-// Model configurations §6.1
-const MODELS: Record<string, string> = {
-  fast: "claude-haiku-4-5-20251001",
-  standard: "claude-sonnet-4-6",
-  smart: "claude-opus-4-6",
-};
-
-const TIMEOUTS: Record<string, number> = {
-  fast: 15,
-  standard: 30,
-  smart: 90,
-};
 const CONTEXT_ID_PRIMARY_MODEL = "gpt-5.3-codex";
 
 /**
@@ -37,36 +33,30 @@ export function inference(
   options?: { model?: string },
 ): InferenceResult {
   const startTime = Date.now();
-  const model = options?.model ?? MODELS[level] ?? MODELS.fast;
-  const timeoutSec = timeout ?? TIMEOUTS[level] ?? TIMEOUTS.fast;
+  const modelInput = options?.model ?? level;
+  const model = resolveModel(modelInput);
+  const timeoutSec = timeout ?? (isModelTier(modelInput) ? getTierTimeout(modelInput) : TIER_TIMEOUTS.fast);
   const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
 
-  // Remove ANTHROPIC_API_KEY to force subscription auth
-  const env = { ...process.env };
-  delete env.ANTHROPIC_API_KEY;
+  const invocation = buildCliInvocation(inferenceSpec(modelInput));
+  const isWin = invocation.needsShell;
+
+  // Prompt arg needs Windows quoting when using shell mode
+  let promptArg = fullPrompt;
+  if (isWin) {
+    promptArg = '"' + fullPrompt.replaceAll(/\r?\n/g, " ").replaceAll('"', '""') + '"';
+  }
 
   try {
-    const isWin = process.platform === "win32";
-
-    // On Windows with shell:true, Node.js sets windowsVerbatimArguments —
-    // args are joined with spaces, NOT individually quoted. We must manually
-    // wrap multi-word/special-char args in "..." for cmd.exe parsing.
-    // Inside double quotes: "" = literal ", and |&<> are safe.
-    const empty = isWin ? '""' : "";
-    let promptArg = fullPrompt;
-    if (isWin) {
-      promptArg = '"' + fullPrompt.replaceAll(/\r?\n/g, " ").replaceAll('"', '""') + '"';
-    }
-
     const stdout = execFileSync(
-      "claude",
-      ["--model", model, "--print", "--setting-sources", empty, "-p", "--no-session-persistence", promptArg],
+      invocation.cliName,
+      [...invocation.args, promptArg],
       {
         timeout: timeoutSec * 1000,
-        env,
+        env: invocation.env,
         encoding: "utf-8",
         stdio: ["pipe", "pipe", "pipe"],
-        shell: isWin, // Windows needs shell for .cmd resolution
+        shell: isWin,
       },
     );
 
@@ -210,7 +200,7 @@ export function generateContextIdSlug(
   if (!sparkResult.success || !sparkResult.output) {
     logWarn(
       "inference",
-      `Context ID slug Spark (${CONTEXT_ID_PRIMARY_MODEL}) failed or returned empty output. Falling back to ${MODELS.fast}`,
+      `Context ID slug Spark (${CONTEXT_ID_PRIMARY_MODEL}) failed or returned empty output. Falling back to ${resolveModel("fast")}`,
     );
   }
   const result = sparkResult.success && sparkResult.output ? sparkResult : inference(CONTEXT_ID_SLUG_PROMPT, truncated, "fast", timeout);
@@ -268,24 +258,23 @@ export async function inferenceAsync(
   options?: { model?: string },
 ): Promise<InferenceResult> {
   const startTime = Date.now();
-  const model = options?.model ?? (level in MODELS ? MODELS[level] : undefined) ?? MODELS.fast;
-  const timeoutSec = timeout ?? (level in TIMEOUTS ? TIMEOUTS[level] : undefined) ?? TIMEOUTS.fast;
+  const modelInput = options?.model ?? level;
+  const timeoutSec = timeout ?? (isModelTier(modelInput) ? getTierTimeout(modelInput) : TIER_TIMEOUTS.fast);
   const timeoutMs = timeoutSec * 1000;
   const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
 
-  const env = getInternalSubprocessEnv();
-  delete env.ANTHROPIC_API_KEY;
+  const invocation = buildCliInvocation(inferenceSpec(modelInput));
+  const isWin = invocation.needsShell;
 
-  const isWin = process.platform === "win32";
-  const empty = isWin ? '""' : "";
+  // Prompt arg needs Windows quoting when using shell mode
   const promptArg = isWin
-    ? shellQuoteWin(fullPrompt.replaceAll(/\r?\n/g, " "))
+    ? ('"' + fullPrompt.replaceAll(/\r?\n/g, " ").replaceAll('"', '""') + '"')
     : fullPrompt;
 
   const result = await execFileAsync(
-    "claude",
-    ["--model", model, "--print", "--setting-sources", empty, "-p", "--no-session-persistence", promptArg],
-    { timeout: timeoutMs, env, shell: isWin },
+    invocation.cliName,
+    [...invocation.args, promptArg],
+    { timeout: timeoutMs, env: invocation.env, shell: isWin },
   );
 
   const latencyMs = Date.now() - startTime;
