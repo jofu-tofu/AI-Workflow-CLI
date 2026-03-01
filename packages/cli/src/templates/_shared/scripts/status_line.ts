@@ -13,14 +13,15 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import { homedir } from "node:os";
 import * as path from "node:path";
+import type { ContextState } from "../lib-ts/types.js";
 
 // PAI infrastructure imports — graceful fallback when libs aren't available
 let CONTEXT_BASELINE_TOKENS = 22_600;
-let getContextBySessionId: (id: string) => Record<string, unknown> | null =
+let getContextBySessionId: (id: string, root?: string) => ContextState | null =
 	() => null;
-let getContext: (id: string) => Record<string, unknown> | null = () => null;
-let loadState: (id: string) => Record<string, unknown> | null = () => null;
-let saveState: (id: string, state: unknown) => void = () => {};
+let getContext: (id: string, root?: string) => ContextState | null = () => null;
+let loadState: (id: string, root?: string) => ContextState | null = () => null;
+let saveState: (id: string, state: ContextState) => void = () => {};
 let findLatestPlan: (contextId: string) => string | null = () => null;
 
 try {
@@ -619,7 +620,7 @@ function findActivePlanFile(): string | null {
 function renderContextManager(
 	mode: string,
 	contextId: string,
-	contextState: Record<string, unknown> | null,
+	contextState: ContextState | null,
 ): string {
 	// Strip YYMMDD-HHMM- timestamp prefix from context ID for display
 	let displayId = contextId.replace(/^\d{6}-\d{4}-/, "");
@@ -649,7 +650,7 @@ function renderContextManager(
 	if (isPlanning) {
 		const label = mode === "nano" ? "Plan" : "Planning";
 		modeBadge = ` ${SLATE_600}\u2502${RESET} ${CTX_SECONDARY}Mode:${RESET} ${AMBER}${label}${RESET}`;
-	} else if (stateMode === "has_plan") {
+	} else if (stateMode === "has_staged_work") {
 		const label = mode === "nano" ? "Ready" : "Plan Ready";
 		modeBadge = ` ${SLATE_600}\u2502${RESET} ${CTX_SECONDARY}Mode:${RESET} ${EMERALD}${label}${RESET}`;
 	} else if (stateMode === "active") {
@@ -663,7 +664,7 @@ function renderContextManager(
 		planFilePath = activePlanFile;
 	} else if (statePlanPath) {
 		planFilePath = statePlanPath;
-	} else if (stateMode === "has_plan" || stateMode === "active") {
+	} else if (stateMode === "has_staged_work" || stateMode === "active") {
 		try {
 			planFilePath = findLatestPlan(contextId) ?? null;
 		} catch {
@@ -746,7 +747,7 @@ function resolveContextId(sessionId: string): string | null {
 		const context = getContextBySessionId(sessionId);
 		if (context) {
 			if (!cache.sessions) cache.sessions = {};
-			const ctxId = (context as Record<string, unknown>).id as string;
+			const ctxId = context.id;
 			cache.sessions[sessionId] = { context_id: ctxId };
 			saveCache(cache);
 			return ctxId;
@@ -759,9 +760,9 @@ function resolveContextId(sessionId: string): string | null {
 	return null;
 }
 
-function loadContextState(contextId: string): Record<string, unknown> | null {
+function loadContextState(contextId: string): ContextState | null {
 	try {
-		return loadState(contextId) as Record<string, unknown> | null;
+		return loadState(contextId);
 	} catch {
 		return null;
 	}
@@ -772,12 +773,12 @@ function writeContextWindow(
 	contextWindowData: Record<string, unknown>,
 ): void {
 	try {
-		const state = getContext(contextId) as Record<string, unknown> | null;
+		const state = getContext(contextId);
 		if (state) {
-			if (!state.last_session) state.last_session = {};
-			state.last_session.context_remaining_pct =
+			if (!state.last_session) state.last_session = { session_id: undefined, saved_at: undefined, save_reason: undefined, transcript_path: undefined };
+			(state.last_session as Record<string, unknown>).context_remaining_pct =
 				contextWindowData.remaining_percentage;
-			saveState(contextId, state as unknown);
+			saveState(contextId, state);
 		}
 	} catch {
 		/* ignore */
@@ -788,11 +789,28 @@ function writeContextWindow(
 // Main
 // ---------------------------------------------------------------------------
 
+/** Shape of the JSON payload piped to status_line.ts via stdin */
+interface StatusLineInput {
+	session_id?: string;
+	model?: { display_name?: string };
+	workspace?: { project_dir?: string };
+	context_window?: {
+		current_usage?: {
+			cache_read_input_tokens?: number;
+			input_tokens?: number;
+			cache_creation_input_tokens?: number;
+			output_tokens?: number;
+		};
+		context_window_size?: number;
+		used_percentage?: number;
+	};
+}
+
 function main(): void {
 	// Read JSON from stdin
-	let inputData: Record<string, unknown>;
+	let inputData: StatusLineInput;
 	try {
-		inputData = JSON.parse(fs.readFileSync(0, "utf-8"));
+		inputData = JSON.parse(fs.readFileSync(0, "utf-8")) as StatusLineInput;
 	} catch {
 		inputData = {};
 	}
@@ -804,8 +822,7 @@ function main(): void {
 	// Extract input fields
 	const sessionId = inputData.session_id ?? "";
 	const modelName = inputData.model?.display_name ?? "unknown";
-	const workspace = inputData.workspace ?? {};
-	const currentDir: string = workspace.project_dir ?? process.cwd();
+	const currentDir: string = inputData.workspace?.project_dir ?? process.cwd();
 	const dirName = path.basename(currentDir);
 
 	// Context window data
@@ -824,7 +841,7 @@ function main(): void {
 	const contextUsed = totalInput + outputTokens + CONTEXT_BASELINE_TOKENS;
 
 	if (usedPct !== undefined && usedPct !== null) {
-		contextPct = Math.floor(usedPct);
+		contextPct = Math.floor(usedPct as number);
 	} else {
 		contextPct =
 			contextMax > 0 ? Math.floor((contextUsed * 100) / contextMax) : 0;

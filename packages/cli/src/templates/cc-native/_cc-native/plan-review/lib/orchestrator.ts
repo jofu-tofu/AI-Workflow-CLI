@@ -6,7 +6,7 @@
 
 import { OrchestratorClaudeAgent } from "./reviewers/providers/orchestrator-claude-agent.js";
 import { logInfo, logWarn } from "../../../_shared/lib-ts/base/logger.js";
-import type { AgentConfig, OrchestratorConfig, OrchestratorResult } from "../../lib-ts/types.js";
+import type { AgentConfig, AgentReviewSettings, OrchestratorConfig, OrchestratorResult } from "../../lib-ts/types.js";
 
 // Re-export for backward compatibility (moved to reviewers/schemas.ts)
 export { buildOrchestratorSchema } from "./reviewers/schemas.js";
@@ -23,7 +23,7 @@ export async function runOrchestrator(
   plan: string,
   agentLibrary: AgentConfig[],
   config: OrchestratorConfig,
-  settings: Record<string, unknown>,
+  settings: AgentReviewSettings,
   mandatoryNames?: Set<string>,
 ): Promise<OrchestratorResult> {
   logInfo("orchestrator", "Starting plan analysis...");
@@ -34,7 +34,7 @@ export async function runOrchestrator(
   const orchestratorAgent: AgentConfig = {
     name: "orchestrator",
     model: config.model,
-    provider: "claude",
+    provider: config.provider ?? "claude",
     focus: "plan analysis and agent selection",
     categories: [],
     description: "Plan orchestrator",
@@ -58,7 +58,7 @@ export async function runOrchestrator(
   } catch (error) {
     logWarn("orchestrator", `Unexpected error: ${error}`);
     const nonMandatory = agentLibrary.filter((a) => !mandatory.has(a.name));
-    const fallbackCount = ((settings.agentSelection as Record<string, unknown>)?.fallbackCount as number) ?? 2;
+    const fallbackCount = settings.agentSelection?.fallbackCount ?? 2;
     return {
       complexity: "medium",
       category: "code",

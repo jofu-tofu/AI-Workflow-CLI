@@ -16,7 +16,7 @@ import type { ContextState, Mode } from "../types.js";
 const MODE_MIGRATION: Record<string, Mode> = {
   none: "idle",
   planning: "idle",
-  pending_implementation: "has_plan",
+  pending_implementation: "has_staged_work",
   implementing: "active",
 };
 

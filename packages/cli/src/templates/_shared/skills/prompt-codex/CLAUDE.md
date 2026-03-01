@@ -15,9 +15,9 @@ prompt-codex/
 
 **Usage:**
 ```bash
-bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] plan
-bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] --file <path>
-bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] <inline text...>
+bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--full-auto] plan
+bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--full-auto] --file <path>
+bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--full-auto] <inline text...>
 ```
 
 **Args:**
@@ -26,6 +26,7 @@ bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|i
 - `<text...>` — join remaining args as inline prompt, write to temp file, inject
 - `--model <alias|tier|id>` — Aliases: `spark` → `gpt-5.3-codex-spark`, `codex` → `gpt-5.3-codex`, `gpt` → `gpt-5.2`. Tiers: `fast`/`standard`/`smart` (resolved via `resolveModelForProvider()`). Or any full model ID. Aliases are checked first (local `CODEX_ALIASES` constant in `launch-codex.ts`), then tiers, then pass-through. Omitted = Codex default.
 - `--sandbox <mode>` — `read-only`, `workspace-write`, or `danger-full-access`. Default is `danger-full-access` for implementation handoffs.
+- `--no-yolo` — Disable YOLO mode (on by default). YOLO maps to Codex CLI's `--dangerously-bypass-approvals-and-sandbox`. Use `--no-yolo` to restore normal approval prompts.
 
 **Plan discovery order:**
 1. `CLAUDE_SESSION_ID` env → `getContextBySessionId()` → `findLatestPlan(contextId)`

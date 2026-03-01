@@ -4,7 +4,7 @@
  */
 
 import { execSync, execFile } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
+import type { ChildProcess, ExecSyncOptionsWithStringEncoding } from "node:child_process";
 
 // ─── Child Process Cleanup ─────────────────────────────────────────────────
 //
@@ -68,7 +68,7 @@ export function isInternalCall(): boolean {
  * claude instances can run without being blocked.
  */
 export function getInternalSubprocessEnv(): Record<string, string | undefined> {
-  const env = {
+  const env: Record<string, string | undefined> = {
     ...process.env,
     AIWCLI_INTERNAL_CALL: "true",
   };
@@ -87,7 +87,8 @@ export function getInternalSubprocessEnv(): Record<string, string | undefined> {
 export function findExecutable(name: string): string | null {
   try {
     const cmd = process.platform === "win32" ? `where ${name}` : `which ${name}`;
-    const lines = execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], shell: true })
+    // shell: true is valid at runtime but Node's TS types restrict it to string for this overload
+    const lines = execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], shell: true } as unknown as ExecSyncOptionsWithStringEncoding)
       .trim()
       .split(/\r?\n/)
       .map((l) => l.trim())

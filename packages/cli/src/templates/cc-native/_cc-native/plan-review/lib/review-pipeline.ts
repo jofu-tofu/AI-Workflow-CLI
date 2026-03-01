@@ -43,7 +43,10 @@ import { loadSettings, loadModelsConfig, loadAgentLibrary, DEFAULT_ORCHESTRATOR 
 import { DEFAULT_REVIEW_ITERATIONS, loadIterationState, saveIterationState } from "../../lib-ts/state.js";
 import type {
   AgentConfig,
+  AgentReviewSettings,
+  LoadedSettings,
   OrchestratorConfig,
+  PlanReviewSettings,
   ReviewerResult,
   CombinedReviewResult,
   OrchestratorResult,
@@ -66,7 +69,7 @@ function getActiveContextForReview(sessionId: string, projectRoot: string): Cont
     return ctx;
   }
   const allActive = getAllContexts("active", projectRoot);
-  const planning = allActive.filter(c => c.mode === "active" || c.mode === "has_plan");
+  const planning = allActive.filter(c => c.mode === "active" || c.mode === "has_staged_work");
   if (planning.length === 1) {
     logInfo(HOOK, `Found single planning context: ${planning[0]!.id}`);
     return planning[0]!;
@@ -89,9 +92,9 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
   const { sessionId, base, aiwcliDir, transcriptPath, payload } = input;
 
   // 1. Load settings
-  const settings = loadSettings(aiwcliDir);
-  const planSettings = settings.planReview ?? {};
-  const agentSettings = settings.agentReview ?? {};
+  const settings: LoadedSettings = loadSettings(aiwcliDir);
+  const planSettings: PlanReviewSettings = settings.planReview;
+  const agentSettings: AgentReviewSettings = settings.agentReview;
 
   const planReviewEnabled = planSettings.enabled ?? true;
   const agentReviewEnabled = agentSettings.enabled ?? true;
@@ -162,8 +165,8 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
   // 5. Questions gate
   if (!wasPlanQuestionsAgentAsked(sessionId, base)) {
     logInfo(HOOK, "Questions gate: plan-questions agent has not run yet, running now");
-    const timeout = typeof agentSettings.timeout === "number" ? agentSettings.timeout : 120;
-    const questionsResult = await runPlanQuestions(plan, aiwcliDir, timeout, undefined, sessionId);
+    const questionsTimeout = agentSettings.timeout ?? 120;
+    const questionsResult = await runPlanQuestions(plan, aiwcliDir, questionsTimeout, undefined, sessionId);
 
     markQuestionsAsked(sessionId, base, "agent");
 
@@ -227,12 +230,12 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
   let detectedComplexity = "medium";
 
   // Preflight: validate provider+model combos before committing agents or orchestrator
-  const preflightEnabled = (agentSettings.preflight as Record<string, unknown>)?.enabled ?? true;
+  const preflightEnabled = agentSettings.preflight?.enabled ?? true;
   let preflightAvailable: Map<string, Set<string>> | undefined;
 
   if (preflightEnabled && agentReviewEnabled) {
     logInfo(HOOK, "=== PREFLIGHT: Checking provider availability ===");
-    const preflightTimeoutMs = (agentSettings.preflight as Record<string, unknown>)?.timeoutMs as number | undefined;
+    const preflightTimeoutMs = agentSettings.preflight?.timeoutMs;
     const modelsConfig = loadModelsConfig(settings);
     const preflightReport = await runPreflight(modelsConfig, preflightTimeoutMs);
 
@@ -257,13 +260,14 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
   const agentLibrary = agentReviewEnabled ? loadAgentLibrary(aiwcliDir, agentSettings) : [];
   const originalAgentCount = agentLibrary.length;
   const enabledAgents = agentLibrary.filter(a => !graduatedSet.has(a.name));
-  const timeout = typeof agentSettings.timeout === "number" ? agentSettings.timeout : 120;
+  const timeout = agentSettings.timeout ?? 120;
   const legacyMode = agentSettings.legacyMode === true;
 
   const orchSettings = agentSettings.orchestrator ?? DEFAULT_ORCHESTRATOR;
   const orchestratorConfig: OrchestratorConfig = {
     enabled: (orchSettings.enabled ?? true) && agentReviewEnabled,
     model: orchSettings.model ?? "haiku",
+    provider: orchSettings.provider,
     timeout: orchSettings.timeout ?? 30,
   };
 
@@ -278,7 +282,7 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
 
   if (orchestratorConfig.enabled && enabledAgents.length > 0 && !legacyMode) {
     // Guard orchestrator against preflight failures (always uses claude provider)
-    const orchProvider = "claude";
+    const orchProvider = orchestratorConfig.provider ?? "claude";
     const orchModel = orchestratorConfig.model;
     const orchPassed = !preflightAvailable ||
       (preflightAvailable.has(orchProvider) && preflightAvailable.get(orchProvider)!.has(orchModel));
@@ -395,8 +399,7 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
   }
 
   // 10. Issue truncation + verdict override
-  const maxIssuesPerAgent = typeof agentSettings.maxIssuesPerAgent === "number"
-    ? agentSettings.maxIssuesPerAgent : 3;
+  const maxIssuesPerAgent = agentSettings.maxIssuesPerAgent ?? 3;
   truncateAgentIssues(agentResults, maxIssuesPerAgent);
 
   const passEligible = computePassEligible(agentResults);
@@ -404,7 +407,7 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
     logInfo(HOOK, `Pass-eligible agents this iteration: ${passEligible.join(", ")}`);
   }
 
-  const highIssueThreshold = typeof agentSettings.highIssueThreshold === "number" ? agentSettings.highIssueThreshold : 3;
+  const highIssueThreshold = agentSettings.highIssueThreshold ?? 3;
   overrideVerdictsByThreshold(agentResults, highIssueThreshold);
 
   // PHASE 4: Generate Output

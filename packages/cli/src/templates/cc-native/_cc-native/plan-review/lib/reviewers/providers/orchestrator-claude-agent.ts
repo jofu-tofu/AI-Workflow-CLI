@@ -3,13 +3,13 @@
  * Analyzes plan complexity and selects reviewer agents via Claude CLI.
  */
 
-import { buildCliInvocation, reviewSpec } from "../../../../../_shared/lib-ts/base/cli-args.js";
+import { buildCliInvocation, reviewSpec, type CliProvider } from "../../../../../_shared/lib-ts/base/cli-args.js";
 import type { ExecutionBackend } from "../../../../../_shared/lib-ts/agent-exec/execution-backend.js";
 import type { ExecutionResult } from "../../../../../_shared/lib-ts/agent-exec/execution-backend.js";
+import { parseStructuredOutput } from "../../../../../_shared/lib-ts/agent-exec/structured-output.js";
 import { logDebug } from "../../../../../_shared/lib-ts/base/logger.js";
 import { debugLog, debugRaw } from "../../../../lib-ts/debug.js";
-import { parseCliOutput } from "../../../../lib-ts/cli-output-parser.js";
-import type { AgentConfig, OrchestratorResult, ComplexityCategory } from "../../../../lib-ts/types.js";
+import type { AgentConfig, AgentReviewSettings, AgentSelectionConfig, OrchestratorResult, ComplexityCategory } from "../../../../lib-ts/types.js";
 import { BaseCliAgent } from "../base/base-agent.js";
 import { buildOrchestratorSchema, ORCHESTRATOR_SCHEMA } from "../schemas.js";
 
@@ -27,7 +27,7 @@ const DEFAULT_COMPLEXITY_CATEGORIES = [
   "research",
 ];
 
-const DEFAULT_AGENT_SELECTION: Record<string, unknown> = {
+const DEFAULT_AGENT_SELECTION: AgentSelectionConfig = {
   simple: { min: 3, max: 3 },
   medium: { min: 8, max: 8 },
   high: { min: 12, max: 12 },
@@ -43,14 +43,14 @@ export class OrchestratorClaudeAgent extends BaseCliAgent<OrchestratorResult> {
   private fallbackCount: number;
   private mandatoryCount: number;
   private nonMandatory: AgentConfig[];
-  private settings: Record<string, unknown>;
+  private settings: AgentReviewSettings;
   private validNames: string[];
 
   constructor(
     agent: AgentConfig,
     agentLibrary: AgentConfig[],
     mandatoryNames: Set<string>,
-    settings: Record<string, unknown>,
+    settings: AgentReviewSettings,
     timeout: number,
     contextPath?: string,
     sessionName?: string,
@@ -61,7 +61,7 @@ export class OrchestratorClaudeAgent extends BaseCliAgent<OrchestratorResult> {
       (a) => !mandatoryNames.has(a.name),
     );
     const validNames = nonMandatory.map((a) => a.name);
-    const categories = (settings.complexityCategories as string[]) ?? DEFAULT_COMPLEXITY_CATEGORIES;
+    const categories = settings.complexityCategories ?? DEFAULT_COMPLEXITY_CATEGORIES;
 
     const schema = validNames.length > 0
       ? buildOrchestratorSchema(validNames, categories)
@@ -77,8 +77,8 @@ export class OrchestratorClaudeAgent extends BaseCliAgent<OrchestratorResult> {
     this.categories = categories;
     this.settings = settings;
 
-    const selection = (settings.agentSelection as Record<string, unknown>) ?? DEFAULT_AGENT_SELECTION;
-    this.fallbackCount = (selection.fallbackCount as number) ?? 2;
+    const selection = settings.agentSelection ?? DEFAULT_AGENT_SELECTION;
+    this.fallbackCount = selection.fallbackCount ?? DEFAULT_AGENT_SELECTION.fallbackCount;
     this.mandatoryCount = agentLibrary.filter((a) => mandatoryNames.has(a.name)).length;
 
     logDebug("orchestrator", `Mandatory agents (always run): ${[...mandatoryNames].sort().join(", ")}`);
@@ -97,12 +97,12 @@ When selecting agents:
 - Fewer agents for simple plans, more for complex plans`;
 
     return buildCliInvocation(
-      reviewSpec("claude", this.agent.model, this.schema, systemPrompt),
+      reviewSpec((this.agent.provider ?? "claude") as CliProvider, this.agent.model, this.schema, systemPrompt),
     ).args;
   }
 
   protected buildPrompt(plan: string): string {
-    const selection = (this.settings.agentSelection as Record<string, unknown>) ?? DEFAULT_AGENT_SELECTION;
+    const selection = this.settings.agentSelection ?? DEFAULT_AGENT_SELECTION;
 
     const agentList = this.nonMandatory
       .map(
@@ -112,9 +112,9 @@ When selecting agents:
       .join("\n");
     const categoryList = this.categories.join("/");
 
-    const simpleAdditional = Math.max(0, ((selection.simple as Record<string, number> | undefined)?.max ?? 3) - this.mandatoryCount);
-    const mediumAdditional = Math.max(0, ((selection.medium as Record<string, number> | undefined)?.max ?? 8) - this.mandatoryCount);
-    const highAdditional = Math.max(0, ((selection.high as Record<string, number> | undefined)?.max ?? 12) - this.mandatoryCount);
+    const simpleAdditional = Math.max(0, (selection.simple?.max ?? 3) - this.mandatoryCount);
+    const mediumAdditional = Math.max(0, (selection.medium?.max ?? 8) - this.mandatoryCount);
+    const highAdditional = Math.max(0, (selection.high?.max ?? 12) - this.mandatoryCount);
 
     return `Analyze this plan and select appropriate reviewer agents.
 
@@ -149,26 +149,54 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning`
         ? rawComplexity
         : "medium";
 
-    let category = (obj.category as string) ?? "code";
-    if (!this.categories.includes(category)) category = "code";
+    const defaultCategory = this.categories.includes("code")
+      ? "code"
+      : (this.categories[0] ?? "code");
+    let category = defaultCategory;
+    if (typeof obj.category === "string" && this.categories.includes(obj.category)) {
+      category = obj.category;
+    }
 
-    let {selectedAgents} = obj;
-    if (!Array.isArray(selectedAgents)) selectedAgents = [];
+    const rawSelected = Array.isArray(obj.selectedAgents)
+      ? obj.selectedAgents
+      : (Array.isArray(obj.selected_agents) ? obj.selected_agents : []);
+
+    const validNames = new Set(this.validNames);
+    const selectedAgents: string[] = [];
+    const unknownNames: string[] = [];
+    const seen = new Set<string>();
+    for (const value of rawSelected) {
+      if (typeof value !== "string") continue;
+      if (!validNames.has(value)) {
+        unknownNames.push(value);
+        continue;
+      }
+      if (!seen.has(value)) {
+        selectedAgents.push(value);
+        seen.add(value);
+      }
+    }
+
+    if (unknownNames.length > 0) {
+      logDebug("orchestrator", `Ignoring unknown orchestrator selections: ${unknownNames.join(", ")}`);
+    }
 
     const reasoning = String(obj.reasoning ?? "").trim() || "No reasoning provided";
-    const skipReason = obj.skipReason as string | undefined;
+    const skipReasonRaw = typeof obj.skipReason === "string"
+      ? obj.skipReason
+      : (typeof obj.skip_reason === "string" ? obj.skip_reason : undefined);
 
     return {
       complexity,
       category,
-      selected_agents: selectedAgents as string[],
+      selected_agents: selectedAgents,
       reasoning,
-      skip_reason: skipReason || undefined,
+      skip_reason: skipReasonRaw || undefined,
     };
   }
 
   protected getCliName(): string {
-    return "claude";
+    return this.agent.provider ?? "claude";
   }
 
   protected makeErrorResult(type: "skip" | "error", message: string): OrchestratorResult {
@@ -179,7 +207,10 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning`
   }
 
   protected parseOutput(raw: string, _result: ExecutionResult): Record<string, unknown> | null {
-    return parseCliOutput(raw);
+    return parseStructuredOutput(raw, {
+      requireFields: ["complexity", "category", "reasoning"],
+      loggerTag: "orchestrator_parser",
+    });
   }
 
   private makeFallback(reasoning: string, error: string): OrchestratorResult {

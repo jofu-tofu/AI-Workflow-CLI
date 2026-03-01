@@ -128,6 +128,7 @@ export interface ReviewDecisionResult {
 export interface OrchestratorConfig {
   enabled: boolean;
   model: string;
+  provider?: string;
   timeout: number;
 }
 
@@ -140,6 +141,66 @@ export interface ProviderConfig {
 /** Model provider pool configuration */
 export interface ModelsConfig {
   providers: Record<string, ProviderConfig>;
+}
+
+// ---------------------------------------------------------------------------
+// Settings Interfaces (typed output of loadSettings())
+// ---------------------------------------------------------------------------
+
+/** Agent selection count range for a single complexity tier */
+export interface AgentSelectionRange {
+  min: number;
+  max: number;
+}
+
+/** Agent selection configuration (per-tier ranges + fallback) */
+export interface AgentSelectionConfig {
+  simple?: AgentSelectionRange;
+  medium?: AgentSelectionRange;
+  high?: AgentSelectionRange;
+  fallbackCount?: number;
+}
+
+/** Preflight health-check configuration */
+export interface PreflightSettings {
+  enabled?: boolean;
+  timeoutMs?: number;
+}
+
+/** Plan review section of merged settings (the "planReview" key) */
+export interface PlanReviewSettings {
+  enabled?: boolean;
+  reviewers?: {
+    codex?: { enabled?: boolean; model?: string; timeout?: number };
+    gemini?: { enabled?: boolean; model?: string; timeout?: number };
+  };
+  display?: Partial<DisplaySettings>;
+}
+
+/** Agent review section of merged settings (the "agentReview" key) */
+export interface AgentReviewSettings {
+  enabled?: boolean;
+  timeout?: number;
+  orchestrator?: OrchestratorConfig;
+  legacyMode?: boolean;
+  highIssueThreshold?: number;
+  maxIssuesPerAgent?: number;
+  mandatoryAgents?: string[] | Record<string, string[]>;
+  agentSelection?: AgentSelectionConfig;
+  agentDefaults?: { model?: string };
+  complexityCategories?: string[];
+  sanitization?: { maxSessionIdLength?: number; maxTitleLength?: number };
+  reviewIterations?: Record<string, number>;
+  display?: Partial<DisplaySettings>;
+  preflight?: PreflightSettings;
+  fallbackByComplexity?: Record<string, number>;
+}
+
+/** Top-level settings object returned by loadSettings() */
+export interface LoadedSettings {
+  planReview: PlanReviewSettings;
+  agentReview: AgentReviewSettings;
+  models: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------

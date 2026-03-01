@@ -7,6 +7,7 @@ import { logDebug, logInfo, logWarn } from "../../../_shared/lib-ts/base/logger.
 import { findExecutable } from "../../../_shared/lib-ts/base/subprocess-utils.js";
 import type {
   AgentConfig,
+  AgentReviewSettings,
   ModelsConfig,
   OrchestratorResult,
   AgentSelectionResult,
@@ -89,7 +90,7 @@ export function assignModelsToAgents(
       }
       return [name, config] as [string, typeof config];
     })
-    .filter((entry): entry is [string, { enabled: boolean; models: string[]; reasoningEffort?: string }] => entry !== null);
+    .filter((entry): entry is [string, { enabled: boolean; models: string[] }] => entry !== null);
 
   // Sort by provider priority (codex first)
   enabledProviders.sort((a, b) => {
@@ -110,7 +111,7 @@ export function assignModelsToAgents(
   return agents.map(agent => {
     const modelIdx = Math.floor(Math.random() * providerConfig.models.length);
     const model = providerConfig.models[modelIdx] ?? providerConfig.models[0] ?? agent.model;
-    return { ...agent, provider: providerName, model, reasoningEffort: providerConfig.reasoningEffort };
+    return { ...agent, provider: providerName, model };
   });
 }
 
@@ -122,7 +123,7 @@ export interface AgentSelectionInput {
   enabledAgents: AgentConfig[];
   orchResult: OrchestratorResult | null;
   mandatoryConfig: unknown;
-  agentSettings: Record<string, unknown>;
+  agentSettings: AgentReviewSettings;
   legacyMode: boolean;
 }
 
@@ -168,7 +169,7 @@ export function selectAgents(input: AgentSelectionInput): AgentSelectionResult {
     }
 
     // Enforce minimum agent count
-    const fallbackByComplexity = agentSettings.fallbackByComplexity ?? { simple: 0, medium: 2, high: 4 };
+    const fallbackByComplexity: Record<string, number> = agentSettings.fallbackByComplexity ?? { simple: 0, medium: 2, high: 4 };
     const minAdditional = fallbackByComplexity[detectedComplexity] ?? 5;
     if (orchSelected.length < minAdditional && nonMandatory.length > 0) {
       const remaining = nonMandatory.filter(a => !orchSelected.includes(a));

@@ -3,9 +3,9 @@
  * Launch Codex in a tmux pane and inject a prompt into its REPL.
  *
  * Usage:
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--context <id>] plan
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--context <id>] --file <path>
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--context <id>] <inline text...>
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--context <id>] plan
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--context <id>] --file <path>
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--context <id>] <inline text...>
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -74,7 +74,7 @@ function findLatestPlanByMtime(projectRoot: string): string | null {
 const rawArgs = process.argv.slice(2);
 
 if (rawArgs.length === 0) {
-  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--context <id>] plan | --file <path> | <text...>");
+  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--no-yolo] [--context <id>] plan | --file <path> | <text...>");
   process.exit(1);
 }
 
@@ -82,6 +82,7 @@ if (rawArgs.length === 0) {
 let modelFlag: string | undefined;
 let sandboxFlag: CodexSandbox | undefined;
 let contextFlag: string | undefined;
+let yolo = true;
 const args: string[] = [];
 
 for (let i = 0; i < rawArgs.length; i++) {
@@ -96,13 +97,17 @@ for (let i = 0; i < rawArgs.length; i++) {
     sandboxFlag = val;
   } else if (rawArgs[i] === "--context" && i + 1 < rawArgs.length) {
     contextFlag = rawArgs[++i];
+  } else if (rawArgs[i] === "--yolo") {
+    yolo = true;
+  } else if (rawArgs[i] === "--no-yolo") {
+    yolo = false;
   } else {
     args.push(rawArgs[i]);
   }
 }
 
 if (args.length === 0) {
-  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--context <id>] plan | --file <path> | <text...>");
+  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--no-yolo] [--context <id>] plan | --file <path> | <text...>");
   process.exit(1);
 }
 
@@ -206,11 +211,12 @@ if (!tmux.available) {
 // ---------------------------------------------------------------------------
 
 // Build args via centralized CLI builder
-const codexArgs = buildCliInvocation(codexReplSpec(resolvedModel, sandboxFlag)).args;
+const codexArgs = buildCliInvocation(codexReplSpec(resolvedModel, sandboxFlag, yolo)).args;
+if (yolo) console.log("Mode: YOLO (bypass approvals and sandbox)");
 if (sandboxFlag) console.log(`Sandbox: ${sandboxFlag}`);
 if (resolvedModel) console.log(`Model: ${resolvedModel}${modelFlag !== resolvedModel ? ` (from "${modelFlag}")` : ""}`);
 
-logDebug("codex-skill", `Launching: model=${resolvedModel ?? "default"}, sandbox=${sandboxFlag ?? "default"}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
+logDebug("codex-skill", `Launching: model=${resolvedModel ?? "default"}, sandbox=${sandboxFlag ?? "default"}, yolo=${yolo}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
 
 const result = await launchDriverInTmuxOrFallback({
   toolName: "codex",

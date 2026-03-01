@@ -44,6 +44,7 @@ export interface CodexReplSpec {
   mode: "repl";
   model?: string | ModelTier;
   sandbox?: CodexSandbox;
+  yolo?: boolean;
   extraArgs?: string[];
 }
 
@@ -203,6 +204,7 @@ function buildCodexReplInvocation(
   env: Record<string, string | undefined>,
 ): CliInvocation {
   const args: string[] = [];
+  if (spec.yolo) args.push("--dangerously-bypass-approvals-and-sandbox");
   if (spec.sandbox) args.push("--sandbox", spec.sandbox);
   if (model) args.push("--model", model);
   if (spec.extraArgs) args.push(...spec.extraArgs);
@@ -263,12 +265,14 @@ export function reviewSpec(
 export function codexReplSpec(
   model?: string,
   sandbox?: CodexSandbox,
+  yolo?: boolean,
 ): CodexReplSpec {
   return {
     provider: "codex",
     mode: "repl",
     model,
     sandbox,
+    yolo,
   };
 }
 

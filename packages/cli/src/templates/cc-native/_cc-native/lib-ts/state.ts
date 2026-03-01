@@ -178,6 +178,7 @@ export function getIterationState(
     passStreaks: {},
     lastPlanHash: "",
     lastPlanPath: "",
+    sessionId: "",
   };
 }
 
