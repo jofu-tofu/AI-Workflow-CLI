@@ -3,9 +3,9 @@
  * Launch Codex in a tmux pane and inject a prompt into its REPL.
  *
  * Usage:
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--context <id>] plan
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--context <id>] --file <path>
- *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--context <id>] <inline text...>
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--context <id>] [--prompt <text>] plan
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--context <id>] [--prompt <text>] --file <path>
+ *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--capture] [--context <id>] [--prompt <text>] <inline text...>
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -179,14 +179,15 @@ function findLatestPlanByMtime(projectRoot: string): string | null {
 const rawArgs = process.argv.slice(2);
 
 if (rawArgs.length === 0) {
-  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--no-yolo] [--capture] [--context <id>] plan | --file <path> | <text...>");
+  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--no-yolo] [--capture] [--context <id>] [--prompt <text>] plan | --file <path> | <text...>");
   process.exit(1);
 }
 
-// Extract --model, --sandbox, and --context flags before mode dispatch
+// Extract flags before mode dispatch
 let modelFlag: string | undefined;
 let sandboxFlag: CodexSandbox | undefined;
 let contextFlag: string | undefined;
+let extraPrompt: string | undefined;
 let yolo = true;
 let capture = false;
 const args: string[] = [];
@@ -203,6 +204,11 @@ for (let i = 0; i < rawArgs.length; i++) {
     sandboxFlag = val;
   } else if (rawArgs[i] === "--context" && i + 1 < rawArgs.length) {
     contextFlag = rawArgs[++i];
+  } else if (rawArgs[i] === "--prompt" && i + 1 < rawArgs.length) {
+    extraPrompt = rawArgs[++i];
+  } else if (rawArgs[i] === "--prompt") {
+    eprint("Error: --prompt requires a text argument.");
+    process.exit(1);
   } else if (rawArgs[i] === "--yolo") {
     yolo = true;
   } else if (rawArgs[i] === "--no-yolo") {
@@ -215,7 +221,7 @@ for (let i = 0; i < rawArgs.length; i++) {
 }
 
 if (args.length === 0) {
-  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--no-yolo] [--capture] [--context <id>] plan | --file <path> | <text...>");
+  eprint("Usage: launch-codex.ts [--model <model>] [--sandbox <mode>] [--no-yolo] [--capture] [--context <id>] [--prompt <text>] plan | --file <path> | <text...>");
   process.exit(1);
 }
 
@@ -303,6 +309,22 @@ if (ctx && promptPath) {
   }
 }
 
+if (extraPrompt && promptPath) {
+  try {
+    const base = fs.readFileSync(promptPath, "utf-8");
+    const combined = `${base}\n\n---\n\n## Additional Instructions\n\n${extraPrompt}`;
+    const extraPromptPath = path.join(os.tmpdir(), `codex-extra-prompt-${Date.now()}.md`);
+    fs.writeFileSync(extraPromptPath, combined, "utf-8");
+    if (tempFile) {
+      try { fs.unlinkSync(tempFile); } catch { /* ignore */ }
+    }
+    promptPath = extraPromptPath;
+    tempFile = extraPromptPath;
+  } catch {
+    logWarn("codex-skill", "Extra prompt append failed, continuing without it");
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Pre-flight: tmux required
 // ---------------------------------------------------------------------------
@@ -324,7 +346,7 @@ if (yolo) console.log("Mode: YOLO (bypass approvals and sandbox)");
 if (sandboxFlag) console.log(`Sandbox: ${sandboxFlag}`);
 if (resolvedModel) console.log(`Model: ${resolvedModel}${modelFlag !== resolvedModel ? ` (from "${modelFlag}")` : ""}`);
 
-logDebug("codex-skill", `Launching: model=${resolvedModel ?? "default"}, sandbox=${sandboxFlag ?? "default"}, yolo=${yolo}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
+logDebug("codex-skill", `Launching: model=${resolvedModel ?? "default"}, sandbox=${sandboxFlag ?? "default"}, yolo=${yolo}, extraPrompt=${!!extraPrompt}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
 const launchStartedAtMs = Date.now();
 
 const result = await launchDriverInTmuxOrFallback({

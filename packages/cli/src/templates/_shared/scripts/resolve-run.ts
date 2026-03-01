@@ -52,7 +52,7 @@ if (!fs.existsSync(fullPath)) {
   process.exit(1);
 }
 
-const result = Bun.spawnSync(["bun", fullPath], {
+const result = Bun.spawnSync(["bun", fullPath, ...process.argv.slice(3)], {
   stdin: "inherit",
   stdout: "inherit",
   stderr: "inherit",

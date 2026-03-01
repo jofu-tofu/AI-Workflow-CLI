@@ -19,8 +19,9 @@ Changes to the working directory (`.aiwcli/`) should also be applied to the temp
 - `.aiwcli/_cc-native/artifacts/**` → `packages/cli/src/templates/cc-native/_cc-native/artifacts/`
 - `.aiwcli/_shared/skills/handoff-system/**/*.ts` → `packages/cli/src/templates/_shared/skills/handoff-system/`
 - `.aiwcli/_shared/skills/meta-plan/**` → `packages/cli/src/templates/_shared/skills/meta-plan/`
-- `.aiwcli/_shared/skills/prompt-codex/**` → `packages/cli/src/templates/_shared/skills/prompt-codex/`
+- `.aiwcli/_shared/skills/codex/**` → `packages/cli/src/templates/_shared/skills/codex/`
 - `.claude/skills/codex/` → `packages/cli/src/templates/_shared/.claude/skills/codex/`
+- `.codex/workflows/codex.md` → `packages/cli/src/templates/_shared/.codex/workflows/codex.md`
 - `.claude/settings.json` → `packages/cli/src/templates/cc-native/.claude/settings.json`
 
 **When to sync:**
@@ -96,7 +97,7 @@ Cohesive subsystems are organized as self-contained folders, following the hando
 - `_cc-native/plan-review/` — multi-agent plan review pipeline
 - `_cc-native/artifacts/` — review artifact generation and tracking
 - `_cc-native/lib-ts/rlm/` — retrieval-augmented learning memory
-- `_shared/skills/prompt-codex/` — Codex tmux launcher skill
+- `_shared/skills/codex/` — Codex tmux launcher skill
 - `_shared/skills/meta-plan/` — prompt amplification for complex problems
 
 **Hooks are NOT co-located with their owning system.**
@@ -123,7 +124,7 @@ Read the relevant CLAUDE.md before working in these areas:
 - `.aiwcli/_cc-native/plan-review/agents/CLAUDE.md` — plan review agent specs
 - `.aiwcli/_cc-native/artifacts/CLAUDE.md` — review artifact generation, public API
 - `.aiwcli/_cc-native/agents/CLAUDE.md` — plan review agent roster and design decisions
-- `.aiwcli/_shared/skills/prompt-codex/CLAUDE.md` — Codex tmux launcher skill
+- `.aiwcli/_shared/skills/codex/CLAUDE.md` — Codex tmux launcher skill
 
 **`packages/cli/` (CLI package — installs templates into user projects):**
 - `packages/cli/CLAUDE.md` — CLI commands, key lib files, template sync constraints

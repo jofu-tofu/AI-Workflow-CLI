@@ -1,11 +1,11 @@
-# Prompt Codex Skill
+# Codex Skill
 
 Launch Codex CLI in a tmux pane and inject a prompt into its REPL.
 
 ## Directory Structure
 
 ```
-prompt-codex/
+codex/
 ├── CLAUDE.md       ← This file
 └── scripts/
     ├── launch-codex.ts  ← CLI entry point
@@ -16,10 +16,10 @@ prompt-codex/
 
 **Usage:**
 ```bash
-bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--full-auto] plan
-bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--full-auto] --file <path>
-bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--full-auto] <inline text...>
-bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--full-auto] [--capture] <mode>
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--full-auto] plan
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--full-auto] --file <path>
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--full-auto] <inline text...>
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--full-auto] [--capture] <mode>
 ```
 
 **Args:**
@@ -28,6 +28,7 @@ bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|i
 - `<text...>` — join remaining args as inline prompt, write to temp file, inject
 - `--model <alias|tier|id>` — Aliases: `spark` → `gpt-5.3-codex-spark`, `codex` → `gpt-5.3-codex`, `gpt` → `gpt-5.2`. Tiers: `fast`/`standard`/`smart` (resolved via `resolveModelForProvider()`). Or any full model ID. Aliases are checked first (local `CODEX_ALIASES` constant in `launch-codex.ts`), then tiers, then pass-through. Omitted = Codex default.
 - `--sandbox <mode>` — `read-only`, `workspace-write`, or `danger-full-access`. Default is `danger-full-access` for implementation handoffs.
+- `--prompt <text>` — append extra instructions under `## Additional Instructions` after the main prompt body.
 - `--no-yolo` — Disable YOLO mode (on by default). YOLO maps to Codex CLI's `--dangerously-bypass-approvals-and-sandbox`. Use `--no-yolo` to restore normal approval prompts.
 - `--capture` — Best-effort session capture. On success, prints:
   - `CODEX_CAPTURE_PANE=<pane_id>`
@@ -57,7 +58,7 @@ bun .aiwcli/_shared/skills/prompt-codex/scripts/launch-codex.ts [--model <tier|i
 
 **Usage:**
 ```bash
-bun .aiwcli/_shared/skills/prompt-codex/scripts/watch-codex.ts <pane_id> <session_id> <session_file>
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/watch-codex.ts <pane_id> <session_id> <session_file>
 ```
 
 **Behavior:**
