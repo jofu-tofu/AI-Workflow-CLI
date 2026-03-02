@@ -141,12 +141,9 @@ static override flags = {
           this.logInfo(`Launching in new tmux session: ${sessionName}`)
           exitCode = await spawnProcess('tmux', ['new-session', '-s', sessionName, shellCommand])
         }
-      } else if (shouldAutoTmux && this.isWindowsTerminalAvailable()) {
-        this.logInfo('tmux unavailable; launching in Windows Terminal split pane')
-        exitCode = await spawnProcess('wt', ['split-pane', '--', cliCommand, ...cliArgs])
       } else {
         if (shouldAutoTmux) {
-          this.logInfo('No pane launcher available. Launching directly.')
+          this.logInfo('Launching directly in current terminal.')
         } else if (disableTmux) {
           this.debug('tmux launch disabled via --no-tmux')
         } else if (insideTmux) {
@@ -199,17 +196,6 @@ static override flags = {
     try {
       const cmd = process.platform === 'win32' ? 'where tmux' : 'which tmux'
       execSync(cmd, {stdio: 'ignore'})
-      return true
-    } catch {
-      return false
-    }
-  }
-
-  private isWindowsTerminalAvailable(): boolean {
-    if (process.platform !== 'win32') return false
-
-    try {
-      execSync('where wt', {stdio: 'ignore'})
       return true
     } catch {
       return false
