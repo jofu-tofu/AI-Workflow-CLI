@@ -67,7 +67,7 @@ export function findBestSplit(panes: TmuxPaneInfo[]): PlacementResult | null {
   // Correct for this so BSP splits the visually longer axis, not just the higher
   // character count. Without this, a 77x68 pane looks "wider" in chars but is
   // actually much taller in pixels, and should split top/bottom (-v), not left/right.
-  const CELL_ASPECT_RATIO = 2.0;
+  const CELL_ASPECT_RATIO = 2;
   const visualWidth = best.width;
   const visualHeight = best.height * CELL_ASPECT_RATIO;
 

@@ -1,5 +1,5 @@
-import { execFileAsync, findExecutable } from "../subprocess-utils.js";
 import type { PaneLaunchOptions, PaneLaunchResult, PaneLauncher } from "../pane-launcher.js";
+import { execFileAsync, findExecutable } from "../subprocess-utils.js";
 
 function findPowerShell(): string {
   return findExecutable("pwsh") ?? findExecutable("powershell") ?? "powershell";

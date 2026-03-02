@@ -12,19 +12,19 @@
 
 import * as fs from "node:fs";
 
+import {
+  getTmuxAvailability,
+  
+  quoteForSh,
+  
+  type TmuxSplitFlag,
+} from "./launchers/tmux-launcher.js";
 import { createPaneLauncher, type PaneBackend, type PaneSplitDirection } from "./pane-launcher.js";
 import { cleanupSentinelIpc, createSentinelIpcPaths } from "./sentinel-ipc.js";
 import { execFileAsync, findExecutable } from "./subprocess-utils.js";
-import {
-  getTmuxAvailability,
-  normalizeSplitFlag,
-  quoteForSh,
-  type TmuxAvailability,
-  type TmuxSplitFlag,
-} from "./launchers/tmux-launcher.js";
 
-export type { TmuxAvailability, TmuxSplitFlag };
-export { getTmuxAvailability, normalizeSplitFlag, quoteForSh };
+
+
 
 export type DriverMode = "exec" | "repl";
 export type TmuxSplitOption = TmuxSplitFlag | "auto";
@@ -258,7 +258,7 @@ export async function launchDriverInTmuxOrFallback(
         baseCommand,
         sentinel.sentinelPath,
         Boolean(options.autoClose),
-        Boolean(options.holdPane) && !Boolean(options.autoClose),
+        Boolean(options.holdPane) && !options.autoClose,
         holdMessage,
       );
 
@@ -339,3 +339,5 @@ export async function launchDriverInTmuxOrFallback(
     reason: `${tmux.reason ?? "no available pane launcher"}; fallback disabled`,
   };
 }
+
+export {getTmuxAvailability, normalizeSplitFlag, quoteForSh, type TmuxAvailability, type TmuxSplitFlag} from "./launchers/tmux-launcher.js";

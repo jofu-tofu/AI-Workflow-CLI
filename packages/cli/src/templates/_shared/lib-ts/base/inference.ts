@@ -9,7 +9,6 @@ import { execFileSync } from "node:child_process";
 import { logDebug, logWarn } from "./logger.js";
 import { STOP_WORDS } from "./stop-words.js";
 import type { InferenceResult } from "../types.js";
-import { execFileAsync } from "./subprocess-utils.js";
 import {
   buildCliInvocation,
   inferenceSpec,
@@ -19,6 +18,7 @@ import {
   TIER_TIMEOUTS,
 } from "./cli-args.js";
 import { CODEX_MODELS } from "./models.js";
+import { execFileAsync } from "./subprocess-utils.js";
 
 const CONTEXT_ID_PRIMARY_MODEL = CODEX_MODELS.spark;
 
@@ -35,7 +35,6 @@ export function inference(
 ): InferenceResult {
   const startTime = Date.now();
   const modelInput = options?.model ?? level;
-  const model = resolveModel(modelInput);
   const timeoutSec = timeout ?? (isModelTier(modelInput) ? getTierTimeout(modelInput) : TIER_TIMEOUTS.fast);
   const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
 

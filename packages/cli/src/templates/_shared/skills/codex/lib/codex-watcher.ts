@@ -12,7 +12,7 @@ import { getTmuxAvailability } from "../../../lib-ts/base/tmux-driver.js";
 export const POLL_INTERVAL_MS = 2000;
 export const POLL_TIMEOUT_MS = 3000;
 export const SUMMARY_TIMEOUT_SEC = 8;
-export const RESUME_TIMEOUT_MS = 45000;
+export const RESUME_TIMEOUT_MS = 45_000;
 export const MAX_TRANSCRIPT_LINES = 220;
 export const MAX_LINE_LENGTH = 500;
 export const WAIT_TIMEOUT_MS_DEFAULT = 14_400_000;
@@ -44,7 +44,9 @@ Do not request additional input.
 If the prior session was brief, still provide a best-effort summary.`;
 
 export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 export function safeCleanup(filePath: string): void {
@@ -65,10 +67,17 @@ export function readTextIfExists(filePath: string): string {
 }
 
 export function normalizeText(text: string): string {
-  return text
-    .replace(/\r/g, "")
-    .replace(/[\x00-\x08\x0B-\x1F\x7F]/g, "")
-    .replace(/\s+/g, " ")
+  let cleaned = "";
+  for (const char of text) {
+    const codePoint = char.codePointAt(0) ?? 0;
+    const isControl =
+      codePoint === 0x7f || (codePoint <= 0x1f && codePoint !== 0x9 && codePoint !== 0xa && codePoint !== 0xd);
+    if (!isControl) cleaned += char;
+  }
+
+  return cleaned
+    .replaceAll("\r", "")
+    .replaceAll(/\s+/g, " ")
     .trim();
 }
 

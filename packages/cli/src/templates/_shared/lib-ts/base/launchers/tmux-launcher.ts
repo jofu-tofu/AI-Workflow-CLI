@@ -1,6 +1,6 @@
+import type { PaneLaunchOptions, PaneLaunchResult, PaneLauncher } from "../pane-launcher.js";
 import { execFileAsync, findExecutable } from "../subprocess-utils.js";
 import { findBestSplit, listPanes } from "../tmux-pane-placement.js";
-import type { PaneLaunchOptions, PaneLaunchResult, PaneLauncher } from "../pane-launcher.js";
 
 export type TmuxSplitFlag = "-h" | "-v";
 
@@ -39,7 +39,7 @@ export function getTmuxAvailability(options?: TmuxLauncherOptions): TmuxAvailabi
 function splitFlagFromDimensions(width: number, height: number): TmuxSplitFlag {
   // Terminal cells are ~2x taller than wide. Correct for aspect ratio so BSP
   // splits the visually longer axis, not just the higher character count.
-  const CELL_ASPECT_RATIO = 2.0;
+  const CELL_ASPECT_RATIO = 2;
   return width >= height * CELL_ASPECT_RATIO ? "-h" : "-v";
 }
 
@@ -104,6 +104,17 @@ export class TmuxLauncher implements PaneLauncher {
     return getTmuxAvailability(this.options).available;
   }
 
+  async kill(paneId: string): Promise<void> {
+    if (!paneId) return;
+
+    const tmux = getTmuxAvailability(this.options);
+    if (!tmux.available || !tmux.tmuxPath) return;
+
+    await execFileAsync(tmux.tmuxPath, ["kill-pane", "-t", paneId], {
+      timeout: 3000,
+    });
+  }
+
   async launch(options: PaneLaunchOptions): Promise<PaneLaunchResult> {
     const tmux = getTmuxAvailability(this.options);
     if (!tmux.available || !tmux.tmuxPath) {
@@ -158,16 +169,5 @@ export class TmuxLauncher implements PaneLauncher {
       backend: this.backend,
       paneId,
     };
-  }
-
-  async kill(paneId: string): Promise<void> {
-    if (!paneId) return;
-
-    const tmux = getTmuxAvailability(this.options);
-    if (!tmux.available || !tmux.tmuxPath) return;
-
-    await execFileAsync(tmux.tmuxPath, ["kill-pane", "-t", paneId], {
-      timeout: 3000,
-    });
   }
 }

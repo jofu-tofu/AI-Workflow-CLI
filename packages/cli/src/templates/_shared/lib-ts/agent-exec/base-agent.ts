@@ -14,7 +14,7 @@ import type { ExecutionBackend, ExecutionResult, AgentDebugLogger } from "./exec
 import type { AgentConfig } from "../types.js";
 
 // Re-export for consumers
-export type { ExecutionResult, AgentDebugLogger };
+
 
 /** Configuration object for BaseCliAgent construction. */
 export interface AgentExecutionConfig {
@@ -227,3 +227,5 @@ export abstract class BaseCliAgent<T> {
     return coerced;
   }
 }
+
+export {type AgentDebugLogger, type ExecutionResult} from "./execution-backend.js";

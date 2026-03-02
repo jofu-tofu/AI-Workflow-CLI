@@ -84,10 +84,10 @@ function parseAssistantEnvelope(
   options?: StructuredOutputParseOptions,
 ): Record<string, unknown> | null {
   const tag = getTag(options);
-  const message = envelope.message;
+  const {message} = envelope;
   if (!message || typeof message !== "object") return null;
 
-  const content = (message as Record<string, unknown>).content;
+  const {content} = (message as Record<string, unknown>);
   if (!Array.isArray(content)) return null;
 
   for (const item of content) {
@@ -142,8 +142,7 @@ export function parseStructuredOutput(
         return null;
       }
     } else if (Array.isArray(parsed)) {
-      for (let i = 0; i < parsed.length; i++) {
-        const event = parsed[i];
+      for (const [i, event] of parsed.entries()) {
         if (!event || typeof event !== "object") continue;
         const eventObj = event as Record<string, unknown>;
         const assistantResult = parseAssistantEnvelope(eventObj, options);

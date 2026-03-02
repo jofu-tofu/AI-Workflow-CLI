@@ -89,9 +89,9 @@ export async function checkProviderModel(
 
     logDebug(hook, `${provider}:${model} passed (${latencyMs}ms)`);
     return { provider, model, available: true, latencyMs };
-  } catch (err) {
+  } catch (error_) {
     const latencyMs = Date.now() - start;
-    const error = err instanceof Error ? err.message : String(err);
+    const error = error_ instanceof Error ? error_.message : String(error_);
     logWarn(hook, `${provider}:${model} exception: ${error}`);
     return { provider, model, available: false, latencyMs, error };
   }

@@ -49,7 +49,9 @@ export async function waitForSentinelFile(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (fs.existsSync(sentinelPath)) return true;
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, pollIntervalMs);
+    });
   }
 
   return fs.existsSync(sentinelPath);

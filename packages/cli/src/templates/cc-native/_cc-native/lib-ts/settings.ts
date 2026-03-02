@@ -180,8 +180,8 @@ export function loadSettings(projDir: string): LoadedSettings {
   const topLevelFallbackByComplexity = asRecord(raw.fallbackByComplexity) as Record<string, number> | undefined;
   if (nestedFallbackByComplexity || topLevelFallbackByComplexity) {
     mergedAgent.fallbackByComplexity = {
-      ...(nestedFallbackByComplexity ?? {}),
-      ...(topLevelFallbackByComplexity ?? {}),
+      ...nestedFallbackByComplexity,
+      ...topLevelFallbackByComplexity,
     };
   }
 
@@ -195,8 +195,8 @@ export function loadSettings(projDir: string): LoadedSettings {
   const topLevelPreflight = asRecord(raw.preflight);
   if (nestedPreflight || topLevelPreflight) {
     mergedAgent.preflight = {
-      ...(nestedPreflight ?? {}),
-      ...(topLevelPreflight ?? {}),
+      ...nestedPreflight,
+      ...topLevelPreflight,
     };
   }
 
@@ -204,8 +204,8 @@ export function loadSettings(projDir: string): LoadedSettings {
   const topLevelReviewIterations = asRecord(raw.reviewIterations) as Record<string, number> | undefined;
   mergedAgent.reviewIterations = {
     ...DEFAULT_REVIEW_ITERATIONS,
-    ...(nestedReviewIterations ?? {}),
-    ...(topLevelReviewIterations ?? {}),
+    ...nestedReviewIterations,
+    ...topLevelReviewIterations,
   };
 
   const modelsRaw = (raw.models ?? {}) as Record<string, unknown>;

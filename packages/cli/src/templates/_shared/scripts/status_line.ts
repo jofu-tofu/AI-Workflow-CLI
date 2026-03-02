@@ -13,6 +13,7 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import { homedir } from "node:os";
 import * as path from "node:path";
+
 import type { ContextState } from "../lib-ts/types.js";
 
 // PAI infrastructure imports — graceful fallback when libs aren't available
@@ -213,19 +214,18 @@ function renderContextBar(width: number, pct: number): [string, string] {
 // Display width helper — accounts for wide Unicode and ANSI escapes
 // ---------------------------------------------------------------------------
 
-// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape stripping requires \x1b
-const ANSI_RE = /\x1b\[[0-9;]*m/g;
+const ANSI_RE = new RegExp(`${String.raw`\u001B`}\\[[0-9;]*m`, "g");
 
 function isWideChar(cp: number): boolean {
 	return (
-		cp === 0x26c1 || // ⛁ draughts man
-		cp === 0x23f1 || // ⏱ stopwatch
-		(cp >= 0x2600 && cp <= 0x26ff) || // misc symbols
-		(cp >= 0x2700 && cp <= 0x27bf) || // dingbats
-		(cp >= 0x1f300 && cp <= 0x1faff) || // emoji
-		(cp >= 0xfe00 && cp <= 0xfe0f) || // variation selectors
-		(cp >= 0x4e00 && cp <= 0x9fff) || // CJK
-		(cp >= 0x3000 && cp <= 0x303f) // CJK symbols
+		cp === 0x26_c1 || // ⛁ draughts man
+		cp === 0x23_f1 || // ⏱ stopwatch
+		(cp >= 0x26_00 && cp <= 0x26_ff) || // misc symbols
+		(cp >= 0x27_00 && cp <= 0x27_bf) || // dingbats
+		(cp >= 0x1_f3_00 && cp <= 0x1_fa_ff) || // emoji
+		(cp >= 0xfe_00 && cp <= 0xfe_0f) || // variation selectors
+		(cp >= 0x4e_00 && cp <= 0x9f_ff) || // CJK
+		(cp >= 0x30_00 && cp <= 0x30_3f) // CJK symbols
 	);
 }
 
@@ -687,12 +687,15 @@ function renderContextManager(
 	// Note: termWidth not available here — caller truncates via main()
 	switch (mode) {
 		case "micro":
-		case "nano":
+		case "nano": {
 			return `${CTX_ACCENT}\u25C6${RESET} ${SLATE_400}${truncatedId}${RESET}${modeBadge}`;
-		case "mini":
+		}
+		case "mini": {
 			return `${CTX_ACCENT}\u25C6${RESET} ${SLATE_400}${truncatedId}${RESET}${modeBadge}${planPart}`;
-		default:
+		}
+		default: {
 			return `${CTX_ACCENT}\u25C6${RESET} ${CTX_SECONDARY}Context:${RESET} ${SLATE_300}${truncatedId}${RESET}${modeBadge}${planPart}`;
+		}
 	}
 }
 

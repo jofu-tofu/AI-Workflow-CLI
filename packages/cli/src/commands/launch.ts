@@ -68,6 +68,7 @@ static override flags = {
     }),
   }
 
+  // eslint-disable-next-line complexity
   async run(): Promise<void> {
     const {flags} = await this.parse(LaunchCommand)
 
@@ -176,6 +177,24 @@ static override flags = {
     return `tmux set-option -g mouse on >/dev/null 2>&1 || true; exec ${launchCommand}`
   }
 
+  private buildUniqueTmuxSessionName(base: string): string {
+    const safeBase = this.sanitizeTmuxSessionName(base)
+    const timestamp = Date.now().toString(36)
+    const pid = process.pid.toString(36)
+    return this.sanitizeTmuxSessionName(`${safeBase}-${timestamp}-${pid}`)
+  }
+
+  private enableTmuxMouseIfPossible(): void {
+    if (!this.isTmuxAvailable()) return
+
+    try {
+      execSync('tmux set-option -g mouse on', {stdio: 'ignore'})
+      this.debug('Enabled tmux mouse support (set-option -g mouse on)')
+    } catch {
+      this.debug('Could not enable tmux mouse support automatically')
+    }
+  }
+
   private isTmuxAvailable(): boolean {
     try {
       const cmd = process.platform === 'win32' ? 'where tmux' : 'which tmux'
@@ -204,24 +223,6 @@ static override flags = {
       .replaceAll(/-+/g, '-')
       .replaceAll(/^[-_]+|[-_]+$/g, '')
     return safe || 'aiw'
-  }
-
-  private buildUniqueTmuxSessionName(base: string): string {
-    const safeBase = this.sanitizeTmuxSessionName(base)
-    const timestamp = Date.now().toString(36)
-    const pid = process.pid.toString(36)
-    return this.sanitizeTmuxSessionName(`${safeBase}-${timestamp}-${pid}`)
-  }
-
-  private enableTmuxMouseIfPossible(): void {
-    if (!this.isTmuxAvailable()) return
-
-    try {
-      execSync('tmux set-option -g mouse on', {stdio: 'ignore'})
-      this.debug('Enabled tmux mouse support (set-option -g mouse on)')
-    } catch {
-      this.debug('Could not enable tmux mouse support automatically')
-    }
   }
 
   private shellQuote(input: string): string {

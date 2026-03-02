@@ -45,7 +45,7 @@ describe('spawn.ts - Process spawning utilities', () => {
       } catch (error) {
         expect(error).to.be.instanceOf(ProcessSpawnError)
         // Some environments (e.g. WSL) return EACCES instead of ENOENT
-        const message = (error as Error).message
+        const {message} = (error as Error)
         expect(message).to.satisfy(
           (m: string) => m.includes('Command not found') || m.includes('Permission denied'),
           `Expected "Command not found" or "Permission denied", got: ${message}`,

@@ -36,7 +36,9 @@ async function main(): Promise<void> {
   console.log(summary);
 }
 
-main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   console.error(`watch-codex error: ${String(error)}`);
   console.log(SUMMARY_UNAVAILABLE_MESSAGE);
-});
+}

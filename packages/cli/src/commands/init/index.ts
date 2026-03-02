@@ -299,7 +299,7 @@ export default class Init extends BaseCommand {
    * @param targetDir - Target directory for installation
    * @param gitDir - Resolved git directory path, or null if not a git repo
    */
-  private async performMinimalInstall(targetDir: string, gitDir: string | null): Promise<void> {
+  private async performMinimalInstall(targetDir: string, gitDir: null | string): Promise<void> {
     this.logInfo('Performing minimal installation (_shared folder only)...')
     this.log('')
 
@@ -366,7 +366,7 @@ export default class Init extends BaseCommand {
    */
   private async performPostInstallActions(config: {
     foldersForExclude: string[]
-    gitDir: string | null
+    gitDir: null | string
     ides: string[]
     method: string
     targetDir: string

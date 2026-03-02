@@ -51,7 +51,7 @@ export interface CorroborationConfig {
 }
 
 const DEFAULT_MIN_AGREEMENT = 2;
-const DEFAULT_MIN_RATIO = 0.40;
+const DEFAULT_MIN_RATIO = 0.4;
 
 /**
  * Compute the effective blocking threshold for a given agent pool size.

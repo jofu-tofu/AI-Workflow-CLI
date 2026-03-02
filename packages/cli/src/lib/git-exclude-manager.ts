@@ -25,7 +25,7 @@ const AIW_PERMANENT_ENTRIES = ['_output']
  * @param targetDir - Directory to resolve git dir for
  * @returns Absolute path to the git directory, or null if not a git repo
  */
-export async function resolveGitDir(targetDir: string): Promise<string | null> {
+export async function resolveGitDir(targetDir: string): Promise<null | string> {
   try {
     const {stdout} = await execFileAsync('git', ['rev-parse', '--git-dir'], {cwd: targetDir})
     const gitDir = stdout.trim()

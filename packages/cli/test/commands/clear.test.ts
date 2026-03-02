@@ -16,7 +16,7 @@ function getClassSource(): string {
   const proto = ClearCommand.prototype as unknown as Record<string, unknown>
   return Object.getOwnPropertyNames(proto)
     .filter((name) => typeof proto[name] === 'function')
-    .map((name) => (proto[name] as Function).toString()) // eslint-disable-line @typescript-eslint/ban-types
+    .map((name) => (proto[name] as (...arguments_: unknown[]) => unknown).toString())
     .join('\n')
 }
 

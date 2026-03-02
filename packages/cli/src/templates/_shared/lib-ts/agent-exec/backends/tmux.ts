@@ -10,7 +10,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { execFileAsync } from "../../base/subprocess-utils.js";
 import {
   buildShellCaptureScript,
   cleanupSentinelIpc,
@@ -19,6 +18,7 @@ import {
   readTextIfExists,
   waitForSentinelFile,
 } from "../../base/sentinel-ipc.js";
+import { execFileAsync } from "../../base/subprocess-utils.js";
 import { getTmuxAvailability, quoteForSh, normalizeSplitFlag } from "../../base/tmux-driver.js";
 import type { ExecutionBackend, ExecutionRequest, ExecutionResult } from "../execution-backend.js";
 

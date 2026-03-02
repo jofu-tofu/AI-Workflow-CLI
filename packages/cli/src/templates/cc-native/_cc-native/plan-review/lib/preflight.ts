@@ -11,10 +11,10 @@
 import { preflightCommandConfig } from "../../../_shared/lib-ts/base/cli-args.js";
 import { logInfo, logWarn } from "../../../_shared/lib-ts/base/logger.js";
 import { checkProviderModel, type PreflightCommandConfig } from "../../../_shared/lib-ts/base/preflight.js";
-import type { ModelsConfig, PreflightCheckResult, PreflightReport } from "../../lib-ts/types.js";
+import type { ModelsConfig, PreflightReport } from "../../lib-ts/types.js";
 
 const HOOK = "preflight";
-const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_TIMEOUT_MS = 15_000;
 
 // ---------------------------------------------------------------------------
 // Provider Registry (built from centralized cli-args)

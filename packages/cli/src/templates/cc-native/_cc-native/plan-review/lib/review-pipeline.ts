@@ -8,12 +8,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { resolveMandatoryAgents, assignModelsToAgents, selectAgents } from "./agent-selection.js";
-import { runPreflight } from "./preflight.js";
 import { computeCorroboratedDecision } from "./corroboration.js";
 import { computePassEligible, extractTopIssuesForTracker, advanceIterationState } from "./graduation.js";
 import { runOrchestrator } from "./orchestrator.js";
 import { truncateAgentIssues, overrideVerdictsByThreshold, buildReviewOutput } from "./output-builder.js";
 import { runPlanQuestions } from "./plan-questions.js";
+import { runPreflight } from "./preflight.js";
 import { runAgentReview } from "./reviewers/index.js";
 import { getContextReviewsDir, getContextDir, getReviewFolderPath } from "../../../_shared/lib-ts/base/constants.js";
 import { logDiagnostic } from "../../../_shared/lib-ts/base/hook-utils.js";

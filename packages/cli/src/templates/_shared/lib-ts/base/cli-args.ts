@@ -4,11 +4,11 @@
  * platform quoting, model tier resolution, and env setup.
  */
 
+import { CLAUDE_MODELS, CODEX_MODELS } from "./models.js";
 import type { PreflightCommandConfig } from "./preflight.js";
 import { getInternalSubprocessEnv, shellQuoteWin } from "./subprocess-utils.js";
-import { CLAUDE_MODELS, CODEX_MODELS } from "./models.js";
 
-export { CLAUDE_MODELS, CODEX_MODELS };
+
 
 // ---------------------------------------------------------------------------
 // Types
@@ -285,3 +285,5 @@ export function preflightCommandConfig(provider: CliProvider): PreflightCommandC
     input,
   };
 }
+
+export {CLAUDE_MODELS, CODEX_MODELS} from "./models.js";

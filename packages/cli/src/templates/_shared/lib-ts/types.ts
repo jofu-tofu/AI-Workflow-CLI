@@ -187,7 +187,7 @@ export interface CaretCommand {
 
 // §1.12 — Preflight types (shared across hooks)
 // Re-exported from base/preflight.ts for convenience
-export type { PreflightCommandConfig, PreflightCheckResult } from "./base/preflight.js";
+export type { PreflightCheckResult, PreflightCommandConfig } from "./base/preflight.js";
 
 // §1.13 — Agent configuration (shared across templates)
 
