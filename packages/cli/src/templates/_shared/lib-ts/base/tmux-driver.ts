@@ -11,6 +11,7 @@
  */
 
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 import {
   getTmuxAvailability,
@@ -84,6 +85,15 @@ function buildCommandArgs(
   promptPath?: string,
 ): string[] {
   if (mode !== "repl" || !promptPath) return args;
+
+  // Windows pane launchers execute via wt/cmd/PowerShell, where long command
+  // strings are prone to truncation. Keep REPL startup arg short and point to file.
+  if (process.platform === "win32") {
+    const absolutePromptPath = path.resolve(promptPath);
+    const bootstrap = `Read startup instructions from this file path before taking action: ${absolutePromptPath}. Use that file as the initial context.`;
+    return [...args, bootstrap];
+  }
+
   const promptText = fs.readFileSync(promptPath, "utf-8");
   return [...args, promptText];
 }

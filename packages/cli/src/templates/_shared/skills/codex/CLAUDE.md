@@ -23,12 +23,12 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 ```
 
 **Args:**
-- `plan` — discover active plan via context system, then pass the absolute plan filepath as startup context (Codex reads the file directly)
-- `--file <path>` — pass the absolute filepath as startup context (Codex reads the file directly)
+- `plan` — discover active plan via context system, build a bootstrap startup prompt that includes the plan filepath (Codex reads that file directly)
+- `--file <path>` — build a bootstrap startup prompt that includes the file path (Codex reads that file directly)
 - `<text...>` — join remaining args as inline prompt
 - `--model <alias|tier|id>` — Aliases: `spark` → `gpt-5.3-codex-spark`, `codex` → `gpt-5.3-codex`, `gpt` → `gpt-5.2`. Tiers: `fast`/`standard`/`smart` (resolved via `resolveModelForProvider()`). Or any full model ID.
 - `--sandbox <mode>` — `read-only`, `workspace-write`, or `danger-full-access`. Default is `danger-full-access`.
-- `--prompt <text>` — append extra instructions under `## Additional Instructions`.
+- `--prompt <text>` — append extra instructions. In `plan` and `--file` modes, these are embedded into a bootstrap temp file alongside the target path.
 - `--no-yolo` — Disable YOLO mode (`--dangerously-bypass-approvals-and-sandbox`).
 - `--no-watch` — Disable watch/summarize mode.
 

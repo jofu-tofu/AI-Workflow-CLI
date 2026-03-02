@@ -83,7 +83,7 @@ function samePath(a: string, b: string): boolean {
   return left === right;
 }
 
-function readSessionMeta(sessionFile: string): { sessionId: string; cwd: string } | null {
+function readSessionMeta(sessionFile: string): { sessionId: string; cwd: string; startedAtMs: number } | null {
   try {
     const raw = fs.readFileSync(sessionFile, "utf-8");
     const firstLine = raw.split(/\r?\n/).find((line) => line.trim().length > 0);
@@ -92,8 +92,12 @@ function readSessionMeta(sessionFile: string): { sessionId: string; cwd: string 
     if (parsed?.type !== "session_meta") return null;
     const sessionId = parsed?.payload?.id;
     const cwd = parsed?.payload?.cwd;
+    const startedAt = parsed?.payload?.timestamp;
     if (typeof sessionId !== "string" || typeof cwd !== "string") return null;
-    return { sessionId, cwd };
+    const startedAtMs = typeof startedAt === "string"
+      ? (Date.parse(startedAt) || 0)
+      : 0;
+    return { sessionId, cwd, startedAtMs };
   } catch {
     return null;
   }
@@ -102,12 +106,14 @@ function readSessionMeta(sessionFile: string): { sessionId: string; cwd: string 
 function findLatestSessionCandidate(
   projectRoot: string,
   launchStartedAtMs: number,
+  requireProjectCwd = true,
 ): { sessionId: string; sessionFile: string } | null {
   const sessionsRoot = path.join(os.homedir(), ".codex", "sessions");
   const files = collectSessionJsonlFiles(sessionsRoot);
   if (files.length === 0) return null;
 
   const candidates: Array<{ sessionId: string; sessionFile: string; mtimeMs: number }> = [];
+  const currentThreadId = process.env.CODEX_THREAD_ID ?? "";
   for (const sessionFile of files) {
     let mtimeMs = 0;
     try {
@@ -119,7 +125,9 @@ function findLatestSessionCandidate(
 
     const meta = readSessionMeta(sessionFile);
     if (!meta) continue;
-    if (!samePath(meta.cwd, projectRoot)) continue;
+    if (currentThreadId && meta.sessionId === currentThreadId) continue;
+    if (meta.startedAtMs > 0 && meta.startedAtMs < launchStartedAtMs - 1000) continue;
+    if (requireProjectCwd && !samePath(meta.cwd, projectRoot)) continue;
 
     candidates.push({ sessionId: meta.sessionId, sessionFile, mtimeMs });
   }
@@ -136,11 +144,12 @@ async function waitForCaptureSession(
 ): Promise<{ sessionId: string; sessionFile: string } | null> {
   const deadline = Date.now() + SESSION_DISCOVERY_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const candidate = findLatestSessionCandidate(projectRoot, launchStartedAtMs);
+    const candidate = findLatestSessionCandidate(projectRoot, launchStartedAtMs, true);
     if (candidate) return candidate;
     await sleep(SESSION_DISCOVERY_POLL_MS);
   }
-  return findLatestSessionCandidate(projectRoot, launchStartedAtMs);
+  // Fallback: tolerate launcher cwd drift (common on Windows pane backends).
+  return findLatestSessionCandidate(projectRoot, launchStartedAtMs, false);
 }
 
 /** Fallback plan discovery: scan all context plan dirs by mtime. */
@@ -170,18 +179,35 @@ function findLatestPlanByMtime(projectRoot: string): string | null {
   return best?.path ?? null;
 }
 
-function buildFileReferencePrompt(filePath: string, sourceLabel: "plan" | "file"): string {
-  const absolutePath = path.resolve(filePath);
-  const heading = sourceLabel === "plan" ? "## Plan Input" : "## File Input";
-  return [
-    heading,
+function buildFileModeBootstrapPrompt(
+  targetPath: string,
+  sourceLabel: "plan" | "file",
+  extraPrompt?: string,
+  orientation?: string,
+): string {
+  const absolutePath = path.resolve(targetPath);
+  const sourceTitle = sourceLabel === "plan" ? "Plan Source" : "File Source";
+  const sections: string[] = ["## Startup Brief", ""];
+
+  if (orientation?.trim()) {
+    sections.push(orientation.trim(), "", "---", "");
+  }
+
+  sections.push(
+    `## ${sourceTitle}`,
     "",
     `Primary input path: ${absolutePath}`,
     "",
     "Read this file directly from disk before taking action.",
     "Treat its contents as the source of truth.",
     "Do not ask for the file contents to be pasted inline.",
-  ].join("\n");
+  );
+
+  if (extraPrompt?.trim()) {
+    sections.push("", "## Additional Instructions", "", extraPrompt.trim());
+  }
+
+  return sections.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -250,6 +276,7 @@ let promptPath: string | null = null;
 let tempFile: string | null = null;
 let fileReferencePath: string | null = null;
 let fileReferenceLabel: "plan" | "file" | null = null;
+let extraPromptEmbedded = false;
 
 const projectRoot = getProjectRoot(process.cwd());
 
@@ -282,7 +309,7 @@ if (args[0] === "plan") {
     process.exit(1);
   }
 
-  fileReferencePath = planPath;
+  fileReferencePath = path.resolve(planPath);
   fileReferenceLabel = "plan";
   console.log(`Found plan: ${displayPath(planPath)}`);
 
@@ -296,7 +323,7 @@ if (args[0] === "plan") {
     eprint(`Error: File not found: ${filePath}`);
     process.exit(1);
   }
-  fileReferencePath = filePath;
+  fileReferencePath = path.resolve(filePath);
   fileReferenceLabel = "file";
 
 } else {
@@ -308,14 +335,29 @@ if (args[0] === "plan") {
 }
 
 if (fileReferencePath && fileReferenceLabel) {
-  const pointerPrompt = buildFileReferencePrompt(fileReferencePath, fileReferenceLabel);
+  let orientation = "";
+  if (ctx) {
+    try {
+      orientation = buildExternalAgentContext(ctx, projectRoot);
+    } catch {
+      logWarn("codex-skill", `Context orientation build failed for ${ctx.id}, continuing without header`);
+    }
+  }
+
+  const bootstrap = buildFileModeBootstrapPrompt(
+    fileReferencePath,
+    fileReferenceLabel,
+    extraPrompt,
+    orientation,
+  );
   tempFile = path.join(os.tmpdir(), `codex-file-ref-${Date.now()}.md`);
-  fs.writeFileSync(tempFile, pointerPrompt, "utf-8");
+  fs.writeFileSync(tempFile, bootstrap, "utf-8");
   promptPath = tempFile;
+  extraPromptEmbedded = Boolean(extraPrompt?.trim());
 }
 
 // Prepend context orientation if available — graceful degradation on failure
-if (ctx && promptPath) {
+if (ctx && promptPath && !fileReferencePath) {
   try {
     const orientation = buildExternalAgentContext(ctx, projectRoot);
     const original = fs.readFileSync(promptPath, "utf-8");
@@ -332,7 +374,7 @@ if (ctx && promptPath) {
   }
 }
 
-if (extraPrompt && promptPath) {
+if (extraPrompt && promptPath && !extraPromptEmbedded) {
   try {
     const base = fs.readFileSync(promptPath, "utf-8");
     const combined = `${base}\n\n---\n\n## Additional Instructions\n\n${extraPrompt}`;
@@ -402,10 +444,6 @@ if (!result.launched) {
 
   console.log("Codex exec completed (non-interactive mode).");
   process.exit(0);
-}
-
-if (tempFile) {
-  try { fs.unlinkSync(tempFile); } catch { /* ignore */ }
 }
 
 const backendLabel = result.backend === "tmux" ? "tmux pane" : (result.backend === "wt" ? "Windows Terminal pane" : "window");

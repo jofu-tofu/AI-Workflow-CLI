@@ -18,7 +18,7 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 
 **Flags:**
 - `--context <id>` — Project orientation for the sub-agent. Pass when implementing a plan so Codex understands the project structure.
-- `--prompt <text>` — Scope the agent's work. Direct each instance to a specific plan section or task.
+- `--prompt <text>` — Add extra instructions. In `plan`/`--file` mode, this is embedded into the bootstrap temp file with the target path.
 - `--model <name>` — Aliases: `spark`, `codex`, `gpt`. Tiers: `fast`, `standard`, `smart`. Or any full model ID.
 - `--sandbox <mode>` — `read-only`, `workspace-write`, `danger-full-access`.
 - `--no-yolo` — Disable YOLO mode (on by default).
@@ -48,17 +48,7 @@ Run with `run_in_background: true`. Wait for the summary. Review the changes.
 
 ### Parallel
 
-For plans with independent sections. Each sub-agent owns one section, scoped by `--prompt`.
-
-```bash
-# Sub-agent A — section 1
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts \
-  --context <ctx-id> --prompt "Implement section 1: Extract watch logic into lib/codex-watcher.ts" plan
-
-# Sub-agent B — section 3
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts \
-  --context <ctx-id> --prompt "Implement section 3: Update launch-codex.ts arg parsing" plan
-```
+For plans with independent sections, create small section-brief files and launch one sub-agent per brief with `--file`.
 
 Run each with `run_in_background: true`. Summaries arrive as separate background task notifications. When all complete, review for conflicts between agents, then verify with tests or import checks.
 
@@ -79,5 +69,5 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 - **Delegate implementation.** If the work involves writing code and Codex can handle it, send it to Codex.
 - **Split independent sections** into parallel sub-agents for faster execution.
 - **Pass `--context`** when implementing a plan — Codex needs project orientation to make good decisions.
-- **Scope with `--prompt`** when running parallel agents — each sub-agent performs better when it knows exactly which section it owns.
+- **Scope parallel agents with separate `--file` briefs** so each sub-agent has an explicit task boundary.
 - **Review results** when summaries arrive. Check for merge conflicts between parallel agents, then verify with `tsc --noEmit`, tests, or manual inspection.
