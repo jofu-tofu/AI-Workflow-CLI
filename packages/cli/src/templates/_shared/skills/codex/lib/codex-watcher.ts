@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { inference } from "../../../lib-ts/base/inference.js";
 import { logDebug, logWarn } from "../../../lib-ts/base/logger.js";
 import { CODEX_MODELS } from "../../../lib-ts/base/models.js";
+import type { PaneBackend } from "../../../lib-ts/base/pane-launcher.js";
 import { execFileAsync } from "../../../lib-ts/base/subprocess-utils.js";
 import { getTmuxAvailability } from "../../../lib-ts/base/tmux-driver.js";
 
@@ -16,6 +17,12 @@ export const MAX_TRANSCRIPT_LINES = 220;
 export const MAX_LINE_LENGTH = 500;
 export const WAIT_TIMEOUT_MS_DEFAULT = 14_400_000;
 export const SUMMARY_UNAVAILABLE_MESSAGE = "Codex session completed. Summary unavailable.";
+
+export interface PaneWatchTarget {
+  backend?: PaneBackend;
+  paneId?: string;
+  sentinelPath?: string;
+}
 
 export const TRANSCRIPT_SUMMARY_PROMPT = `Summarize this Codex session transcript excerpt.
 Return 3-5 concise bullet points.
@@ -135,10 +142,49 @@ export function looksLikeBadSummary(output: string): boolean {
   );
 }
 
-export async function waitForPaneClose(paneId: string, timeoutMs = WAIT_TIMEOUT_MS_DEFAULT): Promise<void> {
+async function waitForSentinelClose(sentinelPath: string, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    if (fs.existsSync(sentinelPath)) return;
+    if (Date.now() >= deadline) {
+      logDebug("codex-capture", `watch timeout reached waiting for sentinel ${sentinelPath}`);
+      return;
+    }
+
+    const remainingMs = deadline - Date.now();
+    await sleep(Math.max(0, Math.min(POLL_INTERVAL_MS, remainingMs)));
+  }
+}
+
+function normalizeWatchTarget(target: string | PaneWatchTarget): PaneWatchTarget {
+  if (typeof target === "string") {
+    return { backend: "tmux", paneId: target };
+  }
+  return target;
+}
+
+export async function waitForPaneClose(
+  target: string | PaneWatchTarget,
+  timeoutMs = WAIT_TIMEOUT_MS_DEFAULT,
+): Promise<void> {
+  const watch = normalizeWatchTarget(target);
+
+  if (watch.sentinelPath) {
+    await waitForSentinelClose(watch.sentinelPath, timeoutMs);
+    return;
+  }
+
+  const backend = watch.backend ?? "tmux";
+  const paneId = watch.paneId ?? "";
+
+  if (backend !== "tmux") {
+    logDebug("codex-capture", `No pane watcher for backend=${backend}; continuing without wait`);
+    return;
+  }
+
   if (!paneId) return;
 
-  const tmux = getTmuxAvailability();
+  const tmux = getTmuxAvailability({ requireSessionEnv: false });
   if (!tmux.available || !tmux.tmuxPath) {
     logWarn("codex-capture", `tmux unavailable while watching pane ${paneId}: ${tmux.reason ?? "unknown reason"}`);
     return;

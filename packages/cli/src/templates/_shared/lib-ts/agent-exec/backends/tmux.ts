@@ -8,16 +8,19 @@
  */
 
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 
 import { execFileAsync } from "../../base/subprocess-utils.js";
+import {
+  buildShellCaptureScript,
+  cleanupSentinelIpc,
+  createSentinelIpcPaths,
+  readSentinelExitCode,
+  readTextIfExists,
+  waitForSentinelFile,
+} from "../../base/sentinel-ipc.js";
 import { getTmuxAvailability, quoteForSh, normalizeSplitFlag } from "../../base/tmux-driver.js";
 import type { ExecutionBackend, ExecutionRequest, ExecutionResult } from "../execution-backend.js";
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 export interface TmuxBackendOptions {
   splitFlag?: string;
@@ -32,7 +35,7 @@ export class TmuxBackend implements ExecutionBackend {
   }
 
   async execute(request: ExecutionRequest): Promise<ExecutionResult> {
-    const tmux = getTmuxAvailability();
+    const tmux = getTmuxAvailability({ requireSessionEnv: true });
     if (!tmux.available || !tmux.tmuxPath) {
       return {
         stdout: "",
@@ -43,38 +46,23 @@ export class TmuxBackend implements ExecutionBackend {
       };
     }
 
-    // Create temp directory for IPC files
     const agentName = path.basename(request.cliPath).replace(/\.[^.]+$/, "");
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `aiwcli-agent-${agentName}-`));
-
-    const promptPath = path.join(tmpDir, "prompt.txt");
-    const stdoutPath = path.join(tmpDir, "stdout.txt");
-    const stderrPath = path.join(tmpDir, "stderr.txt");
-    const sentinelPath = path.join(tmpDir, "sentinel.txt");
+    const ipc = createSentinelIpcPaths(`aiwcli-agent-${agentName}`);
 
     try {
-      // Write prompt to file for stdin redirection
-      fs.writeFileSync(promptPath, request.input, "utf-8");
+      fs.writeFileSync(ipc.inputPath, request.input, "utf-8");
 
-      // Build env prefix
       const envEntries = Object.entries(request.env).filter(
-        ([, v]) => v !== undefined,
+        ([, value]) => value !== undefined,
       ) as Array<[string, string]>;
       const envPrefix = envEntries
-        .map(([k, v]) => `${k}=${quoteForSh(v)}`)
+        .map(([key, value]) => `${key}=${quoteForSh(value)}`)
         .join(" ");
 
-      // Build command
-      const quotedArgs = request.args.map((a) => quoteForSh(a)).join(" ");
-      const script = [
-        `${envPrefix} ${quoteForSh(request.cliPath)} ${quotedArgs}`,
-        `< ${quoteForSh(promptPath)}`,
-        `> ${quoteForSh(stdoutPath)}`,
-        `2> ${quoteForSh(stderrPath)}`,
-        `; echo $? > ${quoteForSh(sentinelPath)}`,
-      ].join(" ");
+      const quotedArgs = request.args.map((arg) => quoteForSh(arg)).join(" ");
+      const command = `${envPrefix} ${quoteForSh(request.cliPath)} ${quotedArgs}`.trim();
+      const script = buildShellCaptureScript(command, ipc, quoteForSh);
 
-      // Launch tmux pane
       const splitFlag = normalizeSplitFlag(this.options.splitFlag);
       const tmuxArgs = ["split-window", splitFlag, "-P", "-F", "#{pane_id}"];
       if (this.options.splitTarget) {
@@ -94,16 +82,9 @@ export class TmuxBackend implements ExecutionBackend {
       }
 
       const paneId = split.stdout.trim().split(/\r?\n/).pop() ?? "";
+      const finished = await waitForSentinelFile(ipc.sentinelPath, request.timeoutMs);
 
-      // Poll for sentinel file
-      const deadline = Date.now() + request.timeoutMs;
-      while (Date.now() < deadline) {
-        if (fs.existsSync(sentinelPath)) break;
-        await sleep(250);
-      }
-
-      if (!fs.existsSync(sentinelPath)) {
-        // Timeout: kill pane
+      if (!finished) {
         if (paneId) {
           await execFileAsync(tmux.tmuxPath, ["kill-pane", "-t", paneId], { timeout: 3000 });
         }
@@ -116,12 +97,10 @@ export class TmuxBackend implements ExecutionBackend {
         };
       }
 
-      // Read results
-      const exitCode = parseInt(fs.readFileSync(sentinelPath, "utf-8").trim(), 10) || 1;
-      const stdout = fs.existsSync(stdoutPath) ? fs.readFileSync(stdoutPath, "utf-8") : "";
-      const stderr = fs.existsSync(stderrPath) ? fs.readFileSync(stderrPath, "utf-8") : "";
+      const exitCode = readSentinelExitCode(ipc.sentinelPath, 1);
+      const stdout = readTextIfExists(ipc.stdoutPath);
+      const stderr = readTextIfExists(ipc.stderrPath);
 
-      // If outputFilePath specified and exists, read from it instead
       if (request.outputFilePath && fs.existsSync(request.outputFilePath)) {
         return {
           stdout: fs.readFileSync(request.outputFilePath, "utf-8"),
@@ -134,12 +113,7 @@ export class TmuxBackend implements ExecutionBackend {
 
       return { stdout, stderr, exitCode, killed: false, signal: null };
     } finally {
-      // Clean up temp dir
-      try {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      } catch {
-        // Best-effort cleanup
-      }
+      cleanupSentinelIpc(ipc);
     }
   }
 }

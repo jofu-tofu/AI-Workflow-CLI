@@ -30,7 +30,7 @@ export default class LaunchCommand extends BaseCommand {
     '  0  Success - AI assistant launched and exited successfully\n' +
     '  1  General error - unexpected runtime failure\n' +
     '  2  Invalid usage - check your arguments and flags\n' +
-    '  3  Environment error - CLI/tmux not found (install Claude Code from https://claude.ai/download, Codex from npm, tmux from your package manager)'
+    '  3  Environment error - CLI not found (install Claude Code from https://claude.ai/download, Codex from npm)'
 static override examples = [
     '<%= config.bin %> <%= command.id %>  # Auto-launches tmux with a fresh session when not already in tmux',
     '<%= config.bin %> <%= command.id %> --codex  # Launch Codex with --yolo flag',
@@ -126,15 +126,7 @@ static override flags = {
       // Spawn AI CLI with sandbox permissions disabled
       // AIW hook system provides safety guardrails
       // Continue launch regardless of version check result (graceful degradation)
-      if (shouldAutoTmux) {
-        if (!this.isTmuxAvailable()) {
-          this.error(
-            'tmux is required for default launch mode but was not found on PATH.\n' +
-              'Install tmux, or rerun with --no-tmux to launch directly.',
-            {exit: EXIT_CODES.ENVIRONMENT_ERROR},
-          )
-        }
-
+      if (shouldAutoTmux && this.isTmuxAvailable()) {
         const shellCommand = this.buildTmuxShellCommand(cliCommand, cliArgs)
         const sessionFromFlag = flags['tmux-session']?.trim()
 
@@ -148,13 +140,20 @@ static override flags = {
           this.logInfo(`Launching in new tmux session: ${sessionName}`)
           exitCode = await spawnProcess('tmux', ['new-session', '-s', sessionName, shellCommand])
         }
+      } else if (shouldAutoTmux && this.isWindowsTerminalAvailable()) {
+        this.logInfo('tmux unavailable; launching in Windows Terminal split pane')
+        exitCode = await spawnProcess('wt', ['split-pane', '--', cliCommand, ...cliArgs])
       } else {
-        if (disableTmux) this.debug('tmux launch disabled via --no-tmux')
-        else if (insideTmux) {
+        if (shouldAutoTmux) {
+          this.logInfo('No pane launcher available. Launching directly.')
+        } else if (disableTmux) {
+          this.debug('tmux launch disabled via --no-tmux')
+        } else if (insideTmux) {
           this.debug('Already inside tmux; launching directly in current pane')
           this.enableTmuxMouseIfPossible()
+        } else if (!interactiveTty) {
+          this.debug('Non-interactive terminal detected; launching directly')
         }
-        else if (!interactiveTty) this.debug('Non-interactive terminal detected; launching directly')
 
         exitCode = await spawnProcess(cliCommand, cliArgs)
       }
@@ -181,6 +180,17 @@ static override flags = {
     try {
       const cmd = process.platform === 'win32' ? 'where tmux' : 'which tmux'
       execSync(cmd, {stdio: 'ignore'})
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private isWindowsTerminalAvailable(): boolean {
+    if (process.platform !== 'win32') return false
+
+    try {
+      execSync('where wt', {stdio: 'ignore'})
       return true
     } catch {
       return false

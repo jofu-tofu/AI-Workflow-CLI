@@ -1,6 +1,6 @@
 # Codex Skill
 
-Launch Codex CLI in a tmux pane and inject a prompt into its REPL.
+Launch Codex CLI in a visible pane (tmux on Unix, Windows Terminal/window fallback on native Windows) and pass the prompt at process start.
 
 ## Directory Structure
 
@@ -23,55 +23,48 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 ```
 
 **Args:**
-- `plan` — discover active plan via context system, inject into Codex REPL
-- `--file <path>` — inject file contents into Codex REPL
-- `<text...>` — join remaining args as inline prompt, write to temp file, inject
-- `--model <alias|tier|id>` — Aliases: `spark` → `gpt-5.3-codex-spark`, `codex` → `gpt-5.3-codex`, `gpt` → `gpt-5.2`. Tiers: `fast`/`standard`/`smart` (resolved via `resolveModelForProvider()`). Or any full model ID. Aliases are checked first (local `CODEX_ALIASES` constant in `launch-codex.ts`), then tiers, then pass-through. Omitted = Codex default.
-- `--sandbox <mode>` — `read-only`, `workspace-write`, or `danger-full-access`. Default is `danger-full-access` for implementation handoffs.
-- `--prompt <text>` — append extra instructions under `## Additional Instructions` after the main prompt body.
-- `--no-yolo` — Disable YOLO mode (on by default). YOLO maps to Codex CLI's `--dangerously-bypass-approvals-and-sandbox`. Use `--no-yolo` to restore normal approval prompts.
-- `--no-watch` — Disable watch/summarize mode. Launch exits immediately after Codex starts.
+- `plan` — discover active plan via context system, send it as startup prompt to Codex
+- `--file <path>` — read file contents and send as startup prompt
+- `<text...>` — join remaining args as inline prompt
+- `--model <alias|tier|id>` — Aliases: `spark` → `gpt-5.3-codex-spark`, `codex` → `gpt-5.3-codex`, `gpt` → `gpt-5.2`. Tiers: `fast`/`standard`/`smart` (resolved via `resolveModelForProvider()`). Or any full model ID.
+- `--sandbox <mode>` — `read-only`, `workspace-write`, or `danger-full-access`. Default is `danger-full-access`.
+- `--prompt <text>` — append extra instructions under `## Additional Instructions`.
+- `--no-yolo` — Disable YOLO mode (`--dangerously-bypass-approvals-and-sandbox`).
+- `--no-watch` — Disable watch/summarize mode.
 
 **Plan discovery order:**
 1. `CLAUDE_SESSION_ID` env → `getContextBySessionId()` → `findLatestPlan(contextId)`
-2. Fallback: scan `_output/contexts/*/plans/*.md` by mtime (inline, no `_cc-native` import)
+2. Fallback: scan `_output/contexts/*/plans/*.md` by mtime
 
 **Dependencies (all from `_shared/lib-ts/`):**
-- `base/tmux-driver.ts` — `launchDriverInTmuxOrFallback()`, `getTmuxAvailability()`
-- `base/cli-args.ts` — `resolveCodexModel()`, `codexReplSpec()`, `buildCliInvocation()`, `isCodexSandbox()`
-- `base/logger.ts` — `logDebug()`, `logWarn()` (injection diagnostics)
-- `context/context-store.ts` — `getContextBySessionId()`
-- `context/context-formatter.ts` — `buildExternalAgentContext()` (orientation header for Codex)
-- `context/plan-manager.ts` — `findLatestPlan()`
+- `base/tmux-driver.ts` — pane launcher orchestration with cross-platform fallback
+- `base/pane-launcher.ts` + `base/launchers/*` — tmux / wt / window launchers
+- `base/cli-args.ts` — model/sandbox/yolo CLI arg generation
+- `base/sentinel-ipc.ts` — completion sentinel file lifecycle
+- `context/*` — context lookup, formatting, plan discovery
 
 **Watch behavior (single entry point):**
 - Watch is enabled by default.
-- `launch-codex.ts` launches Codex, waits for pane close (or timeout), and prints a summary.
+- `launch-codex.ts` launches Codex, waits for completion (pane close or sentinel), and prints a summary.
 - Summary cascade:
   1. Spark transcript summary from session file
   2. `codex exec resume <session_id>` summary
   3. Transcript-line fallback
   4. Static `Summary unavailable` message
-- Watch flow is best-effort and does not change launch success semantics.
 
 **Design decisions:**
-- Always creates a new tmux pane (no pane reuse/tracking)
-- No exec fallback — REPL mode requires tmux
+- Prompt is delivered at launch time (no tmux buffer paste/capture workflow)
+- Pane backend detection order: tmux (in-session) → Windows Terminal split pane → Windows new window → non-interactive exec fallback
 - `_shared` only — never imports from `_cc-native`
-- Temp file cleanup after injection confirmed
+- Watch path is best-effort and does not change launch success semantics
 
 ## Library: lib/codex-watcher.ts
 
 Reusable side-effect-free watch/summarize functions used by launch flow:
-- `waitForPaneClose(paneId, timeoutMs?)`
+- `waitForPaneClose(target, timeoutMs?)` where `target` can be tmux pane id or `{ backend, paneId, sentinelPath }`
 - `summarizeViaSessionFileSpark(sessionFile)`
 - `summarizeViaResume(sessionId)`
 - `summarizeFromSessionFileFallback(sessionFile)`
 - `collectTranscriptLines(sessionFile)`
 
 Constants and helper utilities are exported for reuse and testing (`POLL_INTERVAL_MS`, `SUMMARY_UNAVAILABLE_MESSAGE`, `normalizeText`, `looksLikeBadSummary`, etc.).
-
-**Resilience policy:**
-- Watch path is best-effort and never fails a successful launch
-- Pane-wait timeout defaults to 4 hours; when reached, summarization continues with available transcript state
-- Summary functions degrade through layered fallbacks and end with static message

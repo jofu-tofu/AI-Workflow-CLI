@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Launch Codex in a tmux pane and inject a prompt into its REPL.
+ * Launch Codex in a visible pane (tmux/wt/window) and pass the prompt at startup.
  *
  * Usage:
  *   bun launch-codex.ts [--model fast|standard|smart|<model-id>] [--sandbox read-only|workspace-write|danger-full-access] [--no-yolo] [--no-watch] [--context <id>] [--prompt <text>] plan
@@ -11,12 +11,10 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import {
-  getTmuxAvailability,
-  launchDriverInTmuxOrFallback,
-} from "../../../lib-ts/base/tmux-driver.js";
+import { launchDriverInTmuxOrFallback } from "../../../lib-ts/base/tmux-driver.js";
+import { cleanupSentinelPath } from "../../../lib-ts/base/sentinel-ipc.js";
 import { getProjectRoot } from "../../../lib-ts/base/constants.js";
-import { resolveCodexModel, codexReplSpec, buildCliInvocation, isCodexSandbox, type CodexSandbox } from "../../../lib-ts/base/cli-args.js";
+import { resolveCodexModel, codexReplSpec, buildCliInvocation, isCodexSandbox, type CodexSandbox, type CliArgSpec } from "../../../lib-ts/base/cli-args.js";
 import { CODEX_MODELS } from "../../../lib-ts/base/models.js";
 import { logDebug, logWarn } from "../../../lib-ts/base/logger.js";
 import { displayPath } from "../../../lib-ts/base/utils.js";
@@ -326,67 +324,73 @@ if (extraPrompt && promptPath) {
 }
 
 // ---------------------------------------------------------------------------
-// Pre-flight: tmux required
+// Launch Codex
 // ---------------------------------------------------------------------------
 
-const tmux = getTmuxAvailability();
-if (!tmux.available) {
-  eprint(`Error: tmux is required for Codex REPL mode. ${tmux.reason ?? ""}`);
-  if (tempFile) try { fs.unlinkSync(tempFile); } catch { /* ignore */ }
-  process.exit(1);
-}
-
-// ---------------------------------------------------------------------------
-// Launch Codex REPL in tmux pane
-// ---------------------------------------------------------------------------
-
-// Build args via centralized CLI builder
 const codexArgs = buildCliInvocation(codexReplSpec(resolvedModel, sandboxFlag, yolo)).args;
 if (yolo) console.log("Mode: YOLO (bypass approvals and sandbox)");
 if (sandboxFlag) console.log(`Sandbox: ${sandboxFlag}`);
 if (resolvedModel) console.log(`Model: ${resolvedModel}${modelFlag !== resolvedModel ? ` (from "${modelFlag}")` : ""}`);
 
 logDebug("codex-skill", `Launching: model=${resolvedModel ?? "default"}, sandbox=${sandboxFlag ?? "default"}, yolo=${yolo}, extraPrompt=${!!extraPrompt}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
-const launchStartedAtMs = Date.now();
 
+const launchStartedAtMs = Date.now();
 const result = await launchDriverInTmuxOrFallback({
   toolName: "codex",
   mode: "repl",
   args: codexArgs,
   splitFlag: "auto",
-  promptPath,
-  sendPromptInRepl: true,
+  promptPath: promptPath ?? undefined,
   allowExecFallback: false,
 });
 
-// Cleanup temp file after injection
+if (!result.launched) {
+  // Final fallback: non-interactive codex exec in current terminal.
+  eprint(`Note: Pane launch unavailable (${result.reason ?? "unknown"}). Using codex exec mode (non-interactive).`);
+
+  const execSpec: CliArgSpec = {
+    provider: "codex",
+    model: resolvedModel ?? CODEX_MODELS.codex,
+    mode: "structured",
+    sandbox: sandboxFlag ?? "danger-full-access",
+  };
+  const execInv = buildCliInvocation(execSpec);
+  const promptContent = promptPath ? fs.readFileSync(promptPath, "utf-8") : "";
+
+  if (tempFile) {
+    try { fs.unlinkSync(tempFile); } catch { /* ignore */ }
+  }
+
+  const { execFileAsync } = await import("../../../lib-ts/base/subprocess-utils.js");
+  const execResult = await execFileAsync(execInv.cliName, execInv.args, {
+    input: promptContent,
+    env: { ...process.env, ...execInv.env },
+    shell: process.platform === "win32",
+  });
+
+  if (execResult.stdout) console.log(execResult.stdout);
+  if (execResult.exitCode !== 0) {
+    eprint(`Codex exec exited with code ${execResult.exitCode}`);
+    if (execResult.stderr) eprint(execResult.stderr);
+    process.exit(1);
+  }
+
+  console.log("Codex exec completed (non-interactive mode).");
+  process.exit(0);
+}
+
 if (tempFile) {
   try { fs.unlinkSync(tempFile); } catch { /* ignore */ }
 }
 
-if (!result.launched) {
-  logWarn("codex-skill", `Launch failed: ${result.reason}`);
-  eprint(`Error: Failed to launch Codex. ${result.reason ?? ""}`);
-  process.exit(1);
-}
-
-// Log injection diagnostics
-const diag = result.sendDiagnostics;
-if (diag) {
-  if (diag.success) {
-    logDebug("codex-skill", `Injection OK: promptWait=${diag.promptWaitMs}ms, retrySent=${diag.retrySent}`);
-  } else {
-    logWarn("codex-skill", `Injection failed at ${diag.failedAt}: wait=${diag.promptWaitMs}ms, stderr=${diag.tmuxStderr ?? "none"}, paneTail=${diag.paneTailOnTimeout ?? "none"}`);
-  }
-}
-
+const backendLabel = result.backend === "tmux" ? "tmux pane" : (result.backend === "wt" ? "Windows Terminal pane" : "window");
 if (result.paneId) {
-  console.log(`Codex launched in tmux pane: ${result.paneId}`);
+  console.log(`Codex launched in ${backendLabel}: ${result.paneId}`);
 } else {
-  console.log("Codex launched in tmux pane.");
+  console.log(`Codex launched in ${backendLabel}.`);
 }
 
-if (watch && result.paneId) {
+if (watch && (result.paneId || result.sentinelPath)) {
   try {
     const {
       SUMMARY_UNAVAILABLE_MESSAGE,
@@ -397,7 +401,11 @@ if (watch && result.paneId) {
     } = await import("../lib/codex-watcher.js");
 
     const sessionInfo = await waitForCaptureSession(projectRoot, launchStartedAtMs);
-    await waitForPaneClose(result.paneId);
+    await waitForPaneClose({
+      backend: result.backend,
+      paneId: result.paneId,
+      sentinelPath: result.sentinelPath,
+    });
 
     const sessionFile = sessionInfo?.sessionFile ?? "";
     const sessionId = sessionInfo?.sessionId ?? "";
@@ -409,13 +417,16 @@ if (watch && result.paneId) {
     console.log("\n--- Codex Session Summary ---");
     console.log(summary);
   } catch (error) {
-    logWarn("codex-skill", `Watch flow failed for ${result.paneId}: ${String(error)}`);
+    logWarn("codex-skill", `Watch flow failed for ${result.paneId ?? result.backend}: ${String(error)}`);
     console.log("\n--- Codex Session Summary ---");
     console.log("Codex session completed. Summary unavailable.");
+  } finally {
+    cleanupSentinelPath(result.sentinelPath);
   }
+} else {
+  cleanupSentinelPath(result.sentinelPath);
 }
 
 if (result.reason) {
-  // Partial success (e.g., launched but prompt injection failed)
   eprint(`Warning: ${result.reason}`);
 }

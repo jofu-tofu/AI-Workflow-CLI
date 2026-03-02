@@ -63,8 +63,16 @@ export function findBestSplit(panes: TmuxPaneInfo[]): PlacementResult | null {
     }
   }
 
+  // Terminal cells are ~2x taller than wide (typical monospace font aspect ratio).
+  // Correct for this so BSP splits the visually longer axis, not just the higher
+  // character count. Without this, a 77x68 pane looks "wider" in chars but is
+  // actually much taller in pixels, and should split top/bottom (-v), not left/right.
+  const CELL_ASPECT_RATIO = 2.0;
+  const visualWidth = best.width;
+  const visualHeight = best.height * CELL_ASPECT_RATIO;
+
   return {
     targetPane: best.paneId,
-    splitFlag: best.width >= best.height ? "-h" : "-v",
+    splitFlag: visualWidth >= visualHeight ? "-h" : "-v",
   };
 }

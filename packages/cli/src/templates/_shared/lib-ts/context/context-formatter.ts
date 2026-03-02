@@ -255,9 +255,6 @@ export function buildExternalAgentContext(
     `- **Context folder:** ${displayPath(contextDir)}`,
     `- **Notes folder:** ${displayPath(notesDir)}`,
   ];
-  if (ctx.summary) {
-    lines.push(`- **Summary:** ${ctx.summary}`);
-  }
   return lines.join("\n");
 }
 
