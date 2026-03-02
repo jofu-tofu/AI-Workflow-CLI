@@ -1,4 +1,6 @@
-import {execSync} from 'node:child_process'
+import {existsSync, readFileSync, writeFileSync} from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
 import {basename} from 'node:path'
 
 import {Flags} from '@oclif/core'
@@ -7,6 +9,7 @@ import BaseCommand from '../lib/base-command.js'
 import {ProcessSpawnError} from '../lib/errors.js'
 import {spawnProcess} from '../lib/spawn.js'
 import {launchTerminal} from '../lib/terminal.js'
+import {enableTmuxMouse, findToolPath, launchInTmuxSession} from '../lib/tmux-session.js'
 import {checkVersionCompatibility, getClaudeCodeVersion} from '../lib/version.js'
 import {EXIT_CODES} from '../types/index.js'
 
@@ -20,19 +23,20 @@ import {EXIT_CODES} from '../types/index.js'
  */
 export default class LaunchCommand extends BaseCommand {
   static override description =
-    'Launch Claude Code or Codex with AIW configuration (sandbox disabled, tmux-first by default on non-Windows)\n\n' +
+    'Launch Claude Code or Codex with AIW configuration (sandbox disabled, tmux-first by default)\n\n' +
     'FLAGS\n' +
     '  --codex/-c: Launch Codex instead of Claude Code (uses --yolo flag)\n' +
     '  --new/-n: Open a new terminal in the current directory and launch there\n' +
     '  --no-tmux/-t: Launch directly in current shell instead of auto-launching tmux\n' +
-    '  --tmux-session/-s: tmux session name to reuse when auto-launching tmux (default is fresh session per launch)\n\n' +
+    '  --tmux-session/-s: tmux session name to reuse when auto-launching tmux (default is fresh session per launch)\n' +
+    '  --prompt/-p: Initial prompt to pass to the AI REPL at startup\n\n' +
     'EXIT CODES\n' +
     '  0  Success - AI assistant launched and exited successfully\n' +
     '  1  General error - unexpected runtime failure\n' +
     '  2  Invalid usage - check your arguments and flags\n' +
     '  3  Environment error - CLI not found (install Claude Code from https://claude.ai/download, Codex from npm)'
 static override examples = [
-    '<%= config.bin %> <%= command.id %>  # Auto-launches tmux with a fresh session when not already in tmux (non-Windows)',
+    '<%= config.bin %> <%= command.id %>  # Auto-launches tmux with a fresh session when not already in tmux',
     '<%= config.bin %> <%= command.id %> --codex  # Launch Codex with --yolo flag',
     '<%= config.bin %> <%= command.id %> -c  # Short form for --codex',
     '<%= config.bin %> <%= command.id %> --new  # Launch in a new terminal window',
@@ -40,6 +44,8 @@ static override examples = [
     '<%= config.bin %> <%= command.id %> --codex --new  # Launch Codex in new terminal',
     '<%= config.bin %> <%= command.id %> --no-tmux  # Run directly in current shell',
     '<%= config.bin %> <%= command.id %> --tmux-session aiw-main  # Reuse/attach explicit tmux session name',
+    '<%= config.bin %> <%= command.id %> --prompt "Fix the login bug"  # Launch with initial prompt',
+    '<%= config.bin %> <%= command.id %> -p "Refactor auth module"  # Short form for --prompt',
     '<%= config.bin %> <%= command.id %> --debug  # Enable verbose logging',
     '# Check exit code in Bash\n<%= config.bin %> <%= command.id %>\necho $?',
     '# Check exit code in PowerShell\n<%= config.bin %> <%= command.id %>\necho $LASTEXITCODE',
@@ -61,6 +67,16 @@ static override flags = {
       description: 'Launch directly in current shell instead of auto-launching tmux',
       default: false,
     }),
+    prompt: Flags.string({
+      char: 'p',
+      description: 'Initial prompt to pass to the AI REPL at startup',
+      required: false,
+    }),
+    'prompt-file': Flags.string({
+      description: 'Path to file containing initial prompt (internal)',
+      required: false,
+      hidden: true,
+    }),
     'tmux-session': Flags.string({
       char: 's',
       description: 'tmux session name to reuse when auto-launching tmux (default: new aiw-<current-dir>-<unique> session)',
@@ -72,6 +88,12 @@ static override flags = {
   async run(): Promise<void> {
     const {flags} = await this.parse(LaunchCommand)
 
+    // Clear Claude Code nesting-detection vars so the spawned REPL doesn't
+    // refuse to start with "cannot launch claude within claude".
+    // Safe here because the launch command's only job is to spawn a new REPL.
+    delete process.env['CLAUDECODE']
+    delete process.env['CLAUDE_CODE_ENTRYPOINT']
+
     // Determine which CLI to launch
     const useCodex = flags.codex
     const cliCommand = useCodex ? 'codex' : 'claude'
@@ -80,15 +102,28 @@ static override flags = {
     const disableTmux = flags['no-tmux']
     const insideTmux = Boolean(process.env.TMUX)
     const interactiveTty = Boolean(process.stdin.isTTY && process.stdout.isTTY)
-    const isWindows = process.platform === 'win32'
-    const shouldAutoTmux = !isWindows && !flags.new && !disableTmux && !insideTmux && interactiveTty
+    const shouldAutoTmux = !flags.new && !disableTmux && !insideTmux && interactiveTty
+
+    // Resolve prompt from --prompt flag or --prompt-file (internal, used by --new propagation)
+    let promptText = flags.prompt?.trim() || undefined
+    if (!promptText && flags['prompt-file']) {
+      const pf = flags['prompt-file'].trim()
+      try { if (existsSync(pf)) promptText = readFileSync(pf, 'utf-8').trim() || undefined }
+      catch { /* ignore — prompt is best-effort enhancement */ }
+    }
 
     // Handle --new flag: launch in a new terminal
     if (flags.new) {
       const cwd = process.cwd()
       this.debug(`Launching new terminal in: ${cwd}`)
 
-      const launchCmd = useCodex ? 'aiw launch --codex' : 'aiw launch'
+      let launchCmd = useCodex ? 'aiw launch --codex' : 'aiw launch'
+      if (promptText) {
+        const tmpFile = path.join(os.tmpdir(), `aiwcli-prompt-${Date.now()}-${process.pid}.txt`)
+        writeFileSync(tmpFile, promptText, {encoding: 'utf-8', mode: 0o600})
+        launchCmd += ` --prompt-file ${this.shellQuote(tmpFile)}`
+      }
+
       const result = await launchTerminal({
         cwd,
         command: launchCmd,
@@ -128,35 +163,57 @@ static override flags = {
       // Spawn AI CLI with sandbox permissions disabled
       // AIW hook system provides safety guardrails
       // Continue launch regardless of version check result (graceful degradation)
-      if (shouldAutoTmux && this.isTmuxAvailable()) {
-        const shellCommand = this.buildTmuxShellCommand(cliCommand, cliArgs)
-        const sessionFromFlag = flags['tmux-session']?.trim()
+      if (shouldAutoTmux) {
+        const resolvedPath = findToolPath(cliCommand)
 
-        if (sessionFromFlag && sessionFromFlag.length > 0) {
-          const sessionName = this.sanitizeTmuxSessionName(sessionFromFlag)
-          this.logInfo(`Launching in tmux session: ${sessionName} (reuse/attach)`)
-          exitCode = await spawnProcess('tmux', ['new-session', '-A', '-s', sessionName, shellCommand])
+        // On Windows, bare command names fail in MSYS2 tmux (PATH is reset by login shell).
+        // Skip tmux and fall back to direct spawn with explicit warning.
+        if (!resolvedPath && process.platform === 'win32') {
+          this.warn(`${cliCommand} not found on PATH — launching directly (install from https://claude.ai/download)`)
+          const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
+          exitCode = await spawnProcess(cliCommand, finalArgs)
         } else {
-          const sessionBase = `aiw-${basename(process.cwd())}`
-          const sessionName = this.buildUniqueTmuxSessionName(sessionBase)
-          this.logInfo(`Launching in new tmux session: ${sessionName}`)
-          exitCode = await spawnProcess('tmux', ['new-session', '-s', sessionName, shellCommand])
+          const sessionFromFlag = flags['tmux-session']?.trim()
+          const reattach = Boolean(sessionFromFlag && sessionFromFlag.length > 0)
+
+          let sessionName: string
+          if (reattach) {
+            sessionName = this.sanitizeTmuxSessionName(sessionFromFlag!)
+            this.logInfo(`Launching in tmux session: ${sessionName} (reuse/attach)`)
+          } else {
+            const sessionBase = `aiw-${basename(process.cwd())}`
+            sessionName = this.buildUniqueTmuxSessionName(sessionBase)
+            this.logInfo(`Launching in new tmux session: ${sessionName}`)
+          }
+
+          const result = await launchInTmuxSession({
+            sessionName,
+            reattach,
+            toolPath: resolvedPath ?? cliCommand,
+            toolArgs: cliArgs,
+            promptText,
+          })
+
+          if (result.usedTmux) {
+            exitCode = result.exitCode
+          } else {
+            if (result.reason) this.warn(`tmux: ${result.reason}, launching directly`)
+            const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
+            exitCode = await spawnProcess(cliCommand, finalArgs)
+          }
         }
       } else {
-        if (shouldAutoTmux) {
-          this.logInfo('Launching directly in current terminal.')
-        } else if (isWindows) {
-          this.debug('Auto-tmux disabled on Windows; launching directly in current terminal')
-        } else if (disableTmux) {
+        if (disableTmux) {
           this.debug('tmux launch disabled via --no-tmux')
         } else if (insideTmux) {
           this.debug('Already inside tmux; launching directly in current pane')
-          this.enableTmuxMouseIfPossible()
+          enableTmuxMouse()
         } else if (!interactiveTty) {
           this.debug('Non-interactive terminal detected; launching directly')
         }
 
-        exitCode = await spawnProcess(cliCommand, cliArgs)
+        const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
+        exitCode = await spawnProcess(cliCommand, finalArgs)
       }
     } catch (error) {
       if (error instanceof ProcessSpawnError) {
@@ -172,37 +229,11 @@ static override flags = {
     this.exit(exitCode)
   }
 
-  private buildTmuxShellCommand(command: string, args: string[]): string {
-    const launchCommand = [command, ...args].map((part) => this.shellQuote(part)).join(' ')
-    return `tmux set-option -g mouse on >/dev/null 2>&1 || true; exec ${launchCommand}`
-  }
-
   private buildUniqueTmuxSessionName(base: string): string {
     const safeBase = this.sanitizeTmuxSessionName(base)
     const timestamp = Date.now().toString(36)
     const pid = process.pid.toString(36)
     return this.sanitizeTmuxSessionName(`${safeBase}-${timestamp}-${pid}`)
-  }
-
-  private enableTmuxMouseIfPossible(): void {
-    if (!this.isTmuxAvailable()) return
-
-    try {
-      execSync('tmux set-option -g mouse on', {stdio: 'ignore'})
-      this.debug('Enabled tmux mouse support (set-option -g mouse on)')
-    } catch {
-      this.debug('Could not enable tmux mouse support automatically')
-    }
-  }
-
-  private isTmuxAvailable(): boolean {
-    try {
-      const cmd = process.platform === 'win32' ? 'where tmux' : 'which tmux'
-      execSync(cmd, {stdio: 'ignore'})
-      return true
-    } catch {
-      return false
-    }
   }
 
   private sanitizeTmuxSessionName(input: string): string {

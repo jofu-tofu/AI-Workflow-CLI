@@ -46,6 +46,7 @@ if (!target) {
 
 const root = findProjectRoot();
 const fullPath = path.resolve(root, target);
+const callerCwd = process.cwd();
 
 if (!fs.existsSync(fullPath)) {
   process.stderr.write(`resolve-run: script not found: ${fullPath}\n`);
@@ -57,6 +58,10 @@ const result = Bun.spawnSync(["bun", fullPath, ...process.argv.slice(3)], {
   stdout: "inherit",
   stderr: "inherit",
   cwd: root,
+  env: {
+    ...process.env,
+    AIW_CALLER_CWD: callerCwd,
+  },
 });
 
 process.exit(result.exitCode);

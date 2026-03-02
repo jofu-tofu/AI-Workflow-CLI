@@ -23,6 +23,7 @@ Changes to the working directory (`.aiwcli/`) should also be applied to the temp
 - `.claude/skills/codex/` → `packages/cli/src/templates/_shared/.claude/skills/codex/`
 - `.codex/workflows/codex.md` → `packages/cli/src/templates/_shared/.codex/workflows/codex.md`
 - `.claude/settings.json` → `packages/cli/src/templates/cc-native/.claude/settings.json`
+- `packages/cli/src/lib/tmux-primitives.ts` → `packages/cli/src/templates/_shared/lib-ts/base/tmux-primitives.ts` (via build:templates copy)
 
 **When to sync:**
 - Adding new hooks

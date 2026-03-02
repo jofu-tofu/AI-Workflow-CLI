@@ -241,11 +241,11 @@ describe('launch command', () => {
     it('implementation references tmux launch path', () => {
       const source = LaunchCommand.prototype.run.toString()
       expect(source).to.include('shouldAutoTmux')
-      expect(source).to.include('new-session')
-      expect(source).to.include('tmux')
+      expect(source).to.include('launchInTmuxSession')
+      expect(source).to.include('findToolPath')
     })
 
-    it('implementation disables auto-tmux on Windows', () => {
+    it('implementation falls back on Windows when tool not found', () => {
       const source = LaunchCommand.prototype.run.toString()
       expect(source).to.include("process.platform === 'win32'")
     })
@@ -253,23 +253,62 @@ describe('launch command', () => {
     it('implementation creates a fresh tmux session by default', () => {
       const source = LaunchCommand.prototype.run.toString()
       expect(source).to.include('buildUniqueTmuxSessionName')
-      expect(source).to.include("['new-session', '-s'")
     })
 
     it('implementation reuses explicit tmux session names', () => {
       const source = LaunchCommand.prototype.run.toString()
       expect(source).to.include('sessionFromFlag')
-      expect(source).to.include("['new-session', '-A', '-s'")
+      expect(source).to.include('reattach')
     })
 
-    it('implementation enables tmux mouse support in launched tmux panes', () => {
+    it('implementation passes structured options to launchInTmuxSession', () => {
       const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('buildTmuxShellCommand')
+      expect(source).to.include('toolPath')
+      expect(source).to.include('toolArgs')
     })
 
     it('implementation enables tmux mouse support when already inside tmux', () => {
       const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('enableTmuxMouseIfPossible')
+      expect(source).to.include('enableTmuxMouse')
+    })
+  })
+
+  describe('--prompt/-p flag for initial prompt', () => {
+    it('should have --prompt flag defined', () => {
+      expect(LaunchCommand.flags).to.have.property('prompt')
+    })
+
+    it('should have -p as short form for --prompt', () => {
+      const promptFlag = LaunchCommand.flags.prompt as {char?: string}
+      expect(promptFlag).to.have.property('char', 'p')
+    })
+
+    it('should have hidden --prompt-file flag', () => {
+      expect(LaunchCommand.flags).to.have.property('prompt-file')
+      const promptFileFlag = LaunchCommand.flags['prompt-file'] as {hidden?: boolean}
+      expect(promptFileFlag).to.have.property('hidden', true)
+    })
+
+    it('should include --prompt in description', () => {
+      expect(LaunchCommand.description).to.include('--prompt')
+    })
+
+    it('implementation handles prompt in direct spawn path', () => {
+      const source = LaunchCommand.prototype.run.toString()
+      expect(source).to.include('promptText')
+      expect(source).to.include('spawnProcess')
+    })
+
+    it('implementation passes promptText to launchInTmuxSession', () => {
+      const source = LaunchCommand.prototype.run.toString()
+      expect(source).to.include('promptText')
+      expect(source).to.include('launchInTmuxSession')
+    })
+
+    it('implementation propagates prompt via temp file for --new path', () => {
+      const source = LaunchCommand.prototype.run.toString()
+      expect(source).to.include('prompt-file')
+      expect(source).to.include('launchTerminal')
     })
   })
 })

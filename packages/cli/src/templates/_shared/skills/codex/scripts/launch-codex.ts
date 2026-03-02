@@ -395,6 +395,7 @@ if (extraPrompt && promptPath && !extraPromptEmbedded) {
 // ---------------------------------------------------------------------------
 
 const codexArgs = buildCliInvocation(codexReplSpec(resolvedModel, sandboxFlag, yolo)).args;
+const launchCwd = process.env.AIW_CALLER_CWD?.trim() || process.cwd();
 if (yolo) console.log("Mode: YOLO (bypass approvals and sandbox)");
 if (sandboxFlag) console.log(`Sandbox: ${sandboxFlag}`);
 if (resolvedModel) console.log(`Model: ${resolvedModel}${modelFlag !== resolvedModel ? ` (from "${modelFlag}")` : ""}`);
@@ -406,6 +407,7 @@ const result = await launchDriverInTmuxOrFallback({
   toolName: "codex",
   mode: "repl",
   args: codexArgs,
+  cwd: launchCwd,
   splitFlag: "auto",
   promptPath: promptPath ?? undefined,
   allowExecFallback: false,
@@ -446,7 +448,7 @@ if (!result.launched) {
   process.exit(0);
 }
 
-const backendLabel = result.backend === "tmux" ? "tmux pane" : (result.backend === "wt" ? "Windows Terminal pane" : "window");
+const backendLabel = result.backend === "tmux" ? "tmux pane" : "window";
 if (result.paneId) {
   console.log(`Codex launched in ${backendLabel}: ${result.paneId}`);
 } else {

@@ -1,8 +1,8 @@
+import { GitBashTmuxLauncher } from "./launchers/gitbash-tmux-launcher.js";
 import { TmuxLauncher } from "./launchers/tmux-launcher.js";
 import { WindowLauncher } from "./launchers/window-launcher.js";
-import { WtLauncher } from "./launchers/wt-launcher.js";
 
-export type PaneBackend = "tmux" | "wt" | "window" | "exec";
+export type PaneBackend = "tmux" | "window" | "exec";
 export type PaneSplitDirection = "h" | "v" | "auto";
 
 export interface PaneLaunchOptions {
@@ -35,7 +35,7 @@ export interface PaneLauncherFactoryOptions {
 
 /**
  * Resolve the first available pane launcher for the current environment.
- * Detection order: tmux -> Windows Terminal -> window fallback.
+ * Detection order: tmux (in-session) -> Git Bash tmux -> window fallback.
  */
 export async function createPaneLauncher(
   options?: PaneLauncherFactoryOptions,
@@ -45,8 +45,8 @@ export async function createPaneLauncher(
   const tmux = new TmuxLauncher({ requireSessionEnv: requireTmuxSession });
   if (await tmux.available()) return tmux;
 
-  const wt = new WtLauncher();
-  if (await wt.available()) return wt;
+  const gitBashTmux = new GitBashTmuxLauncher();
+  if (await gitBashTmux.available()) return gitBashTmux;
 
   const window = new WindowLauncher();
   if (await window.available()) return window;

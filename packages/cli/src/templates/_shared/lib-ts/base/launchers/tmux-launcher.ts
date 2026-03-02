@@ -14,9 +14,7 @@ export interface TmuxLauncherOptions {
   requireSessionEnv?: boolean;
 }
 
-export function quoteForSh(input: string): string {
-  return `'${input.replaceAll("'", "'\"'\"'")}'`;
-}
+export { quoteForSh } from "../tmux-primitives.js";
 
 export function normalizeSplitFlag(value: string | undefined): TmuxSplitFlag {
   return value?.trim() === "-v" ? "-v" : "-h";

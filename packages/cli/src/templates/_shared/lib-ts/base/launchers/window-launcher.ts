@@ -1,5 +1,5 @@
 import { execFileAsync, findExecutable } from "../subprocess-utils.js";
-import { quoteForSh } from "./tmux-launcher.js";
+import { quoteForSh } from "../tmux-primitives.js";
 import type { PaneLaunchOptions, PaneLaunchResult, PaneLauncher } from "../pane-launcher.js";
 
 function quoteForPowerShell(input: string): string {

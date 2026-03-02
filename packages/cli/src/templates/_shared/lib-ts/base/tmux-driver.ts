@@ -3,7 +3,7 @@
  *
  * This module now delegates pane creation to platform-specific launchers:
  * - tmux (Linux/macOS in tmux sessions)
- * - Windows Terminal split-pane
+ * - Git Bash tmux (Windows, detached session via MSYS2)
  * - Windows new-window fallback
  *
  * Prompt delivery is handled at launch time by passing prompt text as a CLI
@@ -44,6 +44,7 @@ export interface LaunchDriverOptions {
   mode?: DriverMode;
   args?: string[];
   env?: Record<string, string>;
+  cwd?: string;
   promptPath?: string;
   splitFlag?: TmuxSplitOption;
   splitTarget?: string;
@@ -276,6 +277,7 @@ export async function launchDriverInTmuxOrFallback(
         command: paneCommand,
         splitDirection: mapSplitDirection(options.splitFlag),
         splitTarget: options.splitTarget,
+        cwd: paneLauncher.backend === "tmux" ? undefined : options.cwd,
       });
 
       if (!paneResult.launched) {
