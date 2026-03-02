@@ -51,6 +51,11 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
   2. `codex exec resume <session_id>` summary
   3. Transcript-line fallback
   4. Static `Summary unavailable` message
+- Summary persistence:
+  - `persistSummary()` in `codex-watcher.ts` writes to `os.tmpdir()/codex-summary-<ts>-<id>.md`
+  - Called before stdout output — temp file survives even if background task capture fails
+  - Best-effort: logs warning on failure, returns null, stdout output still proceeds
+  - File path printed as `[summary_file:<path>]` marker for automated retrieval
 
 **Design decisions:**
 - Prompt is delivered at launch time (no tmux buffer paste/capture workflow)

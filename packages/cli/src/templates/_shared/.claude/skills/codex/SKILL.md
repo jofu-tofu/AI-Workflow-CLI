@@ -26,6 +26,16 @@ The script blocks until Codex exits and prints a summary — run with Bash `run_
 - `--model <name>` — `spark`, `codex`, `gpt`, or tier: `fast`, `standard`, `smart`.
 - `--no-watch` — Fire-and-forget (skip waiting for summary).
 
+## Retrieving Results
+
+The script prints a summary to stdout and writes it to a temp file.
+
+**Primary:** Check TaskOutput for the background task — the summary and file path are inline.
+
+**Fallback (if TaskOutput is empty):** Look for the `[summary_file:<path>]` line in the output. If found, read that file path directly. The temp file persists independently of Claude Code's background task capture.
+
+If neither is available, check `_output/hook-log.jsonl` for `codex-capture` or `codex-skill` entries for diagnostics.
+
 ## Delegation Decision
 
 **One-shot:** Plan is small or tightly coupled → launch one Codex with `plan` mode. Wait for the summary, then review.

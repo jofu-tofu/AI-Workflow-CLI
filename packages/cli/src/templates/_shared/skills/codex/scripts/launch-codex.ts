@@ -11,15 +11,15 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { resolveCodexModel, codexReplSpec, buildCliInvocation, isCodexSandbox, type CodexSandbox, type CliArgSpec } from "../../../lib-ts/base/cli-args.js";
-import { getProjectRoot } from "../../../lib-ts/base/constants.js";
-import { logDebug, logWarn } from "../../../lib-ts/base/logger.js";
-import { CODEX_MODELS } from "../../../lib-ts/base/models.js";
-import { cleanupSentinelPath } from "../../../lib-ts/base/sentinel-ipc.js";
 import { launchDriverInTmuxOrFallback } from "../../../lib-ts/base/tmux-driver.js";
+import { cleanupSentinelPath } from "../../../lib-ts/base/sentinel-ipc.js";
+import { getProjectRoot } from "../../../lib-ts/base/constants.js";
+import { resolveCodexModel, codexReplSpec, buildCliInvocation, isCodexSandbox, type CodexSandbox, type CliArgSpec } from "../../../lib-ts/base/cli-args.js";
+import { CODEX_MODELS } from "../../../lib-ts/base/models.js";
+import { logDebug, logWarn } from "../../../lib-ts/base/logger.js";
 import { displayPath } from "../../../lib-ts/base/utils.js";
-import { buildExternalAgentContext } from "../../../lib-ts/context/context-formatter.js";
 import { getContextBySessionId, getContext } from "../../../lib-ts/context/context-store.js";
+import { buildExternalAgentContext } from "../../../lib-ts/context/context-formatter.js";
 import { findLatestPlan } from "../../../lib-ts/context/plan-manager.js";
 import type { ContextState } from "../../../lib-ts/types.js";
 
@@ -30,9 +30,9 @@ const CODEX_ALIASES: Record<string, string> = {
   gpt: CODEX_MODELS.gpt,
 };
 
-const SESSION_DISCOVERY_TIMEOUT_MS = 12_000;
+const SESSION_DISCOVERY_TIMEOUT_MS = 12000;
 const SESSION_DISCOVERY_POLL_MS = 250;
-const SESSION_MTIME_WINDOW_MS = 120_000;
+const SESSION_MTIME_WINDOW_MS = 120000;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -43,9 +43,7 @@ function eprint(...args: unknown[]): void {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  });
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function collectSessionJsonlFiles(rootDir: string): string[] {
@@ -206,32 +204,18 @@ for (let i = 0; i < rawArgs.length; i++) {
     contextFlag = rawArgs[++i];
   } else if (rawArgs[i] === "--prompt" && i + 1 < rawArgs.length) {
     extraPrompt = rawArgs[++i];
-  } else switch (rawArgs[i]) {
- case "--no-watch": {
-    watch = false;
-  
- break;
- }
- case "--no-yolo": {
-    yolo = false;
-  
- break;
- }
- case "--prompt": {
+  } else if (rawArgs[i] === "--prompt") {
     eprint("Error: --prompt requires a text argument.");
     process.exit(1);
-  
- break;
- }
- case "--yolo": {
+  } else if (rawArgs[i] === "--yolo") {
     yolo = true;
-  
- break;
- }
- default: {
+  } else if (rawArgs[i] === "--no-yolo") {
+    yolo = false;
+  } else if (rawArgs[i] === "--no-watch") {
+    watch = false;
+  } else {
     args.push(rawArgs[i]);
   }
- }
 }
 
 if (args.length === 0) {
@@ -348,7 +332,7 @@ if (yolo) console.log("Mode: YOLO (bypass approvals and sandbox)");
 if (sandboxFlag) console.log(`Sandbox: ${sandboxFlag}`);
 if (resolvedModel) console.log(`Model: ${resolvedModel}${modelFlag !== resolvedModel ? ` (from "${modelFlag}")` : ""}`);
 
-logDebug("codex-skill", `Launching: model=${resolvedModel ?? "default"}, sandbox=${sandboxFlag ?? "default"}, yolo=${yolo}, extraPrompt=${Boolean(extraPrompt)}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
+logDebug("codex-skill", `Launching: model=${resolvedModel ?? "default"}, sandbox=${sandboxFlag ?? "default"}, yolo=${yolo}, extraPrompt=${!!extraPrompt}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
 
 const launchStartedAtMs = Date.now();
 const result = await launchDriverInTmuxOrFallback({
@@ -409,6 +393,7 @@ if (result.paneId) {
 if (watch && (result.paneId || result.sentinelPath)) {
   try {
     const {
+      persistSummary,
       SUMMARY_UNAVAILABLE_MESSAGE,
       summarizeFromSessionFileFallback,
       summarizeViaResume,
@@ -429,13 +414,23 @@ if (watch && (result.paneId || result.sentinelPath)) {
       ?? (sessionId ? await summarizeViaResume(sessionId) : null)
       ?? summarizeFromSessionFileFallback(sessionFile)
       ?? SUMMARY_UNAVAILABLE_MESSAGE;
+    const summaryPath = persistSummary(summary, sessionId || undefined);
 
     console.log("\n--- Codex Session Summary ---");
     console.log(summary);
+    if (summaryPath) {
+      console.log(`\n[summary_file:${summaryPath}]`);
+    }
   } catch (error) {
-    logWarn("codex-skill", `Watch flow failed for ${result.paneId ?? result.backend}: ${String(error)}`);
+    logWarn("codex-skill", `Watch flow failed: ${String(error)}`);
+    const fallbackMsg = "Codex session completed. Summary unavailable (watch error).";
+    const { persistSummary: persistFallback } = await import("../lib/codex-watcher.js");
+    const fallbackPath = persistFallback(fallbackMsg);
     console.log("\n--- Codex Session Summary ---");
-    console.log("Codex session completed. Summary unavailable.");
+    console.log(fallbackMsg);
+    if (fallbackPath) {
+      console.log(`\n[summary_file:${fallbackPath}]`);
+    }
   } finally {
     cleanupSentinelPath(result.sentinelPath);
   }

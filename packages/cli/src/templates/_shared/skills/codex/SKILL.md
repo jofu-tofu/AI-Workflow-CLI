@@ -22,6 +22,16 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 - `--no-yolo` — Disable YOLO mode (on by default).
 - `--no-watch` — Fire-and-forget: exit immediately after launch, skip waiting for summary.
 
+## Retrieving Results
+
+The script prints a summary to stdout and writes it to a temp file.
+
+**Primary:** Check TaskOutput for the background task — the summary and file path are inline.
+
+**Fallback (if TaskOutput is empty):** Look for the `[summary_file:<path>]` line in the output. If found, read that file path directly. The temp file persists independently of Claude Code's background task capture.
+
+If neither is available, check `_output/hook-log.jsonl` for `codex-capture` or `codex-skill` entries for diagnostics.
+
 ## Delegation Patterns
 
 ### One-shot
