@@ -41,7 +41,7 @@ That's it. The hook system activates automatically. Your sessions now have persi
 | Command | Description |
 |---------|-------------|
 | `aiw init` | Install templates into your project. `--method cc-native` for full setup, or bare `aiw init` for shared infrastructure only. `--interactive` for guided setup. |
-| `aiw launch` | Launch Claude Code with hooks enabled. Defaults to tmux-first launch (when outside tmux) and creates a fresh tmux session each run. Use `--codex` for Codex, `--new` for a new terminal window, `--no-tmux` to run directly, or `--tmux-session` to reuse a named tmux session. |
+| `aiw launch` | Launch Claude Code with hooks enabled. Defaults to tmux-first launch on non-Windows hosts (when outside tmux) and creates a fresh tmux session each run. On Windows, launches in the current terminal by default. Use `--codex` for Codex, `--new` for a new terminal window, `--no-tmux` to run directly, or `--tmux-session` to reuse a named tmux session. |
 | `aiw branch <name>` | Create a git worktree + branch in a sibling directory, auto-launch Claude Code in it. |
 | `aiw branch --delete --all` | Safely remove worktrees with no unpushed commits or open PRs. |
 | `aiw clean` | Remove output folders (`_output/`). `--method cc-native` for one method, `--all` for everything. |

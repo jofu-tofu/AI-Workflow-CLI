@@ -23,8 +23,8 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 ```
 
 **Args:**
-- `plan` — discover active plan via context system, send it as startup prompt to Codex
-- `--file <path>` — read file contents and send as startup prompt
+- `plan` — discover active plan via context system, then pass the absolute plan filepath as startup context (Codex reads the file directly)
+- `--file <path>` — pass the absolute filepath as startup context (Codex reads the file directly)
 - `<text...>` — join remaining args as inline prompt
 - `--model <alias|tier|id>` — Aliases: `spark` → `gpt-5.3-codex-spark`, `codex` → `gpt-5.3-codex`, `gpt` → `gpt-5.2`. Tiers: `fast`/`standard`/`smart` (resolved via `resolveModelForProvider()`). Or any full model ID.
 - `--sandbox <mode>` — `read-only`, `workspace-write`, or `danger-full-access`. Default is `danger-full-access`.

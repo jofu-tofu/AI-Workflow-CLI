@@ -14,6 +14,8 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 
 **Modes:** `plan` | `--file <path>` | `<inline text...>`
 
+`plan` and `--file` modes pass a filepath-first bootstrap prompt so Codex reads the file from disk instead of relying on a pasted full document.
+
 **Flags:**
 - `--context <id>` — Project orientation for the sub-agent. Pass when implementing a plan so Codex understands the project structure.
 - `--prompt <text>` — Scope the agent's work. Direct each instance to a specific plan section or task.

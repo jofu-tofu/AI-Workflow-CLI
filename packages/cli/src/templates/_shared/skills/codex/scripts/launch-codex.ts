@@ -170,6 +170,20 @@ function findLatestPlanByMtime(projectRoot: string): string | null {
   return best?.path ?? null;
 }
 
+function buildFileReferencePrompt(filePath: string, sourceLabel: "plan" | "file"): string {
+  const absolutePath = path.resolve(filePath);
+  const heading = sourceLabel === "plan" ? "## Plan Input" : "## File Input";
+  return [
+    heading,
+    "",
+    `Primary input path: ${absolutePath}`,
+    "",
+    "Read this file directly from disk before taking action.",
+    "Treat its contents as the source of truth.",
+    "Do not ask for the file contents to be pasted inline.",
+  ].join("\n");
+}
+
 // ---------------------------------------------------------------------------
 // Arg parsing
 // ---------------------------------------------------------------------------
@@ -234,6 +248,8 @@ if (modelFlag) {
 
 let promptPath: string | null = null;
 let tempFile: string | null = null;
+let fileReferencePath: string | null = null;
+let fileReferenceLabel: "plan" | "file" | null = null;
 
 const projectRoot = getProjectRoot(process.cwd());
 
@@ -266,7 +282,8 @@ if (args[0] === "plan") {
     process.exit(1);
   }
 
-  promptPath = planPath;
+  fileReferencePath = planPath;
+  fileReferenceLabel = "plan";
   console.log(`Found plan: ${displayPath(planPath)}`);
 
 } else if (args[0] === "--file") {
@@ -279,13 +296,21 @@ if (args[0] === "plan") {
     eprint(`Error: File not found: ${filePath}`);
     process.exit(1);
   }
-  promptPath = filePath;
+  fileReferencePath = filePath;
+  fileReferenceLabel = "file";
 
 } else {
   // Inline text: join args, write to temp file
   const text = args.join(" ");
   tempFile = path.join(os.tmpdir(), `codex-prompt-${Date.now()}.md`);
   fs.writeFileSync(tempFile, text, "utf-8");
+  promptPath = tempFile;
+}
+
+if (fileReferencePath && fileReferenceLabel) {
+  const pointerPrompt = buildFileReferencePrompt(fileReferencePath, fileReferenceLabel);
+  tempFile = path.join(os.tmpdir(), `codex-file-ref-${Date.now()}.md`);
+  fs.writeFileSync(tempFile, pointerPrompt, "utf-8");
   promptPath = tempFile;
 }
 

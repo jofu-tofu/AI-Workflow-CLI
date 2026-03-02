@@ -245,6 +245,11 @@ describe('launch command', () => {
       expect(source).to.include('tmux')
     })
 
+    it('implementation disables auto-tmux on Windows', () => {
+      const source = LaunchCommand.prototype.run.toString()
+      expect(source).to.include("process.platform === 'win32'")
+    })
+
     it('implementation creates a fresh tmux session by default', () => {
       const source = LaunchCommand.prototype.run.toString()
       expect(source).to.include('buildUniqueTmuxSessionName')

@@ -38,7 +38,7 @@ After installation, run `aiw init --method cc-native` to set up the template in 
 AIW CLI provides the following commands:
 
 ### `aiw launch`
-Launch Claude Code with AIW configuration (sandbox disabled, tmux-first by default when outside tmux).
+Launch Claude Code with AIW configuration (sandbox disabled, tmux-first by default on non-Windows when outside tmux).
 
 ```bash
 aiw launch
@@ -48,7 +48,8 @@ aiw launch --no-tmux  # Bypass tmux auto-launch and run directly
 aiw launch --tmux-session aiw-main  # Reuse/attach a specific tmux session name
 ```
 
-`aiw launch` now creates a fresh tmux session by default when auto-launching tmux.
+`aiw launch` now creates a fresh tmux session by default when auto-launching tmux on non-Windows hosts.
+On Windows, `aiw launch` runs in the current terminal by default.
 
 If you prefer typing `codex`, route it through AIW launch behavior with an alias:
 

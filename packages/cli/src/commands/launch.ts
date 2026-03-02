@@ -20,7 +20,7 @@ import {EXIT_CODES} from '../types/index.js'
  */
 export default class LaunchCommand extends BaseCommand {
   static override description =
-    'Launch Claude Code or Codex with AIW configuration (sandbox disabled, tmux-first by default)\n\n' +
+    'Launch Claude Code or Codex with AIW configuration (sandbox disabled, tmux-first by default on non-Windows)\n\n' +
     'FLAGS\n' +
     '  --codex/-c: Launch Codex instead of Claude Code (uses --yolo flag)\n' +
     '  --new/-n: Open a new terminal in the current directory and launch there\n' +
@@ -32,7 +32,7 @@ export default class LaunchCommand extends BaseCommand {
     '  2  Invalid usage - check your arguments and flags\n' +
     '  3  Environment error - CLI not found (install Claude Code from https://claude.ai/download, Codex from npm)'
 static override examples = [
-    '<%= config.bin %> <%= command.id %>  # Auto-launches tmux with a fresh session when not already in tmux',
+    '<%= config.bin %> <%= command.id %>  # Auto-launches tmux with a fresh session when not already in tmux (non-Windows)',
     '<%= config.bin %> <%= command.id %> --codex  # Launch Codex with --yolo flag',
     '<%= config.bin %> <%= command.id %> -c  # Short form for --codex',
     '<%= config.bin %> <%= command.id %> --new  # Launch in a new terminal window',
@@ -80,7 +80,8 @@ static override flags = {
     const disableTmux = flags['no-tmux']
     const insideTmux = Boolean(process.env.TMUX)
     const interactiveTty = Boolean(process.stdin.isTTY && process.stdout.isTTY)
-    const shouldAutoTmux = !flags.new && !disableTmux && !insideTmux && interactiveTty
+    const isWindows = process.platform === 'win32'
+    const shouldAutoTmux = !isWindows && !flags.new && !disableTmux && !insideTmux && interactiveTty
 
     // Handle --new flag: launch in a new terminal
     if (flags.new) {
@@ -144,6 +145,8 @@ static override flags = {
       } else {
         if (shouldAutoTmux) {
           this.logInfo('Launching directly in current terminal.')
+        } else if (isWindows) {
+          this.debug('Auto-tmux disabled on Windows; launching directly in current terminal')
         } else if (disableTmux) {
           this.debug('tmux launch disabled via --no-tmux')
         } else if (insideTmux) {
