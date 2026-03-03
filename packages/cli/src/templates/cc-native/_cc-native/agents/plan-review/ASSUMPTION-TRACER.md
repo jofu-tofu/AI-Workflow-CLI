@@ -40,7 +40,7 @@ For each critical assumption, trace:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -54,3 +54,4 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of assumption concerns, each with: severity (high/medium/low), category (e.g., "unvalidated-foundation", "circular-dependency", "compound-risk"), issue description, suggested_fix (how to validate)
 - **missing_sections**: Assumptions the plan should trace or validate
 - **questions**: Questions to validate critical foundations
+

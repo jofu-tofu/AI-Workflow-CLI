@@ -1,11 +1,12 @@
 import {execSync} from 'node:child_process'
-import {platform} from 'node:os'
 
 import {expect} from 'chai'
-import {describe, it} from 'mocha'
+import {describe, it} from 'vitest'
+
+import {cliCommand} from '../helpers/cli-command.js'
 
 describe('Epic 3: Scripting & Shell Integration - Integration Validation', () => {
-  const bin = platform() === 'win32' ? String.raw`.\bin\dev.cmd` : './bin/dev.js'
+  const bin = cliCommand()
 
   describe('CLI help output and piping behavior', () => {
     it('produces clean, pipeable help output without ANSI codes', () => {
@@ -75,9 +76,7 @@ describe('Epic 3: Scripting & Shell Integration - Integration Validation', () =>
   })
 
   describe('short and long flag forms', () => {
-    it('accepts both --debug/-d and --quiet/-q flags', function () {
-      this.timeout(20_000)
-      // Test --debug and -d
+    it('accepts both --debug/-d and --quiet/-q flags', () => {      // Test --debug and -d
       const output1 = execSync(`${bin} --version --debug`, {encoding: 'utf8', stdio: 'pipe'})
       const output2 = execSync(`${bin} --version -d`, {encoding: 'utf8', stdio: 'pipe'})
       expect(output1).to.include('aiwcli')

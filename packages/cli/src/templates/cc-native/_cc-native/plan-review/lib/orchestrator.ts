@@ -5,7 +5,7 @@
  */
 
 import { OrchestratorClaudeAgent } from "./reviewers/providers/orchestrator-claude-agent.js";
-import { logInfo, logWarn } from "../../../_shared/lib-ts/base/logger.js";
+import { logInfo, logWarn } from "../../../_shared/lib-ts/runtime/logger.js";
 import type { AgentConfig, AgentReviewSettings, OrchestratorConfig, OrchestratorResult } from "../../lib-ts/types.js";
 
 // Re-export for backward compatibility (moved to reviewers/schemas.ts)

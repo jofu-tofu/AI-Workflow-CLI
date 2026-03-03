@@ -1,7 +1,6 @@
 import {promises as fs} from 'node:fs'
 import {homedir} from 'node:os'
-import {basename, dirname, join} from 'node:path'
-import {fileURLToPath} from 'node:url'
+import {basename, join} from 'node:path'
 
 import checkbox from '@inquirer/checkbox'
 import confirm from '@inquirer/confirm'
@@ -10,11 +9,11 @@ import select from '@inquirer/select'
 import {Flags} from '@oclif/core'
 
 import BaseCommand from '../../lib/base-command.js'
+import {getCoreResolverSourcePath, installCoreAssets} from '../../lib/core-installer.js'
 import {AIW_EXCLUDE_ENTRIES, resolveGitDir, updateGitExclude} from '../../lib/git-exclude-manager.js'
-import {IdePathResolver} from '../../lib/ide-path-resolver.js'
-import {pathExists} from '../../lib/paths.js'
+import {markCoreInstalled, markMethodInstalled} from '../../lib/install-state.js'
 import {getTargetSettingsFile, readClaudeSettings, writeClaudeSettings} from '../../lib/settings-hierarchy.js'
-import {checkTemplateStatus, installTemplate, shouldExclude} from '../../lib/template-installer.js'
+import {checkTemplateStatus, installTemplate} from '../../lib/template-installer.js'
 import {getAvailableTemplates, getTemplatePath} from '../../lib/template-resolver.js'
 import {reconstructIdeSettings} from '../../lib/template-settings-reconstructor.js'
 import {detectUsername} from '../../lib/user-utils.js'
@@ -25,6 +24,7 @@ import {EXIT_CODES} from '../../types/exit-codes.js'
  */
 const AVAILABLE_IDES = [
   {value: 'claude', name: 'Claude Code', description: 'Anthropic Claude Code CLI'},
+  {value: 'codex', name: 'Codex CLI', description: 'OpenAI Codex CLI workflows'},
   {value: 'windsurf', name: 'Windsurf', description: 'Codeium Windsurf IDE'},
 ]
 
@@ -57,6 +57,7 @@ export default class Init extends BaseCommand {
   static override examples = [
     '<%= config.bin %> <%= command.id %> --interactive',
     '<%= config.bin %> <%= command.id %> --method cc-native',
+    '<%= config.bin %> <%= command.id %> --method cc-native --ide codex',
     '<%= config.bin %> <%= command.id %> --method cc-native --ide windsurf',
     '<%= config.bin %> <%= command.id %> --method cc-native --ide claude --ide windsurf',
   ]
@@ -74,8 +75,8 @@ export default class Init extends BaseCommand {
     }),
     ide: Flags.string({
       char: 'i',
-      default: ['claude'],
-      description: 'IDEs to configure (specify multiple: --ide claude --ide windsurf)',
+      default: ['claude', 'codex'],
+      description: 'IDEs to configure (strict filter). No --ide uses defaults: claude + codex',
       multiple: true,
     }),
   }
@@ -115,6 +116,10 @@ export default class Init extends BaseCommand {
 
       // Get template path
       const templatePath = await getTemplatePath(method)
+
+      // Install core runtime first (shared across all methods)
+      const coreInstalledFolders = await installCoreAssets(targetDir, ides)
+      await markCoreInstalled(targetDir, ides)
 
       // Check what already exists vs what's missing
       const status = await checkTemplateStatus(templatePath, targetDir, ides, method)
@@ -166,6 +171,9 @@ export default class Init extends BaseCommand {
       // Collect all folders that need exclude entries
       // The .aiwcli/ container holds all template infrastructure and runtime data
       const foldersForExclude: string[] = [...AIW_EXCLUDE_ENTRIES]
+      if (coreInstalledFolders.length > 0) {
+        this.logSuccess(`✓ Installed core: ${coreInstalledFolders.join(', ')}`)
+      }
 
       // Report installation results
       if (result.installedFolders.length > 0) {
@@ -183,6 +191,7 @@ export default class Init extends BaseCommand {
         gitDir,
         foldersForExclude,
       })
+      await markMethodInstalled(targetDir, method, ides)
 
       this.log('')
       this.logSuccess(`✓ ${method} initialized successfully`)
@@ -212,48 +221,6 @@ export default class Init extends BaseCommand {
   }
 
   /**
-   * Copy directory recursively, excluding test files and cache
-   *
-   * @param src - Source directory path
-   * @param dest - Destination directory path
-   * @param excludeIdeFolders - If true, exclude IDE config folders (.claude, .windsurf, etc.)
-   */
-  private async copyDirectory(src: string, dest: string, excludeIdeFolders: boolean = false): Promise<void> {
-    await fs.mkdir(dest, {recursive: true})
-
-    const entries = await fs.readdir(src, {withFileTypes: true})
-
-    const operations = entries
-      .filter((entry) => {
-        // Standard exclusions (test files, cache, etc.)
-        if (shouldExclude(entry.name)) {
-          return false
-        }
-
-        // Exclude IDE config folders if requested (used for _shared folder)
-        // These folders are used for settings merging, not direct installation
-        if (excludeIdeFolders && entry.isDirectory() && entry.name.startsWith('.')) {
-          return false
-        }
-
-        return true
-      })
-      .map(async (entry) => {
-        const srcPath = join(src, entry.name)
-        const destPath = join(dest, entry.name)
-
-        try {
-          return entry.isDirectory() ? await this.copyDirectory(srcPath, destPath, excludeIdeFolders) : await fs.copyFile(srcPath, destPath)
-        } catch (error) {
-          const err = error as Error
-          throw new Error(`Failed to copy ${srcPath} to ${destPath}: ${err.message}`)
-        }
-      })
-
-    await Promise.all(operations)
-  }
-
-  /**
    * Get description for a template
    *
    * @param template - Template name
@@ -276,10 +243,7 @@ export default class Init extends BaseCommand {
    */
   private async installGlobalResolver(): Promise<void> {
     try {
-      const currentFilePath = fileURLToPath(import.meta.url)
-      const currentDir = dirname(currentFilePath)
-      const templatesRoot = join(dirname(dirname(currentDir)), 'templates')
-      const resolverSrc = join(templatesRoot, '_shared', 'scripts', 'resolve-run.ts')
+      const resolverSrc = getCoreResolverSourcePath()
 
       const globalBinDir = join(homedir(), '.aiwcli', 'bin')
       const resolverDest = join(globalBinDir, 'resolve-run.ts')
@@ -294,45 +258,24 @@ export default class Init extends BaseCommand {
   }
 
   /**
-   * Perform minimal installation (_shared folder only, no template method).
+   * Perform minimal installation (core runtime only, no template method).
    *
    * @param targetDir - Target directory for installation
    * @param gitDir - Resolved git directory path, or null if not a git repo
    */
   private async performMinimalInstall(targetDir: string, gitDir: null | string): Promise<void> {
-    this.logInfo('Performing minimal installation (_shared folder only)...')
+    this.logInfo('Performing minimal installation (_core runtime only)...')
     this.log('')
 
-    // Create .aiwcli container and install _shared
-    const resolver = new IdePathResolver(targetDir)
-    const containerDir = resolver.getAiwcliContainer()
-    await fs.mkdir(containerDir, {recursive: true})
-
-    const sharedDestPath = resolver.getSharedFolder()
-    const sharedExists = await pathExists(sharedDestPath)
-
-    if (sharedExists) {
-      this.logInfo('✓ _shared folder already exists - skipping')
-    } else {
-      const currentFilePath = fileURLToPath(import.meta.url)
-      const currentDir = dirname(currentFilePath)
-      const templatesRoot = join(dirname(dirname(currentDir)), 'templates')
-      const sharedSrcPath = join(templatesRoot, '_shared')
-
-      if (!(await pathExists(sharedSrcPath))) {
-        this.error(`Shared folder not found at ${sharedSrcPath}. This indicates a corrupted installation.`, {
-          exit: EXIT_CODES.ENVIRONMENT_ERROR,
-        })
-      }
-
-      await this.copyDirectory(sharedSrcPath, sharedDestPath, true)
-      this.logSuccess('✓ Installed _shared folder')
-    }
+    // Install core runtime payload and base IDE shared artifacts
+    const installedFolders = await installCoreAssets(targetDir, ['claude', 'codex'])
+    await markCoreInstalled(targetDir, ['claude', 'codex'])
+    this.logSuccess(`✓ Installed: ${installedFolders.join(', ')}`)
 
     // Install global resolver for cwd-drift-proof hook/status line commands
     await this.installGlobalResolver()
 
-    // Reconstruct settings from _shared template
+    // Reconstruct settings from core base
     await reconstructIdeSettings(targetDir, [], ['claude'])
 
     // Update git exclude if git repository exists
@@ -487,7 +430,7 @@ export default class Init extends BaseCommand {
       choices: AVAILABLE_IDES.map((ide) => ({
         value: ide.value,
         name: ide.name,
-        checked: ide.value === 'claude', // Default to Claude selected
+        checked: ide.value === 'claude' || ide.value === 'codex', // Default to Claude + Codex
       })),
       required: true,
     })

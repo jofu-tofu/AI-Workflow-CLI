@@ -10,7 +10,6 @@
  * Output: _output/cc-native/plans/{YYYY-MM-DD}/{slug}/reviews/
  */
 
-import { getProjectRoot, getAiwcliDir } from "../../_shared/lib-ts/base/constants.js";
 import {
   loadHookInput,
   runHookAsync,
@@ -19,8 +18,9 @@ import {
   logWarn,
   emitContext,
   emitContextAndBlock,
-} from "../../_shared/lib-ts/base/hook-utils.js";
-import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
+} from "../../_shared/lib-ts/hooks/hook-utils.js";
+import { getProjectRoot, getAiwcliDir } from "../../_shared/lib-ts/runtime/constants.js";
+import { isInternalCall } from "../../_shared/lib-ts/runtime/subprocess-utils.js";
 import type { PipelineResult } from "../lib-ts/types.js";
 import { runReviewPipeline } from "../plan-review/lib/review-pipeline.js";
 

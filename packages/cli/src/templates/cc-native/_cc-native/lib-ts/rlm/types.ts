@@ -8,7 +8,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { getProjectRoot } from "../../../_shared/lib-ts/base/constants.js";
+import { getProjectRoot } from "../../../_shared/lib-ts/runtime/constants.js";
 import { loadConfig } from "../config.js";
 
 // ---------------------------------------------------------------------------
@@ -120,7 +120,7 @@ const _ccNativeConfig = (() => {
   try {
     const projectRoot = getProjectRoot();
     const config = loadConfig(join(projectRoot, ".aiwcli"));
-    return (config as any)?.rlm?.hyde ?? {};
+    return (config as unknown)?.rlm?.hyde ?? {};
   } catch {
     return {}; // Graceful fallback if config loading fails
   }
@@ -200,3 +200,4 @@ export interface RetrievalResult {
     total_ms: number;
   };
 }
+

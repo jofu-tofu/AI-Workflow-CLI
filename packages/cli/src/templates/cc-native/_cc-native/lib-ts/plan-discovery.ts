@@ -6,11 +6,11 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
-import * as path from "node:path";
+import path from "node:path";
 
 import type { DiscoveredPlan } from "./types.js";
-import { logInfo, logDebug } from "../../_shared/lib-ts/base/logger.js";
 import { findPlanPathInTranscript } from "../../_shared/lib-ts/context/plan-manager.js";
+import { logInfo, logDebug } from "../../_shared/lib-ts/runtime/logger.js";
 
 
 const HOOK = "plan-discovery";
@@ -35,7 +35,7 @@ export function findPlanFile(): string | null {
  * Compute a short SHA-256 hash of plan content.
  */
 export function computePlanHash(content: string): string {
-  return crypto.createHash("sha256").update(content, "utf-8").digest("hex").slice(0, 16);
+  return crypto.createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16);
 }
 
 /**
@@ -62,7 +62,7 @@ export function discoverPlan(transcriptPath?: string): DiscoveredPlan | null {
 
   let content: string;
   try {
-    content = fs.readFileSync(planPath, "utf-8").trim();
+    content = fs.readFileSync(planPath, "utf8").trim();
   } catch {
     return null;
   }
@@ -78,3 +78,5 @@ export function discoverPlan(transcriptPath?: string): DiscoveredPlan | null {
     hash: computePlanHash(content),
   };
 }
+
+

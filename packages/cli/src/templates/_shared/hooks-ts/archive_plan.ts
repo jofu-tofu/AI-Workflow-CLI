@@ -6,16 +6,16 @@
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
-import * as path from "node:path";
+import path from "node:path";
 
-import { getContextDir, getProjectRoot } from "../lib-ts/base/constants.js";
-import {
-  loadHookInput, logDebug, logError, logInfo, logWarn, runHookAsync,
-} from "../lib-ts/base/hook-utils.js";
 import { getContextBySessionId } from "../lib-ts/context/context-store.js";
 import {
   archivePlan, extractPlanPathFromResult, findPlanPathInTranscript,
 } from "../lib-ts/context/plan-manager.js";
+import {
+  loadHookInput, logDebug, logError, logInfo, logWarn, runHookAsync,
+} from "../lib-ts/hooks/hook-utils.js";
+import { getContextDir, getProjectRoot } from "../lib-ts/runtime/constants.js";
 
 /** Find the most recent .md file in a directory */
 function mostRecentMd(dir: string): null | string {
@@ -39,9 +39,9 @@ function mostRecentMd(dir: string): null | string {
 }
 
 /** Multi-strategy plan path discovery */
-function findPlanPath(payload: Record<string, any>, projectRoot: string): null | string {
+function findPlanPath(payload: Record<string, unknown>, projectRoot: string): null | string {
   const toolResult = payload.tool_result as string | undefined;
-  const toolInput = (payload.tool_input ?? {}) as Record<string, any>;
+  const toolInput = (payload.tool_input ?? {}) as Record<string, unknown>;
   const transcriptPath = payload.transcript_path as string | undefined;
 
   // Strategy 1: Extract from tool result
@@ -100,7 +100,7 @@ async function asyncMain(): Promise<void> {
   }
 
   // Check stop flag
-  if ((payload as any).stop_hook_active) {
+  if ((payload as unknown).stop_hook_active) {
     logDebug("archive_plan", "stop_hook_active set, skipping");
     return;
   }
@@ -113,7 +113,7 @@ async function asyncMain(): Promise<void> {
   }
 
   // Find plan path
-  let planPath = findPlanPath(payload as Record<string, any>, projectRoot);
+  let planPath = findPlanPath(payload as Record<string, unknown>, projectRoot);
   if (!planPath) {
     logWarn("archive_plan", "Could not locate plan file");
     return;
@@ -157,3 +157,5 @@ async function asyncMain(): Promise<void> {
 }
 
 runHookAsync(asyncMain, "archive_plan");
+
+

@@ -10,12 +10,14 @@ import {platform} from 'node:os'
 import {promisify} from 'node:util'
 
 import {expect} from 'chai'
-import {describe, it} from 'mocha'
+import {beforeAll, describe, it} from 'vitest'
+
+import {cliCommand} from '../helpers/cli-command.js'
 
 const execAsync = promisify(exec)
 
 const isWindows = platform() === 'win32'
-const binPath = isWindows ? String.raw`.\bin\dev.cmd` : './bin/dev.js'
+const binPath = cliCommand()
 const grepCmd = isWindows ? 'findstr' : 'grep'
 const nullDevice = isWindows ? 'nul' : '/dev/null'
 
@@ -24,7 +26,7 @@ describe('Command Chaining Integration', () => {
   let helpOutput: string
   let helpStderr: string
 
-  before(async () => {
+  beforeAll(async () => {
     const result = await execAsync(`${binPath} launch --help`, {encoding: 'utf8'})
     helpOutput = result.stdout
     helpStderr = result.stderr
@@ -118,7 +120,7 @@ describe('Command Chaining Integration', () => {
         this.skip()
       }
 
-      const script = `${binPath} launch --help; echo "PowerShell"`
+      const script = `& ${binPath} launch --help; echo "PowerShell"`
       const result = execSync(script, {
         encoding: 'utf8',
         shell: 'powershell.exe',
@@ -126,10 +128,8 @@ describe('Command Chaining Integration', () => {
       expect(result).to.include('PowerShell')
     })
 
-    it('Bash chains work (Unix only)', function () {
-      if (isWindows) {
-        this.skip()
-      }
+    it('Bash chains work (Unix only)', () => {
+      if (isWindows) return
 
       const result = execSync(`${binPath} launch --help && echo "Bash"`, {
         encoding: 'utf8',

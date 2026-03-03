@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
 import {expect} from 'chai'
-import {afterEach, beforeEach, describe, it} from 'mocha'
+import {afterEach, beforeEach, describe, it} from 'vitest'
 
 import {copyDir, installTemplate} from '../../src/lib/template-installer.js'
 import {pathExists} from '../helpers/test-utils.js'

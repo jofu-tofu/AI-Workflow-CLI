@@ -13,12 +13,12 @@
  * ready to be consumed by the /handoff-resume command template.
  */
 import * as fs from "node:fs";
-import * as path from "node:path";
+import path from "node:path";
 
-import { getProjectRoot } from "../../../lib-ts/base/constants.js";
-import { getGitStatusShort } from "../../../lib-ts/base/git-state.js";
-import { eprint } from "../../../lib-ts/base/utils.js";
 import { getContextBySessionId } from "../../../lib-ts/context/context-store.js";
+import { getProjectRoot } from "../../../lib-ts/runtime/constants.js";
+import { getGitStatusShort } from "../../../lib-ts/runtime/git-state.js";
+import { eprint } from "../../../lib-ts/runtime/utils.js";
 import {
   findLatestHandoff,
   readHandoffSections,
@@ -181,7 +181,7 @@ function main(): void {
     const planRef = getHandoffPlanReference(handoffFolder, resolvedContextId, projectRoot);
     if (planRef) {
       try {
-        const planContent = fs.readFileSync(planRef, "utf-8");
+        const planContent = fs.readFileSync(planRef, "utf8");
         const progress = countPlanProgress(planContent);
         if (progress) {
           const [done, total] = progress;
@@ -326,7 +326,7 @@ function main(): void {
     const planRef = getHandoffPlanReference(handoffFolder, resolvedContextId, projectRoot);
     if (planRef) {
       try {
-        fullPlanContent = fs.readFileSync(planRef, "utf-8");
+        fullPlanContent = fs.readFileSync(planRef, "utf8");
       } catch {
         // ignore — no plan to append
       }
@@ -371,3 +371,5 @@ function extractContextIdFromIndex(indexContent: string | null): string | null {
 }
 
 main();
+
+

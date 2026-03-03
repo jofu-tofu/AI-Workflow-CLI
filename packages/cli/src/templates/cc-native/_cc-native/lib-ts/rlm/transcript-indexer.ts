@@ -104,7 +104,7 @@ function needsIndexing(session: SessionFile, _sourceMtime: number): boolean {
     const bytesRead = nodeFs.readSync(fd, buffer, 0, 100, 0);
     nodeFs.closeSync(fd);
 
-    const partial = buffer.toString("utf-8", 0, bytesRead);
+    const partial = buffer.toString("utf8", 0, bytesRead);
     const versionMatch = partial.match(/"schema_version"\s*:\s*(\d+)/);
 
     // If version matches, skip (no mtime check needed - schema version bump handles major changes)
@@ -206,7 +206,7 @@ async function indexSession(session: SessionFile, sourceMtime: number): Promise<
   const SEGMENT_SIZE = 50; // lines per segment
 
   const rl = createInterface({
-    input: createReadStream(session.jsonlPath, { encoding: "utf-8" }),
+    input: createReadStream(session.jsonlPath, { encoding: "utf8" }),
     crlfDelay: Infinity,
   });
 
@@ -344,17 +344,17 @@ async function indexSession(session: SessionFile, sourceMtime: number): Promise<
 // ---------------------------------------------------------------------------
 
 const STOP_WORDS = new Set([
-  "a", "about", "above", "after", "all", "also", "an", "and", "any", "are",
-  "as", "at", "be", "been", "before", "being", "below", "between", "both",
-  "but", "by", "can", "class", "const", "could", "default", "did", "do",
-  "does", "during", "each", "either", "every", "export", "false", "few", "for",
-  "from", "function", "had", "has", "have", "he", "here",
-  "how", "i", "if", "import", "in", "into", "is", "it", "its", "just",
-  "let", "may", "me", "might", "more", "most", "must", "my", "neither",
-  "new", "no", "nor", "not", "now", "null", "of", "on", "or",
-  "other", "our", "return", "shall", "she", "should", "so", "some", "such",
-  "than", "that", "the", "their", "them", "then", "there", "these", "they", "this",
-  "those", "through", "to", "too", "true", "type", "undefined", "var", "very",
+  "a", "about", "above", "after", "all", "also", "an", "and", "are", "as",
+  "at", "be", "been", "before", "being", "below", "between", "both", "but",
+  "by", "can", "class", "const", "could", "default", "did", "do", "does",
+  "during", "each", "either", "every", "export", "false", "few", "for", "from",
+  "function", "had", "has", "have", "he", "here", "how",
+  "i", "if", "import", "in", "into", "is", "it", "its", "just", "let",
+  "may", "me", "might", "more", "most", "must", "my", "neither", "new",
+  "no", "nor", "not", "now", "null", "of", "on", "or", "other",
+  "our", "return", "shall", "she", "should", "so", "some", "such", "than",
+  "that", "the", "their", "them", "then", "there", "these", "they", "this", "those",
+  "through", "to", "too", "true", "type", "undefined", "unknown", "var", "very",
   "was", "we", "were", "what", "when", "where", "which",
   "who", "why", "will", "with", "would", "yet", "you", "your",
 ]);
@@ -440,7 +440,7 @@ async function writeIndex(project: string, sessionId: string, index: SessionInde
   const dir = join(RLM_INDEX_DIR, project);
   await mkdir(dir, { recursive: true });
   const indexPath = join(dir, `${sessionId}.index.json`);
-  await writeFile(indexPath, JSON.stringify(index, null, 2), "utf-8");
+  await writeFile(indexPath, JSON.stringify(index, null, 2), "utf8");
 }
 
 // ---------------------------------------------------------------------------
@@ -448,3 +448,5 @@ async function writeIndex(project: string, sessionId: string, index: SessionInde
 // ---------------------------------------------------------------------------
 
 export { discoverSessions, indexSession, needsIndexing, runBatch, writeIndex };
+
+

@@ -49,7 +49,7 @@ For each major decision in the plan:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -63,3 +63,4 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of stakeholder concerns, each with: severity (high/medium/low), category (e.g., "stakeholder-asymmetry", "unacknowledged-cost", "time-shifted-cost", "consent-gap", "beneficiary-mismatch"), issue description, suggested_fix (acknowledge impact, involve affected stakeholders, or redistribute costs)
 - **missing_sections**: Stakeholder considerations the plan should address (affected parties, cost distribution, consent mechanisms)
 - **questions**: Stakeholder impacts that need explicit acknowledgment
+

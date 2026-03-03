@@ -3,7 +3,7 @@
  * Supports Claude/Codex-style envelopes and heuristic JSON extraction.
  */
 
-import { logDebug, logError, logWarn } from "../base/logger.js";
+import { logDebug, logError, logWarn } from "../runtime/logger.js";
 
 export interface StructuredOutputParseOptions {
   requireFields?: string[];

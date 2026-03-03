@@ -8,14 +8,14 @@
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
-import * as path from "node:path";
+import path from "node:path";
 
-import { atomicWrite } from "../../../lib-ts/base/atomic-write.js";
-import { getContextHandoffsDir, getContextDir } from "../../../lib-ts/base/constants.js";
-import { logInfo, logError } from "../../../lib-ts/base/logger.js";
-import { nowIso } from "../../../lib-ts/base/utils.js";
 import { getContext } from "../../../lib-ts/context/context-store.js";
 import { getTasks } from "../../../lib-ts/context/task-tracker.js";
+import { atomicWrite } from "../../../lib-ts/runtime/atomic-write.js";
+import { getContextHandoffsDir, getContextDir } from "../../../lib-ts/runtime/constants.js";
+import { logInfo, logError } from "../../../lib-ts/runtime/logger.js";
+import { nowIso } from "../../../lib-ts/runtime/utils.js";
 import { renderTaskList, formatContinuationHeader, formatReason } from "../../../lib-ts/templates/formatters.js";
 import type { HandoffDocument } from "../../../lib-ts/types.js";
 
@@ -131,7 +131,7 @@ function renderHandoffMarkdown(doc: HandoffDocument): string {
   // Completed this session
   if (doc.completed_tasks_this_session.length > 0) {
     lines.push(renderTaskList(
-      doc.completed_tasks_this_session as any[],
+      doc.completed_tasks_this_session as unknown[],
       "Completed This Session",
       false,
     ).trimEnd());
@@ -214,3 +214,5 @@ After creating handoff, ask the user:
 "Context is low. I've created a handoff document. May I clear and continue in a new session?"
 </system-reminder>`;
 }
+
+

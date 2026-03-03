@@ -8,10 +8,10 @@
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
+import path from "node:path";
 
-import { getContextDir } from "../base/constants.js";
-import { displayPath, parseIsoTimestamp } from "../base/utils.js";
+import { getContextDir } from "../runtime/constants.js";
+import { displayPath, parseIsoTimestamp } from "../runtime/utils.js";
 import type { ContextState, Task } from "../types.js";
 
 const MAX_PLAN_INLINE_CHARS = 30_000;
@@ -79,9 +79,9 @@ export function formatRelativeTime(isoTimestamp: string | null): string {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function taskAttr(task: Task | Record<string, any>, key: string, defaultVal = ""): string {
+function taskAttr(task: Task | Record<string, unknown>, key: string, defaultVal = ""): string {
   if (typeof task === "object" && task !== null) {
-    return (task as any)[key] ?? defaultVal;
+    return (task as unknown)[key] ?? defaultVal;
   }
   return defaultVal;
 }
@@ -89,7 +89,7 @@ function taskAttr(task: Task | Record<string, any>, key: string, defaultVal = ""
 function readPlanContent(planPath: string): [string | null, boolean, number] {
   try {
     if (!fs.existsSync(planPath)) return [null, false, 0];
-    const content = fs.readFileSync(planPath, "utf-8");
+    const content = fs.readFileSync(planPath, "utf8");
     const total = content.length;
     if (total > MAX_PLAN_INLINE_CHARS) {
       return [content.slice(0, MAX_PLAN_INLINE_CHARS), true, total];
@@ -220,11 +220,11 @@ export function formatHandoffContinuation(ctx: ContextState, projectRoot?: strin
 
   try {
     if (handoffPath && fs.existsSync(handoffPath)) {
-      lines.push("### Previous Session Handoff", "", fs.readFileSync(handoffPath, "utf-8"), "");
+      lines.push("### Previous Session Handoff", "", fs.readFileSync(handoffPath, "utf8"), "");
     } else {
       lines.push(`*Handoff document not found at \`${displayPath(handoffPath)}\`*`, "");
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     lines.push(`*Handoff document at \`${displayPath(handoffPath)}\` could not be read: ${error}*`, "");
   }
 
@@ -586,3 +586,6 @@ export function buildContextInventory(
   if (sections.length === 0) return null;
   return "### Context Resources\n\n" + sections.join("\n\n");
 }
+
+
+

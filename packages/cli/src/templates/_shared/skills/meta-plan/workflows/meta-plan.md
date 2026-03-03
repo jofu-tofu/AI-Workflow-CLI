@@ -52,7 +52,7 @@ Decompose the user's prompt into 5 categories. **Preserve all information** from
 
 ### Information Loss Check
 
-After completing the decomposition, **re-read the original prompt in full** and explicitly list any information not captured in the 5 categories above. This prevents silent information loss.
+After completing the decomposition, **re-read the original prompt in full** and explicitly list unknown information not captured in the 5 categories above. This prevents silent information loss.
 
 Output one of:
 - A numbered list of missed information items (then incorporate them into the appropriate category)
@@ -77,9 +77,9 @@ Based on the characteristics from Section 1, select which analysis categories to
 
 | Problem Profile | Categories to Apply | Rationale |
 |----------------|-------------------|-----------|
-| High ambiguity, any domain | 1 → 2 → 3 → 7 (Decomposition → Divergent → Convergent → Integration) | Explore broadly before narrowing |
+| High ambiguity, unknown domain | 1 → 2 → 3 → 7 (Decomposition → Divergent → Convergent → Integration) | Explore broadly before narrowing |
 | Large solution space, familiar domain | 1 → 2 → 4 → 5 → 7 (Decomposition → Divergent → Adversarial → Trade-off → Integration) | Stress-test candidates |
-| Unfamiliar domain, any ambiguity | 1 → 6 → 2 → 3 → 7 (Decomposition → Expert Synthesis → Divergent → Convergent → Integration) | Research before ideation |
+| Unfamiliar domain, unknown ambiguity | 1 → 6 → 2 → 3 → 7 (Decomposition → Expert Synthesis → Divergent → Convergent → Integration) | Research before ideation |
 | Multi-stakeholder, moderate ambiguity | 1 → 6 → 5 → 4 → 7 (Decomposition → Expert Synthesis → Trade-off → Adversarial → Integration) | Gather perspectives, evaluate trade-offs |
 | Low ambiguity, small solution space | 1 → 4 → 7 (Decomposition → Adversarial → Integration) | Quick path: decompose, stress-test, synthesize |
 | Multiple valid approaches, familiar domain | 1 → 2 → 5 → 4 → 7 (Decomposition → Divergent → Trade-off → Adversarial → Integration) | Compare, evaluate, stress-test |
@@ -92,7 +92,7 @@ Numbers reference the 7 categories in Section 3.
 
 ## Section 3 — The 7 Analysis Categories
 
-Each category is a **reasoning lens** — a structured way to examine the problem from a specific angle. Apply each selected category to deepen understanding of the user's request. External skills discovered at runtime (see Section 4) can enhance any category but are never required.
+Each category is a **reasoning lens** — a structured way to examine the problem from a specific angle. Apply each selected category to deepen understanding of the user's request. External skills discovered at runtime (see Section 4) can enhance unknown category but are never required.
 
 ### Category 1: Decomposition
 
@@ -129,7 +129,7 @@ Narrow from many candidates to 1-3 finalists using structured evaluation.
 **Apply this lens:**
 - Define 3-5 evaluation criteria relevant to this problem (e.g., complexity, performance, maintainability, risk, time-to-implement)
 - Score each approach against each criterion (High / Medium / Low)
-- Identify deal-breakers: any approach that fails a critical criterion is eliminated with stated reason
+- Identify deal-breakers: unknown approach that fails a critical criterion is eliminated with stated reason
 - Rank surviving approaches
 
 **Output:** Evaluation matrix — scores, eliminations with reasoning, and shortlist of 1-3 surviving approaches.
@@ -159,7 +159,7 @@ Compare surviving approaches with explicit acknowledgment of what each choice co
 - For each pair of finalist approaches, state what you gain and what you lose by choosing one over the other
 - Identify irreversible decisions (hard to change later) vs. reversible ones (can switch cheaply)
 - State the conditions under which you would switch from the recommended approach to an alternative
-- Flag any "one-way door" decisions that deserve extra scrutiny
+- Flag unknown "one-way door" decisions that deserve extra scrutiny
 
 **Output:** Trade-off map — gain/lose analysis with switching conditions and irreversibility flags.
 
@@ -275,3 +275,4 @@ After the amplified request, append an inventory of which categories were applie
 | 6: Expert Synthesis | Yes/No | [What this lens revealed] |
 | 7: Integration | Yes | [Synthesized into amplified request above] |
 ```
+

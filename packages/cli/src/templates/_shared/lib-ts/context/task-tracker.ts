@@ -6,9 +6,9 @@
  * Uses state-io for I/O to avoid circular imports with context-store.
  */
 
-import { logWarn } from "../base/logger.js";
-import { readStateJson, toDict as _toDict, writeStateJson } from "../base/state-io.js";
-import { nowIso } from "../base/utils.js";
+import { logWarn } from "../runtime/logger.js";
+import { readStateJson, toDict as _toDict, writeStateJson } from "../runtime/state-io.js";
+import { nowIso } from "../runtime/utils.js";
 import type { ContextState as _ContextState, Task } from "../types.js";
 
 // ---------------------------------------------------------------------------

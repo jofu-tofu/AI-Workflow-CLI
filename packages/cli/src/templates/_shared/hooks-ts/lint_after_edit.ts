@@ -3,11 +3,11 @@
  * PostToolUse:Write|Edit hook: Run linter on edited files, feed errors to Claude.
  * Uses emitContext() for non-blocking context injection — Claude sees errors and self-corrects.
  */
-import { getProjectRoot } from "../lib-ts/base/constants.js";
 import {
   emitContext, getToolInput, loadHookInput, logDebug, runHook,
-} from "../lib-ts/base/hook-utils.js";
-import { formatLintErrors, getLinterForFile, runLinter } from "../lib-ts/base/lint-dispatch.js";
+} from "../lib-ts/hooks/hook-utils.js";
+import { getProjectRoot } from "../lib-ts/runtime/constants.js";
+import { formatLintErrors, getLinterForFile, runLinter } from "../lib-ts/runtime/lint-dispatch.js";
 
 // Extensions with no lint value
 const SKIP_EXTENSIONS = new Set([

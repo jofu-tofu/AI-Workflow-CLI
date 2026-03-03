@@ -72,7 +72,7 @@ interface VersionCheckResult {
  * - "claude 0.1.0"
  * - "claude version 0.1.0"
  *
- * Returns null on any failure (command not found, invalid output, etc.)
+ * Returns null on unknown failure (command not found, invalid output, etc.)
  * to support graceful degradation.
  *
  * @returns Version string (e.g., "0.1.0") or null if unavailable
@@ -179,3 +179,4 @@ export function checkVersionCompatibility(version: null | string | undefined): V
     version,
   }
 }
+

@@ -2,7 +2,7 @@ import {promises as fs} from 'node:fs'
 import {join} from 'node:path'
 
 import {expect} from 'chai'
-import {afterEach, beforeEach, describe, it} from 'mocha'
+import {afterEach, beforeEach, describe, it} from 'vitest'
 
 import {cleanupTestDir, createTestDir, pathExists} from '../../helpers/test-utils.js'
 
@@ -47,7 +47,7 @@ describe('pai init command', () => {
       const Init = (await import('../../../src/commands/init/index.js')).default
       expect(Init.flags).to.have.property('ide')
       expect(Init.flags.ide.multiple).to.be.true
-      expect(Init.flags.ide.default).to.deep.equal(['claude'])
+      expect(Init.flags.ide.default).to.deep.equal(['claude', 'codex'])
     })
 
     it('should have global base flags', async () => {
@@ -100,15 +100,21 @@ describe('pai init command', () => {
       expect(Init.flags.ide.multiple).to.be.true
     })
 
-    it('should default to claude for --ide flag', async () => {
+    it('should default to claude + codex for --ide flag', async () => {
       const Init = (await import('../../../src/commands/init/index.js')).default
-      expect(Init.flags.ide.default).to.deep.equal(['claude'])
+      expect(Init.flags.ide.default).to.deep.equal(['claude', 'codex'])
     })
 
     it('should have char shortcuts for flags', async () => {
       const Init = (await import('../../../src/commands/init/index.js')).default
       expect(Init.flags.method.char).to.equal('m')
       expect(Init.flags.ide.char).to.equal('i')
+    })
+
+    it('should support codex as an IDE option', async () => {
+      const Init = (await import('../../../src/commands/init/index.js')).default
+      const examples = Init.examples.join(' ')
+      expect(examples).to.include('--ide codex')
     })
   })
 

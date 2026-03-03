@@ -1,5 +1,5 @@
 ---
-description: Implements Manus-style file-based planning for complex tasks. Creates task_plan.md, findings.md, and progress.md in _output/planning-with-files/. Use when starting complex multi-step tasks, research projects, or any task requiring >5 tool calls.
+description: Implements Manus-style file-based planning for complex tasks. Creates task_plan.md, findings.md, and progress.md in _output/planning-with-files/. Use when starting complex multi-step tasks, research projects, or unknown task requiring >5 tool calls.
 auto_execution_mode: 1
 ---
 
@@ -31,3 +31,4 @@ You can run `.claude/skills/planning-with-files/scripts/init-session.sh` to crea
 4. **Update After Act** - Mark phases complete and log errors
 
 > See the full skill file @.claude/skills/planning-with-files/SKILL.md for complete instructions, templates, and advanced topics.
+

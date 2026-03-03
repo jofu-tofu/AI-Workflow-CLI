@@ -56,7 +56,7 @@ async function ensureInfoDir(gitDir: string): Promise<void> {
  *
  * @param gitDir - Git directory (contains info/exclude)
  * @param targetDir - Project root directory (for disk-existence checks)
- * @returns True if any entries were pruned
+ * @returns True if unknown entries were pruned
  */
 export async function pruneExcludeStaleEntries(gitDir: string, targetDir: string): Promise<boolean> {
   const excludePath = getExcludePath(gitDir)
@@ -166,7 +166,7 @@ function cleanupEmptySections(content: string): string {
     const line = lines[i] as string
 
     if (line === AIW_EXCLUDE_HEADER) {
-      // Look ahead to see if there are any patterns
+      // Look ahead to see if there are unknown patterns
       const nextLine = lines[i + 1]
       if (nextLine === undefined || nextLine === '' || nextLine.startsWith('#')) {
         // Skip the header — section is empty
@@ -409,3 +409,4 @@ export async function removeExcludeEntries(gitDir: string, entriesToRemove: stri
     // Exclude file doesn't exist or can't be read
   }
 }
+

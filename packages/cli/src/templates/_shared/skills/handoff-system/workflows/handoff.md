@@ -181,7 +181,7 @@ This script:
 1. Auto-resolves the active context ID
 2. Creates a folder at `_output/contexts/{context_id}/handoffs/{YYYY-MM-DD-HHMM}/`
 3. Parses sections and writes sharded files (index.md, completed-work.md, dead-ends.md, etc.)
-4. Copies the current plan (if any) to plan.md
+4. Copies the current plan (if unknown) to plan.md
 5. Sets `handoff_path` and `handoff_consumed=false` in state.json
 
 **After handoff is saved, the context becomes dormant:**
@@ -223,7 +223,7 @@ After creating file, output:
 ✓ Created handoff folder: _output/contexts/{context_id}/handoffs/{YYYY-MM-DD-HHMM}/
   - index.md (entry point with navigation)
   - completed-work.md, dead-ends.md, decisions.md, pending.md, context.md
-  - plan.md (copy of current plan, if any)
+  - plan.md (copy of current plan, if unknown)
 
 To continue next session:
   The index.md will be automatically suggested when you start a new session.
@@ -252,3 +252,4 @@ If plan was updated:
 - [ ] If plan provided: checkboxes updated to reflect completion status
 - [ ] If plan provided: Session Progress Log appended
 - [ ] Context state updated to indicate handoff pending
+

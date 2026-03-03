@@ -43,21 +43,11 @@ export async function getTemplatePath(templateName: string): Promise<string> {
 }
 
 /**
- * Get list of available template names by scanning the templates directory.
+ * Get list of available method template names by scanning the templates directory.
  *
- * @returns Array of template names (e.g., ['bmad', 'gsr'])
+ * @returns Array of method template names (e.g., ['bmad', 'cc-native'])
  * @throws Error if templates directory cannot be read (indicates corrupted installation)
  */
-/**
- * Get the absolute path to the _shared template directory.
- *
- * @returns Absolute path to the _shared template
- */
-export function getSharedTemplatePath(): string {
-  const currentFilePath = fileURLToPath(import.meta.url)
-  const currentDir = dirname(currentFilePath)
-  return join(currentDir, '..', 'templates', '_shared')
-}
 
 export async function getAvailableTemplates(): Promise<string[]> {
   const currentFileUrl = import.meta.url
@@ -68,7 +58,9 @@ export async function getAvailableTemplates(): Promise<string[]> {
 
   try {
     const entries = await fs.readdir(templatesDir, {withFileTypes: true})
-    return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+    return entries
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('_'))
+      .map((entry) => entry.name)
   } catch (error) {
     const err = error as NodeJS.ErrnoException
     throw new Error(

@@ -7,10 +7,10 @@
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
+import path from "node:path";
 
-import { getContextHandoffsDir } from "../../../lib-ts/base/constants.js";
 import { getContext } from "../../../lib-ts/context/context-store.js";
+import { getContextHandoffsDir } from "../../../lib-ts/runtime/constants.js";
 import type { HandoffSections } from "../../../lib-ts/types.js";
 
 /**
@@ -65,7 +65,7 @@ export function readHandoffSections(handoffFolder: string): HandoffSections {
     const filePath = path.join(handoffFolder, filename);
     try {
       if (fs.existsSync(filePath)) {
-        sections[key as keyof HandoffSections] = fs.readFileSync(filePath, "utf-8");
+        sections[key as keyof HandoffSections] = fs.readFileSync(filePath, "utf8");
       }
     } catch {
       // graceful — leave as null
@@ -111,7 +111,7 @@ export function getHandoffPlanReference(
   const planMdPath = path.join(handoffFolder, "plan.md");
   try {
     if (fs.existsSync(planMdPath)) {
-      const content = fs.readFileSync(planMdPath, "utf-8");
+      const content = fs.readFileSync(planMdPath, "utf8");
       const frontmatter = parseFrontmatter(content);
       if (frontmatter["plan_path"]) {
         const pp = frontmatter["plan_path"];
@@ -157,3 +157,5 @@ function parseFrontmatter(content: string): Record<string, string> {
 
   return frontmatter;
 }
+
+

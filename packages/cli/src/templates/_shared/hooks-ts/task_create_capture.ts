@@ -2,13 +2,13 @@
 /**
  * PostToolUse:TaskCreate hook: Persist Claude's TaskCreate calls to state.json.
  */
-import { getProjectRoot } from "../lib-ts/base/constants.js";
+import { getContextBySessionId } from "../lib-ts/context/context-store.js";
+import { addTask } from "../lib-ts/context/task-tracker.js";
 import {
   checkSkipPersistence, getToolInput, loadHookInput, logDebug,
   logError, logInfo, logWarn, runHook, validateHookEvent,
-} from "../lib-ts/base/hook-utils.js";
-import { getContextBySessionId } from "../lib-ts/context/context-store.js";
-import { addTask } from "../lib-ts/context/task-tracker.js";
+} from "../lib-ts/hooks/hook-utils.js";
+import { getProjectRoot } from "../lib-ts/runtime/constants.js";
 
 function main(): void {
   const payload = loadHookInput();

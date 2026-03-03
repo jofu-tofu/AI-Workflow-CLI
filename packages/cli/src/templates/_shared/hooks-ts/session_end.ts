@@ -5,18 +5,18 @@
  */
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
-import * as path from "node:path";
+import path from "node:path";
 
-import { getProjectRoot, getContextDir } from "../lib-ts/base/constants.js";
-import { getGitState } from "../lib-ts/base/git-state.js";
-import {
-  loadHookInput, runHook, logDebug, logInfo, logError, logDiagnostic,
-} from "../lib-ts/base/hook-utils.js";
-import { nowIso } from "../lib-ts/base/utils.js";
 import { getContextBySessionId, saveState, determineArtifactType } from "../lib-ts/context/context-store.js";
 import {
   findLatestPlan, normalizePlanContent, generatePlanId, extractPlanAnchors,
 } from "../lib-ts/context/plan-manager.js";
+import {
+  loadHookInput, runHook, logDebug, logInfo, logError, logDiagnostic,
+} from "../lib-ts/hooks/hook-utils.js";
+import { getProjectRoot, getContextDir } from "../lib-ts/runtime/constants.js";
+import { getGitState } from "../lib-ts/runtime/git-state.js";
+import { nowIso } from "../lib-ts/runtime/utils.js";
 
 /**
  * Archive session transcript to context's session-transcripts/ folder.
@@ -153,11 +153,11 @@ function main(): void {
     const latestPlanPath = findLatestPlan(state.id, projectRoot);
     if (latestPlanPath) {
       try {
-        const content = fs.readFileSync(latestPlanPath, "utf-8");
+        const content = fs.readFileSync(latestPlanPath, "utf8");
         const normalized = normalizePlanContent(content);
         const planHash = crypto
           .createHash("sha256")
-          .update(normalized, "utf-8")
+          .update(normalized, "utf8")
           .digest("hex")
           .slice(0, 12);
 
@@ -195,3 +195,5 @@ function main(): void {
 }
 
 runHook(main, "session_end");
+
+

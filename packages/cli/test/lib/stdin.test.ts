@@ -3,7 +3,7 @@
  */
 
 import {expect} from 'chai'
-import {describe, it} from 'mocha'
+import {describe, it} from 'vitest'
 
 import {hasStdin, readStdin} from '../../src/lib/stdin.js'
 

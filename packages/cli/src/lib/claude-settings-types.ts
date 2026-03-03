@@ -96,6 +96,8 @@ export interface ClaudeSettings {
   enabledPlugins?: EnabledPlugins
   /** Environment variables */
   env?: EnvConfig
+  /** File suggestion command configuration */
+  fileSuggestion?: { command: string; type: 'command'; }
   /** Hook configurations */
   hooks?: HooksConfig
   /** Installed methods tracking */
@@ -107,9 +109,7 @@ export interface ClaudeSettings {
   /** Spinner tips enabled */
   spinnerTipsEnabled?: boolean
   /** Status line command configuration */
-  statusLine?: { type: 'command'; command: string }
-  /** File suggestion command configuration */
-  fileSuggestion?: { type: 'command'; command: string }
+  statusLine?: { command: string; type: 'command'; }
 }
 
 /**

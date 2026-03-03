@@ -17,11 +17,12 @@
 import {join} from 'node:path'
 
 import type {ClaudeSettings, HookEventType} from './claude-settings-types.js'
+import {getCoreClaudeSettingsBase, getCoreWindsurfHooksBase} from './core-ide-base.js'
 import {mergeClaudeSettings} from './hooks-merger.js'
-import {adaptHookCommand, validateCommandsForPlatform} from './platform-commands.js'
 import {IdePathResolver} from './ide-path-resolver.js'
+import {adaptHookCommand, validateCommandsForPlatform} from './platform-commands.js'
 import {readClaudeSettings, writeClaudeSettings} from './settings-hierarchy.js'
-import {getSharedTemplatePath, getTemplatePath} from './template-resolver.js'
+import {getTemplatePath} from './template-resolver.js'
 import {getTargetHooksFile, readWindsurfHooks, writeWindsurfHooks} from './windsurf-hooks-hierarchy.js'
 import {mergeWindsurfHooks} from './windsurf-hooks-merger.js'
 import type {WindsurfHooks} from './windsurf-hooks-types.js'
@@ -30,6 +31,9 @@ import type {WindsurfHooks} from './windsurf-hooks-types.js'
 /**
  * Reconstruct .claude/settings.json and .windsurf/hooks.json from the union
  * of all specified templates.
+ *
+ * Note: Codex content is file-based today (`.codex/workflows/*`) and does not
+ * have a merged settings artifact, so it is intentionally ignored here.
  *
  * The function:
  * 1. Starts with empty settings
@@ -44,21 +48,19 @@ import type {WindsurfHooks} from './windsurf-hooks-types.js'
  *
  * @param targetDir - Project root directory
  * @param activeTemplates - Template names to include (e.g., ['cc-native', 'bmad'])
- * @param ides - IDEs to reconstruct for (e.g., ['claude', 'windsurf'])
+ * @param ides - IDEs to reconstruct for (currently claude/windsurf)
  */
 export async function reconstructIdeSettings(
   targetDir: string,
   activeTemplates: string[],
   ides: string[],
 ): Promise<void> {
-  const sharedTemplatePath = getSharedTemplatePath()
-
   if (ides.includes('claude')) {
-    await reconstructClaudeSettings(targetDir, activeTemplates, sharedTemplatePath)
+    await reconstructClaudeSettings(targetDir, activeTemplates)
   }
 
   if (ides.includes('windsurf')) {
-    await reconstructWindsurfHooks(targetDir, activeTemplates, sharedTemplatePath)
+    await reconstructWindsurfHooks(targetDir, activeTemplates)
   }
 }
 
@@ -68,7 +70,6 @@ export async function reconstructIdeSettings(
 async function reconstructClaudeSettings(
   targetDir: string,
   activeTemplates: string[],
-  sharedTemplatePath: string,
 ): Promise<void> {
   const resolver = new IdePathResolver(targetDir)
   const settingsPath = resolver.getClaudeSettings()
@@ -79,19 +80,10 @@ async function reconstructClaudeSettings(
   // Preserve the methods tracking from existing settings
   const methodsTracking = existingSettings?.methods
 
-  // Start from empty and merge all template settings
-  let reconstructed: ClaudeSettings = {}
+  // Start from core-owned base settings, then merge method templates.
+  let reconstructed: ClaudeSettings = getCoreClaudeSettingsBase()
 
-  // 1. Merge _shared template settings (only when active templates exist that need them)
-  if (activeTemplates.length > 0) {
-    const sharedSettingsPath = join(sharedTemplatePath, '.claude', 'settings.json')
-    const sharedSettings = await readClaudeSettings(sharedSettingsPath)
-    if (sharedSettings) {
-      reconstructed = mergeClaudeSettings(reconstructed, sharedSettings)
-    }
-  }
-
-  // 2. Merge each active template's settings (sequential for deterministic merge order)
+  // Merge each active template's settings (sequential for deterministic merge order)
    
   for (const template of activeTemplates) {
     try {
@@ -99,7 +91,7 @@ async function reconstructClaudeSettings(
       const templateSettingsPath = join(templatePath, '.claude', 'settings.json')
       const templateSettings = await readClaudeSettings(templateSettingsPath) // eslint-disable-line no-await-in-loop
       if (templateSettings) {
-        reconstructed = mergeClaudeSettings(reconstructed, templateSettings)
+        reconstructed = mergeClaudeSettings(reconstructed, normalizeTemplateSettingsPaths(templateSettings))
       }
     } catch {
       // Template not found — skip
@@ -124,23 +116,13 @@ async function reconstructClaudeSettings(
 async function reconstructWindsurfHooks(
   targetDir: string,
   activeTemplates: string[],
-  sharedTemplatePath: string,
 ): Promise<void> {
   const hooksPath = getTargetHooksFile(targetDir)
 
-  // Start from empty
-  let reconstructed: WindsurfHooks = {hooks: {}}
+  // Start from core-owned base hooks.
+  let reconstructed: WindsurfHooks = getCoreWindsurfHooksBase()
 
-  // 1. Merge _shared template hooks (only when active templates exist that need them)
-  if (activeTemplates.length > 0) {
-    const sharedHooksPath = join(sharedTemplatePath, '.windsurf', 'hooks.json')
-    const sharedHooks = await readWindsurfHooks(sharedHooksPath)
-    if (sharedHooks) {
-      reconstructed = mergeWindsurfHooks(reconstructed, sharedHooks)
-    }
-  }
-
-  // 2. Merge each active template's hooks (sequential for deterministic merge order)
+  // Merge each active template's hooks (sequential for deterministic merge order)
    
   for (const template of activeTemplates) {
     try {
@@ -162,7 +144,7 @@ async function reconstructWindsurfHooks(
 /**
  * Adapt all command strings in settings for the current platform.
  * On Windows: rewrites commands for cmd.exe compatibility.
- * Validates adapted commands and fails fast if any remain non-portable.
+ * Validates adapted commands and fails fast if unknown remain non-portable.
  */
 function adaptSettingsForPlatform(settings: ClaudeSettings): ClaudeSettings {
   const result = {...settings}
@@ -198,8 +180,39 @@ function adaptSettingsForPlatform(settings: ClaudeSettings): ClaudeSettings {
     result.hooks = adapted
   }
 
-  // Validate: fail fast if any command still contains bash-only syntax on Windows
+  // Validate: fail fast if unknown command still contains bash-only syntax on Windows
   validateCommandsForPlatform(allCommands)
 
   return result
 }
+
+function normalizeTemplateSettingsPaths(settings: ClaudeSettings): ClaudeSettings {
+  const normalized: ClaudeSettings = structuredClone(settings)
+
+  if (normalized.statusLine?.command) {
+    normalized.statusLine.command = normalizeTemplateCommandPath(normalized.statusLine.command)
+  }
+
+  if (normalized.fileSuggestion?.command) {
+    normalized.fileSuggestion.command = normalizeTemplateCommandPath(normalized.fileSuggestion.command)
+  }
+
+  if (normalized.hooks) {
+    for (const event of Object.keys(normalized.hooks) as HookEventType[]) {
+      const matchers = normalized.hooks[event]
+      if (!matchers) continue
+      for (const matcher of matchers) {
+        for (const hook of matcher.hooks) {
+          hook.command = normalizeTemplateCommandPath(hook.command)
+        }
+      }
+    }
+  }
+
+  return normalized
+}
+
+function normalizeTemplateCommandPath(value: string): string {
+  return value.replaceAll('.aiwcli/_shared/', '.aiwcli/_core/')
+}
+

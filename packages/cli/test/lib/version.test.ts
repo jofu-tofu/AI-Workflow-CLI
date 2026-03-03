@@ -8,7 +8,7 @@
  */
 
 import {expect} from 'chai'
-import {describe, it} from 'mocha'
+import {describe, it} from 'vitest'
 
 import {checkVersionCompatibility, getClaudeCodeVersion} from '../../src/lib/version.js'
 
@@ -38,10 +38,8 @@ describe('version utilities', () => {
       }
     })
 
-    it('completes within timeout (3 seconds)', async function () {
-      // Verify timeout is working (prevent hanging)
-      this.timeout(3000)
-      const start = Date.now()
+    it('completes within timeout (3 seconds)', async () => {
+      // Verify timeout is working (prevent hanging)      const start = Date.now()
       await getClaudeCodeVersion()
       const elapsed = Date.now() - start
       // Should complete in under 3 seconds (timeout) even if command hangs

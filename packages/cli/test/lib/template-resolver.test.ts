@@ -2,7 +2,7 @@ import {existsSync} from 'node:fs'
 import {join} from 'node:path'
 
 import {expect} from 'chai'
-import {describe, it} from 'mocha'
+import {describe, it} from 'vitest'
 
 import {getTemplatePath} from '../../src/lib/template-resolver.js'
 

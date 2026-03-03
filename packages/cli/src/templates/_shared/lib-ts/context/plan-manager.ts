@@ -10,12 +10,12 @@
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
-import * as path from "node:path";
+import path from "node:path";
 
-import { atomicWrite } from "../base/atomic-write.js";
-import { getContextPlansDir, sanitizeTitle } from "../base/constants.js";
-import { logDebug, logInfo, logWarn, logError } from "../base/logger.js";
-import { generateSlug } from "../base/utils.js";
+import { atomicWrite } from "../runtime/atomic-write.js";
+import { getContextPlansDir, sanitizeTitle } from "../runtime/constants.js";
+import { logDebug, logInfo, logWarn, logError } from "../runtime/logger.js";
+import { generateSlug } from "../runtime/utils.js";
 
 // ---------------------------------------------------------------------------
 // Plan archival
@@ -42,14 +42,14 @@ export function archivePlan(
 
   let content: string;
   try {
-    content = fs.readFileSync(planPath, "utf-8");
-  } catch (error_: any) {
+    content = fs.readFileSync(planPath, "utf8");
+  } catch (error_: unknown) {
     logError("plan_manager", `Failed to read plan: ${error_}`);
     return [null, null, null];
   }
 
   // Compute hash and signature
-  const planHash = crypto.createHash("sha256").update(content, "utf-8").digest("hex").slice(0, 12);
+  const planHash = crypto.createHash("sha256").update(content, "utf8").digest("hex").slice(0, 12);
   const planSignature = content.slice(0, 200);
 
   // Ensure plans directory exists
@@ -144,12 +144,12 @@ export function findLatestPlan(
   try {
     // Dynamic import to avoid circular dependency at module level
     // eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- dynamic require to avoid circular dependency
-    const stateIo = require("../base/state-io.js");
+    const stateIo = require("../runtime/state-io.js");
     const state = stateIo.readStateJson(contextId, projectRoot);
     if (state?.plan_path && fs.existsSync(state.plan_path)) {
       return state.plan_path;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logWarn("plan_manager", `Failed to check state.json plan_path: ${error}`);
   }
 
@@ -249,8 +249,8 @@ export function findPlanPathInTranscript(transcriptPath: string): string | null 
 
   let lines: string[];
   try {
-    lines = fs.readFileSync(transcriptPath, "utf-8").split(/\r?\n/);
-  } catch (error: any) {
+    lines = fs.readFileSync(transcriptPath, "utf8").split(/\r?\n/);
+  } catch (error: unknown) {
     logWarn("plan_manager", `Failed to read transcript: ${error}`);
     return null;
   }
@@ -259,14 +259,14 @@ export function findPlanPathInTranscript(transcriptPath: string): string | null 
     const line = lines[i]!.trim();
     if (!line) continue;
 
-    let data: any;
+    let data: unknown;
     try {
       data = JSON.parse(line);
     } catch {
       continue;
     }
 
-    let contentArr: any;
+    let contentArr: unknown;
     try {
       contentArr = data.message?.content;
     } catch {
@@ -311,3 +311,6 @@ export function extractPlanPathFromResult(toolResult: string): string | null {
   const match = toolResult.match(/Your plan has been saved to:\s*(.+\.md)/);
   return match ? match[1]!.trim() : null;
 }
+
+
+

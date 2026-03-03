@@ -4,12 +4,12 @@
  * See cc-native-plan-review.ts for integration point (questions gate).
  */
 
-import * as path from "node:path";
+import path from "node:path";
 
 import { runAgentReview } from "./reviewers/index.js";
 import { QUESTIONS_SCHEMA } from "./reviewers/schemas.js";
-import { logInfo, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
-import { findExecutable } from "../../../_shared/lib-ts/base/subprocess-utils.js";
+import { logInfo, logWarn, logError } from "../../../_shared/lib-ts/runtime/logger.js";
+import { findExecutable } from "../../../_shared/lib-ts/runtime/subprocess-utils.js";
 import { aggregateAgents } from "../../lib-ts/aggregate-agents.js";
 import type { AgentConfig } from "../../lib-ts/types.js";
 
@@ -99,3 +99,4 @@ export async function runPlanQuestions(
 
   return { questions, assumptions, ambiguities };
 }
+

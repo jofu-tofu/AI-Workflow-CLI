@@ -1,6 +1,6 @@
 import {expect} from 'chai'
-import {afterEach, beforeEach, describe, it} from 'mocha'
 import {stderr, stdout} from 'stdout-stderr'
+import {afterEach, beforeEach, describe, it, vi} from 'vitest'
 
 import {logDebug, logError, logInfo, logSuccess, logWarning} from '../../src/lib/output.js'
 import type {ProcessLike} from '../../src/lib/tty-detection.js'
@@ -22,14 +22,18 @@ function createMockProcess(options: {
 }
 
 describe('Output Utilities', () => {
+  let errorSpy: ReturnType<typeof vi.spyOn>
+
   beforeEach(() => {
     stdout.start()
     stderr.start()
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
   })
 
   afterEach(() => {
     stdout.stop()
     stderr.stop()
+    errorSpy.mockRestore()
   })
 
   describe('logInfo()', () => {
@@ -67,20 +71,21 @@ describe('Output Utilities', () => {
   describe('logError()', () => {
     it('logs message to stderr', () => {
       logError('error message')
-      expect(stderr.output).to.include('error message')
+      expect(errorSpy.mock.calls.length).to.be.greaterThan(0)
+      expect(String(errorSpy.mock.calls[0]?.[0] ?? '')).to.include('error message')
       expect(stdout.output).to.equal('')
     })
 
     it('uses red color in TTY', () => {
       const mockProcess = createMockProcess({stderrTTY: true, stdoutTTY: true, env: {}})
       logError('red message', {proc: mockProcess})
-      expect(stderr.output).to.include('red message')
+      expect(String(errorSpy.mock.calls[0]?.[0] ?? '')).to.include('red message')
     })
 
     it('does not use color when NO_COLOR is set', () => {
       const mockProcess = createMockProcess({stderrTTY: true, stdoutTTY: true, env: {NO_COLOR: '1'}})
       logError('plain error', {proc: mockProcess})
-      expect(stderr.output).to.equal('plain error\n')
+      expect(String(errorSpy.mock.calls[0]?.[0] ?? '')).to.equal('plain error')
     })
   })
 
@@ -167,7 +172,7 @@ describe('Output Utilities', () => {
     describe('logError() with quiet mode', () => {
       it('never suppresses errors (quiet mode ignored)', () => {
         logError('error message')
-        expect(stderr.output).to.include('error message')
+        expect(String(errorSpy.mock.calls[0]?.[0] ?? '')).to.include('error message')
       })
     })
 

@@ -29,7 +29,7 @@ const BASH_ENV_PREFIX_RE = /^(?:[A-Z_]+=\S*\s+)+/
 export function adaptHookCommand(command: string): string {
   if (process.platform !== 'win32') return command
 
-  const home = homedir().replace(/\\/g, '/')
+  const home = homedir().replaceAll('\\', '/')
   const absoluteResolver = `"${home}/.aiwcli/bin/resolve-run.ts"`
 
   let result = command.replace(BASH_ENV_PREFIX_RE, '')

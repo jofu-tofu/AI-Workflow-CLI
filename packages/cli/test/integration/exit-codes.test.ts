@@ -1,8 +1,9 @@
 import {execSync} from 'node:child_process'
-import {platform} from 'node:os'
 
 import {expect} from 'chai'
-import {describe, it} from 'mocha'
+import {describe, it} from 'vitest'
+
+import {cliCommand} from '../helpers/cli-command.js'
 
 /**
  * Exit code validation tests.
@@ -16,7 +17,7 @@ import {describe, it} from 'mocha'
  */
 describe('Exit Code Consistency', () => {
   // Cross-platform bin path (Windows uses .cmd, Unix uses .js)
-  const bin = platform() === 'win32' ? String.raw`.\bin\dev.cmd` : './bin/dev.js'
+  const bin = cliCommand()
 
   describe('AC1: Success Exit Code (0)', () => {
     it('returns 0 when launch help is displayed', () => {

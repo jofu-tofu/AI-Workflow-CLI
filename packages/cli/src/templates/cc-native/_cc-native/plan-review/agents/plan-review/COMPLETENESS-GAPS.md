@@ -54,7 +54,7 @@ For the plan as a whole:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -68,3 +68,4 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of gaps found, each with: severity (high/medium/low), category (e.g., "missing-step", "error-path", "pre-condition", "post-condition", "transition-gap"), issue description, suggested_fix (specific step to add)
 - **missing_sections**: Structural elements the plan should include (error handling, rollback, pre-conditions, verification steps)
 - **questions**: Gaps that need clarification before implementation
+

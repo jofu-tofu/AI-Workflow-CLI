@@ -3,13 +3,13 @@
  * PostToolUse:TaskUpdate hook: Persist Claude's TaskUpdate calls to state.json.
  * Maps Claude's ephemeral task IDs to persistent aiw-N IDs.
  */
-import { getProjectRoot } from "../lib-ts/base/constants.js";
+import { getContextBySessionId } from "../lib-ts/context/context-store.js";
+import { deleteTask, updateTask } from "../lib-ts/context/task-tracker.js";
 import {
   checkSkipPersistence, getToolInput, loadHookInput, logDebug,
   logError as _logError, logInfo, logWarn, runHook, validateHookEvent,
-} from "../lib-ts/base/hook-utils.js";
-import { getContextBySessionId } from "../lib-ts/context/context-store.js";
-import { deleteTask, updateTask } from "../lib-ts/context/task-tracker.js";
+} from "../lib-ts/hooks/hook-utils.js";
+import { getProjectRoot } from "../lib-ts/runtime/constants.js";
 
 function main(): void {
   const payload = loadHookInput();
@@ -36,7 +36,7 @@ function main(): void {
   }
 
   // Map Claude's ephemeral ID to persistent ID
-  const metadata = (toolInput.metadata ?? {}) as Record<string, any>;
+  const metadata = (toolInput.metadata ?? {}) as Record<string, unknown>;
   const persistentId = (metadata.persistent_id as string) ?? `aiw-${claudeTaskId}`;
 
   const status = toolInput.status as string | undefined;
@@ -53,7 +53,7 @@ function main(): void {
   }
 
   if (status) {
-    const opts: Record<string, any> = { status };
+    const opts: Record<string, unknown> = { status };
     if (metadata.evidence) opts.evidence = metadata.evidence;
     if (metadata.work_summary) opts.work_summary = metadata.work_summary;
     if (metadata.files_changed && Array.isArray(metadata.files_changed)) {
@@ -72,3 +72,4 @@ function main(): void {
 }
 
 runHook(main, "task_update_capture");
+

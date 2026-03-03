@@ -67,6 +67,24 @@ This section explains the template system architecture. Understanding this preve
 | `.aiwcli/_cc-native/lib-ts/**/*.ts` | `packages/cli/src/templates/cc-native/_cc-native/lib-ts/` |
 | `.claude/settings.json` | `packages/cli/src/templates/cc-native/.claude/settings.json` |
 
+### Core Package Source of Truth
+
+Reusable cross-platform utility code now lives in `packages/cli/src/lib/runtime/`.
+Current extracted modules:
+
+- `tmux-preflight.ts`
+- `executable-policy.ts`
+- `platform-adapter.ts`
+- `subprocess-utils.ts`
+- `sentinel-ipc.ts`
+
+To sync extracted shared library modules into CLI and template wrappers:
+
+```bash
+cd packages/cli
+npm run sync:shared-lib
+```
+
 ### Directory Structure
 
 ```

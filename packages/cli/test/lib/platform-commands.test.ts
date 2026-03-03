@@ -1,24 +1,24 @@
 import {expect} from 'chai'
-import sinon from 'sinon'
+import {stub, type SinonStub} from 'sinon'
 
 import {adaptHookCommand, validateCommandsForPlatform} from '../../src/lib/platform-commands.js'
 
 describe('platform-commands', () => {
   describe('adaptHookCommand', () => {
-    let platformStub: sinon.SinonStub
+    let platformStub: SinonStub
 
     afterEach(() => {
       platformStub?.restore()
     })
 
     it('is a no-op on non-Windows', () => {
-      platformStub = sinon.stub(process, 'platform').value('linux')
+      platformStub = stub(process, 'platform').value('linux')
       const cmd = 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/session_start.ts'
       expect(adaptHookCommand(cmd)).to.equal(cmd)
     })
 
     it('expands ~ to absolute home path on Windows', () => {
-      platformStub = sinon.stub(process, 'platform').value('win32')
+      platformStub = stub(process, 'platform').value('win32')
       const cmd = 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/session_start.ts'
       const result = adaptHookCommand(cmd)
       expect(result).to.not.include('~/')
@@ -29,7 +29,7 @@ describe('platform-commands', () => {
     })
 
     it('strips bash env-var prefix on Windows', () => {
-      platformStub = sinon.stub(process, 'platform').value('win32')
+      platformStub = stub(process, 'platform').value('win32')
       const cmd = 'NO_COLOR= FORCE_COLOR=2 bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/scripts/status_line.ts'
       const result = adaptHookCommand(cmd)
       expect(result).to.not.include('NO_COLOR=')
@@ -38,42 +38,42 @@ describe('platform-commands', () => {
     })
 
     it('preserves bash env-var prefix on Unix', () => {
-      platformStub = sinon.stub(process, 'platform').value('darwin')
+      platformStub = stub(process, 'platform').value('darwin')
       const cmd = 'NO_COLOR= FORCE_COLOR=2 bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/scripts/status_line.ts'
       expect(adaptHookCommand(cmd)).to.equal(cmd)
     })
 
     it('handles commands without resolver token on Windows', () => {
-      platformStub = sinon.stub(process, 'platform').value('win32')
+      platformStub = stub(process, 'platform').value('win32')
       const cmd = 'echo hello'
       expect(adaptHookCommand(cmd)).to.equal('echo hello')
     })
   })
 
   describe('validateCommandsForPlatform', () => {
-    let platformStub: sinon.SinonStub
+    let platformStub: SinonStub
 
     afterEach(() => {
       platformStub?.restore()
     })
 
     it('is a no-op on Unix', () => {
-      platformStub = sinon.stub(process, 'platform').value('linux')
+      platformStub = stub(process, 'platform').value('linux')
       expect(() => validateCommandsForPlatform(['bun ~/.aiwcli/bin/resolve-run.ts foo'])).to.not.throw()
     })
 
     it('throws on unexpanded ~/ on Windows', () => {
-      platformStub = sinon.stub(process, 'platform').value('win32')
+      platformStub = stub(process, 'platform').value('win32')
       expect(() => validateCommandsForPlatform(['bun ~/.aiwcli/bin/resolve-run.ts foo'])).to.throw(/unexpanded ~\//)
     })
 
     it('throws on bash env prefix on Windows', () => {
-      platformStub = sinon.stub(process, 'platform').value('win32')
+      platformStub = stub(process, 'platform').value('win32')
       expect(() => validateCommandsForPlatform(['NO_COLOR= bun something'])).to.throw(/bash env prefix/)
     })
 
     it('passes for adapted commands on Windows', () => {
-      platformStub = sinon.stub(process, 'platform').value('win32')
+      platformStub = stub(process, 'platform').value('win32')
       const adapted = ['bun "C:/Users/test/.aiwcli/bin/resolve-run.ts" .aiwcli/foo.ts']
       expect(() => validateCommandsForPlatform(adapted)).to.not.throw()
     })

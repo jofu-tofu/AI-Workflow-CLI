@@ -10,5 +10,6 @@ IT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the c
 2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @.aiwcli/_bmad/bmm/workflows/testarch/framework/workflow.yaml
 3. Pass the yaml path .aiwcli/_bmad/bmm/workflows/testarch/framework/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions
 4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions
-5. Save outputs after EACH section when generating any documents from templates
+5. Save outputs after EACH section when generating unknown documents from templates
 </steps>
+

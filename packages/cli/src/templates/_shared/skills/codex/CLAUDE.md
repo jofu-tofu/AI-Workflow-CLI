@@ -26,7 +26,7 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 - `plan` — discover active plan via context system, build a bootstrap startup prompt that includes the plan filepath (Codex reads that file directly)
 - `--file <path>` — build a bootstrap startup prompt that includes the file path (Codex reads that file directly)
 - `<text...>` — join remaining args as inline prompt
-- `--model <alias|tier|id>` — Aliases: `spark` → `gpt-5.3-codex-spark`, `codex` → `gpt-5.3-codex`, `gpt` → `gpt-5.2`. Tiers: `fast`/`standard`/`smart` (resolved via `resolveModelForProvider()`). Or any full model ID.
+- `--model <alias|tier|id>` — Aliases: `spark` → `gpt-5.3-codex-spark`, `codex` → `gpt-5.3-codex`, `gpt` → `gpt-5.2`. Tiers: `fast`/`standard`/`smart` (resolved via `resolveModelForProvider()`). Or unknown full model ID.
 - `--sandbox <mode>` — `read-only`, `workspace-write`, or `danger-full-access`. Default is `danger-full-access`.
 - `--prompt <text>` — append extra instructions. In `plan` and `--file` modes, these are embedded into a bootstrap temp file alongside the target path.
 - `--no-yolo` — Disable YOLO mode (`--dangerously-bypass-approvals-and-sandbox`).
@@ -71,3 +71,4 @@ Reusable side-effect-free watch/summarize functions used by launch flow:
 - `collectTranscriptLines(sessionFile)`
 
 Constants and helper utilities are exported for reuse and testing (`POLL_INTERVAL_MS`, `SUMMARY_UNAVAILABLE_MESSAGE`, `normalizeText`, `looksLikeBadSummary`, etc.).
+

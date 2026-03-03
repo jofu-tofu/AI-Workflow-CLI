@@ -3,14 +3,14 @@ import {homedir, tmpdir} from 'node:os'
 import {join} from 'node:path'
 
 import {expect} from 'chai'
-import {after, before, describe, it} from 'mocha'
+import {afterAll, beforeAll, describe, it} from 'vitest'
 
 describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', () => {
   const testAiwHome = join(tmpdir(), 'aiw-test-epic-2-validation')
   const testClaudeDir = join(testAiwHome, '.claude')
   const originalAiwDir = process.env.AIW_DIR
 
-  before(() => {
+  beforeAll(() => {
     if (existsSync(testAiwHome)) {
       rmSync(testAiwHome, {recursive: true, force: true})
     }
@@ -35,7 +35,7 @@ describe('Epic 2: Zero-Friction Claude Code Launch - Integration Validation', ()
     process.env.AIW_DIR = testAiwHome
   })
 
-  after(() => {
+  afterAll(() => {
     if (existsSync(testAiwHome)) {
       rmSync(testAiwHome, {recursive: true, force: true})
     }

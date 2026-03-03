@@ -47,6 +47,15 @@ export class IdePathResolver {
   }
 
   /**
+   * Get the .aiwcli/state directory path
+   *
+   * @returns Absolute path to .aiwcli/state directory
+   */
+  getAiwcliStateDir(): string {
+    return join(this.getAiwcliContainer(), 'state')
+  }
+
+  /**
    * Get path to a file/folder within .claude directory
    *
    * @param relativePath - Relative path within .claude (e.g., 'settings.json', 'commands/bmad')
@@ -75,6 +84,15 @@ export class IdePathResolver {
   }
 
   /**
+   * Get the core runtime folder path within .aiwcli
+   *
+   * @returns Absolute path to _core directory
+   */
+  getCoreFolder(): string {
+    return this.getAiwcliFolder('_core')
+  }
+
+  /**
    * Get IDE directory path by IDE name
    *
    * @param ideName - IDE name ('claude', 'windsurf', etc.)
@@ -82,6 +100,15 @@ export class IdePathResolver {
    */
   getIdeDir(ideName: string): string {
     return join(this.projectRoot, `.${ideName}`)
+  }
+
+  /**
+   * Get install state file path.
+   *
+   * @returns Absolute path to install-state.json
+   */
+  getInstallStatePath(): string {
+    return join(this.getAiwcliStateDir(), 'install-state.json')
   }
 
   /**

@@ -1,21 +1,22 @@
 import {execSync} from 'node:child_process'
-import {platform} from 'node:os'
 
 import {expect} from 'chai'
-import {describe, it} from 'mocha'
+import {beforeAll, describe, it} from 'vitest'
+
+import {cliCommand} from '../helpers/cli-command.js'
 
 /**
  * Subcommand Architecture Validation Tests
  * Story 3.1 - FR30, FR31, FR32
  */
 describe('Subcommand Architecture Validation', () => {
-  const bin = platform() === 'win32' ? String.raw`.\bin\dev.cmd` : './bin/dev.js'
+  const bin = cliCommand()
 
   // Cache help outputs to avoid redundant subprocess calls
   let mainHelp: string
   let launchHelp: string
 
-  before(() => {
+  beforeAll(() => {
     mainHelp = execSync(`${bin} --help`, {encoding: 'utf8'})
     launchHelp = execSync(`${bin} launch --help`, {encoding: 'utf8'})
   })

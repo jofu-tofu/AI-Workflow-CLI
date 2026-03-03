@@ -18,7 +18,7 @@ let logDebug: (hookName: string, message: string, opts?: Record<string, unknown>
 
 try {
   // Try shared logger (works when imported as part of the hook pipeline)
-  const mod = await import("../../../../_shared/lib-ts/base/logger.js");
+  const mod = await import("../../../../_shared/lib-ts/runtime/logger.js");
   logInfo = mod.logInfo;
   logWarn = mod.logWarn;
   logError = mod.logError;

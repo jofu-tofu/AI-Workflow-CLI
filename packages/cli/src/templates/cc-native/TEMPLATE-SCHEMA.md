@@ -103,9 +103,9 @@ CC-Native settings are stored in `_cc-native/cc-native.config.json`:
       "timeout": 30
     },
     "agentSelection": {
-      "simple": { "min": 0, "max": 0 },
-      "medium": { "min": 1, "max": 2 },
-      "high": { "min": 2, "max": 4 },
+      "simple": { "min": 3, "max": 3 },
+      "medium": { "min": 5, "max": 5 },
+      "high": { "min": 7, "max": 7 },
       "fallbackCount": 2
     }
   }
@@ -129,12 +129,12 @@ CC-Native settings are stored in `_cc-native/cc-native.config.json`:
 |---------|---------|---------|
 | `agentReview.enabled` | Master switch for agent review | `true` |
 | `agentReview.timeout` | Seconds per agent before timeout | `120` |
-| `agentReview.blockOnFail` | Block Claude if any agent fails | `true` |
+| `agentReview.blockOnFail` | Block Claude if unknown agent fails | `true` |
 | `agentReview.orchestrator.enabled` | Use orchestrator for complexity analysis | `true` |
 | `agentReview.orchestrator.model` | Model for orchestrator | `haiku` |
-| `agentReview.agentSelection.simple` | Agent count for simple plans | `0-0` |
-| `agentReview.agentSelection.medium` | Agent count for medium plans | `1-2` |
-| `agentReview.agentSelection.high` | Agent count for complex plans | `2-4` |
+| `agentReview.agentSelection.simple` | Agent count for simple plans | `3-3` |
+| `agentReview.agentSelection.medium` | Agent count for medium plans | `5-5` |
+| `agentReview.agentSelection.high` | Agent count for complex plans | `7-7` |
 
 ### Environment Variables
 
@@ -268,7 +268,7 @@ The orchestrator uses a fast model (Haiku) to:
 - Categorize the plan (code/infrastructure/documentation/life/business/design/research)
 - Select appropriate agents based on complexity and category
 
-Simple plans skip agent review entirely. Medium/high complexity plans get 1-4 agents based on configuration.
+Plans run a complexity-tiered reviewer set: simple plans use 3 agents, medium plans use 5, and high-complexity plans use 7 (including mandatory reviewers).
 
 #### Agent Execution
 
@@ -302,3 +302,4 @@ Each selected agent:
 | 1.2.0 | Added multi-agent plan review via Claude Code agents, reordered hooks (archive last) |
 | 1.1.0 | Added plan review via Codex/Gemini with Claude feedback, config.json |
 | 1.0.0 | Initial release with fix, research, implement workflows |
+

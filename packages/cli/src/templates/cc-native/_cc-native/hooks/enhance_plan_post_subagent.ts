@@ -18,8 +18,8 @@ import {
   logDebug,
   emitContext,
   getToolInput,
-} from "../../_shared/lib-ts/base/hook-utils.js";
-import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
+} from "../../_shared/lib-ts/hooks/hook-utils.js";
+import { isInternalCall } from "../../_shared/lib-ts/runtime/subprocess-utils.js";
 import { getPlanQualityReviewContext } from "../lib-ts/plan-enhancement.js";
 
 function main(): void {

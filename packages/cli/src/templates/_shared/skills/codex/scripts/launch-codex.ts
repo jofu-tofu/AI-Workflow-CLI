@@ -9,17 +9,17 @@
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
-import * as path from "node:path";
+import path from "node:path";
 
-import { aiwLaunch } from "../../../lib-ts/base/aiw-cli.js";
-import { getProjectRoot } from "../../../lib-ts/base/constants.js";
-import { resolveCodexModel, buildCliInvocation, isCodexSandbox, type CodexSandbox, type CliArgSpec } from "../../../lib-ts/base/cli-args.js";
-import { CODEX_MODELS } from "../../../lib-ts/base/models.js";
-import { logDebug, logWarn } from "../../../lib-ts/base/logger.js";
-import { displayPath } from "../../../lib-ts/base/utils.js";
-import { getContextBySessionId, getContext } from "../../../lib-ts/context/context-store.js";
 import { buildExternalAgentContext } from "../../../lib-ts/context/context-formatter.js";
+import { getContextBySessionId, getContext } from "../../../lib-ts/context/context-store.js";
 import { findLatestPlan } from "../../../lib-ts/context/plan-manager.js";
+import { aiwLaunch } from "../../../lib-ts/runtime/aiw-cli.js";
+import { resolveCodexModel, buildCliInvocation, isCodexSandbox, type CodexSandbox, type CliArgSpec } from "../../../lib-ts/runtime/cli-args.js";
+import { getProjectRoot } from "../../../lib-ts/runtime/constants.js";
+import { logDebug, logWarn } from "../../../lib-ts/runtime/logger.js";
+import { CODEX_MODELS } from "../../../lib-ts/runtime/models.js";
+import { displayPath } from "../../../lib-ts/runtime/utils.js";
 import type { ContextState } from "../../../lib-ts/types.js";
 
 /** Codex-specific model abbreviations. Checked before tier resolution. */
@@ -29,9 +29,9 @@ const CODEX_ALIASES: Record<string, string> = {
   gpt: CODEX_MODELS.gpt,
 };
 
-const SESSION_DISCOVERY_TIMEOUT_MS = 12000;
+const SESSION_DISCOVERY_TIMEOUT_MS = 12_000;
 const SESSION_DISCOVERY_POLL_MS = 250;
-const SESSION_MTIME_WINDOW_MS = 120000;
+const SESSION_MTIME_WINDOW_MS = 120_000;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -50,7 +50,9 @@ function cleanupSentinel(sentinelPath: string | null | undefined): void {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function collectSessionJsonlFiles(rootDir: string): string[] {
@@ -92,7 +94,7 @@ function samePath(a: string, b: string): boolean {
 
 function readSessionMeta(sessionFile: string): { sessionId: string; cwd: string; startedAtMs: number } | null {
   try {
-    const raw = fs.readFileSync(sessionFile, "utf-8");
+    const raw = fs.readFileSync(sessionFile, "utf8");
     const firstLine = raw.split(/\r?\n/).find((line) => line.trim().length > 0);
     if (!firstLine) return null;
     const parsed = JSON.parse(firstLine);
@@ -251,18 +253,32 @@ for (let i = 0; i < rawArgs.length; i++) {
     contextFlag = rawArgs[++i];
   } else if (rawArgs[i] === "--prompt" && i + 1 < rawArgs.length) {
     extraPrompt = rawArgs[++i];
-  } else if (rawArgs[i] === "--prompt") {
+  } else switch (rawArgs[i]) {
+ case "--no-watch": {
+    watch = false;
+  
+ break;
+ }
+ case "--no-yolo": {
+    yolo = false;
+  
+ break;
+ }
+ case "--prompt": {
     eprint("Error: --prompt requires a text argument.");
     process.exit(1);
-  } else if (rawArgs[i] === "--yolo") {
+  
+ break;
+ }
+ case "--yolo": {
     yolo = true;
-  } else if (rawArgs[i] === "--no-yolo") {
-    yolo = false;
-  } else if (rawArgs[i] === "--no-watch") {
-    watch = false;
-  } else {
+  
+ break;
+ }
+ default: {
     args.push(rawArgs[i]);
   }
+ }
 }
 
 if (args.length === 0) {
@@ -337,7 +353,7 @@ if (args[0] === "plan") {
   // Inline text: join args, write to temp file
   const text = args.join(" ");
   tempFile = path.join(os.tmpdir(), `codex-prompt-${Date.now()}.md`);
-  fs.writeFileSync(tempFile, text, "utf-8");
+  fs.writeFileSync(tempFile, text, "utf8");
   promptPath = tempFile;
 }
 
@@ -358,7 +374,7 @@ if (fileReferencePath && fileReferenceLabel) {
     orientation,
   );
   tempFile = path.join(os.tmpdir(), `codex-file-ref-${Date.now()}.md`);
-  fs.writeFileSync(tempFile, bootstrap, "utf-8");
+  fs.writeFileSync(tempFile, bootstrap, "utf8");
   promptPath = tempFile;
   extraPromptEmbedded = Boolean(extraPrompt?.trim());
 }
@@ -367,10 +383,10 @@ if (fileReferencePath && fileReferenceLabel) {
 if (ctx && promptPath && !fileReferencePath) {
   try {
     const orientation = buildExternalAgentContext(ctx, projectRoot);
-    const original = fs.readFileSync(promptPath, "utf-8");
+    const original = fs.readFileSync(promptPath, "utf8");
     const combined = `${orientation}\n\n---\n\n${original}`;
     const contextPromptPath = path.join(os.tmpdir(), `codex-ctx-prompt-${Date.now()}.md`);
-    fs.writeFileSync(contextPromptPath, combined, "utf-8");
+    fs.writeFileSync(contextPromptPath, combined, "utf8");
     if (tempFile) {
       try { fs.unlinkSync(tempFile); } catch { /* ignore */ }
     }
@@ -383,10 +399,10 @@ if (ctx && promptPath && !fileReferencePath) {
 
 if (extraPrompt && promptPath && !extraPromptEmbedded) {
   try {
-    const base = fs.readFileSync(promptPath, "utf-8");
+    const base = fs.readFileSync(promptPath, "utf8");
     const combined = `${base}\n\n---\n\n## Additional Instructions\n\n${extraPrompt}`;
     const extraPromptPath = path.join(os.tmpdir(), `codex-extra-prompt-${Date.now()}.md`);
-    fs.writeFileSync(extraPromptPath, combined, "utf-8");
+    fs.writeFileSync(extraPromptPath, combined, "utf8");
     if (tempFile) {
       try { fs.unlinkSync(tempFile); } catch { /* ignore */ }
     }
@@ -406,7 +422,7 @@ if (yolo) console.log("Mode: YOLO (bypass approvals and sandbox)");
 if (sandboxFlag) console.log(`Sandbox: ${sandboxFlag}`);
 if (resolvedModel) console.log(`Model: ${resolvedModel}${modelFlag !== resolvedModel ? ` (from "${modelFlag}")` : ""}`);
 
-logDebug("codex-skill", `Launching: model=${resolvedModel ?? "default"}, sandbox=${sandboxFlag ?? "default"}, yolo=${yolo}, extraPrompt=${!!extraPrompt}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
+logDebug("codex-skill", `Launching: model=${resolvedModel ?? "default"}, sandbox=${sandboxFlag ?? "default"}, yolo=${yolo}, extraPrompt=${Boolean(extraPrompt)}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
 
 const launchStartedAtMs = Date.now();
 
@@ -432,13 +448,13 @@ if (!result.launched) {
     sandbox: sandboxFlag ?? "danger-full-access",
   };
   const execInv = buildCliInvocation(execSpec);
-  const promptContent = promptPath ? fs.readFileSync(promptPath, "utf-8") : "";
+  const promptContent = promptPath ? fs.readFileSync(promptPath, "utf8") : "";
 
   if (tempFile) {
     try { fs.unlinkSync(tempFile); } catch { /* ignore */ }
   }
 
-  const { execFileAsync } = await import("../../../lib-ts/base/subprocess-utils.js");
+  const { execFileAsync } = await import("../../../lib-ts/runtime/subprocess-utils.js");
   const execResult = await execFileAsync(execInv.cliName, execInv.args, {
     input: promptContent,
     env: { ...process.env, ...execInv.env },
@@ -514,3 +530,5 @@ if (watch && (result.paneId || result.sentinelPath)) {
 if (result.reason) {
   eprint(`Warning: ${result.reason}`);
 }
+
+

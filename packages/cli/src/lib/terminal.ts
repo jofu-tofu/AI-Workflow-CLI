@@ -28,7 +28,10 @@
  * @module lib/terminal
  */
 
-import {execSync, spawn} from 'node:child_process'
+import {spawn} from 'node:child_process'
+
+import {isCommandAvailable} from './runtime/executable-policy.js'
+import {isWindowsPlatform} from './runtime/platform-adapter.js'
 
 /**
  * Return a copy of process.env with Claude Code nesting-detection vars removed.
@@ -91,12 +94,7 @@ interface TerminalLaunchResult {
  * @returns 'pwsh' if PowerShell 7 is available, 'powershell' otherwise
  */
 function detectPowerShell(): string {
-  try {
-    execSync('where pwsh', {stdio: 'ignore'})
-    return 'pwsh'
-  } catch {
-    return 'powershell'
-  }
+  return isCommandAvailable('pwsh') ? 'pwsh' : 'powershell'
 }
 
 /**
@@ -227,12 +225,8 @@ const LINUX_TERMINALS = [
  */
 function findAvailableLinuxTerminal(): (typeof LINUX_TERMINALS)[number] | null {
   for (const terminal of LINUX_TERMINALS) {
-    try {
-      execSync(`which ${terminal.cmd}`, {stdio: 'ignore'})
+    if (isCommandAvailable(terminal.cmd, 'linux')) {
       return terminal
-    } catch {
-      // Terminal not found, try next
-      continue
     }
   }
 
@@ -361,7 +355,7 @@ export async function launchTerminal(options: TerminalLaunchOptions): Promise<Te
   debugLog?.(`Launching terminal in ${cwd} with command: ${command}`)
   debugLog?.(`Platform: ${platform}`)
 
-  if (platform === 'win32') {
+  if (isWindowsPlatform(platform)) {
     return launchWindowsTerminal(cwd, command, debugLog)
   }
 

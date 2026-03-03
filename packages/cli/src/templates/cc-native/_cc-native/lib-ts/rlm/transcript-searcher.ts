@@ -116,7 +116,7 @@ async function search(
 
       let idx: SessionIndex;
       try {
-        const raw = await readFile(join(projectPath, file), "utf-8");
+        const raw = await readFile(join(projectPath, file), "utf8");
         idx = JSON.parse(raw) as SessionIndex;
       } catch {
         continue;
@@ -272,3 +272,4 @@ function insertSorted(arr: SearchResult[], item: SearchResult, maxSize: number):
 // ---------------------------------------------------------------------------
 
 export { scoreIndex, search, type SearchOptions, tokenize };
+

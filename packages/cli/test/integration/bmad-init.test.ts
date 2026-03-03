@@ -2,7 +2,7 @@ import {promises as fs} from 'node:fs'
 import {join} from 'node:path'
 
 import {expect} from 'chai'
-import {afterEach, beforeEach, describe, it} from 'mocha'
+import {afterEach, beforeEach, describe, it} from 'vitest'
 
 import {installBmad} from '../../src/lib/bmad-installer.js'
 import {updateGitExclude} from '../../src/lib/git-exclude-manager.js'
@@ -20,11 +20,8 @@ describe.skip('BMAD Installation Integration Tests', () => {
     await cleanupTestDir(testDir)
   })
 
-  it('should install BMAD with complete directory structure', async function () {
-    // Increase timeout for this test as it copies many files
-    this.timeout(15_000)
-
-    await installBmad({
+  it('should install BMAD with complete directory structure', async () => {
+    // Increase timeout for this test as it copies many files    await installBmad({
       projectName: 'test-project',
       targetDir: testDir,
       username: 'TestUser',
@@ -71,10 +68,7 @@ describe.skip('BMAD Installation Integration Tests', () => {
     expect(await pathExists(join(claudeCommandsDir, 'bmm', 'workflows'))).to.be.true
   })
 
-  it('should generate custom configuration files', async function () {
-    this.timeout(15_000)
-
-    await installBmad({
+  it('should generate custom configuration files', async () => {    await installBmad({
       projectName: 'my-project',
       targetDir: testDir,
       username: 'Alice',
@@ -148,10 +142,7 @@ describe.skip('BMAD Installation Integration Tests', () => {
     expect(matches).to.have.lengthOf(1, 'AIW patterns should only appear once')
   })
 
-  it('should install agents from template', async function () {
-    this.timeout(15_000)
-
-    await installBmad({
+  it('should install agents from template', async () => {    await installBmad({
       projectName: 'test-project',
       targetDir: testDir,
       username: 'TestUser',
@@ -169,10 +160,7 @@ describe.skip('BMAD Installation Integration Tests', () => {
     expect(agentFiles.some((f) => f.includes('pm'))).to.be.true
   })
 
-  it('should install workflows from template', async function () {
-    this.timeout(15_000)
-
-    await installBmad({
+  it('should install workflows from template', async () => {    await installBmad({
       projectName: 'test-project',
       targetDir: testDir,
       username: 'TestUser',

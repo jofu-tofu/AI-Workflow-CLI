@@ -5,8 +5,8 @@
 
 import type { ExecutionBackend , ExecutionResult } from "../../../../../_shared/lib-ts/agent-exec/execution-backend.js";
 import { parseStructuredOutput } from "../../../../../_shared/lib-ts/agent-exec/structured-output.js";
-import { buildCliInvocation, reviewSpec, type CliProvider } from "../../../../../_shared/lib-ts/base/cli-args.js";
-import { logDebug } from "../../../../../_shared/lib-ts/base/logger.js";
+import { buildCliInvocation, reviewSpec, type CliProvider } from "../../../../../_shared/lib-ts/runtime/cli-args.js";
+import { logDebug } from "../../../../../_shared/lib-ts/runtime/logger.js";
 import { debugLog, debugRaw } from "../../../../lib-ts/debug.js";
 import type { AgentConfig, AgentReviewSettings, AgentSelectionConfig, OrchestratorResult, ComplexityCategory } from "../../../../lib-ts/types.js";
 import { BaseCliAgent } from "../base/base-agent.js";
@@ -28,9 +28,9 @@ const DEFAULT_COMPLEXITY_CATEGORIES = [
 
 const DEFAULT_AGENT_SELECTION: AgentSelectionConfig = {
   simple: { min: 3, max: 3 },
-  medium: { min: 8, max: 8 },
-  high: { min: 12, max: 12 },
-  fallbackCount: 3,
+  medium: { min: 5, max: 5 },
+  high: { min: 7, max: 7 },
+  fallbackCount: 2,
 };
 
 /**
@@ -87,7 +87,7 @@ export class OrchestratorClaudeAgent extends BaseCliAgent<OrchestratorResult> {
   protected buildCliArgs(): string[] {
     const systemPrompt = `You are a plan orchestrator for code review. Your job is to analyze plans and select appropriate reviewer agents.
 
-You MUST call StructuredOutput immediately with your analysis. Do NOT ask questions or use any other tools.
+You MUST call StructuredOutput immediately with your analysis. Do NOT ask questions or use unknown other tools.
 
 When selecting agents:
 - Match agent expertise to plan requirements
@@ -112,8 +112,8 @@ When selecting agents:
     const categoryList = this.categories.join("/");
 
     const simpleAdditional = Math.max(0, (selection.simple?.max ?? 3) - this.mandatoryCount);
-    const mediumAdditional = Math.max(0, (selection.medium?.max ?? 8) - this.mandatoryCount);
-    const highAdditional = Math.max(0, (selection.high?.max ?? 12) - this.mandatoryCount);
+    const mediumAdditional = Math.max(0, (selection.medium?.max ?? 5) - this.mandatoryCount);
+    const highAdditional = Math.max(0, (selection.high?.max ?? 7) - this.mandatoryCount);
 
     return `Analyze this plan and select appropriate reviewer agents.
 
@@ -222,3 +222,4 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning`
     };
   }
 }
+

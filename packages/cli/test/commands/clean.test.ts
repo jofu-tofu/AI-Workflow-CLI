@@ -11,11 +11,27 @@ import {promises as fs} from 'node:fs'
 import {join} from 'node:path'
 
 import {expect} from 'chai'
+import {afterAll, beforeAll} from 'vitest'
 
 import CleanCommand from '../../src/commands/clean.js'
 import {cleanupTestDir, createTestDir, getAbsoluteBinPath} from '../helpers/test-utils.js'
 
 describe('clean command', () => {
+  const originalNodeEnv = process.env.NODE_ENV
+
+  beforeAll(() => {
+    process.env.NODE_ENV = 'production'
+  })
+
+  afterAll(() => {
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV
+      return
+    }
+
+    process.env.NODE_ENV = originalNodeEnv
+  })
+
   describe('command metadata', () => {
     it('should have static description field', () => {
       expect(CleanCommand.description).to.be.a('string')

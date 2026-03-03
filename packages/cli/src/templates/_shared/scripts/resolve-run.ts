@@ -14,7 +14,7 @@
  */
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
-import * as path from "node:path";
+import path from "node:path";
 
 /**
  * Convert MSYS2/Git-Bash POSIX path to native Windows path.
@@ -28,10 +28,10 @@ function fromMsysPosixPath(p: string): string {
 }
 
 function findProjectRoot(): string {
-  // 1. git (works from any subdirectory of a repo)
+  // 1. git (works from unknown subdirectory of a repo)
   try {
     let root = execSync("git rev-parse --show-toplevel", {
-      encoding: "utf-8",
+      encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 2000,
     }).trim();
@@ -84,3 +84,6 @@ const result = Bun.spawnSync(["bun", fullPath, ...process.argv.slice(3)], {
 });
 
 process.exit(result.exitCode);
+
+
+

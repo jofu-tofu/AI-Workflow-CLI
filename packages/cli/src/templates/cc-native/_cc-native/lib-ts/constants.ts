@@ -4,7 +4,7 @@
  */
 
 import * as os from "node:os";
-import * as path from "node:path";
+import path from "node:path";
 
 // ---------------------------------------------------------------------------
 // Feature Flags
@@ -81,3 +81,4 @@ export function validatePlanPath(planPath: string): string {
 
   return resolved;
 }
+

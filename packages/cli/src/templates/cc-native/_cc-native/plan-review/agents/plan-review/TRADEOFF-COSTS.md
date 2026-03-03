@@ -51,7 +51,7 @@ Focus on the 3-5 most consequential trade-offs. Prioritize by irreversibility, m
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -65,3 +65,4 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of cost concerns, each with: severity (high/medium/low), category (e.g., "hidden-cost", "opportunity-cost", "capability-sacrifice", "future-flexibility", "quality-tradeoff"), issue description, suggested_fix (acknowledge cost or reconsider decision)
 - **missing_sections**: Cost considerations the plan should address (opportunity costs, capability sacrifices, resource allocation)
 - **questions**: Costs that need explicit acknowledgment
+

@@ -5,13 +5,13 @@
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
+import path from "node:path";
 
 import { validatePlanPath } from "./constants.js";
 import type { IterationState, IterationEntry } from "./types.js";
-import { atomicWrite } from "../../_shared/lib-ts/base/atomic-write.js";
-import { logInfo, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
-import { nowIso } from "../../_shared/lib-ts/base/utils.js";
+import { atomicWrite } from "../../_shared/lib-ts/runtime/atomic-write.js";
+import { logInfo, logWarn, logError } from "../../_shared/lib-ts/runtime/logger.js";
+import { nowIso } from "../../_shared/lib-ts/runtime/utils.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -53,7 +53,7 @@ export function loadState(planPath: string): Record<string, unknown> | null {
     }
 
     const state = JSON.parse(
-      fs.readFileSync(stateFile, "utf-8"),
+      fs.readFileSync(stateFile, "utf8"),
     ) as Record<string, unknown>;
 
     // Handle schema version (backward compatible)
@@ -253,7 +253,7 @@ export function loadIterationState(reviewsDir: string): IterationState | null {
   const iterationFile = path.join(reviewsDir, "iteration.json");
   if (!fs.existsSync(iterationFile)) return null;
   try {
-    return JSON.parse(fs.readFileSync(iterationFile, "utf-8")) as IterationState;
+    return JSON.parse(fs.readFileSync(iterationFile, "utf8")) as IterationState;
   } catch (error) {
     logError("state", `Failed to load iteration state: ${error}`);
     return null;
@@ -268,10 +268,12 @@ export function saveIterationState(reviewsDir: string, state: IterationState): b
   try {
     fs.mkdirSync(reviewsDir, { recursive: true });
     const toWrite = { ...state, schema_version: "1.0.0" };
-    fs.writeFileSync(iterationFile, JSON.stringify(toWrite, null, 2), "utf-8");
+    fs.writeFileSync(iterationFile, JSON.stringify(toWrite, null, 2), "utf8");
     return true;
   } catch (error) {
     logError("state", `Failed to save iteration state: ${error}`);
     return false;
   }
 }
+
+

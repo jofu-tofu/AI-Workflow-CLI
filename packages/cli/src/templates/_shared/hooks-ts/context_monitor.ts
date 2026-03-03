@@ -3,14 +3,14 @@
  * PostToolUse:* hook: Monitor context window usage, trigger mode transitions,
  * and progressive-save state when context runs low.
  */
-import { getProjectRoot } from "../lib-ts/base/constants.js";
+import { getContextBySessionId, maybeActivate, saveState } from "../lib-ts/context/context-store.js";
 import {
   emitContext, getContextPercentRemaining, hookLog,
   loadHookInput,
   logDebug, logDiagnostic, logInfo, logWarn, runHook,
-} from "../lib-ts/base/hook-utils.js";
-import { nowIso } from "../lib-ts/base/utils.js";
-import { getContextBySessionId, maybeActivate, saveState } from "../lib-ts/context/context-store.js";
+} from "../lib-ts/hooks/hook-utils.js";
+import { getProjectRoot } from "../lib-ts/runtime/constants.js";
+import { nowIso } from "../lib-ts/runtime/utils.js";
 import type { ContextState } from "../lib-ts/types.js";
 
 const WRITE_TOOLS = new Set(["Bash", "Edit", "NotebookEdit", "Write"]);

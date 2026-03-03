@@ -61,10 +61,11 @@ Never import from `hooks/` or `plan-review/` into `lib-ts/`. The one exception n
 
 ## Context Maintenance
 
-**After modifying files in this directory:** scan the entries above — if any claim is now
+**After modifying files in this directory:** scan the entries above — if unknown claim is now
 false or incomplete, update this file before ending the task. Do not defer.
 
 **Staleness anchor:** This file assumes `index.ts` exists with 13 sibling `.ts` files. If the
 count changes, update the Module Reference table.
 
 <!-- context-layer: generated=2026-03-01 | last-audited=2026-03-01 | version=1 | dir-commits-at-audit=15 -->
+

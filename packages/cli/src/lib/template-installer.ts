@@ -1,5 +1,5 @@
 import {promises as fs} from 'node:fs'
-import {dirname, join} from 'node:path'
+import {join} from 'node:path'
 
 import {IdePathResolver} from './ide-path-resolver.js'
 import {pathExists} from './paths.js'
@@ -233,7 +233,6 @@ async function mergeDirectory(src: string, dest: string): Promise<void> {
  *
  * Template structure:
  * - Non-dot folders (e.g., _bmad/, GSR/) → .aiwcli/ (always overwritten)
- * - _shared/ → .aiwcli/_shared/ (always overwritten)
  * - IDE dot folders (e.g., .claude/) → decomposed into method-owned subdirs
  *
  * Settings reconstruction is handled separately by the caller via reconstructIdeSettings().
@@ -303,30 +302,6 @@ export async function installTemplate(
   const nonDotResults = await Promise.all(nonDotInstalls)
   installedFolders.push(...nonDotResults)
 
-  // Install root-level _shared directory (shared across all templates)
-  // Exclude IDE config folders (.claude, .windsurf) - they are used for settings merging only
-  const templatesRoot = dirname(templatePath)
-  const rootSharedSrc = join(templatesRoot, '_shared')
-  const rootSharedDest = join(containerDir, '_shared')
-
-  if (await pathExists(rootSharedSrc)) {
-    await copyDir(rootSharedSrc, rootSharedDest, true) // excludeIdeFolders = true
-    installedFolders.push('_shared')
-
-    // Copy shared IDE content (e.g., _shared/.claude/commands/handoff.md)
-    // These are non-method-owned files that live in IDE folders
-    const sharedIdeInstalls = ides.map(async (ide) => {
-      const sharedIdeFolder = join(rootSharedSrc, `.${ide}`)
-      if (await pathExists(sharedIdeFolder)) {
-        const destIdeFolder = resolver.getIdeDir(ide)
-        await fs.mkdir(destIdeFolder, {recursive: true})
-        // Merge shared IDE content, skipping files that already exist
-        await mergeDirectory(sharedIdeFolder, destIdeFolder)
-      }
-    })
-    await Promise.all(sharedIdeInstalls)
-  }
-
   // Install method-owned IDE content (decomposed approach)
   // Instead of copying entire .claude/ from template, only copy method-namespaced subdirectories
   const ideInstalls = ides.map(async (ide) => {
@@ -388,15 +363,16 @@ async function writeAiwBinPath(containerDir: string): Promise<void> {
     // Resolve to the bin directory to find the actual `aiw` executable
     const {execSync} = await import('node:child_process')
     const cmd = process.platform === 'win32' ? 'where aiw' : 'which aiw'
-    const resolved = execSync(cmd, {encoding: 'utf-8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe']})
+    const resolved = execSync(cmd, {encoding: 'utf8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe']})
       .trim()
       .split(/\r?\n/)[0]
       ?.trim()
 
     if (resolved) {
-      await fs.writeFile(join(containerDir, '.aiw-bin-path'), resolved, 'utf-8')
+      await fs.writeFile(join(containerDir, '.aiw-bin-path'), resolved, 'utf8')
     }
   } catch {
     // Best-effort — aiw will still be found on PATH at runtime
   }
 }
+

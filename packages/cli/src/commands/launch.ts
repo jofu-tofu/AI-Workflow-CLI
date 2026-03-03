@@ -1,16 +1,15 @@
 import {existsSync, readFileSync, writeFileSync} from 'node:fs'
 import * as os from 'node:os'
-import * as path from 'node:path'
-import {basename} from 'node:path'
+import path from 'node:path'
 
 import {Flags} from '@oclif/core'
 
 import BaseCommand from '../lib/base-command.js'
 import {ProcessSpawnError} from '../lib/errors.js'
 import {ensureLspPatch} from '../lib/lsp-patch.js'
-import {createPaneLauncher} from '../lib/pane-launcher.js'
 import {launchDriverInTmuxOrFallback, type LaunchDriverResult} from '../lib/pane-driver.js'
-import {readSentinelExitCode, waitForSentinelFile} from '../lib/sentinel-ipc.js'
+import {createPaneLauncher} from '../lib/pane-launcher.js'
+import {readSentinelExitCode, waitForSentinelFile} from '../lib/runtime/sentinel-ipc.js'
 import {spawnProcess} from '../lib/spawn.js'
 import {launchTerminal} from '../lib/terminal.js'
 import {enableTmuxColors, enableTmuxMouse, findToolPath, launchInTmuxSession} from '../lib/tmux-session.js'
@@ -46,8 +45,7 @@ export default class LaunchCommand extends BaseCommand {
     '  1  General error - unexpected runtime failure\n' +
     '  2  Invalid usage - check your arguments and flags\n' +
     '  3  Environment error - CLI not found (install Claude Code from https://claude.ai/download, Codex from npm)'
-
-  static override examples = [
+static override examples = [
     '<%= config.bin %> <%= command.id %>  # Auto-launches tmux with a fresh session when not already in tmux',
     '<%= config.bin %> <%= command.id %> --codex  # Launch Codex with --yolo flag',
     '<%= config.bin %> <%= command.id %> --new  # Launch in a new terminal window',
@@ -58,8 +56,7 @@ export default class LaunchCommand extends BaseCommand {
     '<%= config.bin %> <%= command.id %> --split h  # Force horizontal split in tmux',
     '<%= config.bin %> <%= command.id %> --debug  # Enable verbose logging',
   ]
-
-  static override flags = {
+static override flags = {
     ...BaseCommand.baseFlags,
     codex: Flags.boolean({
       char: 'c',
@@ -158,7 +155,7 @@ export default class LaunchCommand extends BaseCommand {
     if (!promptText && flags['prompt-file']) {
       const pf = flags['prompt-file'].trim()
       try {
-        if (existsSync(pf)) promptText = readFileSync(pf, 'utf-8').trim() || undefined
+        if (existsSync(pf)) promptText = readFileSync(pf, 'utf8').trim() || undefined
       } catch { /* ignore — prompt is best-effort enhancement */ }
     }
 
@@ -170,7 +167,7 @@ export default class LaunchCommand extends BaseCommand {
       let launchCmd = useCodex ? 'aiw launch --codex' : 'aiw launch'
       if (promptText) {
         const tmpFile = path.join(os.tmpdir(), `aiwcli-prompt-${Date.now()}-${process.pid}.txt`)
-        writeFileSync(tmpFile, promptText, {encoding: 'utf-8', mode: 0o600})
+        writeFileSync(tmpFile, promptText, {encoding: 'utf8', mode: 0o600})
         launchCmd += ` --prompt-file ${this.shellQuote(tmpFile)}`
       }
 
@@ -211,7 +208,7 @@ export default class LaunchCommand extends BaseCommand {
       let effectivePromptPath = promptPath
       if (!effectivePromptPath && promptText) {
         const tmpFile = path.join(os.tmpdir(), `aiwcli-prompt-${Date.now()}-${process.pid}.txt`)
-        writeFileSync(tmpFile, promptText, {encoding: 'utf-8', mode: 0o600})
+        writeFileSync(tmpFile, promptText, {encoding: 'utf8', mode: 0o600})
         effectivePromptPath = tmpFile
       }
 
@@ -273,12 +270,7 @@ export default class LaunchCommand extends BaseCommand {
       if (shouldAutoTmux) {
         const resolvedPath = findToolPath(cliCommand)
 
-        if (!resolvedPath) {
-          this.logWarning(`${cliCommand} not found on PATH (install from https://claude.ai/download)`)
-          this.logInfo(`Launching ${cliCommand} inline`)
-          const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
-          exitCode = await spawnProcess(cliCommand, finalArgs)
-        } else {
+        if (resolvedPath) {
           const sessionFromFlag = flags['tmux-session']?.trim()
           const reattach = Boolean(sessionFromFlag && sessionFromFlag.length > 0)
 
@@ -287,7 +279,7 @@ export default class LaunchCommand extends BaseCommand {
             sessionName = this.sanitizeTmuxSessionName(sessionFromFlag!)
             this.logInfo(`Launching in tmux session: ${sessionName} (reuse/attach)`)
           } else {
-            const sessionBase = `aiw-${basename(process.cwd())}`
+            const sessionBase = `aiw-${path.basename(process.cwd())}`
             sessionName = this.buildUniqueTmuxSessionName(sessionBase)
             this.logInfo(`Launching in new tmux session: ${sessionName}`)
           }
@@ -308,6 +300,11 @@ export default class LaunchCommand extends BaseCommand {
             const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
             exitCode = await spawnProcess(cliCommand, finalArgs)
           }
+        } else {
+          this.logWarning(`${cliCommand} not found on PATH (install from https://claude.ai/download)`)
+          this.logInfo(`Launching ${cliCommand} inline`)
+          const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
+          exitCode = await spawnProcess(cliCommand, finalArgs)
         }
       } else {
         if (disableTmux) {
@@ -330,16 +327,19 @@ export default class LaunchCommand extends BaseCommand {
     this.exit(exitCode)
   }
 
+  private buildUniqueTmuxSessionName(base: string): string {
+    const safeBase = this.sanitizeTmuxSessionName(base)
+    const timestamp = Date.now().toString(36)
+    const pid = process.pid.toString(36)
+    return this.sanitizeTmuxSessionName(`${safeBase}-${timestamp}-${pid}`)
+  }
+
   private async handleJsonOutput(result: LaunchDriverResult, wait: boolean): Promise<void> {
-    let exitCode: number | undefined = result.exitCode
+    let {exitCode} = result
 
     if (wait && result.launched && result.sentinelPath) {
       const finished = await waitForSentinelFile(result.sentinelPath, 14_400_000)
-      if (finished) {
-        exitCode = readSentinelExitCode(result.sentinelPath, 1)
-      } else {
-        exitCode = -1
-      }
+      exitCode = finished ? readSentinelExitCode(result.sentinelPath, 1) : -1;
     }
 
     const output = {
@@ -354,24 +354,6 @@ export default class LaunchCommand extends BaseCommand {
     this.exit(exitCode ?? 0)
   }
 
-  private async waitForSentinel(result: LaunchDriverResult): Promise<void> {
-    if (!result.sentinelPath) return
-    const finished = await waitForSentinelFile(result.sentinelPath, 14_400_000)
-    if (finished) {
-      const exitCode = readSentinelExitCode(result.sentinelPath, 1)
-      this.exit(exitCode)
-    } else {
-      this.exit(1)
-    }
-  }
-
-  private buildUniqueTmuxSessionName(base: string): string {
-    const safeBase = this.sanitizeTmuxSessionName(base)
-    const timestamp = Date.now().toString(36)
-    const pid = process.pid.toString(36)
-    return this.sanitizeTmuxSessionName(`${safeBase}-${timestamp}-${pid}`)
-  }
-
   private sanitizeTmuxSessionName(input: string): string {
     const trimmed = input.trim().toLowerCase()
     const safe = trimmed
@@ -384,4 +366,18 @@ export default class LaunchCommand extends BaseCommand {
   private shellQuote(input: string): string {
     return `'${input.replaceAll("'", `'"'"'`)}'`
   }
+
+  private async waitForSentinel(result: LaunchDriverResult): Promise<void> {
+    if (!result.sentinelPath) return
+    const finished = await waitForSentinelFile(result.sentinelPath, 14_400_000)
+    if (finished) {
+      const exitCode = readSentinelExitCode(result.sentinelPath, 1)
+      this.exit(exitCode)
+    } else {
+      this.exit(1)
+    }
+  }
 }
+
+
+

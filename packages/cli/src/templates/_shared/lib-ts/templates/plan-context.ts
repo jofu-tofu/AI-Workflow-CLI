@@ -29,7 +29,7 @@ What exactly to build or change
 - \`exact/path/to/reference.ext\` — Why relevant (e.g., "pattern to follow at lines 12-30")
 
 ## Steps
-Numbered steps with specific details. For each step, consider whether any of the skills available in your system-reminder messages would help the implementation agent — if so, reference the skill inline at the point of use.
+Numbered steps with specific details. For each step, consider whether unknown of the skills available in your system-reminder messages would help the implementation agent — if so, reference the skill inline at the point of use.
 
 1. [Specific action with function names, patterns, or code snippets]
 2. [Enough detail for someone who never saw this conversation]
@@ -56,3 +56,4 @@ The implementation agent should document these so the next session inherits what
 - [ ] Are relevant skills referenced where they add value?
 - [ ] Are key decisions captured so they survive this session?`;
 }
+

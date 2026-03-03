@@ -37,7 +37,7 @@ export function expandPath(inputPath: string): string {
 /**
  * Convert a path to Unix-style forward slashes.
  * Useful for cross-platform logging or display.
- * @param inputPath - Path with any separator style
+ * @param inputPath - Path with unknown separator style
  * @returns Path with forward slashes only
  */
 export function toUnixPath(inputPath: string): string {
@@ -47,7 +47,7 @@ export function toUnixPath(inputPath: string): string {
 /**
  * Convert a path to Windows-style backslashes.
  * Useful for cross-platform logging or display.
- * @param inputPath - Path with any separator style
+ * @param inputPath - Path with unknown separator style
  * @returns Path with backslashes only
  */
 export function toWindowsPath(inputPath: string): string {
@@ -149,3 +149,4 @@ export function getWorkspacePath(startDir?: string): null | string {
     return null
   }
 }
+

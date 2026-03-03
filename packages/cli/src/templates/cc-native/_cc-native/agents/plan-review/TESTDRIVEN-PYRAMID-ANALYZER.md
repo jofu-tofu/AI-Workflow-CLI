@@ -45,7 +45,7 @@ Evaluate the plan's test type distribution:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -59,3 +59,4 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of distribution concerns, each with: severity (high/medium/low), category (e.g., "inverted-pyramid", "missing-unit-tests", "over-reliance-e2e", "missing-integration", "slow-feedback-loop"), issue description, suggested_fix (specific tests to add at the appropriate layer)
 - **missing_sections**: Test distribution gaps the plan should address (missing test layers, unspecified test types)
 - **questions**: Test strategy aspects that need clarification
+

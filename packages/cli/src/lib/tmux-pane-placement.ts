@@ -3,20 +3,20 @@
  * Extracted from template _shared/lib-ts/base/tmux-pane-placement.ts.
  */
 
-import {execFileAsync} from './subprocess-utils.js'
+import {execFileAsync} from './runtime/subprocess-utils.js'
 
 export type TmuxSplitFlag = '-h' | '-v'
 
 export interface TmuxPaneInfo {
+  active: boolean
+  height: number
   paneId: string
   width: number
-  height: number
-  active: boolean
 }
 
 export interface PlacementResult {
-  targetPane: string
   splitFlag: TmuxSplitFlag
+  targetPane: string
 }
 
 const LIST_PANES_FORMAT = '#{pane_id} #{pane_width} #{pane_height} #{pane_active}'
@@ -52,7 +52,7 @@ export async function listPanes(tmuxPath: string): Promise<TmuxPaneInfo[]> {
   return panes
 }
 
-export function findBestSplit(panes: TmuxPaneInfo[]): PlacementResult | null {
+export function findBestSplit(panes: TmuxPaneInfo[]): null | PlacementResult {
   if (panes.length === 0) return null
 
   let best = panes[0]!

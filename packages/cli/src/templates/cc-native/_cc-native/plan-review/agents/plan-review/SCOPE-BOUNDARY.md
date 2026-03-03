@@ -61,7 +61,7 @@ Not all scope expansion is bad. Flag it, but note when expansion is justified:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -75,3 +75,4 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of scope concerns, each with: severity (high/medium/low), category (e.g., "scope-creep", "opportunistic-refactor", "goal-misalignment", "unstated-expansion"), issue description, suggested_fix (split into separate plan, remove step, or acknowledge expansion in goal)
 - **missing_sections**: Scope boundaries the plan should clarify (explicit non-goals, scope justification for expanded steps)
 - **questions**: Scope decisions that need explicit acknowledgment
+

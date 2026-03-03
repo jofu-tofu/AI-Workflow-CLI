@@ -46,7 +46,7 @@ Build an implicit dependency graph from the plan:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -60,3 +60,4 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of ordering concerns, each with: severity (high/medium/low), category (e.g., "ordering-violation", "implicit-dependency", "missed-parallelization", "circular-dependency", "critical-path"), issue description, suggested_fix (reorder steps, add explicit dependency, or parallelize)
 - **missing_sections**: Ordering considerations the plan should address (dependency graph, critical path, parallelization opportunities)
 - **questions**: Ordering ambiguities that need clarification
+

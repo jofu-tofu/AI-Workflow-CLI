@@ -4,7 +4,7 @@
 
 **One import gets you started:**
 ```typescript
-import { loadHookInput, runHook, logInfo, emitContext } from "../lib-ts/base/hook-utils.js";
+import { loadHookInput, runHook, logInfo, emitContext } from "../lib-ts/hooks/hook-utils.js";
 ```
 
 `hook-utils.ts` re-exports the most-used functions from `logger.ts`, `constants.ts`, and `context-store.ts`. Start here. Only import from deeper modules when you need specific capabilities.
@@ -31,7 +31,7 @@ Copy this for new hooks:
 
 ```typescript
 #!/usr/bin/env bun
-import { loadHookInput, runHook, logDebug, logInfo, emitContext } from "../lib-ts/base/hook-utils.js";
+import { loadHookInput, runHook, logDebug, logInfo, emitContext } from "../lib-ts/hooks/hook-utils.js";
 
 function main(): void {
   const payload = loadHookInput();
@@ -51,7 +51,7 @@ runHook(main, "my_hook_name");
 For async hooks (AI inference, network calls):
 
 ```typescript
-import { runHookAsync } from "../lib-ts/base/hook-utils.js";
+import { runHookAsync } from "../lib-ts/hooks/hook-utils.js";
 
 async function asyncMain(): Promise<void> {
   // await something...
@@ -74,7 +74,7 @@ All logging goes to `_output/hook-log.jsonl`. stderr visibility is opt-in.
 | Terminal | `eprint()` | Yes (raw stderr) | Usage help, progress indicators — not logged to JSONL |
 
 ```typescript
-import { logDebug, logInfo, logWarn, logBlocking } from "../lib-ts/base/hook-utils.js";
+import { logDebug, logInfo, logWarn, logBlocking } from "../lib-ts/hooks/hook-utils.js";
 
 logInfo("my_hook", "Session started");           // file only
 logWarn("my_hook", `Fallback used: ${reason}`);   // file only
@@ -89,7 +89,7 @@ Hooks have multiple channels back to the session. Pick the right one:
 
 | Want to... | Function | Who sees it |
 |------------|----------|-------------|
-| **Block (any event)** | `emitBlock(reason, context?)` | Claude + user — auto-dispatches to correct mechanism |
+| **Block (unknown event)** | `emitBlock(reason, context?)` | Claude + user — auto-dispatches to correct mechanism |
 | Block tool (PreToolUse only) | `emitContextAndBlock(context, reason)` | Claude + user (denial reason prominent) |
 | Return message, don't block | `emitContext(context)` | Claude + user (in transcript) |
 | Log only (diagnostics) | `logInfo()` / `logWarn()` / etc. | Nobody in session — file only |
@@ -157,7 +157,7 @@ emitPermissionDecision("deny", { message: "Why denied" });
 emitPermissionDecision("allow", { updatedInput: { /* modified input */ } });
 ```
 
-### Channel 6: Non-blocking Context (any hook event)
+### Channel 6: Non-blocking Context (unknown hook event)
 
 ```typescript
 emitContext("Information added to Claude's context");
@@ -238,7 +238,7 @@ Claude Code validates `hookSpecificOutput` using a Zod discriminated union keyed
 | **0** + deny JSON | Yes | Yes (PreToolUse only) | `additionalContext` + denial reason | Yes |
 | **0** + context JSON | Yes | No | `additionalContext` in transcript | Yes |
 | **1** | No | No | stderr in verbose mode only | Yes |
-| **2** | No | Yes (any event) | stderr fed as system-reminder | Yes |
+| **2** | No | Yes (unknown event) | stderr fed as system-reminder | Yes |
 
 **Key insight:** Exit 0 + `permissionDecision: "deny"` is the correct way to block a tool. Exit 2 is a blunt instrument — it ignores your JSON and feeds raw stderr to Claude. Use exit 0 + deny for clean blocking with structured feedback.
 
@@ -255,7 +255,7 @@ Early testing suggested ExitPlanMode was "immune" to PreToolUse deny. **This was
 - Exit 2 also appeared to "not work" for PreToolUse (JSON was ignored as expected, but the blocking was via stderr, not deny)
 - PostToolUse with exit 2 appeared to work because it used stderr (not JSON), bypassing the Zod issue
 
-**Lesson:** When a hook output seems to be "silently ignored," check the JSON schema first. The Zod validator rejects malformed output without any error message.
+**Lesson:** When a hook output seems to be "silently ignored," check the JSON schema first. The Zod validator rejects malformed output without unknown error message.
 
 ### Debugging Checklist
 
@@ -369,14 +369,14 @@ These run for ALL templates. Method-specific hooks live in `_{method}/hooks/`.
 ---
 ## Context Maintenance
 
-**After modifying files in this directory:** scan the entries above — if any claim is now
+**After modifying files in this directory:** scan the entries above — if unknown claim is now
 false or incomplete, update this file before ending the task. Do not defer.
 
 **Add** an entry only if an agent would fail without knowing it, it is not obvious from
 the code, and it belongs at this scope (project-wide rule → root CLAUDE.md; WHY decision
 → inline comment or ADR; inferable from code → nowhere).
 
-**Remove** any entry that fails the falsifiability test: if removing it would not change
+**Remove** unknown entry that fails the falsifiability test: if removing it would not change
 how an agent acts here, remove it. If a convention here conflicts with the codebase,
 the codebase wins — update this file, do not work around it. Prune aggressively.
 
@@ -390,3 +390,4 @@ is stale — update or regenerate before relying on it.
 - Agent mistake caused by this file → fix immediately, then Audit
 
 <!-- context-layer: generated=2026-02-14 | last-audited=2026-02-21 | version=2 | dir-commits-at-audit=29 -->
+

@@ -72,7 +72,7 @@ export interface CorroborationResult {
   verdict: "pass" | "warn" | "fail";
 }
 
-/** Normalized review data from any reviewer */
+/** Normalized review data from unknown reviewer */
 export interface ReviewData {
   verdict: Verdict;
   summary: string;
@@ -404,3 +404,4 @@ export interface PreflightReport {
   allFailed: boolean;
   totalMs: number;
 }
+

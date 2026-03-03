@@ -51,7 +51,7 @@ export function shouldUseColors(proc: ProcessLike = process): boolean {
   const noColor = env.NO_COLOR
   const forceColor = env.FORCE_COLOR
 
-  // NO_COLOR takes precedence (any value disables colors)
+  // NO_COLOR takes precedence (unknown value disables colors)
   if (noColor !== undefined) {
     return false
   }
@@ -105,3 +105,4 @@ export function shouldShowSpinners(flags?: {quiet?: boolean}, proc: ProcessLike 
 
   return isTTY(proc)
 }
+

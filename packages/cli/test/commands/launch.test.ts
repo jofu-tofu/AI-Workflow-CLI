@@ -247,7 +247,8 @@ describe('launch command', () => {
 
     it('implementation falls back on Windows when tool not found', () => {
       const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include("process.platform === 'win32'")
+      expect(source).to.include('not found on PATH')
+      expect(source).to.include('launching inline')
     })
 
     it('implementation creates a fresh tmux session by default', () => {

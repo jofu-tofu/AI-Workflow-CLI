@@ -7,9 +7,10 @@
 
 import {execSync} from 'node:child_process'
 import {randomUUID} from 'node:crypto'
-import {promises as fs} from 'node:fs'
+import {existsSync, promises as fs, readFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
-import {join} from 'node:path'
+import {dirname, join, resolve} from 'node:path'
+import {fileURLToPath} from 'node:url'
 
 /**
  * Check if a path exists
@@ -69,6 +70,24 @@ export async function createTestGitRepo(): Promise<string> {
  * Uses bin/run.js which points to the compiled dist/ output.
  */
 export function getAbsoluteBinPath(): string {
-  // process.cwd() during tests is packages/cli, and bin is in packages/cli/bin
-  return join(process.cwd(), 'bin', 'run.js')
+  let current = dirname(fileURLToPath(import.meta.url))
+
+  for (let i = 0; i < 10; i += 1) {
+    const pkgPath = join(current, 'package.json')
+    const binPath = join(current, 'bin', 'run.js')
+
+    try {
+      const pkgRaw = readFileSync(pkgPath, 'utf8')
+      const pkg = JSON.parse(pkgRaw) as {name?: string}
+      if (pkg.name === 'aiwcli' && existsSync(binPath)) return binPath
+    } catch {
+      // Keep scanning upwards.
+    }
+
+    const parent = resolve(current, '..')
+    if (parent === current) break
+    current = parent
+  }
+
+  throw new Error('Unable to locate packages/cli bin/run.js from test helper')
 }

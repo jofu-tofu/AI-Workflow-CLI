@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
 import {expect} from 'chai'
-import {afterEach, beforeEach, describe, it} from 'mocha'
+import {afterEach, beforeEach, describe, it} from 'vitest'
 
 import {reconstructIdeSettings} from '../../src/lib/template-settings-reconstructor.js'
 import {pathExists} from '../helpers/test-utils.js'
@@ -34,7 +34,7 @@ describe('Template Settings Reconstructor', () => {
   })
 
   describe('reconstructIdeSettings', () => {
-    it('should create settings.json with _shared settings when no templates active', async () => {
+    it('should create settings.json with _core base settings when no templates active', async () => {
       await reconstructIdeSettings(testDir, [], ['claude'])
 
       // Should have created a settings file
@@ -43,6 +43,7 @@ describe('Template Settings Reconstructor', () => {
       const content = await fs.readFile(join(testDir, '.claude', 'settings.json'), 'utf8')
       const settings = JSON.parse(content)
       expect(settings).to.be.an('object')
+      expect(settings.statusLine.command).to.include('.aiwcli/_core/')
     })
 
     it('should reconstruct with cc-native template settings', async () => {

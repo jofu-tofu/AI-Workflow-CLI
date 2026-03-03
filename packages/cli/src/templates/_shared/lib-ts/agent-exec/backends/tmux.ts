@@ -7,7 +7,7 @@
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
+import path from "node:path";
 
 import {
   buildShellCaptureScript,
@@ -16,8 +16,8 @@ import {
   readSentinelExitCode,
   readTextIfExists,
   waitForSentinelFile,
-} from "../../base/sentinel-ipc.js";
-import { execFileAsync, findExecutable } from "../../base/subprocess-utils.js";
+} from "../../runtime/sentinel-ipc.js";
+import { execFileAsync, findExecutable } from "../../runtime/subprocess-utils.js";
 import type { ExecutionBackend, ExecutionRequest, ExecutionResult } from "../execution-backend.js";
 
 export interface TmuxBackendOptions {
@@ -66,7 +66,7 @@ export class TmuxBackend implements ExecutionBackend {
     const ipc = createSentinelIpcPaths(`aiwcli-agent-${agentName}`);
 
     try {
-      fs.writeFileSync(ipc.inputPath, request.input, "utf-8");
+      fs.writeFileSync(ipc.inputPath, request.input, "utf8");
 
       const envEntries = Object.entries(request.env).filter(
         ([, value]) => value !== undefined,
@@ -119,7 +119,7 @@ export class TmuxBackend implements ExecutionBackend {
 
       if (request.outputFilePath && fs.existsSync(request.outputFilePath)) {
         return {
-          stdout: fs.readFileSync(request.outputFilePath, "utf-8"),
+          stdout: fs.readFileSync(request.outputFilePath, "utf8"),
           stderr,
           exitCode,
           killed: false,
@@ -133,3 +133,5 @@ export class TmuxBackend implements ExecutionBackend {
     }
   }
 }
+
+

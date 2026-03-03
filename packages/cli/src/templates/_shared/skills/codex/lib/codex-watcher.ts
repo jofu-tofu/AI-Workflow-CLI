@@ -1,18 +1,18 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
-import * as path from "node:path";
+import path from "node:path";
 
-import { inference } from "../../../lib-ts/base/inference.js";
-import { logDebug, logWarn } from "../../../lib-ts/base/logger.js";
-import { CODEX_MODELS } from "../../../lib-ts/base/models.js";
-import { execFileAsync, findExecutable } from "../../../lib-ts/base/subprocess-utils.js";
+import { inference } from "../../../lib-ts/runtime/inference.js";
+import { logDebug, logWarn } from "../../../lib-ts/runtime/logger.js";
+import { CODEX_MODELS } from "../../../lib-ts/runtime/models.js";
+import { execFileAsync, findExecutable } from "../../../lib-ts/runtime/subprocess-utils.js";
 
 type PaneBackend = "tmux" | "window" | "exec";
 
 export const POLL_INTERVAL_MS = 2000;
 export const POLL_TIMEOUT_MS = 3000;
 export const SUMMARY_TIMEOUT_SEC = 8;
-export const RESUME_TIMEOUT_MS = 45000;
+export const RESUME_TIMEOUT_MS = 45_000;
 export const MAX_TRANSCRIPT_LINES = 220;
 export const MAX_LINE_LENGTH = 500;
 export const WAIT_TIMEOUT_MS_DEFAULT = 14_400_000;
@@ -44,7 +44,9 @@ Do not request additional input.
 If the prior session was brief, still provide a best-effort summary.`;
 
 export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 export function safeCleanup(filePath: string): void {
@@ -58,7 +60,7 @@ export function safeCleanup(filePath: string): void {
 export function readTextIfExists(filePath: string): string {
   try {
     if (!filePath || !fs.existsSync(filePath)) return "";
-    return fs.readFileSync(filePath, "utf-8").trim();
+    return fs.readFileSync(filePath, "utf8").trim();
   } catch {
     return "";
   }
@@ -70,13 +72,13 @@ export function persistSummary(
 ): string | null {
   try {
     const suffix = sessionId
-      ? sessionId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 8)
+      ? sessionId.replaceAll(/[^a-zA-Z0-9_-]/g, "").slice(0, 8)
       : String(process.pid);
     const filePath = path.join(
       os.tmpdir(),
       `codex-summary-${Date.now()}-${suffix}.md`,
     );
-    fs.writeFileSync(filePath, summary, "utf-8");
+    fs.writeFileSync(filePath, summary, "utf8");
     // Normalize to forward slashes for cross-platform path parsing
     return filePath.replaceAll("\\", "/");
   } catch (error) {
@@ -87,16 +89,16 @@ export function persistSummary(
 
 export function normalizeText(text: string): string {
   return text
-    .replace(/\r/g, "")
-    .replace(/[\x00-\x08\x0B-\x1F\x7F]/g, "")
-    .replace(/\s+/g, " ")
+    .replaceAll('\r', "")
+    .replaceAll(/\p{Cc}/gu, "")
+    .replaceAll(/\s+/g, " ")
     .trim();
 }
 
 export function getMessageContentText(content: unknown): string {
   if (!Array.isArray(content)) return "";
   return content
-    .map((entry: any) => {
+    .map((entry: unknown) => {
       if (!entry || typeof entry !== "object") return "";
       if (typeof entry.text !== "string") return "";
       return entry.text;
@@ -111,11 +113,11 @@ export function collectTranscriptLines(sessionFile: string): string[] {
   const seen = new Set<string>();
 
   try {
-    const raw = fs.readFileSync(sessionFile, "utf-8");
+    const raw = fs.readFileSync(sessionFile, "utf8");
     const lines = raw.split(/\r?\n/).filter((line) => line.trim().length > 0);
 
     for (const line of lines) {
-      let parsed: any;
+      let parsed: unknown;
       try {
         parsed = JSON.parse(line);
       } catch {
@@ -291,3 +293,6 @@ export function summarizeFromSessionFileFallback(sessionFile: string): string | 
   if (lines.length === 0) return null;
   return `Codex session completed. Transcript fallback:\n- ${lines.join("\n- ")}`;
 }
+
+
+

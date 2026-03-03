@@ -2,17 +2,19 @@ import {execSync} from 'node:child_process'
 import {platform} from 'node:os'
 
 import {expect} from 'chai'
-import {describe, it} from 'mocha'
+import {beforeAll, describe, it} from 'vitest'
+
+import {cliCommand} from '../helpers/cli-command.js'
 
 describe('Quiet Mode Integration', () => {
-  const binPath = platform() === 'win32' ? String.raw`.\bin\dev.cmd` : './bin/dev.js'
+  const binPath = cliCommand()
   const skipOnWindows = platform() === 'win32' ? it.skip : it
 
   // Cache the help outputs to avoid redundant subprocess calls
   let launchHelpOutput: string
   let quietLaunchHelpOutput: string
 
-  before(() => {
+  beforeAll(() => {
     launchHelpOutput = execSync(`${binPath} launch --help`, {encoding: 'utf8'})
     quietLaunchHelpOutput = execSync(`${binPath} launch --help --quiet`, {encoding: 'utf8'})
   })
@@ -45,7 +47,7 @@ describe('Quiet Mode Integration', () => {
 
   describe('quiet mode with piping', () => {
     skipOnWindows('quiet mode works when output is piped', () => {
-      const result = execSync('./bin/dev.js launch --help --quiet | grep "Launch"', {
+      const result = execSync(`${cliCommand('launch --help --quiet')} | grep "Launch"`, {
         encoding: 'utf8',
         shell: '/bin/sh',
       })

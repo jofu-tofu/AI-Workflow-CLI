@@ -309,7 +309,7 @@ function buildDeadEndsSection(deadEnds: DeadEnd[]): string
 
 **Used by:** `/aiwcli-shared:handoff` workflow to programmatically generate handoff content before piping to `save_handoff.ts`.
 
-**Note:** Currently not imported by any files. Moved here for logical grouping and completeness.
+**Note:** Currently not imported by unknown files. Moved here for logical grouping and completeness.
 
 ## Skill Integration
 
@@ -431,3 +431,4 @@ Both `.aiwcli/_shared/skills/handoff-system/` (working copy) and `packages/cli/s
 When updating script paths, check:
 - `packages/cli/src/templates/_shared/.windsurf/workflows/handoff.md`
 - `packages/cli/src/templates/_shared/.codex/workflows/handoff.md`
+

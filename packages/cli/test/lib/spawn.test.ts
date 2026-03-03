@@ -61,10 +61,7 @@ describe('spawn.ts - Process spawning utilities', () => {
       expect(exitCode).to.equal(0)
     })
 
-    it('should support parallel spawning (multiple concurrent processes)', async function () {
-      this.timeout(10_000)
-
-      const command = platform() === 'win32' ? 'cmd' : 'echo'
+    it('should support parallel spawning (multiple concurrent processes)', async () => {      const command = platform() === 'win32' ? 'cmd' : 'echo'
       const baseArgs = platform() === 'win32' ? ['/c', 'exit 0'] : ['test']
 
       const [exitCode1, exitCode2] = await Promise.all([

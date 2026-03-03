@@ -214,9 +214,9 @@ Cohesive subsystems are organized as self-contained folders, following the hando
 {system-name}/
 ├── CLAUDE.md       ← Spec: lifecycle, API reference, design decisions, gotchas
 ├── lib/            ← TypeScript implementation (imported by hooks and other systems)
-├── agents/         ← Agent spec .md files used by this system (if any)
-├── scripts/        ← Standalone entry points invoked independently (if any)
-└── workflows/      ← User-facing procedural workflow docs (if any)
+├── agents/         ← Agent spec .md files used by this system (if unknown)
+├── scripts/        ← Standalone entry points invoked independently (if unknown)
+└── workflows/      ← User-facing procedural workflow docs (if unknown)
 ```
 
 **Existing systems following this pattern:**
@@ -230,3 +230,4 @@ Claude Code hooks are path-referenced in `.claude/settings.json` at install time
 Moving a hook file requires settings.json updates — high blast-radius, fragile.
 Hooks live in `_shared/hooks-ts/` or `_cc-native/hooks/`. Each system's CLAUDE.md
 lists the hooks that invoke it under a "Hooks" section.
+

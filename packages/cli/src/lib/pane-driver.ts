@@ -4,7 +4,7 @@
  */
 
 import * as fs from 'node:fs'
-import * as path from 'node:path'
+import path from 'node:path'
 
 import {
   getTmuxAvailability,
@@ -12,8 +12,10 @@ import {
   type TmuxSplitFlag,
 } from './launchers/tmux-launcher.js'
 import {createPaneLauncher, type PaneBackend, type PaneSplitDirection} from './pane-launcher.js'
-import {cleanupSentinelIpc, createSentinelIpcPaths} from './sentinel-ipc.js'
-import {execFileAsync, findExecutable} from './subprocess-utils.js'
+import {applyTmuxLaunchEnv, isWindowsPlatform, shouldUseShell} from './runtime/platform-adapter.js'
+import {cleanupSentinelIpc, createSentinelIpcPaths} from './runtime/sentinel-ipc.js'
+import {execFileAsync, findExecutable} from './runtime/subprocess-utils.js'
+import {preflightWindowsTmux, type WindowsTmuxPreflight} from './runtime/tmux-preflight.js'
 import {toMsysPosixPath} from './tmux-primitives.js'
 
 /**
@@ -21,7 +23,7 @@ import {toMsysPosixPath} from './tmux-primitives.js'
  * Used on Windows where the tmux backend runs commands in bash,
  * but findExecutable() returns Windows paths (.cmd/.exe) that bash can't execute.
  */
-async function resolveToolForBash(toolName: string): Promise<string | null> {
+async function resolveToolForBash(toolName: string): Promise<null | string> {
   const bash = findExecutable('bash')
   if (!bash) return null
   const result = await execFileAsync(bash, ['-lc', `command -v ${toolName}`], {
@@ -32,7 +34,7 @@ async function resolveToolForBash(toolName: string): Promise<string | null> {
 }
 
 export type DriverMode = 'exec' | 'repl'
-export type TmuxSplitOption = TmuxSplitFlag | 'auto'
+export type TmuxSplitOption = 'auto' | TmuxSplitFlag
 
 export interface DriverPreflightResult {
   available: boolean
@@ -40,38 +42,38 @@ export interface DriverPreflightResult {
 }
 
 export type DriverPreflight =
-  (toolPath: string) => Promise<DriverPreflightResult> | DriverPreflightResult
+  (toolPath: string) => DriverPreflightResult | Promise<DriverPreflightResult>
 
 export interface LaunchDriverOptions {
-  toolName: string
-  toolBin?: string | undefined
-  mode?: DriverMode | undefined
+  allowExecFallback?: boolean | undefined
   args?: string[] | undefined
-  env?: Record<string, string> | undefined
+  autoClose?: boolean | undefined
   cwd?: string | undefined
+  env?: Record<string, string> | undefined
+  holdMessage?: string | undefined
+  holdPane?: boolean | undefined
+  mode?: DriverMode | undefined
+  preflight?: DriverPreflight | undefined
   promptPath?: string | undefined
   splitFlag?: TmuxSplitOption | undefined
   splitTarget?: string | undefined
-  autoClose?: boolean | undefined
-  holdPane?: boolean | undefined
-  holdMessage?: string | undefined
-  allowExecFallback?: boolean | undefined
-  preflight?: DriverPreflight | undefined
   timeoutMs?: number | undefined
+  toolBin?: string | undefined
+  toolName: string
 }
 
 export interface LaunchDriverResult {
-  launched: boolean
-  usedTmux: boolean
   backend: PaneBackend
-  mode: DriverMode
-  toolPath?: string | undefined
-  paneId?: string | undefined
-  sentinelPath?: string | undefined
   exitCode?: number | undefined
-  stdout?: string | undefined
+  launched: boolean
+  mode: DriverMode
+  paneId?: string | undefined
   reason?: string | undefined
+  sentinelPath?: string | undefined
   stderr?: string | undefined
+  stdout?: string | undefined
+  toolPath?: string | undefined
+  usedTmux: boolean
 }
 
 function buildEnvPrefix(env: Record<string, string>): string {
@@ -91,23 +93,24 @@ function buildCommandArgs(
 ): string[] {
   if (mode !== 'repl' || !promptPath) return args
 
-  if (process.platform === 'win32') {
+  if (isWindowsPlatform()) {
     const absolutePromptPath = path.resolve(promptPath)
     const bootstrap = `Read startup instructions from this file path before taking action: ${absolutePromptPath}. Use that file as the initial context.`
     return [...args, bootstrap]
   }
 
-  const promptText = fs.readFileSync(promptPath, 'utf-8')
+  const promptText = fs.readFileSync(promptPath, 'utf8')
   return [...args, promptText]
 }
 
-function buildShToolCommand(
-  toolPath: string,
-  args: string[],
-  env: Record<string, string>,
-  mode: DriverMode,
-  promptPath?: string,
-): string {
+function buildShToolCommand(params: {
+  toolPath: string;
+  args: string[];
+  env: Record<string, string>;
+  mode: DriverMode;
+  promptPath?: string;
+}): string {
+  const { toolPath, args, env, mode, promptPath } = params
   const envPrefix = buildEnvPrefix(env)
   const commandArgs = buildCommandArgs(args, mode, promptPath)
   const argPart = commandArgs.map((arg) => quoteForSh(arg)).join(' ')
@@ -122,13 +125,14 @@ function buildShToolCommand(
   return base
 }
 
-function buildPowerShellToolCommand(
-  toolPath: string,
-  args: string[],
-  env: Record<string, string>,
-  mode: DriverMode,
-  promptPath?: string,
-): string {
+function buildPowerShellToolCommand(params: {
+  toolPath: string;
+  args: string[];
+  env: Record<string, string>;
+  mode: DriverMode;
+  promptPath?: string;
+}): string {
+  const { toolPath, args, env, mode, promptPath } = params
   const envPrefix = Object.entries(env)
     .map(([key, value]) => `$env:${key}=${quoteForPowerShell(value)}`)
     .join('; ')
@@ -144,19 +148,20 @@ function buildPowerShellToolCommand(
   return [envPrefix, body].filter(Boolean).join('; ')
 }
 
-function wrapPaneCommand(
-  backend: PaneBackend,
-  command: string,
-  sentinelPath: string,
-  autoClose: boolean,
-  holdPane: boolean,
-  holdMessage: string,
-): string {
+function wrapPaneCommand(params: {
+  backend: PaneBackend;
+  command: string;
+  sentinelPath: string;
+  autoClose: boolean;
+  holdPane: boolean;
+  holdMessage: string;
+}): string {
+  const { backend, command, sentinelPath, autoClose, holdPane, holdMessage } = params
   if (backend === 'tmux') {
     // On Windows, convert sentinel path to POSIX for bash redirections.
     // MSYS2 bash maps /c/Users/.../file to C:\Users\...\file on disk,
     // so Node.js reads the same physical file via its original Windows path.
-    const safePath = process.platform === 'win32'
+    const safePath = isWindowsPlatform()
       ? toMsysPosixPath(sentinelPath) : sentinelPath
     const base = `${command}; code=$?; printf '%s' "$code" > ${quoteForSh(safePath)}`
 
@@ -192,24 +197,52 @@ export function isTruthy(value: string | undefined): boolean {
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on'
 }
 
-export function resolveToolPath(toolName: string, toolBin?: string): string | null {
+export function resolveToolPath(toolName: string, toolBin?: string): null | string {
   const bin = toolBin?.trim() || toolName
   return findExecutable(bin)
 }
 
-function buildCommandForBackend(
-  backend: PaneBackend,
-  toolPath: string,
-  args: string[],
+export function buildTmuxLaunchEnv(
   envVars: Record<string, string>,
-  mode: DriverMode,
-  promptPath?: string,
+  platform: NodeJS.Platform = process.platform,
+): Record<string, string> {
+  return applyTmuxLaunchEnv(envVars, platform)
+}
+
+export function getWindowsTmuxPreflightFailureReason(
+  backend: PaneBackend,
+  platform: NodeJS.Platform = process.platform,
+  preflight: () => WindowsTmuxPreflight = preflightWindowsTmux,
+): null | string {
+  if (backend !== 'tmux' || !isWindowsPlatform(platform)) return null
+  const result = preflight()
+  if (result.available) return null
+  return result.reason ?? 'Windows tmux preflight failed'
+}
+
+export function withWindowsTmuxWinpty(
+  command: string,
+  backend: PaneBackend,
+  platform: NodeJS.Platform = process.platform,
 ): string {
+  if (backend !== 'tmux' || !isWindowsPlatform(platform)) return command
+  return `winpty bash -lc ${quoteForSh(command)}`
+}
+
+function buildCommandForBackend(params: {
+  backend: PaneBackend;
+  toolPath: string;
+  args: string[];
+  envVars: Record<string, string>;
+  mode: DriverMode;
+  promptPath?: string;
+}): string {
+  const { backend, toolPath, args, envVars, mode, promptPath } = params
   if (backend === 'tmux') {
-    return buildShToolCommand(toolPath, args, envVars, mode, promptPath)
+    return buildShToolCommand({ toolPath, args, env: envVars, mode, promptPath })
   }
 
-  return buildPowerShellToolCommand(toolPath, args, envVars, mode, promptPath)
+  return buildPowerShellToolCommand({ toolPath, args, env: envVars, mode, promptPath })
 }
 
 export async function launchDriverInTmuxOrFallback(
@@ -258,10 +291,22 @@ export async function launchDriverInTmuxOrFallback(
 
   const paneLauncher = await createPaneLauncher({requireTmuxSession: true})
   if (paneLauncher) {
+    const windowsTmuxPreflightError = getWindowsTmuxPreflightFailureReason(paneLauncher.backend)
+    if (windowsTmuxPreflightError) {
+      return {
+        launched: false,
+        usedTmux: false,
+        backend: paneLauncher.backend,
+        mode,
+        toolPath,
+        reason: windowsTmuxPreflightError,
+      }
+    }
+
     // On Windows with tmux backend, resolve tool path from bash's perspective.
     // findExecutable() returns Windows paths (.cmd/.exe) that bash can't execute.
     let effectiveToolPath = toolPath
-    if (process.platform === 'win32' && paneLauncher.backend === 'tmux') {
+    if (isWindowsPlatform() && paneLauncher.backend === 'tmux') {
       const bashPath = await resolveToolForBash(options.toolName)
       if (bashPath) {
         effectiveToolPath = bashPath
@@ -279,31 +324,32 @@ export async function launchDriverInTmuxOrFallback(
 
     const sentinel = createSentinelIpcPaths(`aiwcli-pane-${options.toolName}`)
 
-    // When launching via tmux, inject COLORTERM so CLI tools know truecolor is available.
-    // Outside tmux, mintty sets this; tmux does not propagate it into panes.
+    // Tmux does not always propagate COLORTERM into panes.
+    // On winpty, avoid advertising truecolor because it causes palette corruption.
     const effectiveEnvVars = paneLauncher.backend === 'tmux'
-      ? {COLORTERM: 'truecolor', ...envVars}
+      ? buildTmuxLaunchEnv(envVars)
       : envVars
 
     try {
-      const baseCommand = buildCommandForBackend(
-        paneLauncher.backend,
-        effectiveToolPath,
+      const baseCommand = buildCommandForBackend({
+        backend: paneLauncher.backend,
+        toolPath: effectiveToolPath,
         args,
-        effectiveEnvVars,
+        envVars: effectiveEnvVars,
         mode,
-        options.promptPath,
-      )
+        promptPath: options.promptPath,
+      })
+      const effectiveBaseCommand = withWindowsTmuxWinpty(baseCommand, paneLauncher.backend)
 
       const holdMessage = options.holdMessage ?? '[aiwcli] Driver exited. Pane held open.'
-      const paneCommand = wrapPaneCommand(
-        paneLauncher.backend,
-        baseCommand,
-        sentinel.sentinelPath,
-        Boolean(options.autoClose),
-        Boolean(options.holdPane) && !options.autoClose,
+      const paneCommand = wrapPaneCommand({
+        backend: paneLauncher.backend,
+        command: effectiveBaseCommand,
+        sentinelPath: sentinel.sentinelPath,
+        autoClose: Boolean(options.autoClose),
+        holdPane: Boolean(options.holdPane) && !options.autoClose,
         holdMessage,
-      )
+      })
 
       const paneResult = await paneLauncher.launch({
         command: paneCommand,
@@ -350,14 +396,14 @@ export async function launchDriverInTmuxOrFallback(
   if (options.allowExecFallback) {
     const commandArgs = buildCommandArgs(args, mode, options.promptPath)
     const input = mode === 'exec' && options.promptPath
-      ? fs.readFileSync(options.promptPath, 'utf-8')
+      ? fs.readFileSync(options.promptPath, 'utf8')
       : undefined
 
     const result = await execFileAsync(toolPath, commandArgs, {
       input,
       timeout: timeoutMs,
       env: {...process.env, ...envVars},
-      shell: process.platform === 'win32',
+      shell: shouldUseShell(),
     })
 
     return {
@@ -385,3 +431,4 @@ export async function launchDriverInTmuxOrFallback(
 }
 
 export {getTmuxAvailability, normalizeSplitFlag, quoteForSh, type TmuxAvailability, type TmuxSplitFlag} from './launchers/tmux-launcher.js'
+

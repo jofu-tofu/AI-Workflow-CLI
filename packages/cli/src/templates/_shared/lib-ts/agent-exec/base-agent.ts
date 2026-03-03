@@ -7,8 +7,8 @@
  * Debug logging is injectable via AgentDebugLogger (default: no-op).
  */
 
-import { logDebug, logInfo, logWarn, logError } from "../base/logger.js";
-import { getInternalSubprocessEnv, findExecutable, normalizePathForCli } from "../base/subprocess-utils.js";
+import { logDebug, logInfo, logWarn, logError } from "../runtime/logger.js";
+import { getInternalSubprocessEnv, findExecutable, normalizePathForCli } from "../runtime/subprocess-utils.js";
 import { HeadlessBackend } from "./backends/headless.js";
 import type { ExecutionBackend, ExecutionResult, AgentDebugLogger } from "./execution-backend.js";
 import type { AgentConfig } from "../types.js";

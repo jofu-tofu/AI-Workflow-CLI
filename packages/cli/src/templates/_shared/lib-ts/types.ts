@@ -89,7 +89,7 @@ export interface LogEntry {
   hook: string;
   msg: string;
   component?: string;
-  data?: any;
+  data?: unknown;
   tb?: string;
 }
 
@@ -97,7 +97,7 @@ export interface LogEntry {
 export interface HookInput {
   hook_event_name: string;
   tool_name?: string;
-  tool_input?: Record<string, any>;
+  tool_input?: Record<string, unknown>;
   tool_result?: string;
   session_id?: string;
   cwd?: string;
@@ -186,8 +186,8 @@ export interface CaretCommand {
 }
 
 // §1.12 — Preflight types (shared across hooks)
-// Re-exported from base/preflight.ts for convenience
-export type { PreflightCheckResult, PreflightCommandConfig } from "./base/preflight.js";
+// Re-exported from runtime/preflight.ts for convenience
+export type { PreflightCheckResult, PreflightCommandConfig } from "./runtime/preflight.js";
 
 // §1.13 — Agent configuration (shared across templates)
 
@@ -201,3 +201,4 @@ export interface AgentConfig {
   description: string;
   system_prompt: string; // Markdown body content for --system-prompt
 }
+

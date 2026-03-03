@@ -55,7 +55,7 @@ Check for the test-before-modify pattern:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -69,3 +69,4 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of safety-net concerns, each with: severity (high/medium/low), category (e.g., "refactor-without-tests", "missing-characterization", "behavior-change-no-consumer-check", "wrong-sequence", "insufficient-coverage"), issue description, suggested_fix (specific characterization test to add before the modification)
 - **missing_sections**: Safety-net gaps the plan should address (untested modifications, unverified consumers)
 - **questions**: Modification-related aspects that need clarification
+

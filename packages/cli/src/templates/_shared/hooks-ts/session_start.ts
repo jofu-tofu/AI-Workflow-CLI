@@ -3,11 +3,6 @@
  * SessionStart hook: Restore context after /clear (plan/handoff) or compaction.
  * Routes by source field to appropriate handler.
  */
-import { getProjectRoot } from "../lib-ts/base/constants.js";
-import {
-  loadHookInput, emitContext, runHookAsync,
-  logDebug, logInfo, logWarn, logDiagnostic,
-} from "../lib-ts/base/hook-utils.js";
 import {
   buildRestoreSections, formatHandoffContinuation, getModeDisplay,
   buildContextInventory,
@@ -15,6 +10,11 @@ import {
 import {
   getContextBySessionId, getAllContexts, bindSession, updateMode, determineArtifactType,
 } from "../lib-ts/context/context-store.js";
+import {
+  loadHookInput, emitContext, runHookAsync,
+  logDebug, logInfo, logWarn, logDiagnostic,
+} from "../lib-ts/hooks/hook-utils.js";
+import { getProjectRoot } from "../lib-ts/runtime/constants.js";
 
 
 /**

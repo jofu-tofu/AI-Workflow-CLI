@@ -34,7 +34,7 @@ Big-bang implementations are high-risk by nature — they delay feedback, increa
 Evaluate the plan's decomposition:
 
 1. **Identify the delivery structure**: Is this a single big-bang delivery, or does it have intermediate milestones?
-2. **Find vertical slices**: Can any subset of steps produce an independently valuable, testable result?
+2. **Find vertical slices**: Can unknown subset of steps produce an independently valuable, testable result?
 3. **Assess feedback loops**: Where is the earliest point that real feedback (from tests, users, or systems) becomes available?
 4. **Identify checkpoints**: Are there natural stopping points where the system works correctly with partial implementation?
 5. **Evaluate migration strategy**: For changes to existing systems, can the transition be gradual?
@@ -50,7 +50,7 @@ Evaluate the plan's decomposition:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -64,3 +64,4 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of delivery concerns, each with: severity (high/medium/low), category (e.g., "big-bang-delivery", "missing-checkpoint", "no-feedback-loop", "vertical-slice-opportunity", "migration-risk"), issue description, suggested_fix (suggest specific decomposition or intermediate milestone)
 - **missing_sections**: Incremental delivery considerations the plan should address (intermediate milestones, feedback points, migration strategy)
 - **questions**: Decomposition opportunities that need investigation
+

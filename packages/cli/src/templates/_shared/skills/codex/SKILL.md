@@ -19,7 +19,7 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 **Flags:**
 - `--context <id>` — Project orientation for the sub-agent. Pass when implementing a plan so Codex understands the project structure.
 - `--prompt <text>` — Add extra instructions. In `plan`/`--file` mode, this is embedded into the bootstrap temp file with the target path.
-- `--model <name>` — Aliases: `spark`, `codex`, `gpt`. Tiers: `fast`, `standard`, `smart`. Or any full model ID.
+- `--model <name>` — Aliases: `spark`, `codex`, `gpt`. Tiers: `fast`, `standard`, `smart`. Or unknown full model ID.
 - `--sandbox <mode>` — `read-only`, `workspace-write`, `danger-full-access`.
 - `--no-yolo` — Disable YOLO mode (on by default).
 - `--no-watch` — Fire-and-forget: exit immediately after launch, skip waiting for summary.
@@ -71,3 +71,4 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 - **Pass `--context`** when implementing a plan — Codex needs project orientation to make good decisions.
 - **Scope parallel agents with separate `--file` briefs** so each sub-agent has an explicit task boundary.
 - **Review results** when summaries arrive. Check for merge conflicts between parallel agents, then verify with `tsc --noEmit`, tests, or manual inspection.
+

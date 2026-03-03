@@ -21,14 +21,14 @@
  * 5. Sets handoff_path and handoff_consumed=false in state.json
  */
 import * as fs from "node:fs";
-import * as path from "node:path";
+import path from "node:path";
 
-import { atomicWrite } from "../../../lib-ts/base/atomic-write.js";
-import { getHandoffFolderPath, getProjectRoot } from "../../../lib-ts/base/constants.js";
-import { getGitStatusShort } from "../../../lib-ts/base/git-state.js";
-import { logInfo, logWarn, logError } from "../../../lib-ts/base/logger.js";
-import { eprint } from "../../../lib-ts/base/utils.js";
 import { getContext, saveState, getContextBySessionId, getAllContexts } from "../../../lib-ts/context/context-store.js";
+import { atomicWrite } from "../../../lib-ts/runtime/atomic-write.js";
+import { getHandoffFolderPath, getProjectRoot } from "../../../lib-ts/runtime/constants.js";
+import { getGitStatusShort } from "../../../lib-ts/runtime/git-state.js";
+import { logInfo, logWarn, logError } from "../../../lib-ts/runtime/logger.js";
+import { eprint } from "../../../lib-ts/runtime/utils.js";
 
 // ---------------------------------------------------------------------------
 // Parsing helpers
@@ -192,7 +192,7 @@ function main(): void {
   // Read content from stdin FIRST (needed to extract session_id from frontmatter)
   let content: string;
   try {
-    content = fs.readFileSync(0, "utf-8");
+    content = fs.readFileSync(0, "utf8");
   } catch {
     logError("save_handoff", "Failed to read from stdin");
     process.exit(1);
@@ -339,7 +339,7 @@ function main(): void {
   } else if (planPath) {
     // Fallback: copy unchanged plan if Claude didn't provide an update
     try {
-      const planContent = fs.readFileSync(planPath, "utf-8");
+      const planContent = fs.readFileSync(planPath, "utf8");
       const [success, error] = atomicWrite(path.join(handoffFolder, "plan.md"), planContent);
       if (success) {
         logInfo("save_handoff", `Copied unchanged plan from ${planPath}`);
@@ -466,3 +466,5 @@ function main(): void {
 }
 
 main();
+
+

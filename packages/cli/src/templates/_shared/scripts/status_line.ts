@@ -12,7 +12,7 @@
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import { homedir } from "node:os";
-import * as path from "node:path";
+import path from "node:path";
 
 import type { ContextState } from "../lib-ts/types.js";
 
@@ -26,7 +26,7 @@ let saveState: (id: string, state: ContextState) => void = () => {};
 let findLatestPlan: (contextId: string) => string | null = () => null;
 
 try {
-	const hookUtils = await import("../lib-ts/base/hook-utils.js");
+	const hookUtils = await import("../lib-ts/hooks/hook-utils.js");
 	CONTEXT_BASELINE_TOKENS = hookUtils.CONTEXT_BASELINE_TOKENS;
 } catch {
 	/* PAI hook-utils not available */
@@ -404,7 +404,7 @@ function runGit(args: string[], cwd: string, timeout = 2000): string | null {
 		const result = execFileSync("git", args, {
 			cwd,
 			timeout,
-			encoding: "utf-8",
+			encoding: "utf8",
 			stdio: ["pipe", "pipe", "pipe"],
 			windowsHide: true,
 		});
@@ -718,7 +718,7 @@ interface StatuslineCache {
 function loadCache(): StatuslineCache {
 	try {
 		if (fs.existsSync(STATUSLINE_CACHE)) {
-			return JSON.parse(fs.readFileSync(STATUSLINE_CACHE, "utf-8"));
+			return JSON.parse(fs.readFileSync(STATUSLINE_CACHE, "utf8"));
 		}
 	} catch {
 		/* ignore */
@@ -729,7 +729,7 @@ function loadCache(): StatuslineCache {
 function saveCache(cache: StatuslineCache): void {
 	try {
 		fs.mkdirSync(path.dirname(STATUSLINE_CACHE), { recursive: true });
-		fs.writeFileSync(STATUSLINE_CACHE, JSON.stringify(cache, null, 2), "utf-8");
+		fs.writeFileSync(STATUSLINE_CACHE, JSON.stringify(cache, null, 2), "utf8");
 	} catch {
 		/* ignore */
 	}
@@ -813,7 +813,7 @@ function main(): void {
 	// Read JSON from stdin
 	let inputData: StatusLineInput;
 	try {
-		inputData = JSON.parse(fs.readFileSync(0, "utf-8")) as StatusLineInput;
+		inputData = JSON.parse(fs.readFileSync(0, "utf8")) as StatusLineInput;
 	} catch {
 		inputData = {};
 	}
@@ -901,3 +901,5 @@ function main(): void {
 }
 
 main();
+
+

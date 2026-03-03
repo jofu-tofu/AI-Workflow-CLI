@@ -3,17 +3,18 @@
  * Extracted from template _shared/lib-ts/base/launchers/tmux-launcher.ts.
  */
 
-import type {PaneLaunchOptions, PaneLaunchResult, PaneLauncher} from '../pane-launcher.js'
-import {execFileAsync, findExecutable} from '../subprocess-utils.js'
+import type {PaneLauncher, PaneLaunchOptions, PaneLaunchResult} from '../pane-launcher.js'
+import {execFileAsync, findExecutable} from '../runtime/subprocess-utils.js'
 import {findBestSplit, listPanes} from '../tmux-pane-placement.js'
 import {quoteForSh, toMsysPosixPath} from '../tmux-primitives.js'
+import {buildTmuxRuntimeBootstrapCommands} from '../tmux-session.js'
 
 export type TmuxSplitFlag = '-h' | '-v'
 
 export interface TmuxAvailability {
   available: boolean
-  tmuxPath?: string
   reason?: string
+  tmuxPath?: string
 }
 
 export interface TmuxLauncherOptions {
@@ -21,6 +22,12 @@ export interface TmuxLauncherOptions {
 }
 
 export {quoteForSh} from '../tmux-primitives.js'
+
+export function withWindowsTmuxBootstrap(command: string, platform: NodeJS.Platform = process.platform): string {
+  if (platform !== 'win32') return command
+  const bootstrap = buildTmuxRuntimeBootstrapCommands(platform).join('; ')
+  return `${bootstrap}; ${command}`
+}
 
 export function normalizeSplitFlag(value: string | undefined): TmuxSplitFlag {
   return value?.trim() === '-v' ? '-v' : '-h'
@@ -53,7 +60,7 @@ function getLastLine(text: string): string {
 async function resolveSplitFlagForTargetPane(
   tmuxPath: string,
   splitTarget: string,
-): Promise<TmuxSplitFlag | null> {
+): Promise<null | TmuxSplitFlag> {
   const size = await execFileAsync(
     tmuxPath,
     ['display-message', '-p', '-t', splitTarget, '#{pane_width} #{pane_height}'],
@@ -159,7 +166,8 @@ export class TmuxLauncher implements PaneLauncher {
     }
 
     if (splitTarget) tmuxArgs.push('-t', splitTarget)
-    tmuxArgs.push(`bash -lc ${quoteForSh(options.command)}`)
+    const paneCommand = withWindowsTmuxBootstrap(options.command)
+    tmuxArgs.push(`bash -lc ${quoteForSh(paneCommand)}`)
 
     const split = await execFileAsync(tmux.tmuxPath, tmuxArgs, {timeout: 5000})
     if (split.exitCode !== 0) {

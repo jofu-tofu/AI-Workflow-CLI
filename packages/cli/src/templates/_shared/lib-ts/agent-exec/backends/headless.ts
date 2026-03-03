@@ -6,7 +6,7 @@
 
 import * as fs from "node:fs";
 
-import { execFileAsync } from "../../base/subprocess-utils.js";
+import { execFileAsync } from "../../runtime/subprocess-utils.js";
 import type { ExecutionBackend, ExecutionRequest, ExecutionResult } from "../execution-backend.js";
 
 export class HeadlessBackend implements ExecutionBackend {
@@ -21,7 +21,7 @@ export class HeadlessBackend implements ExecutionBackend {
 
     // If outputFilePath specified and exists, read from file instead of stdout
     if (request.outputFilePath && fs.existsSync(request.outputFilePath)) {
-      const fileContent = fs.readFileSync(request.outputFilePath, "utf-8");
+      const fileContent = fs.readFileSync(request.outputFilePath, "utf8");
       return {
         ...result,
         stdout: fileContent,
@@ -31,3 +31,4 @@ export class HeadlessBackend implements ExecutionBackend {
     return result;
   }
 }
+

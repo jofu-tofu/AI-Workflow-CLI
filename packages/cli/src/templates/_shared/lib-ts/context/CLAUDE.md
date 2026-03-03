@@ -130,5 +130,6 @@ Tracks task progress (ISC criteria) within a context.
 
 - **Single state.json per context:** All state is in one file. No distributed state. Atomic writes prevent corruption.
 - **No moves out of lib-ts:** Context is pure library code imported by ~8 shared hooks. Moving it would require updating all those import paths for no structural gain. The subfolder is already co-located; it just needed documentation.
-- **`maybeActivate()` is idempotent:** Can be called from any hook without checking current mode — safe to call repeatedly.
+- **`maybeActivate()` is idempotent:** Can be called from unknown hook without checking current mode — safe to call repeatedly.
 - **`determineArtifactType()` drives session restore:** Returns `"plan"` or `"handoff"` to dispatch the correct restoration path in `session_start.ts`.
+

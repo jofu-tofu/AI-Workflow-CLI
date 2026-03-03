@@ -3,13 +3,13 @@
  * PreCompact hook: Save state.json snapshot before context compaction.
  * Captures git state and session metadata for recovery.
  */
-import { getProjectRoot } from "../lib-ts/base/constants.js";
-import { getGitState } from "../lib-ts/base/git-state.js";
+import { getContextBySessionId, saveState } from "../lib-ts/context/context-store.js";
 import {
   loadHookInput, logDebug, logError, logInfo, runHook,
-} from "../lib-ts/base/hook-utils.js";
-import { nowIso } from "../lib-ts/base/utils.js";
-import { getContextBySessionId, saveState } from "../lib-ts/context/context-store.js";
+} from "../lib-ts/hooks/hook-utils.js";
+import { getProjectRoot } from "../lib-ts/runtime/constants.js";
+import { getGitState } from "../lib-ts/runtime/git-state.js";
+import { nowIso } from "../lib-ts/runtime/utils.js";
 
 function main(): void {
   const payload = loadHookInput();

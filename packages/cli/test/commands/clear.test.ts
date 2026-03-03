@@ -5,6 +5,7 @@
  */
 
 import {expect} from 'chai'
+import {beforeAll, describe, it} from 'vitest'
 
 import ClearCommand from '../../src/commands/clear.js'
 
@@ -45,6 +46,10 @@ describe('clear command', () => {
 
     it('should reference .windsurf in description', () => {
       expect(ClearCommand.description.toLowerCase()).to.include('.windsurf')
+    })
+
+    it('should reference .codex in description', () => {
+      expect(ClearCommand.description.toLowerCase()).to.include('.codex')
     })
 
     it('should have static examples array', () => {
@@ -110,7 +115,7 @@ describe('clear command', () => {
   describe('implementation verification', () => {
     let source: string
 
-    before(() => {
+    beforeAll(() => {
       source = getClassSource()
     })
 
@@ -181,8 +186,13 @@ describe('clear command', () => {
       expect(source).to.include('removedWindsurfDir')
     })
 
+    it('should track removal of .codex folder', () => {
+      expect(source).to.include('removedCodexDir')
+    })
+
     it('should preview IDE folder removal in dry-run mode', () => {
       expect(source).to.include('willClaudeFolderBeEmpty')
+      expect(source).to.include('willCodexFolderBeEmpty')
       expect(source).to.include('willWindsurfFolderBeEmpty')
     })
 

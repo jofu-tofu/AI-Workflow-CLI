@@ -1,9 +1,9 @@
+import {execSync} from 'node:child_process'
 import {copyFileSync, existsSync, readFileSync, renameSync, statSync, writeFileSync} from 'node:fs'
 import * as os from 'node:os'
-import * as path from 'node:path'
-import {execSync} from 'node:child_process'
+import path from 'node:path'
 
-// TODO: Remove when upstream LSP spawn bug is fixed.
+// Temporary workaround until upstream LSP spawn bug is fixed.
 // Tracks: https://github.com/anthropics/claude-code/issues/17136
 //         https://github.com/anthropics/claude-code/issues/19658
 
@@ -21,7 +21,7 @@ const SPAWN_REPLACE =
  * takes precedence on PATH.
  *
  * Safe ordering: locate → backup → patch → verify → rename.
- * Never throws. On any failure, emits a warning and returns.
+ * Never throws. On unknown failure, emits a warning and returns.
  */
 export async function ensureLspPatch(options: {
   debugLog: (msg: string) => void
@@ -100,7 +100,7 @@ export async function ensureLspPatch(options: {
       renameSync(tmpPath, cliJsPath)
       debugLog('LSP patch: applied successfully')
     } catch (error: unknown) {
-      const code = (error as NodeJS.ErrnoException).code
+      const {code} = (error as NodeJS.ErrnoException)
       if (code === 'EACCES' || code === 'EPERM') {
         warn('LSP patch: permission denied writing cli.js')
       } else {
@@ -149,7 +149,7 @@ function renamNativeBinary(
       renameSync(src, target)
       debugLog(`LSP patch: renamed ${src} → ${target}`)
     } catch (error: unknown) {
-      const code = (error as NodeJS.ErrnoException).code
+      const {code} = (error as NodeJS.ErrnoException)
       if (code === 'EACCES' || code === 'EPERM') {
         warn(`Cannot rename ${src} — rename manually to ${src.replace(name, name.replace('claude', 'claude-native'))}`)
       } else {
@@ -158,3 +158,5 @@ function renamNativeBinary(
     }
   }
 }
+
+

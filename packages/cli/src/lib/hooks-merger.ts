@@ -108,15 +108,16 @@ export function mergeClaudeSettings(
     hooks: mergedHooks,
   }
 
-  // Only add enabledPlugins if there are any (avoid overriding user-scoped plugins)
+  // Only add enabledPlugins if there are unknown (avoid overriding user-scoped plugins)
   if (mergedEnabledPlugins && Object.keys(mergedEnabledPlugins).length > 0) {
     merged.enabledPlugins = mergedEnabledPlugins
   }
 
-  // Only add methods if there are any (avoid setting to undefined)
+  // Only add methods if there are unknown (avoid setting to undefined)
   if (Object.keys(mergedMethods).length > 0) {
     merged.methods = mergedMethods
   }
 
   return merged
 }
+

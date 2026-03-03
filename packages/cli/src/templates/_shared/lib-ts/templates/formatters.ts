@@ -32,13 +32,13 @@ export function getStatusIcon(status: string): string {
 
 // §13.3 — Task rendering
 export function renderTaskItem(
-  task: Record<string, any> | Task,
+  task: Record<string, unknown> | Task,
   showDescription = true,
   maxDescriptionLength = 100,
 ): string {
-  const status = (task as any).status ?? "pending";
-  const subject = (task as any).subject ?? "";
-  const description = (task as any).description ?? "";
+  const status = (task as unknown).status ?? "pending";
+  const subject = (task as unknown).subject ?? "";
+  const description = (task as unknown).description ?? "";
 
   const icon = getStatusIcon(status);
   const statusText = `[${status.toUpperCase()}]`;
@@ -57,7 +57,7 @@ export function renderTaskItem(
 }
 
 export function renderTaskList(
-  tasks: Array<Record<string, any> | Task>,
+  tasks: Array<Record<string, unknown> | Task>,
   header = "Active Tasks",
   showDescription = true,
 ): string {
@@ -102,3 +102,4 @@ export const REASON_MAP: Record<string, string> = {
 export function formatReason(reason: string): string {
   return REASON_MAP[reason] ?? reason;
 }
+

@@ -8,9 +8,9 @@
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
+import path from "node:path";
 
-import { atomicWrite } from "../base/atomic-write.js";
+import { atomicWrite } from "../runtime/atomic-write.js";
 import {
   getContextDir,
   getContextsDir,
@@ -19,10 +19,10 @@ import {
   getArchiveContextDir,
   getArchiveIndexPath,
   validateContextId,
-} from "../base/constants.js";
-import { logInfo, logWarn, logError, setContextPath } from "../base/logger.js";
-import { readStateJson, writeStateJson } from "../base/state-io.js";
-import { nowIso, generateContextId } from "../base/utils.js";
+} from "../runtime/constants.js";
+import { logInfo, logWarn, logError, setContextPath } from "../runtime/logger.js";
+import { readStateJson, writeStateJson } from "../runtime/state-io.js";
+import { nowIso, generateContextId } from "../runtime/utils.js";
 import type { ContextState, IndexFile, IndexEntry, Mode } from "../types.js";
 
 const INDEX_VERSION = "3.0";
@@ -76,9 +76,9 @@ function loadIndex(projectRoot?: string): IndexFile {
   const indexPath = getIndexPath(projectRoot);
   if (fs.existsSync(indexPath)) {
     try {
-      const raw = fs.readFileSync(indexPath, "utf-8");
+      const raw = fs.readFileSync(indexPath, "utf8");
       return JSON.parse(raw) as IndexFile;
-    } catch (error: any) {
+    } catch (error: unknown) {
       logWarn("context_store", `Failed to read index, recreating: ${error}`);
     }
   }
@@ -111,7 +111,7 @@ function migrateContextJson(contextId: string, projectRoot?: string): ContextSta
   if (!fs.existsSync(legacyPath)) return null;
 
   try {
-    const data = JSON.parse(fs.readFileSync(legacyPath, "utf-8"));
+    const data = JSON.parse(fs.readFileSync(legacyPath, "utf8"));
     const inFlight = data.in_flight ?? {};
     const oldMode = inFlight.mode ?? "none";
     const MODE_MIGRATION: Record<string, string> = {
@@ -149,7 +149,7 @@ function migrateContextJson(contextId: string, projectRoot?: string): ContextSta
       last_session: null,
       tasks: [],
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     logWarn("context_store", `Failed to migrate context.json for '${contextId}': ${error}`);
     return null;
   }
@@ -493,7 +493,7 @@ export function maybeActivate(
 
   if (state.mode === "idle" || state.mode === "has_staged_work") {
     const oldMode = state.mode;
-    const opts: Record<string, any> = {};
+    const opts: Record<string, unknown> = {};
     if (oldMode === "has_staged_work") opts.work_consumed = true; // CHANGED: unified flag
     updateMode(contextId, "active", projectRoot, opts);
     logInfo(
@@ -560,7 +560,7 @@ export function archiveContext(contextId: string, projectRoot?: string): Context
 
   try {
     fs.renameSync(sourceDir, archiveDest);
-  } catch (error: any) {
+  } catch (error: unknown) {
     logError("context_store", `Failed to move context to archive: ${error}`);
     return null;
   }
@@ -650,8 +650,8 @@ function updateArchiveIndex(state: ContextState, projectRoot?: string): boolean 
 
   if (fs.existsSync(archiveIndexPath)) {
     try {
-      archiveIndex = JSON.parse(fs.readFileSync(archiveIndexPath, "utf-8"));
-    } catch (error_: any) {
+      archiveIndex = JSON.parse(fs.readFileSync(archiveIndexPath, "utf8"));
+    } catch (error_: unknown) {
       logWarn("context_store", `Failed to read archive index, recreating: ${error_}`);
     }
   }
@@ -679,7 +679,7 @@ function restoreFromArchive(contextId: string, projectRoot?: string): ContextSta
 
   try {
     fs.renameSync(archiveDir, activeDir);
-  } catch (error: any) {
+  } catch (error: unknown) {
     logError("context_store", `Failed to restore context from archive: ${error}`);
     return null;
   }
@@ -697,7 +697,7 @@ function removeFromArchiveIndex(contextId: string, projectRoot?: string): boolea
   if (!fs.existsSync(archiveIndexPath)) return true;
 
   try {
-    const archiveIndex = JSON.parse(fs.readFileSync(archiveIndexPath, "utf-8")) as IndexFile;
+    const archiveIndex = JSON.parse(fs.readFileSync(archiveIndexPath, "utf8")) as IndexFile;
     if (archiveIndex.contexts[contextId]) {
       delete archiveIndex.contexts[contextId];
       archiveIndex.updated_at = nowIso();
@@ -709,8 +709,11 @@ function removeFromArchiveIndex(contextId: string, projectRoot?: string): boolea
       }
     }
     return true;
-  } catch (error: any) {
+  } catch (error: unknown) {
     logWarn("context_store", `Failed to read archive index: ${error}`);
     return false;
   }
 }
+
+
+

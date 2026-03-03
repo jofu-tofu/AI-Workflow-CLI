@@ -35,8 +35,8 @@ import {
   determineArtifactType,
 } from "./context-store.js";
 import { normalizePlanContent } from "./plan-manager.js";
-import { logDebug, logInfo, logError } from "../base/logger.js";
-import { isInternalCall } from "../base/subprocess-utils.js";
+import { logDebug, logInfo, logError } from "../runtime/logger.js";
+import { isInternalCall } from "../runtime/subprocess-utils.js";
 import type { ContextState, CaretCommand } from "../types.js";
 
 /** Minimum characters required for new context description. */
@@ -256,7 +256,7 @@ function matchPlanContent(prompt: string, hasPlanContexts: ContextState[]): Cont
 
   // Tier 2: Normalized hash match
   const normalized = normalizePlanContent(prompt);
-  const normHash = crypto.createHash("sha256").update(normalized, "utf-8").digest("hex").slice(0, 12);
+  const normHash = crypto.createHash("sha256").update(normalized, "utf8").digest("hex").slice(0, 12);
   for (const ctx of hasPlanContexts) {
     if (ctx.plan_hash && ctx.plan_hash === normHash) {
       logDebug("context_selector", `Tier 2 normalized hash match: ${ctx.id} (hash: ${normHash})`);
@@ -302,7 +302,7 @@ function createNewContext(
     newCtx.mode = "active";
     logInfo("context_selector", `Auto-created context: ${newCtx.id}`);
     return [newCtx.id, "auto_created", formatContextCreated(newCtx)];
-  } catch (error: any) {
+  } catch (error: unknown) {
     logError("context_selector", `Primary context creation failed: ${error}`);
     try {
       const now = new Date();
@@ -323,7 +323,7 @@ function createNewContext(
       newCtx.mode = "active";
       logInfo("context_selector", `Fallback context created: ${newCtx.id}`);
       return [newCtx.id, "auto_created_fallback", formatContextCreated(newCtx)];
-    } catch (error: any) {
+    } catch (error: unknown) {
       logError("context_selector", `ALL context creation failed: ${error}`);
       return [null, "creation_failed", null];
     }
@@ -492,7 +492,7 @@ export function determineContext(
         if (sessionId) bindSession(matched.id, sessionId, projectRoot);
         updateMode(matched.id, "active", projectRoot, {
           work_consumed: true, // CHANGED: unified flag
-          plan_hash_consumed: matched.plan_hash,
+          ...(matched.plan_hash ? {plan_hash_consumed: matched.plan_hash} : {}),
         });
         matched.mode = "active";
         logInfo("context_selector", `Plan match (fallback): ${matched.id}`);
@@ -522,3 +522,5 @@ export function determineContext(
   // --- Case 4: default ---
   return createNewContext(prompt, projectRoot);
 }
+
+

@@ -138,6 +138,7 @@ Each agent file has:
 - `--max-turns 3` gives safety margin while still preventing runaway multi-turn behavior
 - With these settings, reviews complete in ~5-10 seconds
 
-**Constraint:** The agent markdown files MUST contain clear instructions to "call StructuredOutput IMMEDIATELY" and "do NOT use any other tools". Without these instructions, the model will try to use its turns for file operations instead of outputting the review.
+**Constraint:** The agent markdown files MUST contain clear instructions to "call StructuredOutput IMMEDIATELY" and "do NOT use unknown other tools". Without these instructions, the model will try to use its turns for file operations instead of outputting the review.
+
 
 

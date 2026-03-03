@@ -2,7 +2,7 @@ import {promises as fs} from 'node:fs'
 import {join} from 'node:path'
 
 import {expect} from 'chai'
-import {afterEach, beforeEach, describe, it} from 'mocha'
+import {afterEach, beforeEach, describe, it} from 'vitest'
 
 import {updateGitExclude} from '../../src/lib/git-exclude-manager.js'
 import {cleanupTestDir, createTestDir, pathExists} from '../helpers/test-utils.js'

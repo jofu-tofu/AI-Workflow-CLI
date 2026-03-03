@@ -67,7 +67,7 @@ Hooks can be invoked recursively when spawning subprocesses (agents, orchestrato
 import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
 
 function main(): void {
-  // FIRST LINE of main - before any other logic
+  // FIRST LINE of main - before unknown other logic
   if (isInternalCall()) return;
 
   // Rest of hook logic...
@@ -137,7 +137,7 @@ const context = getContextBySessionId(sessionId, projectRoot);
 if (!context) {
   // Fallback: find single planning context
   const allActive = getAllContexts("active", projectRoot);
-  const planning = allActive.filter((c: any) => c.mode === "active" || c.mode === "has_staged_work");
+  const planning = allActive.filter((c: unknown) => c.mode === "active" || c.mode === "has_staged_work");
   if (planning.length === 1) {
     context = planning[0];
   }
@@ -223,7 +223,7 @@ bun --print "import('.aiwcli/_cc-native/hooks/cc-native-plan-review.ts')" 2>&1 |
 bun build --no-bundle .aiwcli/_cc-native/hooks/mark_questions_asked.ts --outdir /dev/null 2>&1
 ```
 
-Hooks fail silently on import errors — verify after any import path changes.
+Hooks fail silently on import errors — verify after unknown import path changes.
 
 ---
 
@@ -244,14 +244,14 @@ Hooks fail silently on import errors — verify after any import path changes.
 ---
 ## Context Maintenance
 
-**After modifying files in this directory:** scan the entries above — if any claim is now
+**After modifying files in this directory:** scan the entries above — if unknown claim is now
 false or incomplete, update this file before ending the task. Do not defer.
 
 **Add** an entry only if an agent would fail without knowing it, it is not obvious from
 the code, and it belongs at this scope (project-wide rule → root CLAUDE.md; WHY decision
 → inline comment or ADR; inferable from code → nowhere).
 
-**Remove** any entry that fails the falsifiability test: if removing it would not change
+**Remove** unknown entry that fails the falsifiability test: if removing it would not change
 how an agent acts here, remove it. If a convention here conflicts with the codebase,
 the codebase wins — update this file, do not work around it. Prune aggressively.
 
@@ -265,3 +265,4 @@ is stale — update or regenerate before relying on it.
 - Agent mistake caused by this file → fix immediately, then Audit
 
 <!-- context-layer: generated=2026-02-10 | last-audited=2026-02-21 | version=2 | dir-commits-at-audit=58 -->
+

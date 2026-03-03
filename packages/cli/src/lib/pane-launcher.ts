@@ -5,30 +5,30 @@
 
 import {TmuxLauncher} from './launchers/tmux-launcher.js'
 
-export type PaneBackend = 'tmux' | 'window' | 'exec'
-export type PaneSplitDirection = 'h' | 'v' | 'auto'
+export type PaneBackend = 'exec' | 'tmux' | 'window'
+export type PaneSplitDirection = 'auto' | 'h' | 'v'
 
 export interface PaneLaunchOptions {
   command: string
+  cwd?: string | undefined
   splitDirection?: PaneSplitDirection | undefined
   splitTarget?: string | undefined
-  cwd?: string | undefined
   title?: string | undefined
 }
 
 export interface PaneLaunchResult {
-  launched: boolean
   backend: PaneBackend
+  launched: boolean
   paneId?: string | undefined
   reason?: string | undefined
   stderr?: string | undefined
 }
 
 export interface PaneLauncher {
-  readonly backend: PaneBackend
   available(): Promise<boolean>
-  launch(options: PaneLaunchOptions): Promise<PaneLaunchResult>
+  readonly backend: PaneBackend
   kill?(paneId: string): Promise<void>
+  launch(options: PaneLaunchOptions): Promise<PaneLaunchResult>
 }
 
 export interface PaneLauncherFactoryOptions {
@@ -42,7 +42,7 @@ export interface PaneLauncherFactoryOptions {
  */
 export async function createPaneLauncher(
   options?: PaneLauncherFactoryOptions,
-): Promise<PaneLauncher | null> {
+): Promise<null | PaneLauncher> {
   const requireTmuxSession = options?.requireTmuxSession ?? true
 
   const tmux = new TmuxLauncher({requireSessionEnv: requireTmuxSession})

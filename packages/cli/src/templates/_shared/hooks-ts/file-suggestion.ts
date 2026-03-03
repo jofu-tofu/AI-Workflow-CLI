@@ -4,11 +4,11 @@
  * Outputs a plain JSON array (NOT hookSpecificOutput).
  */
 import * as fs from "node:fs";
-import * as path from "node:path";
+import path from "node:path";
 
-import { getContextFilePath, getContextHandoffsDir, getContextPlansDir, getContextReviewsDir, getProjectRoot } from "../lib-ts/base/constants.js";
-import { loadHookInput, logDebug, logError, runHook } from "../lib-ts/base/hook-utils.js";
 import { getAllContexts, getContextBySessionId } from "../lib-ts/context/context-store.js";
+import { loadHookInput, logDebug, logError, runHook } from "../lib-ts/hooks/hook-utils.js";
+import { getContextFilePath, getContextHandoffsDir, getContextPlansDir, getContextReviewsDir, getProjectRoot } from "../lib-ts/runtime/constants.js";
 import type { ContextState } from "../lib-ts/types.js";
 
 /** Get .md files sorted by mtime descending */
@@ -128,3 +128,4 @@ function main(): void {
 }
 
 runHook(main, "file-suggestion");
+

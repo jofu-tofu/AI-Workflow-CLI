@@ -1,12 +1,14 @@
 import {execSync} from 'node:child_process'
 import {readFileSync} from 'node:fs'
-import {platform} from 'node:os'
+import path from 'node:path'
 
 import {expect} from 'chai'
-import {describe, it} from 'mocha'
+import {describe, it} from 'vitest'
+
+import {cliCommand, getCliRoot} from '../helpers/cli-command.js'
 
 describe('Init Command Structure - Integration Tests', () => {
-  const bin = platform() === 'win32' ? String.raw`.\bin\dev.cmd` : './bin/dev.js'
+  const bin = cliCommand()
 
   describe('Flag-Based Init Pattern', () => {
     it('validates pai init --help shows flag-based usage', () => {
@@ -73,7 +75,7 @@ describe('Init Command Structure - Integration Tests', () => {
       }
     })
 
-    it('validates --ide flag defaults to claude', () => {
+    it('validates --ide flag defaults include claude and codex', () => {
       const output = execSync(`${bin} init --help`, {
         encoding: 'utf8',
         stdio: 'pipe',
@@ -81,6 +83,7 @@ describe('Init Command Structure - Integration Tests', () => {
 
       // Help should indicate default value
       expect(output).to.include('--ide')
+      expect(output).to.include('claude + codex')
     })
   })
 
@@ -103,7 +106,7 @@ describe('Init Command Structure - Integration Tests', () => {
 
   describe('Extensible Template Pattern', () => {
     it('validates template method allows multiple templates', () => {
-      const commandFile = readFileSync('src/commands/init/index.ts', 'utf8')
+      const commandFile = readFileSync(path.join(getCliRoot(), 'src', 'commands', 'init', 'index.ts'), 'utf8')
 
       // Should use generic template installer
       expect(commandFile).to.include('installTemplate')
