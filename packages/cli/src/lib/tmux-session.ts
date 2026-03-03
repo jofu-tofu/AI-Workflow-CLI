@@ -216,7 +216,6 @@ export async function launchInTmuxSession(options: TmuxSessionOptions): Promise<
     // ANTI-PATTERN: Do not use bash positional params ($1, $2, $3) to pass shell
     // commands to tmux on MSYS2. Quoting does not survive the bash→exec→tmux→sh
     // chain. Instead, build a single bash string with per-arg quoteForSh().
-    // See gitbash-tmux-launcher.ts tmuxViaBash() for the proven pattern.
     const posixSocket = toMsysPosixPath(TMUX_SOCKET_PATH)
     const tmuxArgs = ['-S', posixSocket, 'new-session']
     if (reattach) tmuxArgs.push('-A')

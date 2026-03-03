@@ -38,8 +38,8 @@ describe('tmux-session', () => {
     })
   })
 
-  // Verify quoteForSh round-trip: the quoting contract that both tmux-session.ts
-  // and gitbash-tmux-launcher.ts depend on for safe bash→tmux→sh transport.
+  // Verify quoteForSh round-trip: the quoting contract that tmux-session.ts
+  // depends on for safe bash→tmux→sh transport.
   describe('quoteForSh round-trip safety', () => {
     it('preserves single quotes through double quoting (nested tmux scenario)', () => {
       // Simulates: buildShellCommand produces inner-quoted string,

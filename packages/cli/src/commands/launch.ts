@@ -29,7 +29,7 @@ import {EXIT_CODES} from '../types/index.js'
  */
 export default class LaunchCommand extends BaseCommand {
   static override description =
-    'Launch Claude Code or Codex with AIW configuration (sandbox disabled, tmux-first by default)\n\n' +
+    'Launch Claude Code or Codex with AIW configuration (sandbox disabled, inline on Windows, tmux-first on Unix)\n\n' +
     'FLAGS\n' +
     '  --codex/-c: Launch Codex instead of Claude Code (uses --yolo flag)\n' +
     '  --new/-n: Open a new terminal in the current directory and launch there\n' +

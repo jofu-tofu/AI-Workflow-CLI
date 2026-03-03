@@ -57,7 +57,7 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 
 **Design decisions:**
 - Prompt is delivered at launch time (no tmux buffer paste/capture workflow)
-- Pane backend detection delegated to `aiw launch` (tmux → gitbash-tmux → window fallback → non-interactive exec)
+- Pane backend detection delegated to `aiw launch` (tmux in-session only → inline exec fallback)
 - `_shared` only — never imports from `_cc-native`
 - Watch path is best-effort and does not change launch success semantics
 

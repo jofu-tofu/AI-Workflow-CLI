@@ -21,7 +21,7 @@ oclif-based CLI (`aiw`). Installs cc-native and other templates into user projec
 | `src/lib/ide-path-resolver.ts` | Path resolution for `.aiwcli/` and IDE-specific directories |
 | `src/lib/settings-hierarchy.ts` | Merge settings across all active installed templates |
 | `src/lib/pane-driver.ts` | Pane launch orchestrator — consolidates all tmux/window pane splitting |
-| `src/lib/pane-launcher.ts` | Abstract pane launcher interface + factory (tmux/gitbash-tmux/window) |
+| `src/lib/pane-launcher.ts` | Abstract pane launcher interface + factory (tmux in-session only) |
 | `src/lib/sentinel-ipc.ts` | Temp file IPC for pane-launched process results |
 | `src/templates/` | Template source files (kept in sync with `.aiwcli/`) |
 

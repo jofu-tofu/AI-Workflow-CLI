@@ -3,9 +3,7 @@
  * Extracted from template _shared/lib-ts/base/pane-launcher.ts.
  */
 
-import {GitBashTmuxLauncher} from './launchers/gitbash-tmux-launcher.js'
 import {TmuxLauncher} from './launchers/tmux-launcher.js'
-import {WindowLauncher} from './launchers/window-launcher.js'
 
 export type PaneBackend = 'tmux' | 'window' | 'exec'
 export type PaneSplitDirection = 'h' | 'v' | 'auto'
@@ -39,7 +37,8 @@ export interface PaneLauncherFactoryOptions {
 
 /**
  * Resolve the first available pane launcher for the current environment.
- * Detection order: tmux (in-session) -> Git Bash tmux -> window fallback.
+ * Only returns a launcher when already inside an active tmux session.
+ * On Windows without tmux, returns null — callers fall through to inline execution.
  */
 export async function createPaneLauncher(
   options?: PaneLauncherFactoryOptions,
@@ -48,12 +47,6 @@ export async function createPaneLauncher(
 
   const tmux = new TmuxLauncher({requireSessionEnv: requireTmuxSession})
   if (await tmux.available()) return tmux
-
-  const gitBashTmux = new GitBashTmuxLauncher()
-  if (await gitBashTmux.available()) return gitBashTmux
-
-  const win = new WindowLauncher()
-  if (await win.available()) return win
 
   return null
 }
