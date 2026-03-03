@@ -1,7 +1,7 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "NO_COLOR= FORCE_COLOR=2 bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/scripts/status_line.ts"
+    "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/scripts/status_line.ts"
   },
   "fileSuggestion": {
     "type": "command",

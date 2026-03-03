@@ -13,7 +13,7 @@ import {launchDriverInTmuxOrFallback, type LaunchDriverResult} from '../lib/pane
 import {readSentinelExitCode, waitForSentinelFile} from '../lib/sentinel-ipc.js'
 import {spawnProcess} from '../lib/spawn.js'
 import {launchTerminal} from '../lib/terminal.js'
-import {enableTmuxMouse, findToolPath, launchInTmuxSession} from '../lib/tmux-session.js'
+import {enableTmuxColors, enableTmuxMouse, findToolPath, launchInTmuxSession} from '../lib/tmux-session.js'
 import {checkVersionCompatibility, getClaudeCodeVersion} from '../lib/version.js'
 import {EXIT_CODES} from '../types/index.js'
 
@@ -29,7 +29,7 @@ import {EXIT_CODES} from '../types/index.js'
  */
 export default class LaunchCommand extends BaseCommand {
   static override description =
-    'Launch Claude Code or Codex with AIW configuration (sandbox disabled, inline on Windows, tmux-first on Unix)\n\n' +
+    'Launch Claude Code or Codex with AIW configuration (sandbox disabled, tmux-first with inline fallback)\n\n' +
     'FLAGS\n' +
     '  --codex/-c: Launch Codex instead of Claude Code (uses --yolo flag)\n' +
     '  --new/-n: Open a new terminal in the current directory and launch there\n' +
@@ -138,7 +138,6 @@ export default class LaunchCommand extends BaseCommand {
     const launchFlag = useCodex ? '--codex' : ''
     const disableTmux = flags['no-tmux']
     const insideTmux = Boolean(process.env.TMUX)
-    const isWindows = process.platform === 'win32'
     const interactiveTty = Boolean(process.stdin.isTTY && process.stdout.isTTY)
     const wantJson = flags.json
     const wantWait = flags.wait
@@ -198,8 +197,11 @@ export default class LaunchCommand extends BaseCommand {
       ? await createPaneLauncher({requireTmuxSession: true})
       : null
     if (paneLauncher && !flags.new) {
-      this.debug(`Pane manager detected (${paneLauncher.backend}); splitting new pane via pane-driver`)
-      if (insideTmux) enableTmuxMouse()
+      this.logInfo(`Pane manager detected (${paneLauncher.backend}); splitting new pane`)
+      if (insideTmux) {
+        enableTmuxMouse()
+        enableTmuxColors()
+      }
 
       const splitFlag = flags.split === 'v' ? '-v' as const
         : flags.split === 'h' ? '-h' as const
@@ -252,7 +254,7 @@ export default class LaunchCommand extends BaseCommand {
     }
 
     // ── Normal launch flow (no pane manager detected) ──
-    const shouldAutoTmux = !disableTmux && !isWindows && !insideTmux && interactiveTty
+    const shouldAutoTmux = !disableTmux && !insideTmux && interactiveTty
     let exitCode: number
 
     try {
@@ -271,8 +273,9 @@ export default class LaunchCommand extends BaseCommand {
       if (shouldAutoTmux) {
         const resolvedPath = findToolPath(cliCommand)
 
-        if (!resolvedPath && process.platform === 'win32') {
-          this.warn(`${cliCommand} not found on PATH — launching directly (install from https://claude.ai/download)`)
+        if (!resolvedPath) {
+          this.logWarning(`${cliCommand} not found on PATH (install from https://claude.ai/download)`)
+          this.logInfo(`Launching ${cliCommand} inline`)
           const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
           exitCode = await spawnProcess(cliCommand, finalArgs)
         } else {
@@ -300,16 +303,17 @@ export default class LaunchCommand extends BaseCommand {
           if (result.usedTmux) {
             exitCode = result.exitCode
           } else {
-            if (result.reason) this.warn(`tmux: ${result.reason}, launching directly`)
+            if (result.reason) this.logWarning(`${result.reason} — launching inline`)
+            this.logInfo(`Launching ${cliCommand} inline`)
             const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
             exitCode = await spawnProcess(cliCommand, finalArgs)
           }
         }
       } else {
         if (disableTmux) {
-          this.debug('tmux launch disabled via --no-tmux')
+          this.logInfo('Tmux disabled via --no-tmux — launching inline')
         } else if (!interactiveTty) {
-          this.debug('Non-interactive terminal detected; launching directly')
+          this.logInfo('Non-interactive terminal — launching inline')
         }
 
         const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs

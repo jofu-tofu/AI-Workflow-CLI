@@ -104,6 +104,22 @@ function isTmuxReachable(bashPath: string): boolean {
   }
 }
 
+/** Probe whether winpty is available through the given bash binary.
+ *  winpty bridges MSYS2 pty (tmux) to ConPTY (native Windows TUI apps). */
+function isWinptyReachable(bashPath: string): boolean {
+  try {
+    execFileSync(bashPath, ['-lc', 'command -v winpty'], {
+      timeout: 3000,
+      stdio: 'ignore',
+      env: {...process.env, MSYS_NO_PATHCONV: '1'},
+      windowsHide: true,
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Check if tmux is natively on PATH (Unix, or rare Windows native installs). */
 function isNativeTmuxAvailable(): boolean {
   try {
@@ -149,6 +165,16 @@ export function buildShellCommand(opts: TmuxSessionOptions): string {
     parts.push('tmux set-option -g mouse on >/dev/null 2>&1 || true')
   }
 
+  // Enable 256-color and truecolor support inside tmux.
+  // Try tmux-256color first (best terminfo), fall back to screen-256color (universally available).
+  // Session-scoped (no -g) to avoid mutating other tmux sessions on this server.
+  parts.push(
+    'if tmux set default-terminal "tmux-256color" 2>/dev/null; then true; '
+    + 'else tmux set default-terminal "screen-256color" 2>/dev/null || true; fi',
+  )
+  // Enable truecolor passthrough for common outer terminals (xterm covers Git Bash/mintty).
+  parts.push('tmux set -a terminal-overrides ",xterm*:Tc,alacritty:Tc" >/dev/null 2>&1 || true')
+
   const cmdParts: string[] = []
 
   // On Windows, convert tool path to POSIX for MSYS2 bash
@@ -170,7 +196,14 @@ export function buildShellCommand(opts: TmuxSessionOptions): string {
     cmdParts.push(quoteForSh(bootstrap))
   }
 
-  parts.push(`exec ${cmdParts.join(' ')}`)
+  // On Windows, use winpty to bridge MSYS2 pty (tmux) to ConPTY (native Windows TUI).
+  // exec is safe here because winpty is an MSYS2 binary that maintains the pty bridge —
+  // unlike exec-ing a native .exe directly, which destroys the MSYS2 pty layer.
+  if (process.platform === 'win32') {
+    parts.push(`exec winpty ${cmdParts.join(' ')}`)
+  } else {
+    parts.push(`exec ${cmdParts.join(' ')}`)
+  }
   return parts.join('; ')
 }
 
@@ -198,7 +231,7 @@ export async function launchInTmuxSession(options: TmuxSessionOptions): Promise<
   if (process.platform !== 'win32' && isNativeTmuxAvailable()) {
     const args = ['new-session']
     if (reattach) args.push('-A')
-    args.push('-s', sessionName, shellCommand)
+    args.push('-c', process.cwd(), '-s', sessionName, shellCommand)
     return spawnAttached('tmux', args, cleanTmuxEnv())
   }
 
@@ -213,13 +246,18 @@ export async function launchInTmuxSession(options: TmuxSessionOptions): Promise<
       return {exitCode: -1, usedTmux: false, reason: 'tmux not available in Git Bash'}
     }
 
+    if (!isWinptyReachable(bashPath)) {
+      return {exitCode: -1, usedTmux: false, reason: 'winpty not available in Git Bash (required for TUI apps in MSYS2 tmux)'}
+    }
+
     // ANTI-PATTERN: Do not use bash positional params ($1, $2, $3) to pass shell
     // commands to tmux on MSYS2. Quoting does not survive the bash→exec→tmux→sh
     // chain. Instead, build a single bash string with per-arg quoteForSh().
     const posixSocket = toMsysPosixPath(TMUX_SOCKET_PATH)
+    const posixCwd = toMsysPosixPath(process.cwd())
     const tmuxArgs = ['-S', posixSocket, 'new-session']
     if (reattach) tmuxArgs.push('-A')
-    tmuxArgs.push('-s', sessionName, shellCommand)
+    tmuxArgs.push('-c', posixCwd, '-s', sessionName, shellCommand)
     const tmuxCmd = `exec tmux ${tmuxArgs.map(quoteForSh).join(' ')}`
 
     return spawnAttached(bashPath, ['-lc', tmuxCmd], cleanTmuxEnv({MSYS_NO_PATHCONV: '1'}))
@@ -247,6 +285,44 @@ export function enableTmuxMouse(): void {
       env: {...process.env, MSYS_NO_PATHCONV: '1'},
       windowsHide: true,
     })
+  } catch {
+    // Best-effort — ignore failures
+  }
+}
+
+/** Best-effort enable 256-color and truecolor support in the current tmux session.
+ *  Uses session-scoped settings (no -g) to avoid affecting other sessions. */
+export function enableTmuxColors(): void {
+  const baseOpts = {stdio: 'ignore' as const, timeout: 3000}
+  try {
+    if (process.platform !== 'win32') {
+      try {
+        execSync('tmux set default-terminal "tmux-256color"', baseOpts)
+      } catch {
+        execSync('tmux set default-terminal "screen-256color"', baseOpts)
+      }
+      execSync('tmux set -a terminal-overrides ",xterm*:Tc,alacritty:Tc"', baseOpts)
+      return
+    }
+
+    const bashPath = findMsysBash()
+    if (!bashPath) return
+
+    const posixSocket = toMsysPosixPath(TMUX_SOCKET_PATH)
+    const winOpts = {
+      ...baseOpts,
+      env: {...process.env, MSYS_NO_PATHCONV: '1'},
+      windowsHide: true,
+    }
+
+    try {
+      execFileSync(bashPath, ['-lc', `tmux -S ${quoteForSh(posixSocket)} set default-terminal 'tmux-256color'`], winOpts)
+    } catch {
+      try {
+        execFileSync(bashPath, ['-lc', `tmux -S ${quoteForSh(posixSocket)} set default-terminal 'screen-256color'`], winOpts)
+      } catch { /* best-effort */ }
+    }
+    execFileSync(bashPath, ['-lc', `tmux -S ${quoteForSh(posixSocket)} set -a terminal-overrides ',xterm*:Tc,alacritty:Tc'`], winOpts)
   } catch {
     // Best-effort — ignore failures
   }

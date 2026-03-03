@@ -303,7 +303,7 @@ export async function launchDriverInTmuxOrFallback(
         command: paneCommand,
         splitDirection: mapSplitDirection(options.splitFlag),
         splitTarget: options.splitTarget,
-        cwd: paneLauncher.backend === 'tmux' ? undefined : options.cwd,
+        cwd: options.cwd,
       })
 
       if (!paneResult.launched) {

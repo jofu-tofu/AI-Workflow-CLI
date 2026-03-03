@@ -16,8 +16,9 @@
 
 import {join} from 'node:path'
 
-import type {ClaudeSettings} from './claude-settings-types.js'
+import type {ClaudeSettings, HookEventType} from './claude-settings-types.js'
 import {mergeClaudeSettings} from './hooks-merger.js'
+import {adaptHookCommand, validateCommandsForPlatform} from './platform-commands.js'
 import {IdePathResolver} from './ide-path-resolver.js'
 import {readClaudeSettings, writeClaudeSettings} from './settings-hierarchy.js'
 import {getSharedTemplatePath, getTemplatePath} from './template-resolver.js'
@@ -110,7 +111,10 @@ async function reconstructClaudeSettings(
     reconstructed.methods = methodsTracking
   }
 
-  // 4. Write reconstructed settings
+  // 4. Platform-adapt hook commands (Windows cmd.exe compatibility)
+  reconstructed = adaptSettingsForPlatform(reconstructed)
+
+  // 5. Write reconstructed settings
   await writeClaudeSettings(settingsPath, reconstructed)
 }
 
@@ -153,4 +157,49 @@ async function reconstructWindsurfHooks(
 
   // 3. Write reconstructed hooks
   await writeWindsurfHooks(hooksPath, reconstructed)
+}
+
+/**
+ * Adapt all command strings in settings for the current platform.
+ * On Windows: rewrites commands for cmd.exe compatibility.
+ * Validates adapted commands and fails fast if any remain non-portable.
+ */
+function adaptSettingsForPlatform(settings: ClaudeSettings): ClaudeSettings {
+  const result = {...settings}
+  const allCommands: string[] = []
+
+  // Adapt top-level command configs
+  if (result.statusLine && 'command' in result.statusLine) {
+    result.statusLine = {...result.statusLine, command: adaptHookCommand(result.statusLine.command)}
+    allCommands.push(result.statusLine.command)
+  }
+
+  if (result.fileSuggestion && 'command' in result.fileSuggestion) {
+    result.fileSuggestion = {...result.fileSuggestion, command: adaptHookCommand(result.fileSuggestion.command)}
+    allCommands.push(result.fileSuggestion.command)
+  }
+
+  // Adapt all hook commands
+  if (result.hooks) {
+    const adapted: typeof result.hooks = {}
+    for (const [event, matchers] of Object.entries(result.hooks)) {
+      if (!matchers) continue
+      adapted[event as HookEventType] = matchers.map((matcher) => ({
+        ...matcher,
+        hooks: matcher.hooks.map((hook) => {
+          if (hook.type !== 'command') return hook
+          const adaptedCmd = adaptHookCommand(hook.command)
+          allCommands.push(adaptedCmd)
+          return {...hook, command: adaptedCmd}
+        }),
+      }))
+    }
+
+    result.hooks = adapted
+  }
+
+  // Validate: fail fast if any command still contains bash-only syntax on Windows
+  validateCommandsForPlatform(allCommands)
+
+  return result
 }

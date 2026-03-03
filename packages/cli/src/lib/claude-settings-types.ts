@@ -106,6 +106,10 @@ export interface ClaudeSettings {
   permissions?: Permissions
   /** Spinner tips enabled */
   spinnerTipsEnabled?: boolean
+  /** Status line command configuration */
+  statusLine?: { type: 'command'; command: string }
+  /** File suggestion command configuration */
+  fileSuggestion?: { type: 'command'; command: string }
 }
 
 /**

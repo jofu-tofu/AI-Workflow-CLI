@@ -6,7 +6,7 @@
 import type {PaneLaunchOptions, PaneLaunchResult, PaneLauncher} from '../pane-launcher.js'
 import {execFileAsync, findExecutable} from '../subprocess-utils.js'
 import {findBestSplit, listPanes} from '../tmux-pane-placement.js'
-import {quoteForSh} from '../tmux-primitives.js'
+import {quoteForSh, toMsysPosixPath} from '../tmux-primitives.js'
 
 export type TmuxSplitFlag = '-h' | '-v'
 
@@ -147,13 +147,19 @@ export class TmuxLauncher implements PaneLauncher {
       splitTarget = explicitTarget
     }
 
-    const body = options.cwd?.trim()
-      ? `cd ${quoteForSh(options.cwd.trim())} && ${options.command}`
-      : options.command
-
     const tmuxArgs = ['split-window', splitFlag, '-P', '-F', '#{pane_id}']
+    if (options.cwd?.trim()) {
+      // Use tmux-native -c flag to set working directory. This is more reliable
+      // than `cd <dir> && command` because bash -l (login shell) profile scripts
+      // may change the cwd before the command runs (common on MSYS2/Git Bash).
+      const cwdPath = process.platform === 'win32'
+        ? toMsysPosixPath(options.cwd.trim())
+        : options.cwd.trim()
+      tmuxArgs.push('-c', cwdPath)
+    }
+
     if (splitTarget) tmuxArgs.push('-t', splitTarget)
-    tmuxArgs.push(`bash -lc ${quoteForSh(body)}`)
+    tmuxArgs.push(`bash -lc ${quoteForSh(options.command)}`)
 
     const split = await execFileAsync(tmux.tmuxPath, tmuxArgs, {timeout: 5000})
     if (split.exitCode !== 0) {

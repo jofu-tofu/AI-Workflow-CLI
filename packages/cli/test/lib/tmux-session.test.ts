@@ -1,7 +1,7 @@
 import {expect} from 'chai'
 
-import {buildShellCommand} from '../../src/lib/tmux-session.js'
 import {quoteForSh} from '../../src/lib/tmux-primitives.js'
+import {buildShellCommand} from '../../src/lib/tmux-session.js'
 
 describe('tmux-session', () => {
   describe('buildShellCommand', () => {
@@ -33,8 +33,8 @@ describe('tmux-session', () => {
         toolArgs: [],
         enableMouse: false,
       })
-      expect(result).to.not.include('tmux set-option')
-      expect(result).to.match(/^exec /)
+      expect(result).to.not.include('tmux set-option -g mouse')
+      expect(result).to.include('exec ')
     })
   })
 
