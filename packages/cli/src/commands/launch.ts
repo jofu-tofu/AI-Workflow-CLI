@@ -7,6 +7,7 @@ import {Flags} from '@oclif/core'
 
 import BaseCommand from '../lib/base-command.js'
 import {ProcessSpawnError} from '../lib/errors.js'
+import {ensureLspPatch} from '../lib/lsp-patch.js'
 import {createPaneLauncher} from '../lib/pane-launcher.js'
 import {launchDriverInTmuxOrFallback, type LaunchDriverResult} from '../lib/pane-driver.js'
 import {readSentinelExitCode, waitForSentinelFile} from '../lib/sentinel-ipc.js'
@@ -122,6 +123,14 @@ export default class LaunchCommand extends BaseCommand {
     delete process.env['CLAUDECODE']
     delete process.env['CLAUDE_CODE_ENTRYPOINT']
 
+    // Patch Claude Code's LSP spawn on Windows (adds shell:true for .cmd shims)
+    if (process.platform === 'win32') {
+      await ensureLspPatch({
+        debugLog: (msg) => this.debug(msg),
+        warn: (msg) => this.warn(msg),
+      })
+    }
+
     // Determine which CLI to launch
     const useCodex = flags.codex
     const cliCommand = useCodex ? 'codex' : 'claude'
@@ -184,7 +193,7 @@ export default class LaunchCommand extends BaseCommand {
     // When a pane manager is available (tmux, Windows Terminal, etc.),
     // use pane-driver to split a new pane instead of spawning directly.
     // Uses the abstract factory to detect the backend automatically.
-    const shouldUsePaneLauncher = !disableTmux && (!isWindows || insideTmux)
+    const shouldUsePaneLauncher = !disableTmux
     const paneLauncher = shouldUsePaneLauncher
       ? await createPaneLauncher({requireTmuxSession: true})
       : null

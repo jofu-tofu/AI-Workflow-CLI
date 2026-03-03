@@ -84,11 +84,11 @@ export function mergeClaudeSettings(
     ...template.env,
   }
 
-  // Merge enabled plugins (template values override)
-  const mergedEnabledPlugins = {
-    ...existing.enabledPlugins,
-    ...template.enabledPlugins,
-  }
+  // Merge enabled plugins only if template explicitly defines them
+  const mergedEnabledPlugins =
+    template.enabledPlugins && Object.keys(template.enabledPlugins).length > 0
+      ? { ...existing.enabledPlugins, ...template.enabledPlugins }
+      : existing.enabledPlugins
 
   // Merge hooks using dedicated function
   const mergedHooks = mergeHooks(existing.hooks, template.hooks)
@@ -105,8 +105,12 @@ export function mergeClaudeSettings(
     ...template,
     permissions: mergedPermissions,
     env: mergedEnv,
-    enabledPlugins: mergedEnabledPlugins,
     hooks: mergedHooks,
+  }
+
+  // Only add enabledPlugins if there are any (avoid overriding user-scoped plugins)
+  if (mergedEnabledPlugins && Object.keys(mergedEnabledPlugins).length > 0) {
+    merged.enabledPlugins = mergedEnabledPlugins
   }
 
   // Only add methods if there are any (avoid setting to undefined)

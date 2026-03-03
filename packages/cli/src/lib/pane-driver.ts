@@ -14,6 +14,22 @@ import {
 import {createPaneLauncher, type PaneBackend, type PaneSplitDirection} from './pane-launcher.js'
 import {cleanupSentinelIpc, createSentinelIpcPaths} from './sentinel-ipc.js'
 import {execFileAsync, findExecutable} from './subprocess-utils.js'
+import {toMsysPosixPath} from './tmux-primitives.js'
+
+/**
+ * Resolve a tool path from bash's perspective.
+ * Used on Windows where the tmux backend runs commands in bash,
+ * but findExecutable() returns Windows paths (.cmd/.exe) that bash can't execute.
+ */
+async function resolveToolForBash(toolName: string): Promise<string | null> {
+  const bash = findExecutable('bash')
+  if (!bash) return null
+  const result = await execFileAsync(bash, ['-lc', `command -v ${toolName}`], {
+    timeout: 3000,
+    env: {...process.env, MSYS_NO_PATHCONV: '1'},
+  })
+  return result.exitCode === 0 ? result.stdout.trim() || null : null
+}
 
 export type DriverMode = 'exec' | 'repl'
 export type TmuxSplitOption = TmuxSplitFlag | 'auto'
@@ -137,7 +153,12 @@ function wrapPaneCommand(
   holdMessage: string,
 ): string {
   if (backend === 'tmux') {
-    const base = `${command}; code=$?; printf '%s' "$code" > ${quoteForSh(sentinelPath)}`
+    // On Windows, convert sentinel path to POSIX for bash redirections.
+    // MSYS2 bash maps /c/Users/.../file to C:\Users\...\file on disk,
+    // so Node.js reads the same physical file via its original Windows path.
+    const safePath = process.platform === 'win32'
+      ? toMsysPosixPath(sentinelPath) : sentinelPath
+    const base = `${command}; code=$?; printf '%s' "$code" > ${quoteForSh(safePath)}`
 
     if (autoClose) {
       return `${base}; tmux kill-pane -t "$TMUX_PANE" >/dev/null 2>&1 || true; exit $code`
@@ -237,12 +258,31 @@ export async function launchDriverInTmuxOrFallback(
 
   const paneLauncher = await createPaneLauncher({requireTmuxSession: true})
   if (paneLauncher) {
+    // On Windows with tmux backend, resolve tool path from bash's perspective.
+    // findExecutable() returns Windows paths (.cmd/.exe) that bash can't execute.
+    let effectiveToolPath = toolPath
+    if (process.platform === 'win32' && paneLauncher.backend === 'tmux') {
+      const bashPath = await resolveToolForBash(options.toolName)
+      if (bashPath) {
+        effectiveToolPath = bashPath
+      } else {
+        return {
+          launched: false,
+          usedTmux: false,
+          backend: paneLauncher.backend,
+          mode,
+          toolPath,
+          reason: `${options.toolName} not found in bash PATH (required for tmux pane)`,
+        }
+      }
+    }
+
     const sentinel = createSentinelIpcPaths(`aiwcli-pane-${options.toolName}`)
 
     try {
       const baseCommand = buildCommandForBackend(
         paneLauncher.backend,
-        toolPath,
+        effectiveToolPath,
         args,
         envVars,
         mode,
