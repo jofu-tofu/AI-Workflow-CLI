@@ -2,9 +2,8 @@
  * Tmux execution backend — runs CLI agents in visible tmux panes
  * with sentinel-file-based output capture.
  *
- * Delegates pane management to tmux-driver.ts primitives. Does NOT use
- * launchDriverInTmuxOrFallback() because fallback is the caller's concern,
- * not the backend's.
+ * Self-contained tmux interaction — does not depend on tmux-driver.ts
+ * or the pane launcher stack (those are consolidated into the `aiw` CLI).
  */
 
 import * as fs from "node:fs";
@@ -18,13 +17,20 @@ import {
   readTextIfExists,
   waitForSentinelFile,
 } from "../../base/sentinel-ipc.js";
-import { execFileAsync } from "../../base/subprocess-utils.js";
-import { getTmuxAvailability, quoteForSh, normalizeSplitFlag } from "../../base/tmux-driver.js";
+import { execFileAsync, findExecutable } from "../../base/subprocess-utils.js";
 import type { ExecutionBackend, ExecutionRequest, ExecutionResult } from "../execution-backend.js";
 
 export interface TmuxBackendOptions {
   splitFlag?: string;
   splitTarget?: string;
+}
+
+function quoteForSh(input: string): string {
+  return `'${input.replaceAll("'", "'\"'\"'")}'`;
+}
+
+function normalizeSplitFlag(value: string | undefined): "-h" | "-v" {
+  return value?.trim() === "-v" ? "-v" : "-h";
 }
 
 export class TmuxBackend implements ExecutionBackend {
@@ -35,11 +41,21 @@ export class TmuxBackend implements ExecutionBackend {
   }
 
   async execute(request: ExecutionRequest): Promise<ExecutionResult> {
-    const tmux = getTmuxAvailability({ requireSessionEnv: true });
-    if (!tmux.available || !tmux.tmuxPath) {
+    if (!process.env.TMUX) {
       return {
         stdout: "",
-        stderr: `tmux pane launch failed: ${tmux.reason ?? "tmux unavailable"}`,
+        stderr: "tmux pane launch failed: TMUX is not set",
+        exitCode: 1,
+        killed: false,
+        signal: null,
+      };
+    }
+
+    const tmuxPath = findExecutable("tmux");
+    if (!tmuxPath) {
+      return {
+        stdout: "",
+        stderr: "tmux pane launch failed: tmux not found on PATH",
         exitCode: 1,
         killed: false,
         signal: null,
@@ -70,7 +86,7 @@ export class TmuxBackend implements ExecutionBackend {
       }
       tmuxArgs.push(`bash -lc ${quoteForSh(script)}`);
 
-      const split = await execFileAsync(tmux.tmuxPath, tmuxArgs, { timeout: 5000 });
+      const split = await execFileAsync(tmuxPath, tmuxArgs, { timeout: 5000 });
       if (split.exitCode !== 0) {
         return {
           stdout: "",
@@ -86,7 +102,7 @@ export class TmuxBackend implements ExecutionBackend {
 
       if (!finished) {
         if (paneId) {
-          await execFileAsync(tmux.tmuxPath, ["kill-pane", "-t", paneId], { timeout: 3000 });
+          await execFileAsync(tmuxPath, ["kill-pane", "-t", paneId], { timeout: 3000 });
         }
         return {
           stdout: "",

@@ -7,6 +7,9 @@ import {Flags} from '@oclif/core'
 
 import BaseCommand from '../lib/base-command.js'
 import {ProcessSpawnError} from '../lib/errors.js'
+import {createPaneLauncher} from '../lib/pane-launcher.js'
+import {launchDriverInTmuxOrFallback, type LaunchDriverResult} from '../lib/pane-driver.js'
+import {readSentinelExitCode, waitForSentinelFile} from '../lib/sentinel-ipc.js'
 import {spawnProcess} from '../lib/spawn.js'
 import {launchTerminal} from '../lib/terminal.js'
 import {enableTmuxMouse, findToolPath, launchInTmuxSession} from '../lib/tmux-session.js'
@@ -18,8 +21,10 @@ import {EXIT_CODES} from '../types/index.js'
  *
  * Spawns Claude Code CLI with --dangerously-skip-permissions flag,
  * or Codex CLI with --yolo flag, enabling unattended execution.
- * Designed for AIW hook system safety guardrails (requires aiw setup).
  * Supports multiple parallel sessions.
+ *
+ * When already inside tmux, splits a new pane (absorbs template pane-driver logic).
+ * Use --wait to block until the pane exits, --json for machine-readable output.
  */
 export default class LaunchCommand extends BaseCommand {
   static override description =
@@ -28,33 +33,44 @@ export default class LaunchCommand extends BaseCommand {
     '  --codex/-c: Launch Codex instead of Claude Code (uses --yolo flag)\n' +
     '  --new/-n: Open a new terminal in the current directory and launch there\n' +
     '  --no-tmux/-t: Launch directly in current shell instead of auto-launching tmux\n' +
-    '  --tmux-session/-s: tmux session name to reuse when auto-launching tmux (default is fresh session per launch)\n' +
-    '  --prompt/-p: Initial prompt to pass to the AI REPL at startup\n\n' +
+    '  --tmux-session/-s: tmux session name to reuse when auto-launching tmux\n' +
+    '  --prompt/-p: Initial prompt to pass to the AI REPL at startup\n' +
+    '  --wait: Block until launched pane exits (for scripted callers)\n' +
+    '  --json: JSON output (paneId, backend, exitCode, sentinel)\n' +
+    '  --split: Split direction when in tmux (auto|h|v, default: auto)\n' +
+    '  --env: Extra env vars as JSON string\n' +
+    '  --prompt-path: Path to prompt file for REPL-mode tools\n\n' +
     'EXIT CODES\n' +
     '  0  Success - AI assistant launched and exited successfully\n' +
     '  1  General error - unexpected runtime failure\n' +
     '  2  Invalid usage - check your arguments and flags\n' +
     '  3  Environment error - CLI not found (install Claude Code from https://claude.ai/download, Codex from npm)'
-static override examples = [
+
+  static override examples = [
     '<%= config.bin %> <%= command.id %>  # Auto-launches tmux with a fresh session when not already in tmux',
     '<%= config.bin %> <%= command.id %> --codex  # Launch Codex with --yolo flag',
-    '<%= config.bin %> <%= command.id %> -c  # Short form for --codex',
     '<%= config.bin %> <%= command.id %> --new  # Launch in a new terminal window',
-    '<%= config.bin %> <%= command.id %> -n  # Short form for --new',
-    '<%= config.bin %> <%= command.id %> --codex --new  # Launch Codex in new terminal',
     '<%= config.bin %> <%= command.id %> --no-tmux  # Run directly in current shell',
     '<%= config.bin %> <%= command.id %> --tmux-session aiw-main  # Reuse/attach explicit tmux session name',
     '<%= config.bin %> <%= command.id %> --prompt "Fix the login bug"  # Launch with initial prompt',
-    '<%= config.bin %> <%= command.id %> -p "Refactor auth module"  # Short form for --prompt',
+    '<%= config.bin %> <%= command.id %> --wait --json  # Block until pane exits, output JSON result',
+    '<%= config.bin %> <%= command.id %> --split h  # Force horizontal split in tmux',
     '<%= config.bin %> <%= command.id %> --debug  # Enable verbose logging',
-    '# Check exit code in Bash\n<%= config.bin %> <%= command.id %>\necho $?',
-    '# Check exit code in PowerShell\n<%= config.bin %> <%= command.id %>\necho $LASTEXITCODE',
   ]
-static override flags = {
+
+  static override flags = {
     ...BaseCommand.baseFlags,
     codex: Flags.boolean({
       char: 'c',
       description: 'Launch Codex instead of Claude Code (uses --yolo flag for full auto mode)',
+      default: false,
+    }),
+    env: Flags.string({
+      description: 'Extra env vars as JSON object string (e.g. \'{"FOO":"bar"}\')',
+      required: false,
+    }),
+    json: Flags.boolean({
+      description: 'JSON output (paneId, backend, exitCode, sentinel)',
       default: false,
     }),
     new: Flags.boolean({
@@ -77,10 +93,23 @@ static override flags = {
       required: false,
       hidden: true,
     }),
+    'prompt-path': Flags.string({
+      description: 'Path to prompt file for REPL-mode tools',
+      required: false,
+    }),
+    split: Flags.string({
+      description: 'Split direction when in tmux (auto|h|v, default: auto)',
+      options: ['auto', 'h', 'v'],
+      required: false,
+    }),
     'tmux-session': Flags.string({
       char: 's',
       description: 'tmux session name to reuse when auto-launching tmux (default: new aiw-<current-dir>-<unique> session)',
       required: false,
+    }),
+    wait: Flags.boolean({
+      description: 'Block until launched pane exits; output result',
+      default: false,
     }),
   }
 
@@ -90,7 +119,6 @@ static override flags = {
 
     // Clear Claude Code nesting-detection vars so the spawned REPL doesn't
     // refuse to start with "cannot launch claude within claude".
-    // Safe here because the launch command's only job is to spawn a new REPL.
     delete process.env['CLAUDECODE']
     delete process.env['CLAUDE_CODE_ENTRYPOINT']
 
@@ -102,14 +130,27 @@ static override flags = {
     const disableTmux = flags['no-tmux']
     const insideTmux = Boolean(process.env.TMUX)
     const interactiveTty = Boolean(process.stdin.isTTY && process.stdout.isTTY)
-    const shouldAutoTmux = !flags.new && !disableTmux && !insideTmux && interactiveTty
+    const wantJson = flags.json
+    const wantWait = flags.wait
 
-    // Resolve prompt from --prompt flag or --prompt-file (internal, used by --new propagation)
+    // Parse extra env vars
+    let extraEnv: Record<string, string> = {}
+    if (flags.env) {
+      try {
+        extraEnv = JSON.parse(flags.env)
+      } catch {
+        this.error('--env must be a valid JSON object string', {exit: EXIT_CODES.INVALID_USAGE})
+      }
+    }
+
+    // Resolve prompt from --prompt flag, --prompt-file, or --prompt-path
     let promptText = flags.prompt?.trim() || undefined
+    const promptPath = flags['prompt-path']?.trim() || undefined
     if (!promptText && flags['prompt-file']) {
       const pf = flags['prompt-file'].trim()
-      try { if (existsSync(pf)) promptText = readFileSync(pf, 'utf-8').trim() || undefined }
-      catch { /* ignore — prompt is best-effort enhancement */ }
+      try {
+        if (existsSync(pf)) promptText = readFileSync(pf, 'utf-8').trim() || undefined
+      } catch { /* ignore — prompt is best-effort enhancement */ }
     }
 
     // Handle --new flag: launch in a new terminal
@@ -138,36 +179,85 @@ static override flags = {
       return
     }
 
-    // Normal launch flow
+    // ── Pane splitting (new behavior) ──
+    // When a pane manager is available (tmux, Windows Terminal, etc.),
+    // use pane-driver to split a new pane instead of spawning directly.
+    // Uses the abstract factory to detect the backend automatically.
+    const paneLauncher = !disableTmux ? await createPaneLauncher({requireTmuxSession: true}) : null
+    if (paneLauncher && !flags.new) {
+      this.debug(`Pane manager detected (${paneLauncher.backend}); splitting new pane via pane-driver`)
+      if (insideTmux) enableTmuxMouse()
+
+      const splitFlag = flags.split === 'v' ? '-v' as const
+        : flags.split === 'h' ? '-h' as const
+          : 'auto' as const
+
+      // Build prompt path if we have prompt text
+      let effectivePromptPath = promptPath
+      if (!effectivePromptPath && promptText) {
+        const tmpFile = path.join(os.tmpdir(), `aiwcli-prompt-${Date.now()}-${process.pid}.txt`)
+        writeFileSync(tmpFile, promptText, {encoding: 'utf-8', mode: 0o600})
+        effectivePromptPath = tmpFile
+      }
+
+      const driverResult = await launchDriverInTmuxOrFallback({
+        toolName: cliCommand,
+        mode: 'repl',
+        args: cliArgs,
+        env: extraEnv,
+        cwd: process.cwd(),
+        splitFlag,
+        promptPath: effectivePromptPath,
+        allowExecFallback: false,
+      })
+
+      if (wantJson) {
+        await this.handleJsonOutput(driverResult, wantWait)
+        return
+      }
+
+      if (!driverResult.launched) {
+        // Fall back to direct spawn if pane-driver fails
+        this.warn(`Pane split failed (${driverResult.reason}), launching directly`)
+        const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
+        const exitCode = await spawnProcess(cliCommand, finalArgs)
+        this.exit(exitCode)
+        return
+      }
+
+      if (driverResult.paneId) {
+        this.logInfo(`Launched in tmux pane: ${driverResult.paneId}`)
+      } else {
+        this.logInfo(`Launched in ${driverResult.backend}`)
+      }
+
+      if (wantWait && driverResult.sentinelPath) {
+        await this.waitForSentinel(driverResult)
+      }
+
+      return
+    }
+
+    // ── Normal launch flow (no pane manager detected) ──
+    const shouldAutoTmux = !disableTmux && !insideTmux && interactiveTty
     let exitCode: number
 
     try {
-      // Version check only applies to Claude Code (not Codex)
       if (useCodex) {
         this.debug('Launching Codex with --yolo flag')
       } else {
-        // Check Claude Code version compatibility (non-blocking)
         const version = await getClaudeCodeVersion()
         const versionCheck = checkVersionCompatibility(version)
-
-        // Debug logging: show version information
         this.debug(`Claude Code version: ${versionCheck.version ?? 'unknown'}`)
         this.debug(`Compatibility status: ${versionCheck.compatible ? 'compatible' : 'incompatible'}`)
-
-        // Non-blocking warning for incompatibility or unknown version
         if (versionCheck.warning) {
           this.warn(versionCheck.warning)
         }
       }
 
-      // Spawn AI CLI with sandbox permissions disabled
-      // AIW hook system provides safety guardrails
-      // Continue launch regardless of version check result (graceful degradation)
       if (shouldAutoTmux) {
         const resolvedPath = findToolPath(cliCommand)
 
-        // On Windows, bare command names fail in MSYS2 tmux (PATH is reset by login shell).
-        // Skip tmux and fall back to direct spawn with explicit warning.
         if (!resolvedPath && process.platform === 'win32') {
           this.warn(`${cliCommand} not found on PATH — launching directly (install from https://claude.ai/download)`)
           const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
@@ -205,9 +295,6 @@ static override flags = {
       } else {
         if (disableTmux) {
           this.debug('tmux launch disabled via --no-tmux')
-        } else if (insideTmux) {
-          this.debug('Already inside tmux; launching directly in current pane')
-          enableTmuxMouse()
         } else if (!interactiveTty) {
           this.debug('Non-interactive terminal detected; launching directly')
         }
@@ -217,16 +304,48 @@ static override flags = {
       }
     } catch (error) {
       if (error instanceof ProcessSpawnError) {
-        // Actionable error message (already includes installation link)
         this.error(error.message, {exit: EXIT_CODES.ENVIRONMENT_ERROR})
       }
 
-      // Unexpected error
       this.error('Unexpected launch failure.', {exit: EXIT_CODES.GENERAL_ERROR})
     }
 
-    // Pass through Claude Code's exit code (outside try-catch to avoid catching exit)
     this.exit(exitCode)
+  }
+
+  private async handleJsonOutput(result: LaunchDriverResult, wait: boolean): Promise<void> {
+    let exitCode: number | undefined = result.exitCode
+
+    if (wait && result.launched && result.sentinelPath) {
+      const finished = await waitForSentinelFile(result.sentinelPath, 14_400_000)
+      if (finished) {
+        exitCode = readSentinelExitCode(result.sentinelPath, 1)
+      } else {
+        exitCode = -1
+      }
+    }
+
+    const output = {
+      launched: result.launched,
+      backend: result.backend,
+      paneId: result.paneId ?? null,
+      sentinelPath: result.sentinelPath ?? null,
+      exitCode: exitCode ?? null,
+      reason: result.reason ?? null,
+    }
+    this.log(JSON.stringify(output))
+    this.exit(exitCode ?? 0)
+  }
+
+  private async waitForSentinel(result: LaunchDriverResult): Promise<void> {
+    if (!result.sentinelPath) return
+    const finished = await waitForSentinelFile(result.sentinelPath, 14_400_000)
+    if (finished) {
+      const exitCode = readSentinelExitCode(result.sentinelPath, 1)
+      this.exit(exitCode)
+    } else {
+      this.exit(1)
+    }
   }
 
   private buildUniqueTmuxSessionName(base: string): string {

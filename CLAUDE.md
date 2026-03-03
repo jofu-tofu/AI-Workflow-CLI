@@ -23,7 +23,7 @@ Changes to the working directory (`.aiwcli/`) should also be applied to the temp
 - `.claude/skills/codex/` → `packages/cli/src/templates/_shared/.claude/skills/codex/`
 - `.codex/workflows/codex.md` → `packages/cli/src/templates/_shared/.codex/workflows/codex.md`
 - `.claude/settings.json` → `packages/cli/src/templates/cc-native/.claude/settings.json`
-- `packages/cli/src/lib/tmux-primitives.ts` → `packages/cli/src/templates/_shared/lib-ts/base/tmux-primitives.ts` (via build:templates copy)
+
 
 **When to sync:**
 - Adding new hooks
@@ -98,7 +98,7 @@ Cohesive subsystems are organized as self-contained folders, following the hando
 - `_cc-native/plan-review/` — multi-agent plan review pipeline
 - `_cc-native/artifacts/` — review artifact generation and tracking
 - `_cc-native/lib-ts/rlm/` — retrieval-augmented learning memory
-- `_shared/skills/codex/` — Codex pane launcher skill (tmux/wt/window)
+- `_shared/skills/codex/` — Codex pane launcher skill (shells out to `aiw launch`)
 - `_shared/skills/meta-plan/` — prompt amplification for complex problems
 
 **Hooks are NOT co-located with their owning system.**
@@ -113,7 +113,6 @@ Read the relevant CLAUDE.md before working in these areas:
 
 **`.aiwcli/` (working instance — edit here first, then sync to templates):**
 - `.aiwcli/_shared/lib-ts/CLAUDE.md` — full hook API: emit channels, logging, output schema
-- `.aiwcli/_shared/lib-ts/base/tmux-driver.ts` — shared cross-platform pane launch/fallback utility for multi-provider drivers (not auto-wired to hooks)
 - `.aiwcli/_shared/lib-ts/context/CLAUDE.md` — context selector, plan manager, task tracker
 - `.aiwcli/_shared/skills/handoff-system/CLAUDE.md` — handoff creation, section markers, restore spec
 - `.aiwcli/_shared/skills/meta-plan/CLAUDE.md` — prompt amplifier for complex problems

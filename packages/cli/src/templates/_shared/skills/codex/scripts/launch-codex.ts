@@ -11,10 +11,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { launchDriverInTmuxOrFallback } from "../../../lib-ts/base/tmux-driver.js";
-import { cleanupSentinelPath } from "../../../lib-ts/base/sentinel-ipc.js";
+import { aiwLaunch } from "../../../lib-ts/base/aiw-cli.js";
 import { getProjectRoot } from "../../../lib-ts/base/constants.js";
-import { resolveCodexModel, codexReplSpec, buildCliInvocation, isCodexSandbox, type CodexSandbox, type CliArgSpec } from "../../../lib-ts/base/cli-args.js";
+import { resolveCodexModel, buildCliInvocation, isCodexSandbox, type CodexSandbox, type CliArgSpec } from "../../../lib-ts/base/cli-args.js";
 import { CODEX_MODELS } from "../../../lib-ts/base/models.js";
 import { logDebug, logWarn } from "../../../lib-ts/base/logger.js";
 import { displayPath } from "../../../lib-ts/base/utils.js";
@@ -40,6 +39,14 @@ const SESSION_MTIME_WINDOW_MS = 120000;
 
 function eprint(...args: unknown[]): void {
   process.stderr.write(args.map(String).join(" ") + "\n");
+}
+
+function cleanupSentinel(sentinelPath: string | null | undefined): void {
+  if (!sentinelPath) return;
+  try {
+    const dir = path.dirname(sentinelPath);
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch { /* best-effort */ }
 }
 
 function sleep(ms: number): Promise<void> {
@@ -394,7 +401,6 @@ if (extraPrompt && promptPath && !extraPromptEmbedded) {
 // Launch Codex
 // ---------------------------------------------------------------------------
 
-const codexArgs = buildCliInvocation(codexReplSpec(resolvedModel, sandboxFlag, yolo)).args;
 const launchCwd = process.env.AIW_CALLER_CWD?.trim() || process.cwd();
 if (yolo) console.log("Mode: YOLO (bypass approvals and sandbox)");
 if (sandboxFlag) console.log(`Sandbox: ${sandboxFlag}`);
@@ -403,14 +409,16 @@ if (resolvedModel) console.log(`Model: ${resolvedModel}${modelFlag !== resolvedM
 logDebug("codex-skill", `Launching: model=${resolvedModel ?? "default"}, sandbox=${sandboxFlag ?? "default"}, yolo=${yolo}, extraPrompt=${!!extraPrompt}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
 
 const launchStartedAtMs = Date.now();
-const result = await launchDriverInTmuxOrFallback({
-  toolName: "codex",
-  mode: "repl",
-  args: codexArgs,
-  cwd: launchCwd,
-  splitFlag: "auto",
+
+// Shell out to `aiw launch` instead of importing tmux modules directly.
+// This consolidates all pane-launching logic in the CLI binary.
+const result = await aiwLaunch({
+  codex: true,
+  wait: false,
+  json: true,
+  split: "auto",
   promptPath: promptPath ?? undefined,
-  allowExecFallback: false,
+  cwd: launchCwd,
 });
 
 if (!result.launched) {
@@ -497,10 +505,10 @@ if (watch && (result.paneId || result.sentinelPath)) {
       console.log(`\n[summary_file:${fallbackPath}]`);
     }
   } finally {
-    cleanupSentinelPath(result.sentinelPath);
+    cleanupSentinel(result.sentinelPath);
   }
 } else {
-  cleanupSentinelPath(result.sentinelPath);
+  cleanupSentinel(result.sentinelPath);
 }
 
 if (result.reason) {

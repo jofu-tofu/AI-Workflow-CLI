@@ -368,9 +368,35 @@ export async function installTemplate(
 
   // Settings reconstruction is handled by the caller via reconstructIdeSettings()
 
+  // Write resolved CLI binary path so template scripts can shell out to `aiw`
+  await writeAiwBinPath(containerDir)
+
   return {
     installedFolders,
     sharedSettingsMerged: false,
     templatePath,
+  }
+}
+
+/**
+ * Write the resolved `aiw` binary path to `.aiwcli/.aiw-bin-path`.
+ * Template scripts read this file to find the CLI binary for `aiw launch`.
+ */
+async function writeAiwBinPath(containerDir: string): Promise<void> {
+  try {
+    // process.argv[1] is the main script entry point (e.g., /path/to/aiw/bin/run.js)
+    // Resolve to the bin directory to find the actual `aiw` executable
+    const {execSync} = await import('node:child_process')
+    const cmd = process.platform === 'win32' ? 'where aiw' : 'which aiw'
+    const resolved = execSync(cmd, {encoding: 'utf-8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe']})
+      .trim()
+      .split(/\r?\n/)[0]
+      ?.trim()
+
+    if (resolved) {
+      await fs.writeFile(join(containerDir, '.aiw-bin-path'), resolved, 'utf-8')
+    }
+  } catch {
+    // Best-effort — aiw will still be found on PATH at runtime
   }
 }

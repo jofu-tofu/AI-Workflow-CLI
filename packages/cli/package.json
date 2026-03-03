@@ -82,7 +82,7 @@
   },
   "scripts": {
     "build": "shx rm -rf dist && tsc -b && npm run build:templates",
-    "build:templates": "shx mkdir -p dist/templates && shx cp -r src/templates/_shared dist/templates/ && shx cp -r src/templates/cc-native dist/templates/ && shx cp src/templates/CLAUDE.md dist/templates/ && shx cp src/lib/tmux-primitives.ts dist/templates/_shared/lib-ts/base/",
+    "build:templates": "shx mkdir -p dist/templates && shx cp -r src/templates/_shared dist/templates/ && shx cp -r src/templates/cc-native dist/templates/ && shx cp src/templates/CLAUDE.md dist/templates/",
     "build:watch": "tsc -b --watch",
     "check": "npm run lint && npm run build",
     "clean": "shx rm -rf dist",

@@ -36,11 +36,9 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 1. `CLAUDE_SESSION_ID` env → `getContextBySessionId()` → `findLatestPlan(contextId)`
 2. Fallback: scan `_output/contexts/*/plans/*.md` by mtime
 
-**Dependencies (all from `_shared/lib-ts/`):**
-- `base/tmux-driver.ts` — pane launcher orchestration with cross-platform fallback
-- `base/pane-launcher.ts` + `base/launchers/*` — tmux / wt / window launchers
+**Dependencies:**
+- `base/aiw-cli.ts` — shells out to `aiw launch` for pane management (no direct tmux imports)
 - `base/cli-args.ts` — model/sandbox/yolo CLI arg generation
-- `base/sentinel-ipc.ts` — completion sentinel file lifecycle
 - `context/*` — context lookup, formatting, plan discovery
 
 **Watch behavior (single entry point):**
@@ -59,7 +57,7 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 
 **Design decisions:**
 - Prompt is delivered at launch time (no tmux buffer paste/capture workflow)
-- Pane backend detection order: tmux (in-session) → Windows Terminal split pane → Windows new window → non-interactive exec fallback
+- Pane backend detection delegated to `aiw launch` (tmux → gitbash-tmux → window fallback → non-interactive exec)
 - `_shared` only — never imports from `_cc-native`
 - Watch path is best-effort and does not change launch success semantics
 

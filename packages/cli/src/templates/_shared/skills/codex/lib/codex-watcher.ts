@@ -5,9 +5,9 @@ import * as path from "node:path";
 import { inference } from "../../../lib-ts/base/inference.js";
 import { logDebug, logWarn } from "../../../lib-ts/base/logger.js";
 import { CODEX_MODELS } from "../../../lib-ts/base/models.js";
-import type { PaneBackend } from "../../../lib-ts/base/pane-launcher.js";
-import { execFileAsync } from "../../../lib-ts/base/subprocess-utils.js";
-import { getTmuxAvailability } from "../../../lib-ts/base/tmux-driver.js";
+import { execFileAsync, findExecutable } from "../../../lib-ts/base/subprocess-utils.js";
+
+type PaneBackend = "tmux" | "window" | "exec";
 
 export const POLL_INTERVAL_MS = 2000;
 export const POLL_TIMEOUT_MS = 3000;
@@ -205,9 +205,9 @@ export async function waitForPaneClose(
 
   if (!paneId) return;
 
-  const tmux = getTmuxAvailability({ requireSessionEnv: false });
-  if (!tmux.available || !tmux.tmuxPath) {
-    logWarn("codex-capture", `tmux unavailable while watching pane ${paneId}: ${tmux.reason ?? "unknown reason"}`);
+  const tmuxPath = findExecutable("tmux");
+  if (!tmuxPath) {
+    logWarn("codex-capture", `tmux unavailable while watching pane ${paneId}`);
     return;
   }
 
@@ -218,7 +218,7 @@ export async function waitForPaneClose(
       return;
     }
 
-    const result = await execFileAsync(tmux.tmuxPath, ["list-panes", "-a", "-F", "#{pane_id}"], {
+    const result = await execFileAsync(tmuxPath, ["list-panes", "-a", "-F", "#{pane_id}"], {
       timeout: POLL_TIMEOUT_MS,
     });
 
