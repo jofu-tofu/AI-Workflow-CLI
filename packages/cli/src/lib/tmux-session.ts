@@ -168,18 +168,20 @@ export function buildShellCommand(opts: TmuxSessionOptions): string {
   // Increase scrollback buffer from default 2000
   parts.push('tmux set-option -g history-limit 50000 >/dev/null 2>&1 || true')
 
-  // On Windows, winpty drops mouse events. Override tmux's default wheel behavior
-  // to always use copy-mode scrolling instead of forwarding to the app.
-  if (process.platform === 'win32') {
-    parts.push("tmux bind -n WheelUpPane copy-mode -e \\; send-keys -M >/dev/null 2>&1 || true")
-    parts.push("tmux bind -n WheelDownPane send-keys -M >/dev/null 2>&1 || true")
-  }
-
   // Enable truecolor passthrough for common outer terminals (xterm covers Git Bash/mintty).
   // Note: default-terminal is now set BEFORE session creation (in launchInTmuxSession)
   // so the first pane gets the correct TERM. terminal-overrides is session-scoped and
   // must run after the session exists.
-  parts.push('tmux set -a terminal-overrides ",xterm*:Tc,alacritty:Tc" >/dev/null 2>&1 || true')
+  if (process.platform === 'win32') {
+    // On Windows, winpty bridges MSYS2 pty to ConPTY but mangles mouse events
+    // (converting wheel to arrow keys). Strip 'kmous' (mouse key encoding) from
+    // the pane terminal so tmux can't forward mouse events to apps. This forces
+    // tmux to handle ALL mouse events internally — wheel scrolls via copy-mode,
+    // click selects panes, etc. — instead of forwarding to winpty where they break.
+    parts.push('tmux set -ga terminal-overrides ",xterm*:Tc,alacritty:Tc,*:kmous@" >/dev/null 2>&1 || true')
+  } else {
+    parts.push('tmux set -a terminal-overrides ",xterm*:Tc,alacritty:Tc" >/dev/null 2>&1 || true')
+  }
 
   const cmdParts: string[] = []
 
@@ -207,10 +209,12 @@ export function buildShellCommand(opts: TmuxSessionOptions): string {
   parts.push('export COLORTERM=truecolor')
 
   // On Windows, use winpty to bridge MSYS2 pty (tmux) to ConPTY (native Windows TUI).
-  // exec is safe here because winpty is an MSYS2 binary that maintains the pty bridge —
-  // unlike exec-ing a native .exe directly, which destroys the MSYS2 pty layer.
+  // winpty cannot execute shell scripts (npm shims like 'codex', 'claude' are #!/bin/sh
+  // wrappers). Wrap in `bash -c` so winpty launches bash.exe (a real binary), which
+  // then runs the shell script that execs into node.exe.
   if (process.platform === 'win32') {
-    parts.push(`exec winpty ${cmdParts.join(' ')}`)
+    const innerCmd = cmdParts.join(' ')
+    parts.push(`exec winpty bash -c ${quoteForSh(innerCmd)}`)
   } else {
     parts.push(`exec ${cmdParts.join(' ')}`)
   }
@@ -335,10 +339,9 @@ export function enableTmuxMouse(): void {
     execFileSync(bashPath, ['-lc', `${tmuxPrefix} set-option -g mouse on`], winOpts)
     execFileSync(bashPath, ['-lc', `${tmuxPrefix} set-option -g history-limit 50000`], winOpts)
 
-    // On Windows, winpty drops mouse events. Override tmux's default wheel behavior
-    // to always use copy-mode scrolling instead of forwarding to the app.
-    execFileSync(bashPath, ['-lc', `${tmuxPrefix} bind -n WheelUpPane copy-mode -e \\\\; send-keys -M`], winOpts)
-    execFileSync(bashPath, ['-lc', `${tmuxPrefix} bind -n WheelDownPane send-keys -M`], winOpts)
+    // Strip 'kmous' so tmux handles mouse internally instead of forwarding to winpty
+    // (winpty mangles wheel events into arrow keys). See buildShellCommand() for details.
+    execFileSync(bashPath, ['-lc', `${tmuxPrefix} set -ga terminal-overrides ',*:kmous@'`], winOpts)
   } catch {
     // Best-effort — ignore failures
   }
