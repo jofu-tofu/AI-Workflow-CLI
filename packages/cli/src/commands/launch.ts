@@ -129,6 +129,7 @@ export default class LaunchCommand extends BaseCommand {
     const launchFlag = useCodex ? '--codex' : ''
     const disableTmux = flags['no-tmux']
     const insideTmux = Boolean(process.env.TMUX)
+    const isWindows = process.platform === 'win32'
     const interactiveTty = Boolean(process.stdin.isTTY && process.stdout.isTTY)
     const wantJson = flags.json
     const wantWait = flags.wait
@@ -183,7 +184,10 @@ export default class LaunchCommand extends BaseCommand {
     // When a pane manager is available (tmux, Windows Terminal, etc.),
     // use pane-driver to split a new pane instead of spawning directly.
     // Uses the abstract factory to detect the backend automatically.
-    const paneLauncher = !disableTmux ? await createPaneLauncher({requireTmuxSession: true}) : null
+    const shouldUsePaneLauncher = !disableTmux && (!isWindows || insideTmux)
+    const paneLauncher = shouldUsePaneLauncher
+      ? await createPaneLauncher({requireTmuxSession: true})
+      : null
     if (paneLauncher && !flags.new) {
       this.debug(`Pane manager detected (${paneLauncher.backend}); splitting new pane via pane-driver`)
       if (insideTmux) enableTmuxMouse()
@@ -239,7 +243,7 @@ export default class LaunchCommand extends BaseCommand {
     }
 
     // ── Normal launch flow (no pane manager detected) ──
-    const shouldAutoTmux = !disableTmux && !insideTmux && interactiveTty
+    const shouldAutoTmux = !disableTmux && !isWindows && !insideTmux && interactiveTty
     let exitCode: number
 
     try {
