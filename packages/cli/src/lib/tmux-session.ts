@@ -165,14 +165,20 @@ export function buildShellCommand(opts: TmuxSessionOptions): string {
     parts.push('tmux set-option -g mouse on >/dev/null 2>&1 || true')
   }
 
-  // Enable 256-color and truecolor support inside tmux.
-  // Try tmux-256color first (best terminfo), fall back to screen-256color (universally available).
-  // Session-scoped (no -g) to avoid mutating other tmux sessions on this server.
-  parts.push(
-    'if tmux set default-terminal "tmux-256color" 2>/dev/null; then true; '
-    + 'else tmux set default-terminal "screen-256color" 2>/dev/null || true; fi',
-  )
+  // Increase scrollback buffer from default 2000
+  parts.push('tmux set-option -g history-limit 50000 >/dev/null 2>&1 || true')
+
+  // On Windows, winpty drops mouse events. Override tmux's default wheel behavior
+  // to always use copy-mode scrolling instead of forwarding to the app.
+  if (process.platform === 'win32') {
+    parts.push("tmux bind -n WheelUpPane copy-mode -e \\; send-keys -M >/dev/null 2>&1 || true")
+    parts.push("tmux bind -n WheelDownPane send-keys -M >/dev/null 2>&1 || true")
+  }
+
   // Enable truecolor passthrough for common outer terminals (xterm covers Git Bash/mintty).
+  // Note: default-terminal is now set BEFORE session creation (in launchInTmuxSession)
+  // so the first pane gets the correct TERM. terminal-overrides is session-scoped and
+  // must run after the session exists.
   parts.push('tmux set -a terminal-overrides ",xterm*:Tc,alacritty:Tc" >/dev/null 2>&1 || true')
 
   const cmdParts: string[] = []
@@ -195,6 +201,10 @@ export function buildShellCommand(opts: TmuxSessionOptions): string {
     const bootstrap = `Read startup instructions from this file path before taking action: ${posixTmpFile}. Use that file as the initial context.`
     cmdParts.push(quoteForSh(bootstrap))
   }
+
+  // Export COLORTERM so CLI tools (Claude Code, etc.) know truecolor is available.
+  // Outside tmux, mintty sets this; tmux does not propagate it into panes.
+  parts.push('export COLORTERM=truecolor')
 
   // On Windows, use winpty to bridge MSYS2 pty (tmux) to ConPTY (native Windows TUI).
   // exec is safe here because winpty is an MSYS2 binary that maintains the pty bridge —
@@ -229,6 +239,18 @@ export async function launchInTmuxSession(options: TmuxSessionOptions): Promise<
   // Strategy 1: Native tmux on PATH (Unix only — on Windows, MSYS2 tmux.exe
   // appears on PATH but can't run outside a bash/MSYS2 environment)
   if (process.platform !== 'win32' && isNativeTmuxAvailable()) {
+    // Set default-terminal BEFORE creating the session so the first pane inherits
+    // the correct TERM. Setting it inside buildShellCommand() is too late — TERM is
+    // assigned at pane creation time, so the pane would get tmux's compile-time default.
+    try {
+      execSync('tmux start-server', {stdio: 'ignore', timeout: 3000})
+      try {
+        execSync('tmux set -g default-terminal "tmux-256color"', {stdio: 'ignore', timeout: 3000})
+      } catch {
+        execSync('tmux set -g default-terminal "screen-256color"', {stdio: 'ignore', timeout: 3000})
+      }
+    } catch { /* best-effort — session creation will still work */ }
+
     const args = ['new-session']
     if (reattach) args.push('-A')
     args.push('-c', process.cwd(), '-s', sessionName, shellCommand)
@@ -250,10 +272,32 @@ export async function launchInTmuxSession(options: TmuxSessionOptions): Promise<
       return {exitCode: -1, usedTmux: false, reason: 'winpty not available in Git Bash (required for TUI apps in MSYS2 tmux)'}
     }
 
+    // Set default-terminal BEFORE creating the session so the first pane inherits
+    // the correct TERM (assigned at pane creation time, not after).
+    const posixSocket = toMsysPosixPath(TMUX_SOCKET_PATH)
+    try {
+      execFileSync(bashPath, ['-lc', `tmux -S ${quoteForSh(posixSocket)} start-server`], {
+        stdio: 'ignore', timeout: 3000,
+        env: {...process.env, MSYS_NO_PATHCONV: '1'}, windowsHide: true,
+      })
+      try {
+        execFileSync(bashPath, ['-lc', `tmux -S ${quoteForSh(posixSocket)} set -g default-terminal 'tmux-256color'`], {
+          stdio: 'ignore', timeout: 3000,
+          env: {...process.env, MSYS_NO_PATHCONV: '1'}, windowsHide: true,
+        })
+      } catch {
+        try {
+          execFileSync(bashPath, ['-lc', `tmux -S ${quoteForSh(posixSocket)} set -g default-terminal 'screen-256color'`], {
+            stdio: 'ignore', timeout: 3000,
+            env: {...process.env, MSYS_NO_PATHCONV: '1'}, windowsHide: true,
+          })
+        } catch { /* best-effort */ }
+      }
+    } catch { /* best-effort — session creation will still work */ }
+
     // ANTI-PATTERN: Do not use bash positional params ($1, $2, $3) to pass shell
     // commands to tmux on MSYS2. Quoting does not survive the bash→exec→tmux→sh
     // chain. Instead, build a single bash string with per-arg quoteForSh().
-    const posixSocket = toMsysPosixPath(TMUX_SOCKET_PATH)
     const posixCwd = toMsysPosixPath(process.cwd())
     const tmuxArgs = ['-S', posixSocket, 'new-session']
     if (reattach) tmuxArgs.push('-A')
@@ -272,6 +316,7 @@ export function enableTmuxMouse(): void {
   try {
     if (process.platform !== 'win32') {
       execSync('tmux set-option -g mouse on', {stdio: 'ignore', timeout: 3000})
+      execSync('tmux set-option -g history-limit 50000', {stdio: 'ignore', timeout: 3000})
       return
     }
 
@@ -279,12 +324,21 @@ export function enableTmuxMouse(): void {
     if (!bashPath) return
 
     const posixSocket = toMsysPosixPath(TMUX_SOCKET_PATH)
-    execFileSync(bashPath, ['-lc', `tmux -S ${quoteForSh(posixSocket)} set-option -g mouse on`], {
-      stdio: 'ignore',
+    const winOpts = {
+      stdio: 'ignore' as const,
       timeout: 3000,
       env: {...process.env, MSYS_NO_PATHCONV: '1'},
       windowsHide: true,
-    })
+    }
+    const tmuxPrefix = `tmux -S ${quoteForSh(posixSocket)}`
+
+    execFileSync(bashPath, ['-lc', `${tmuxPrefix} set-option -g mouse on`], winOpts)
+    execFileSync(bashPath, ['-lc', `${tmuxPrefix} set-option -g history-limit 50000`], winOpts)
+
+    // On Windows, winpty drops mouse events. Override tmux's default wheel behavior
+    // to always use copy-mode scrolling instead of forwarding to the app.
+    execFileSync(bashPath, ['-lc', `${tmuxPrefix} bind -n WheelUpPane copy-mode -e \\\\; send-keys -M`], winOpts)
+    execFileSync(bashPath, ['-lc', `${tmuxPrefix} bind -n WheelDownPane send-keys -M`], winOpts)
   } catch {
     // Best-effort — ignore failures
   }
@@ -322,7 +376,10 @@ export function enableTmuxColors(): void {
         execFileSync(bashPath, ['-lc', `tmux -S ${quoteForSh(posixSocket)} set default-terminal 'screen-256color'`], winOpts)
       } catch { /* best-effort */ }
     }
-    execFileSync(bashPath, ['-lc', `tmux -S ${quoteForSh(posixSocket)} set -a terminal-overrides ',xterm*:Tc,alacritty:Tc'`], winOpts)
+    // Separate try/catch so terminal-overrides failure doesn't suppress default-terminal success
+    try {
+      execFileSync(bashPath, ['-lc', `tmux -S ${quoteForSh(posixSocket)} set -a terminal-overrides ',xterm*:Tc,alacritty:Tc'`], winOpts)
+    } catch { /* best-effort */ }
   } catch {
     // Best-effort — ignore failures
   }

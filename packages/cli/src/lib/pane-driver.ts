@@ -279,12 +279,18 @@ export async function launchDriverInTmuxOrFallback(
 
     const sentinel = createSentinelIpcPaths(`aiwcli-pane-${options.toolName}`)
 
+    // When launching via tmux, inject COLORTERM so CLI tools know truecolor is available.
+    // Outside tmux, mintty sets this; tmux does not propagate it into panes.
+    const effectiveEnvVars = paneLauncher.backend === 'tmux'
+      ? {COLORTERM: 'truecolor', ...envVars}
+      : envVars
+
     try {
       const baseCommand = buildCommandForBackend(
         paneLauncher.backend,
         effectiveToolPath,
         args,
-        envVars,
+        effectiveEnvVars,
         mode,
         options.promptPath,
       )
