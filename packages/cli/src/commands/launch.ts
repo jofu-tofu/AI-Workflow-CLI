@@ -131,7 +131,7 @@ static override flags = {
     // Determine which CLI to launch
     const useCodex = flags.codex
     const cliCommand = useCodex ? 'codex' : 'claude'
-    const cliArgs = useCodex ? ['--yolo'] : ['--dangerously-skip-permissions']
+    const cliArgs = useCodex ? this.buildCodexArgs() : ['--dangerously-skip-permissions']
     const launchFlag = useCodex ? '--codex' : ''
     const disableTmux = flags['no-tmux']
     const insideTmux = Boolean(process.env.TMUX)
@@ -174,6 +174,7 @@ static override flags = {
       const result = await launchTerminal({
         cwd,
         command: launchCmd,
+        windowsShellPreference: useCodex && process.platform === 'win32' ? 'git-bash' : 'default',
         debugLog: (msg) => this.debug(msg),
       })
 
@@ -271,8 +272,8 @@ static override flags = {
         exitCode = await this.launchViaAutoTmuxOrInline({
           cliCommand,
           cliArgs,
-          promptText,
-          tmuxSessionFlag: flags['tmux-session'],
+          ...(promptText ? {promptText} : {}),
+          ...(flags['tmux-session'] ? {tmuxSessionFlag: flags['tmux-session']} : {}),
         })
       } else {
         if (disableTmux) {
@@ -383,6 +384,11 @@ static override flags = {
 
   private shellQuote(input: string): string {
     return `'${input.replaceAll("'", `'"'"'`)}'`
+  }
+
+  private buildCodexArgs(): string[] {
+    if (process.platform !== 'win32') return ['--yolo']
+    return ['-c', 'shell_type="bash"', '--yolo']
   }
 
   private async waitForSentinel(result: LaunchDriverResult): Promise<void> {

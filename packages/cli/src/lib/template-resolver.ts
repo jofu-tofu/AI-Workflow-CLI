@@ -2,6 +2,13 @@ import {promises as fs} from 'node:fs'
 import {dirname, join} from 'node:path'
 import {fileURLToPath} from 'node:url'
 
+function getTemplatesRootDir(): string {
+  const currentFileUrl = import.meta.url
+  const currentFilePath = fileURLToPath(currentFileUrl)
+  const currentDir = dirname(currentFilePath)
+  return join(currentDir, '..', 'templates')
+}
+
 /**
  * Resolve the absolute path to a bundled template root.
  * Works in both development (src/) and production (dist/) contexts.
@@ -23,14 +30,10 @@ export async function getTemplatePath(templateName: string): Promise<string> {
   // Get the directory of this file
   // In dev: .../aiwcli/src/lib/
   // In prod: .../aiwcli/dist/lib/
-  const currentFileUrl = import.meta.url
-  const currentFilePath = fileURLToPath(currentFileUrl)
-  const currentDir = dirname(currentFilePath)
-
   // Go up one level and into templates/<templateName>
   // src/lib/ → src/templates/<templateName>/
   // dist/lib/ → dist/templates/<templateName>/
-  const templatePath = join(currentDir, '..', 'templates', templateName)
+  const templatePath = join(getTemplatesRootDir(), templateName)
 
   // Validate template exists
   try {
@@ -50,11 +53,7 @@ export async function getTemplatePath(templateName: string): Promise<string> {
  */
 
 export async function getAvailableTemplates(): Promise<string[]> {
-  const currentFileUrl = import.meta.url
-  const currentFilePath = fileURLToPath(currentFileUrl)
-  const currentDir = dirname(currentFilePath)
-
-  const templatesDir = join(currentDir, '..', 'templates')
+  const templatesDir = getTemplatesRootDir()
 
   try {
     const entries = await fs.readdir(templatesDir, {withFileTypes: true})
@@ -68,5 +67,18 @@ export async function getAvailableTemplates(): Promise<string[]> {
       `This indicates a corrupted installation. Please reinstall aiwcli.`
     )
   }
+}
+
+/**
+ * Discover IDE names available in a template path by scanning top-level dot-folders.
+ * Example: .claude, .codex -> ['claude', 'codex']
+ */
+export async function getTemplateIdeNamesByPath(templatePath: string): Promise<string[]> {
+  const entries = await fs.readdir(templatePath, {withFileTypes: true})
+  return entries
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith('.'))
+    .map((entry) => entry.name.slice(1))
+    .filter((name) => name.length > 0)
+    .sort((a, b) => a.localeCompare(b))
 }
 

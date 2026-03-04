@@ -4,7 +4,7 @@ import {join} from 'node:path'
 import {expect} from 'chai'
 import {describe, it} from 'vitest'
 
-import {getTemplatePath} from '../../src/lib/template-resolver.js'
+import {getTemplateIdeNamesByPath, getTemplatePath} from '../../src/lib/template-resolver.js'
 
 describe('Template Resolver', () => {
   it('should resolve to a valid template path', async () => {
@@ -26,5 +26,21 @@ describe('Template Resolver', () => {
 
     // Check for .claude subdirectories
     expect(existsSync(join(templatePath, '.claude'))).to.be.true
+  })
+
+  it('should discover IDE folders for _shared template', async () => {
+    const sharedPath = await getTemplatePath('_shared')
+    const ides = await getTemplateIdeNamesByPath(sharedPath)
+    expect(ides).to.include('claude')
+    expect(ides).to.include('codex')
+    expect(ides).to.include('windsurf')
+  })
+
+  it('should discover IDE folders for cc-native template', async () => {
+    const templatePath = await getTemplatePath('cc-native')
+    const ides = await getTemplateIdeNamesByPath(templatePath)
+    expect(ides).to.include('claude')
+    expect(ides).to.include('windsurf')
+    expect(ides).to.not.include('codex')
   })
 })

@@ -32,6 +32,7 @@ import {spawn} from 'node:child_process'
 
 import {isCommandAvailable} from './runtime/executable-policy.js'
 import {isWindowsPlatform} from './runtime/platform-adapter.js'
+import {findMsysBash} from './runtime/tmux-preflight.js'
 
 /**
  * Return a copy of process.env with Claude Code nesting-detection vars removed.
@@ -64,6 +65,13 @@ interface TerminalLaunchOptions {
    * Working directory where the terminal should open.
    */
   cwd: string
+
+  /**
+   * Preferred shell when launching on Windows.
+   * - default: Existing behavior (PowerShell in wt or fallback)
+   * - git-bash: Prefer Git Bash in wt, fallback to PowerShell if unavailable
+   */
+  windowsShellPreference?: 'default' | 'git-bash'
 
   /**
    * Optional debug logging function.
@@ -142,10 +150,48 @@ async function launchPowerShellFallback(
 async function launchWindowsTerminal(
   cwd: string,
   command: string,
+  shellPreference: 'default' | 'git-bash',
   debugLog?: (message: string) => void,
 ): Promise<TerminalLaunchResult> {
   const powershellCmd = detectPowerShell()
-  debugLog?.(`Detected PowerShell: ${powershellCmd}`)
+  debugLog?.(`Detected PowerShell: ${powershellCmd}; shell preference: ${shellPreference}`)
+
+  if (shellPreference === 'git-bash') {
+    const gitBashPath = findMsysBash()
+    if (gitBashPath) {
+      const escapedPath = cwd.replaceAll("'", String.raw`'\''`)
+      const bashCmd = `cd '${escapedPath}' && ${command}; exec bash`
+      debugLog?.(`Using Git Bash for Windows terminal: ${gitBashPath}`)
+
+      return new Promise<TerminalLaunchResult>((resolve) => {
+        const terminal = spawn('wt', ['-d', cwd, gitBashPath, '-lc', bashCmd], {
+          detached: true,
+          stdio: 'ignore',
+          env: cleanTerminalEnv(),
+        })
+
+        terminal.on('error', (err) => {
+          if (err.message.includes('ENOENT')) {
+            debugLog?.('wt.exe not found for Git Bash launch, falling back to PowerShell')
+            launchPowerShellFallback(cwd, command, powershellCmd, debugLog)
+              .then(resolve)
+              .catch(() => resolve({success: false, error: 'Failed to launch PowerShell fallback'}))
+            return
+          }
+
+          debugLog?.(`Git Bash launch via wt failed (${err.message}), falling back to PowerShell`)
+          launchPowerShellFallback(cwd, command, powershellCmd, debugLog)
+            .then(resolve)
+            .catch(() => resolve({success: false, error: 'Failed to launch PowerShell fallback'}))
+        })
+
+        terminal.unref()
+        resolve({success: true})
+      })
+    }
+
+    debugLog?.('Git Bash requested but not found, falling back to PowerShell')
+  }
 
   return new Promise<TerminalLaunchResult>((resolve) => {
     const terminal = spawn('wt', ['-d', cwd, powershellCmd, '-NoExit', '-Command', command], {
@@ -349,14 +395,14 @@ async function launchLinuxTerminal(
  * ```
  */
 export async function launchTerminal(options: TerminalLaunchOptions): Promise<TerminalLaunchResult> {
-  const {cwd, command, debugLog} = options
+  const {cwd, command, debugLog, windowsShellPreference = 'default'} = options
   const {platform} = process
 
   debugLog?.(`Launching terminal in ${cwd} with command: ${command}`)
   debugLog?.(`Platform: ${platform}`)
 
   if (isWindowsPlatform(platform)) {
-    return launchWindowsTerminal(cwd, command, debugLog)
+    return launchWindowsTerminal(cwd, command, windowsShellPreference, debugLog)
   }
 
   if (platform === 'darwin') {

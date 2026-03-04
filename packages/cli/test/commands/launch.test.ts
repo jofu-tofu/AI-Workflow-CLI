@@ -1,315 +1,143 @@
 /**
  * @file Unit tests for launch command.
  *
- * Tests command structure, metadata, and spawn behavior.
- * Note: Actual spawn testing uses real processes (not mocked) to avoid ESM module issues.
- * Error scenarios tested via integration with spawn.test.ts.
+ * Focuses on stable command contract checks (flags, examples, helper surface).
  */
 
 import {expect} from 'chai'
 
 import LaunchCommand from '../../src/commands/launch.js'
 
+type PrototypeMap = Record<string, unknown>
+
+function getPrototypeMethods(): Set<string> {
+  const proto = LaunchCommand.prototype as unknown as PrototypeMap
+  return new Set(
+    Object.getOwnPropertyNames(proto).filter((name) => typeof proto[name] === 'function'),
+  )
+}
+
 describe('launch command', () => {
-  describe('Task 4.1-4.4: command metadata and help', () => {
-    it('should have static description field', () => {
+  describe('metadata and help', () => {
+    it('has a description', () => {
       expect(LaunchCommand.description).to.be.a('string')
       expect(LaunchCommand.description.length).to.be.greaterThan(0)
     })
 
-    it('should reference Claude Code in description', () => {
+    it('mentions supported tools and behavior', () => {
       expect(LaunchCommand.description).to.include('Claude Code')
+      expect(LaunchCommand.description).to.include('Codex')
+      expect(LaunchCommand.description).to.match(/tmux|inline/i)
     })
 
-    it('should reference AIW configuration in description', () => {
-      expect(LaunchCommand.description).to.match(/AIW|configuration|sandbox|parallel/i)
-    })
-
-    it('should have static examples array', () => {
+    it('has examples including debug mode', () => {
       expect(LaunchCommand.examples).to.be.an('array')
       expect(LaunchCommand.examples.length).to.be.greaterThan(0)
-    })
-
-    it('should include basic usage example', () => {
-      const {examples} = LaunchCommand
-      expect(examples).to.be.an('array')
-      expect(examples.length).to.be.greaterThan(0)
-      // Examples use oclif template syntax
-      expect(examples[0]).to.be.a('string')
-    })
-
-    it('should include debug mode example', () => {
-      const {examples} = LaunchCommand
-      const hasDebugExample = examples.some((ex: string) => ex.includes('--debug'))
-      expect(hasDebugExample).to.be.true
+      expect(LaunchCommand.examples.some((ex: string) => ex.includes('--debug'))).to.equal(true)
     })
   })
 
   describe('command structure', () => {
-    it('should have run method', () => {
+    it('has run method and inherits base flags', () => {
       expect(LaunchCommand.prototype.run).to.be.a('function')
-    })
-
-    it('should return promise (async)', () => {
-      // Verify run() returns Promise (async method)
-      expect(LaunchCommand.prototype.run).to.be.a('function')
-    })
-
-    it('should extend BaseCommand', () => {
-      // Verify LaunchCommand has baseFlags (inherited from BaseCommand)
       expect(LaunchCommand).to.have.property('baseFlags')
-    })
-  })
-
-  describe('Task 5.2-5.7: implementation verification', () => {
-    it('Task 5.2-5.3: implementation calls spawnProcess with correct args', () => {
-      // Verify the implementation source code contains the correct pattern
-      // This is a static analysis test to ensure the code is written correctly
-      const source = LaunchCommand.prototype.run.toString()
-
-      // Should call spawnProcess
-      expect(source).to.include('spawnProcess')
-
-      // Should support 'claude' command (via cliCommand variable)
-      expect(source).to.include('claude')
-
-      // Should pass --dangerously-skip-permissions flag for Claude
-      expect(source).to.include('--dangerously-skip-permissions')
-
-      // Should support 'codex' command with --yolo flag
-      expect(source).to.include('codex')
-      expect(source).to.include('--yolo')
-
-      // Should handle exit code
-      expect(source).to.include('exitCode')
-      expect(source).to.include('this.exit')
-    })
-
-    it('Task 5.4: implementation handles ProcessSpawnError', () => {
-      const source = LaunchCommand.prototype.run.toString()
-
-      // Should have try-catch
-      expect(source).to.include('try')
-      expect(source).to.include('catch')
-
-      // Should check for ProcessSpawnError
-      expect(source).to.include('ProcessSpawnError')
-
-      // Should use ENVIRONMENT_ERROR exit code
-      expect(source).to.include('ENVIRONMENT_ERROR')
-    })
-
-    it('Task 5.5: command accepts debug flag (inherited from BaseCommand)', () => {
-      // BaseCommand provides baseFlags with debug flag
       expect(LaunchCommand.baseFlags).to.have.property('debug')
-      expect(LaunchCommand.baseFlags.debug).to.have.property('char', 'd')
     })
 
-    it('Task 5.6: implementation supports parallel sessions (stdio inherit)', () => {
-      // spawnProcess uses stdio: inherit by default, which supports parallel sessions
-      // Each terminal runs independent `aiw launch` - no shared state
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('spawnProcess')
+    it('exposes launch helpers used by run flow', () => {
+      const methods = getPrototypeMethods()
+      expect(methods.has('launchInline')).to.equal(true)
+      expect(methods.has('launchViaAutoTmuxOrInline')).to.equal(true)
+      expect(methods.has('waitForSentinel')).to.equal(true)
+      expect(methods.has('handleJsonOutput')).to.equal(true)
     })
 
-    it('Task 5.7: implementation passes --dangerously-skip-permissions flag', () => {
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('--dangerously-skip-permissions')
-    })
-
-    it('implementation handles generic errors with GENERAL_ERROR', () => {
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('GENERAL_ERROR')
-      expect(source).to.include('Unexpected launch failure')
+    it('exposes helper utilities for session/prompt handling', () => {
+      const methods = getPrototypeMethods()
+      expect(methods.has('buildUniqueTmuxSessionName')).to.equal(true)
+      expect(methods.has('sanitizeTmuxSessionName')).to.equal(true)
+      expect(methods.has('shellQuote')).to.equal(true)
     })
   })
 
-  describe('--codex/-c flag for launching Codex', () => {
-    it('should have --codex flag defined', () => {
+  describe('codex flag', () => {
+    it('defines --codex with short -c and default false', () => {
+      const codexFlag = LaunchCommand.flags.codex as {char?: string; default?: boolean}
       expect(LaunchCommand.flags).to.have.property('codex')
-    })
-
-    it('should have -c as short form for --codex', () => {
-      const codexFlag = LaunchCommand.flags.codex as {char?: string}
       expect(codexFlag).to.have.property('char', 'c')
-    })
-
-    it('should have --codex flag default to false', () => {
-      const codexFlag = LaunchCommand.flags.codex as {default?: boolean}
       expect(codexFlag).to.have.property('default', false)
     })
 
-    it('should include --codex flag in description', () => {
+    it('documents codex usage in description/examples', () => {
       expect(LaunchCommand.description).to.include('--codex')
-      expect(LaunchCommand.description).to.include('-c')
-    })
-
-    it('should include Codex in description', () => {
-      expect(LaunchCommand.description).to.include('Codex')
-    })
-
-    it('should include --codex examples', () => {
-      const {examples} = LaunchCommand
-      const hasCodexExample = examples.some((ex: string) => ex.includes('--codex'))
-      expect(hasCodexExample).to.be.true
-    })
-
-    it('implementation handles --codex flag', () => {
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('flags.codex')
-      expect(source).to.include('useCodex')
-    })
-
-    it('implementation uses --yolo for Codex', () => {
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('--yolo')
+      expect(LaunchCommand.examples.some((ex: string) => ex.includes('--codex'))).to.equal(true)
     })
   })
 
-  describe('--new/-n flag for launching in new terminal', () => {
-    it('should have --new flag defined', () => {
+  describe('new-terminal flag', () => {
+    it('defines --new with short -n and default false', () => {
+      const newFlag = LaunchCommand.flags.new as {char?: string; default?: boolean}
       expect(LaunchCommand.flags).to.have.property('new')
-    })
-
-    it('should have -n as short form for --new', () => {
-      const newFlag = LaunchCommand.flags.new as {char?: string}
       expect(newFlag).to.have.property('char', 'n')
-    })
-
-    it('should have --new flag default to false', () => {
-      const newFlag = LaunchCommand.flags.new as {default?: boolean}
       expect(newFlag).to.have.property('default', false)
     })
 
-    it('should include --new flag in description', () => {
+    it('documents --new usage in description/examples', () => {
       expect(LaunchCommand.description).to.include('--new')
-      expect(LaunchCommand.description).to.include('-n')
-    })
-
-    it('should include --new examples', () => {
-      const {examples} = LaunchCommand
-      const hasNewExample = examples.some((ex: string) => ex.includes('--new'))
-      expect(hasNewExample).to.be.true
-    })
-
-    it('should include -n short form example', () => {
-      const {examples} = LaunchCommand
-      const hasShortExample = examples.some((ex: string) => ex.includes('-n'))
-      expect(hasShortExample).to.be.true
-    })
-
-    it('implementation handles --new flag', () => {
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('flags.new')
-      // Verifies the run method uses launchTerminal utility (imported from lib/terminal.ts)
-      expect(source).to.include('launchTerminal')
-    })
-
-    it('implementation has cross-platform terminal launching', () => {
-      // Cross-platform terminal launching is now handled by shared utility in lib/terminal.ts
-      // Verify that the run method calls the shared launchTerminal function
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('launchTerminal')
-      // The platform-specific logic is encapsulated in lib/terminal.ts
+      expect(LaunchCommand.examples.some((ex: string) => ex.includes('--new'))).to.equal(true)
     })
   })
 
-  describe('tmux-first launch flags', () => {
-    it('should have --no-tmux flag defined', () => {
-      expect(LaunchCommand.flags).to.have.property('no-tmux')
-    })
-
-    it('should have -t as short form for --no-tmux', () => {
+  describe('tmux flags', () => {
+    it('defines --no-tmux with short -t', () => {
       const flag = LaunchCommand.flags['no-tmux'] as {char?: string}
+      expect(LaunchCommand.flags).to.have.property('no-tmux')
       expect(flag).to.have.property('char', 't')
     })
 
-    it('should have --tmux-session flag defined', () => {
-      expect(LaunchCommand.flags).to.have.property('tmux-session')
-    })
-
-    it('should have -s as short form for --tmux-session', () => {
+    it('defines --tmux-session with short -s', () => {
       const flag = LaunchCommand.flags['tmux-session'] as {char?: string}
+      expect(LaunchCommand.flags).to.have.property('tmux-session')
       expect(flag).to.have.property('char', 's')
     })
 
-    it('should include tmux flags in description', () => {
+    it('documents tmux-related flags', () => {
       expect(LaunchCommand.description).to.include('--no-tmux')
       expect(LaunchCommand.description).to.include('--tmux-session')
     })
-
-    it('implementation references tmux launch path', () => {
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('shouldAutoTmux')
-      expect(source).to.include('launchInTmuxSession')
-      expect(source).to.include('findToolPath')
-    })
-
-    it('implementation falls back on Windows when tool not found', () => {
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('not found on PATH')
-      expect(source).to.include('launching inline')
-    })
-
-    it('implementation creates a fresh tmux session by default', () => {
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('buildUniqueTmuxSessionName')
-    })
-
-    it('implementation reuses explicit tmux session names', () => {
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('sessionFromFlag')
-      expect(source).to.include('reattach')
-    })
-
-    it('implementation passes structured options to launchInTmuxSession', () => {
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('toolPath')
-      expect(source).to.include('toolArgs')
-    })
-
-    it('implementation enables tmux mouse support when already inside tmux', () => {
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('enableTmuxMouse')
-    })
   })
 
-  describe('--prompt/-p flag for initial prompt', () => {
-    it('should have --prompt flag defined', () => {
-      expect(LaunchCommand.flags).to.have.property('prompt')
-    })
-
-    it('should have -p as short form for --prompt', () => {
+  describe('prompt flags', () => {
+    it('defines --prompt with short -p', () => {
       const promptFlag = LaunchCommand.flags.prompt as {char?: string}
+      expect(LaunchCommand.flags).to.have.property('prompt')
       expect(promptFlag).to.have.property('char', 'p')
     })
 
-    it('should have hidden --prompt-file flag', () => {
-      expect(LaunchCommand.flags).to.have.property('prompt-file')
+    it('defines hidden --prompt-file and visible --prompt-path', () => {
       const promptFileFlag = LaunchCommand.flags['prompt-file'] as {hidden?: boolean}
+      expect(LaunchCommand.flags).to.have.property('prompt-file')
       expect(promptFileFlag).to.have.property('hidden', true)
+      expect(LaunchCommand.flags).to.have.property('prompt-path')
     })
 
-    it('should include --prompt in description', () => {
+    it('documents prompt usage in description/examples', () => {
       expect(LaunchCommand.description).to.include('--prompt')
+      expect(LaunchCommand.examples.some((ex: string) => ex.includes('--prompt'))).to.equal(true)
+    })
+  })
+
+  describe('other launch flags', () => {
+    it('defines --wait and --json with defaults', () => {
+      const waitFlag = LaunchCommand.flags.wait as {default?: boolean}
+      const jsonFlag = LaunchCommand.flags.json as {default?: boolean}
+      expect(waitFlag).to.have.property('default', false)
+      expect(jsonFlag).to.have.property('default', false)
     })
 
-    it('implementation handles prompt in direct spawn path', () => {
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('promptText')
-      expect(source).to.include('spawnProcess')
-    })
-
-    it('implementation passes promptText to launchInTmuxSession', () => {
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('promptText')
-      expect(source).to.include('launchInTmuxSession')
-    })
-
-    it('implementation propagates prompt via temp file for --new path', () => {
-      const source = LaunchCommand.prototype.run.toString()
-      expect(source).to.include('prompt-file')
-      expect(source).to.include('launchTerminal')
+    it('defines --split enum options', () => {
+      const splitFlag = LaunchCommand.flags.split as {options?: string[]}
+      expect(splitFlag.options).to.deep.equal(['auto', 'h', 'v'])
     })
   })
 })

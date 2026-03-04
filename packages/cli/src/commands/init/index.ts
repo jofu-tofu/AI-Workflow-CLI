@@ -14,7 +14,7 @@ import {AIW_EXCLUDE_ENTRIES, resolveGitDir, updateGitExclude} from '../../lib/gi
 import {markCoreInstalled, markMethodInstalled} from '../../lib/install-state.js'
 import {getTargetSettingsFile, readClaudeSettings, writeClaudeSettings} from '../../lib/settings-hierarchy.js'
 import {checkTemplateStatus, installTemplate} from '../../lib/template-installer.js'
-import {getAvailableTemplates, getTemplatePath} from '../../lib/template-resolver.js'
+import {getAvailableTemplates, getTemplateIdeNamesByPath, getTemplatePath} from '../../lib/template-resolver.js'
 import {reconstructIdeSettings} from '../../lib/template-settings-reconstructor.js'
 import {detectUsername} from '../../lib/user-utils.js'
 import {EXIT_CODES} from '../../types/exit-codes.js'
@@ -22,7 +22,7 @@ import {EXIT_CODES} from '../../types/exit-codes.js'
 /**
  * Available IDEs for configuration
  */
-const AVAILABLE_IDES = [
+const KNOWN_IDES = [
   {value: 'claude', name: 'Claude Code', description: 'Anthropic Claude Code CLI'},
   {value: 'codex', name: 'Codex CLI', description: 'OpenAI Codex CLI workflows'},
   {value: 'windsurf', name: 'Windsurf', description: 'Codeium Windsurf IDE'},
@@ -36,6 +36,23 @@ const AVAILABLE_IDES = [
  */
 function detectProjectName(targetDir: string): string {
   return basename(targetDir)
+}
+
+function normalizeIdeList(ides: string[]): string[] {
+  const normalized = ides
+    .map((ide) => ide.trim().toLowerCase())
+    .filter((ide) => ide.length > 0)
+  return [...new Set(normalized)]
+}
+
+function intersectIdes(requested: string[], available: string[]): string[] {
+  const availableSet = new Set(available)
+  return requested.filter((ide) => availableSet.has(ide))
+}
+
+function differenceIdes(left: string[], right: string[]): string[] {
+  const rightSet = new Set(right)
+  return left.filter((ide) => !rightSet.has(ide))
 }
 
 /**
@@ -57,7 +74,6 @@ export default class Init extends BaseCommand {
   static override examples = [
     '<%= config.bin %> <%= command.id %> --interactive',
     '<%= config.bin %> <%= command.id %> --method cc-native',
-    '<%= config.bin %> <%= command.id %> --method cc-native --ide codex',
     '<%= config.bin %> <%= command.id %> --method cc-native --ide windsurf',
     '<%= config.bin %> <%= command.id %> --method cc-native --ide claude --ide windsurf',
   ]
@@ -75,8 +91,7 @@ export default class Init extends BaseCommand {
     }),
     ide: Flags.string({
       char: 'i',
-      default: ['claude', 'codex'],
-      description: 'IDEs to configure (strict filter). No --ide uses defaults: claude + codex',
+      description: 'IDEs to configure. When omitted, uses all IDEs discovered in core + selected template',
       multiple: true,
     }),
   }
@@ -114,19 +129,38 @@ export default class Init extends BaseCommand {
         })
       }
 
-      // Get template path
+      // Resolve template + available IDE sets
       const templatePath = await getTemplatePath(method)
+      const coreTemplatePath = await getTemplatePath('_shared')
+      const coreAvailableIdes = await getTemplateIdeNamesByPath(coreTemplatePath)
+      const methodAvailableIdes = await getTemplateIdeNamesByPath(templatePath)
+      const discoveredIdes = [...new Set([...coreAvailableIdes, ...methodAvailableIdes])].sort((a, b) => a.localeCompare(b))
+      const requestedIdes = ides.length > 0 ? normalizeIdeList(ides) : discoveredIdes
+      const coreIdesToInstall = intersectIdes(requestedIdes, coreAvailableIdes)
+      const methodIdesToInstall = intersectIdes(requestedIdes, methodAvailableIdes)
+
+      const coreSkipped = differenceIdes(requestedIdes, coreAvailableIdes)
+      if (coreSkipped.length > 0) {
+        this.warn(`Skipping core IDEs not available in _shared: ${coreSkipped.join(', ')}`)
+      }
+
+      const methodSkipped = differenceIdes(requestedIdes, methodAvailableIdes)
+      if (methodSkipped.length > 0) {
+        this.warn(`Skipping method IDEs not available for '${method}': ${methodSkipped.join(', ')}`)
+      }
 
       // Install core runtime first (shared across all methods)
-      const coreInstalledFolders = await installCoreAssets(targetDir, ides)
-      await markCoreInstalled(targetDir, ides)
+      const coreInstalledFolders = await installCoreAssets(targetDir, coreIdesToInstall)
+      await markCoreInstalled(targetDir, coreIdesToInstall)
 
       // Check what already exists vs what's missing
-      const status = await checkTemplateStatus(templatePath, targetDir, ides, method)
+      const status = await checkTemplateStatus(templatePath, targetDir, methodIdesToInstall, method)
 
       this.logInfo(`Installing ${method} template for project: ${projectName}`)
       this.logInfo(`Detected user: ${username}`)
-      this.logInfo(`Target IDEs: ${ides.join(', ')}`)
+      this.logInfo(`Target IDEs (requested): ${requestedIdes.join(', ')}`)
+      this.logInfo(`Target IDEs (core): ${coreIdesToInstall.join(', ') || '(none)'}`)
+      this.logInfo(`Target IDEs (${method}): ${methodIdesToInstall.join(', ') || '(none)'}`)
 
       // Report existing items
       if (status.existing.length > 0) {
@@ -162,7 +196,7 @@ export default class Init extends BaseCommand {
       const result = await installTemplate({
         templateName: method,
         targetDir,
-        ides,
+        ides: methodIdesToInstall,
         username,
         projectName,
         templatePath,
@@ -187,11 +221,11 @@ export default class Init extends BaseCommand {
       await this.performPostInstallActions({
         targetDir,
         method,
-        ides,
+        ides: methodIdesToInstall,
         gitDir,
         foldersForExclude,
       })
-      await markMethodInstalled(targetDir, method, ides)
+      await markMethodInstalled(targetDir, method, methodIdesToInstall)
 
       this.log('')
       this.logSuccess(`✓ ${method} initialized successfully`)
@@ -270,16 +304,19 @@ export default class Init extends BaseCommand {
     this.logInfo('Performing minimal installation (_core runtime only)...')
     this.log('')
 
+    const coreTemplatePath = await getTemplatePath('_shared')
+    const discoveredCoreIdes = await getTemplateIdeNamesByPath(coreTemplatePath)
+
     // Install core runtime payload and base IDE shared artifacts
-    const installedFolders = await installCoreAssets(targetDir, ['claude', 'codex'])
-    await markCoreInstalled(targetDir, ['claude', 'codex'])
+    const installedFolders = await installCoreAssets(targetDir, discoveredCoreIdes)
+    await markCoreInstalled(targetDir, discoveredCoreIdes)
     this.logSuccess(`✓ Installed: ${installedFolders.join(', ')}`)
 
     // Install global resolver for cwd-drift-proof hook/status line commands
     await this.installGlobalResolver()
 
     // Reconstruct settings from core base
-    await reconstructIdeSettings(targetDir, [], ['claude'])
+    await reconstructIdeSettings(targetDir, [], discoveredCoreIdes)
 
     // Update git exclude if git repository exists
     if (gitDir) {
@@ -355,7 +392,7 @@ export default class Init extends BaseCommand {
    * @returns Installation configuration or null for minimal install
    */
   private async resolveInstallationConfig(
-    flags: {ide: string[]; interactive: boolean; method?: string | undefined},
+    flags: {ide: string[] | undefined; interactive: boolean; method?: string | undefined},
     targetDir: string,
     availableTemplates: string[],
   ): Promise<null | {ides: string[]; method: string; projectName: string; username: string}> {
@@ -387,7 +424,7 @@ export default class Init extends BaseCommand {
 
       return {
         method: flags.method,
-        ides: flags.ide,
+        ides: normalizeIdeList(flags.ide ?? []),
         username: await detectUsername(),
         projectName: detectProjectName(targetDir),
       }
@@ -427,14 +464,30 @@ export default class Init extends BaseCommand {
 
     this.log('')
 
+    const coreTemplatePath = await getTemplatePath('_shared')
+    const selectedTemplatePath = await getTemplatePath(method)
+    const coreAvailableIdes = await getTemplateIdeNamesByPath(coreTemplatePath)
+    const methodAvailableIdes = await getTemplateIdeNamesByPath(selectedTemplatePath)
+    const discoveredIdes = [...new Set([...coreAvailableIdes, ...methodAvailableIdes])].sort((a, b) => a.localeCompare(b))
+    const knownByValue = new Map(KNOWN_IDES.map((ide) => [ide.value, ide]))
+    if (discoveredIdes.length === 0) {
+      this.error('No IDE integrations were discovered in core or selected template.', {
+        exit: EXIT_CODES.ENVIRONMENT_ERROR,
+      })
+    }
+
     // Step 2: Select IDEs
     const ides = await checkbox({
       message: 'Select IDEs to configure:',
-      choices: AVAILABLE_IDES.map((ide) => ({
-        value: ide.value,
-        name: ide.name,
-        checked: ide.value === 'claude' || ide.value === 'codex', // Default to Claude + Codex
-      })),
+      choices: discoveredIdes.map((ideName) => {
+        const known = knownByValue.get(ideName)
+        return {
+          value: ideName,
+          name: known?.name ?? ideName,
+          description: known?.description ?? `Discovered IDE integration (.${ideName}/)`,
+          checked: true,
+        }
+      }),
       required: true,
     })
 

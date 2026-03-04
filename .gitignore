@@ -142,3 +142,7 @@ _bmad-output/
 /_cc-native/
 /_output/
 /.claude/
+
+# Socket artifacts
+*.sock
+

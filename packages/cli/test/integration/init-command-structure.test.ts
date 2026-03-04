@@ -75,7 +75,7 @@ describe('Init Command Structure - Integration Tests', () => {
       }
     })
 
-    it('validates --ide flag defaults include claude and codex', () => {
+    it('validates --ide help text describes dynamic IDE discovery', () => {
       const output = execSync(`${bin} init --help`, {
         encoding: 'utf8',
         stdio: 'pipe',
@@ -83,7 +83,7 @@ describe('Init Command Structure - Integration Tests', () => {
 
       // Help should indicate default value
       expect(output).to.include('--ide')
-      expect(output).to.include('claude + codex')
+      expect(output).to.include('discovered in core + selected template')
     })
   })
 

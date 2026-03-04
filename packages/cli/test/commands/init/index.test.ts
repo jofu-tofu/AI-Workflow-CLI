@@ -43,11 +43,11 @@ describe('pai init command', () => {
       expect(Init.flags.method.required).to.be.false
     })
 
-    it('should have ide flag with default', async () => {
+    it('should have ide flag configured for multiple selection', async () => {
       const Init = (await import('../../../src/commands/init/index.js')).default
       expect(Init.flags).to.have.property('ide')
       expect(Init.flags.ide.multiple).to.be.true
-      expect(Init.flags.ide.default).to.deep.equal(['claude', 'codex'])
+      expect(Init.flags.ide.default).to.equal(undefined)
     })
 
     it('should have global base flags', async () => {
@@ -100,9 +100,9 @@ describe('pai init command', () => {
       expect(Init.flags.ide.multiple).to.be.true
     })
 
-    it('should default to claude + codex for --ide flag', async () => {
+    it('should not hardcode a default --ide list on the flag', async () => {
       const Init = (await import('../../../src/commands/init/index.js')).default
-      expect(Init.flags.ide.default).to.deep.equal(['claude', 'codex'])
+      expect(Init.flags.ide.default).to.equal(undefined)
     })
 
     it('should have char shortcuts for flags', async () => {
@@ -111,10 +111,10 @@ describe('pai init command', () => {
       expect(Init.flags.ide.char).to.equal('i')
     })
 
-    it('should support codex as an IDE option', async () => {
+    it('should show --ide usage in examples', async () => {
       const Init = (await import('../../../src/commands/init/index.js')).default
       const examples = Init.examples.join(' ')
-      expect(examples).to.include('--ide codex')
+      expect(examples).to.include('--ide')
     })
   })
 

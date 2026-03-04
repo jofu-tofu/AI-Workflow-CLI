@@ -36,9 +36,9 @@ export interface TmuxSessionResult {
 export type TmuxColorMode = 'c256' | 'truecolor'
 
 function windowsTerminalOverrides(colorMode: TmuxColorMode): string {
-  // Suppress app-level mouse reporting on Windows tmux+winpty.
-  // winpty mangles mouse passthrough for TUIs and can cause cursor/focus churn.
-  const stabilityOverrides = '*:kmous@,*:Ss@,*:Se@,*:Cs@,*:Cr@'
+  // Keep cursor-shape stability overrides on Windows tmux+winpty, but avoid
+  // disabling mouse reporting so tmux can preserve native wheel/copy behavior.
+  const stabilityOverrides = '*:Ss@,*:Se@,*:Cs@,*:Cr@'
   if (colorMode === 'truecolor') {
     return `,xterm*:Tc,alacritty:Tc,${stabilityOverrides}`
   }
@@ -61,16 +61,17 @@ export function buildTmuxRuntimeBootstrapCommands(
   commands.push('tmux set-option -g history-limit 50000 >/dev/null 2>&1 || true')
   if (isWindowsPlatform(platform)) {
     commands.push('tmux set-option -g focus-events off >/dev/null 2>&1 || true')
-    if (enableMouse) {
-      commands.push("tmux bind -n WheelUpPane if-shell -F '#{pane_in_mode}' 'send-keys -M' 'copy-mode -e \\; send-keys -M' >/dev/null 2>&1 || true")
-      commands.push("tmux bind -n WheelDownPane if-shell -F '#{pane_in_mode}' 'send-keys -M' 'copy-mode -e \\; send-keys -M' >/dev/null 2>&1 || true")
-    }
+    // Cleanup legacy AIW mouse wheel binds from prior versions.
+    commands.push('tmux unbind -n WheelUpPane >/dev/null 2>&1 || true')
+    commands.push('tmux unbind -n WheelDownPane >/dev/null 2>&1 || true')
   }
 
   // Configure terminal overrides for the active color mode.
   // Note: default-terminal is set before session creation.
   if (isWindowsPlatform(platform)) {
-    commands.push(`tmux set -a terminal-overrides "${windowsTerminalOverrides(colorMode)}" >/dev/null 2>&1 || true`)
+    // Reset then apply overrides to scrub stale kmous@ from older AIW runs.
+    commands.push('tmux set -gu terminal-overrides >/dev/null 2>&1 || true')
+    commands.push(`tmux set -g terminal-overrides "${windowsTerminalOverrides(colorMode)}" >/dev/null 2>&1 || true`)
   } else {
     commands.push('tmux set -a terminal-overrides ",xterm*:Tc,alacritty:Tc" >/dev/null 2>&1 || true')
   }
@@ -283,24 +284,14 @@ export function enableTmuxMouse(): void {
     execFileSync(bashPath, ['-lc', `${tmuxPrefix} set-option -g mouse on`], winOpts)
     execFileSync(bashPath, ['-lc', `${tmuxPrefix} set-option -g history-limit 50000`], winOpts)
     execFileSync(bashPath, ['-lc', `${tmuxPrefix} set-option -g focus-events off`], winOpts)
+    execFileSync(bashPath, ['-lc', `${tmuxPrefix} unbind -n WheelUpPane`], winOpts)
+    execFileSync(bashPath, ['-lc', `${tmuxPrefix} unbind -n WheelDownPane`], winOpts)
 
-    // Force wheel behavior to tmux copy-mode scrolling on Windows.
+    // Keep Windows terminal stability overrides while preserving mouse reporting.
+    execFileSync(bashPath, ['-lc', `${tmuxPrefix} set -gu terminal-overrides`], winOpts)
     execFileSync(
       bashPath,
-      ['-lc', `${tmuxPrefix} bind -n WheelUpPane if-shell -F '#{pane_in_mode}' 'send-keys -M' 'copy-mode -e \\\\; send-keys -M'`],
-      winOpts,
-    )
-    execFileSync(
-      bashPath,
-      ['-lc', `${tmuxPrefix} bind -n WheelDownPane if-shell -F '#{pane_in_mode}' 'send-keys -M' 'copy-mode -e \\\\; send-keys -M'`],
-      winOpts,
-    )
-
-    // Keep Windows terminal stability overrides (including kmous@ suppression).
-    const setCommand = process.env.TMUX ? 'set -a' : 'set -ga'
-    execFileSync(
-      bashPath,
-      ['-lc', `${tmuxPrefix} ${setCommand} terminal-overrides '${windowsTerminalOverrides('c256')}'`],
+      ['-lc', `${tmuxPrefix} set -g terminal-overrides '${windowsTerminalOverrides('c256')}'`],
       winOpts,
     )
   } catch {
@@ -353,8 +344,8 @@ export function enableTmuxColors(): void {
     // Separate try/catch so terminal-overrides failure doesn't suppress default-terminal success
     try {
       const override = windowsTerminalOverrides(colorMode)
-      const setCommand = process.env.TMUX ? 'set -a' : 'set -ga'
-      execFileSync(bashPath, ['-lc', `${tmuxPrefix} ${setCommand} terminal-overrides '${override}'`], winOpts)
+      execFileSync(bashPath, ['-lc', `${tmuxPrefix} set -gu terminal-overrides`], winOpts)
+      execFileSync(bashPath, ['-lc', `${tmuxPrefix} set -g terminal-overrides '${override}'`], winOpts)
     } catch { /* best-effort */ }
   } catch {
     // Best-effort — ignore failures
