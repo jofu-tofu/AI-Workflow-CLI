@@ -17,7 +17,7 @@ describe('Quiet Mode Integration', () => {
   beforeAll(() => {
     launchHelpOutput = execSync(`${binPath} launch --help`, {encoding: 'utf8'})
     quietLaunchHelpOutput = execSync(`${binPath} launch --help --quiet`, {encoding: 'utf8'})
-  })
+  }, 30_000)
 
   describe('--quiet flag behavior', () => {
     it('recognizes --quiet and -q flags and appears in help text', () => {

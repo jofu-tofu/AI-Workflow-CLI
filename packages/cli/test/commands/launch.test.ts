@@ -86,6 +86,13 @@ describe('launch command', () => {
       expect(LaunchCommand.description).to.include('--new')
       expect(LaunchCommand.examples.some((ex: string) => ex.includes('--new'))).to.equal(true)
     })
+
+    it('defines hidden --spawned-window for internal new-window handoff', () => {
+      const spawnedFlag = LaunchCommand.flags['spawned-window'] as {default?: boolean; hidden?: boolean}
+      expect(LaunchCommand.flags).to.have.property('spawned-window')
+      expect(spawnedFlag).to.have.property('hidden', true)
+      expect(spawnedFlag).to.have.property('default', false)
+    })
   })
 
   describe('tmux flags', () => {

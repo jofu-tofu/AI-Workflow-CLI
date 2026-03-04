@@ -167,8 +167,9 @@ describe('branch command', () => {
   describe('--delete flag behavior', () => {
     let testDir: string
 
-    beforeEach(async () => {      testDir = await createTestGitRepo()
-    })
+    beforeEach(async () => {
+      testDir = await createTestGitRepo()
+    }, 30_000)
 
     afterEach(async () => {
       await cleanupTestDir(testDir)
@@ -280,8 +281,9 @@ describe('branch command', () => {
   describe('--main flag behavior', () => {
     let testDir: string
 
-    beforeEach(async () => {      testDir = await createTestGitRepo()
-    })
+    beforeEach(async () => {
+      testDir = await createTestGitRepo()
+    }, 30_000)
 
     afterEach(async () => {
       await cleanupTestDir(testDir)
@@ -316,8 +318,9 @@ describe('branch command', () => {
   describe('--delete --all flag behavior', () => {
     let testDir: string
 
-    beforeEach(async () => {      testDir = await createTestGitRepo()
-    })
+    beforeEach(async () => {
+      testDir = await createTestGitRepo()
+    }, 30_000)
 
     afterEach(async () => {
       await cleanupTestDir(testDir)

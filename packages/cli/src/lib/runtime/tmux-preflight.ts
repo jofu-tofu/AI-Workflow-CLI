@@ -58,20 +58,6 @@ export function isTmuxReachableViaBash(bashPath: string): boolean {
   }
 }
 
-export function isWinptyReachableViaBash(bashPath: string): boolean {
-  try {
-    execFileSync(bashPath, ['-lc', 'command -v winpty'], {
-      timeout: 3000,
-      stdio: 'ignore',
-      env: { ...process.env, MSYS_NO_PATHCONV: '1' },
-      windowsHide: true,
-    })
-    return true
-  } catch {
-    return false
-  }
-}
-
 export function isNativeTmuxAvailable(platform: NodeJS.Platform = process.platform): boolean {
   return isCommandAvailable('tmux', platform)
 }
@@ -94,10 +80,6 @@ export function preflightWindowsTmux(): WindowsTmuxPreflight {
 
   if (!isTmuxReachableViaBash(bashPath)) {
     return { available: false, bashPath, reason: 'tmux not available in Git Bash' }
-  }
-
-  if (!isWinptyReachableViaBash(bashPath)) {
-    return { available: false, bashPath, reason: 'winpty not available in Git Bash (required for TUI apps in MSYS2 tmux)' }
   }
 
   return { available: true, bashPath }

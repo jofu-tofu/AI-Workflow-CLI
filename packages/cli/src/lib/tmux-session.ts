@@ -35,16 +35,6 @@ export interface TmuxSessionResult {
 
 export type TmuxColorMode = 'c256' | 'truecolor'
 
-function shouldWrapWinptyForTool(toolPath: string): boolean {
-  const mode = process.env.AIW_WINPTY_MODE?.trim().toLowerCase()
-  if (mode === 'never') return false
-  if (mode === 'always') return true
-
-  // Default: keep winpty enabled on Windows tmux.
-  void toolPath
-  return true
-}
-
 export function buildTmuxRuntimeBootstrapCommands(
   platform: NodeJS.Platform = process.platform,
   enableMouse = true,
@@ -66,15 +56,10 @@ export function buildTmuxRuntimeBootstrapCommands(
   if (isWindowsPlatform(platform)) {
     // Reset terminal-overrides to clear stale entries (e.g. kmous@ from older AIW runs)
     // then set Windows-specific overrides:
-    //   Ss@:Se@:Cs@:Cr@ — suppress cursor shape changes (flicker through winpty)
+    //   Ss@:Se@:Cs@:Cr@ — suppress cursor shape and color churn
     //   kmous=\E[< — SGR extended mouse mode for scroll wheel in mintty/WT
     commands.push('tmux set -gu terminal-overrides >/dev/null 2>&1 || true')
     commands.push('tmux set -g terminal-overrides ",*:Ss@:Se@:Cs@:Cr@:kmous=\\E[<" >/dev/null 2>&1 || true')
-
-    // Disable status bar — on Windows/winpty, tmux status redraws cause visible cursor
-    // jumps because winpty translates every intermediate cursor position into a Win32
-    // SetConsoleCursorPosition call with no buffering.
-    commands.push('tmux set-option -g status off >/dev/null 2>&1 || true')
   }
 
   return commands
@@ -153,17 +138,9 @@ export function buildShellCommand(opts: TmuxSessionOptions): string {
     parts.push('unset COLORTERM')
   }
 
-  // On Windows, use winpty to bridge MSYS2 pty (tmux) to ConPTY (native Windows TUI).
-  // winpty cannot execute shell scripts (npm shims like 'codex', 'claude' are #!/bin/sh
-  // wrappers). Wrap in `bash -c` so winpty launches bash.exe (a real binary), which
-  // then runs the shell script that execs into node.exe.
   if (isWindowsPlatform(platform)) {
     const innerCmd = cmdParts.join(' ')
-    if (shouldWrapWinptyForTool(toolPath)) {
-      parts.push(`exec winpty bash -c ${quoteForSh(innerCmd)}`)
-    } else {
-      parts.push(`exec ${innerCmd}`)
-    }
+    parts.push(`exec ${innerCmd}`)
   } else {
     parts.push(`exec ${cmdParts.join(' ')}`)
   }
@@ -298,7 +275,6 @@ export function enableTmuxMouse(): void {
  *  Uses session-scoped settings (no -g) to avoid affecting other sessions.
  */
 export function enableTmuxColors(): void {
-  const colorMode = resolveTmuxColorMode()
   const baseOpts = {stdio: 'ignore' as const, timeout: 3000}
   try {
     if (isNonWindowsPlatform()) {

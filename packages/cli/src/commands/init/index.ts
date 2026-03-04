@@ -55,6 +55,10 @@ function differenceIdes(left: string[], right: string[]): string[] {
   return left.filter((ide) => !rightSet.has(ide))
 }
 
+function toIdeExcludeEntries(ides: string[]): string[] {
+  return [...new Set(ides.map((ide) => `.${ide}`))]
+}
+
 /**
  * Interactive wizard configuration result
  */
@@ -202,9 +206,10 @@ export default class Init extends BaseCommand {
         templatePath,
       })
 
-      // Collect all folders that need exclude entries
-      // The .aiwcli/ container holds all template infrastructure and runtime data
-      const foldersForExclude: string[] = [...AIW_EXCLUDE_ENTRIES]
+      // Collect all folders that need exclude entries.
+      // Include defaults plus all IDE directories actually installed this run.
+      const installedIdeExcludes = toIdeExcludeEntries([...coreIdesToInstall, ...methodIdesToInstall])
+      const foldersForExclude = [...new Set([...AIW_EXCLUDE_ENTRIES, ...installedIdeExcludes])]
       if (coreInstalledFolders.length > 0) {
         this.logSuccess(`✓ Installed core: ${coreInstalledFolders.join(', ')}`)
       }
@@ -320,7 +325,8 @@ export default class Init extends BaseCommand {
 
     // Update git exclude if git repository exists
     if (gitDir) {
-      await updateGitExclude(gitDir, [...AIW_EXCLUDE_ENTRIES])
+      const ideExcludeEntries = toIdeExcludeEntries(discoveredCoreIdes)
+      await updateGitExclude(gitDir, [...new Set([...AIW_EXCLUDE_ENTRIES, ...ideExcludeEntries])])
       this.logSuccess('✓ git exclude updated')
     }
 

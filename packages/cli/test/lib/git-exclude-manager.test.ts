@@ -4,7 +4,7 @@ import {join} from 'node:path'
 import {expect} from 'chai'
 import {afterEach, beforeEach, describe, it} from 'vitest'
 
-import {updateGitExclude} from '../../src/lib/git-exclude-manager.js'
+import {AIW_EXCLUDE_ENTRIES, updateGitExclude} from '../../src/lib/git-exclude-manager.js'
 import {cleanupTestDir, createTestDir, pathExists} from '../helpers/test-utils.js'
 
 describe('Git Exclude Manager', () => {
@@ -24,6 +24,12 @@ describe('Git Exclude Manager', () => {
   })
 
   describe('updateGitExclude', () => {
+    it('should include all supported IDE folders in managed defaults', () => {
+      expect(AIW_EXCLUDE_ENTRIES).to.include('.claude')
+      expect(AIW_EXCLUDE_ENTRIES).to.include('.codex')
+      expect(AIW_EXCLUDE_ENTRIES).to.include('.windsurf')
+    })
+
     it('should create exclude file when it does not exist', async () => {
       expect(await pathExists(excludePath)).to.be.false
 
@@ -33,12 +39,13 @@ describe('Git Exclude Manager', () => {
     })
 
     it('should add folder patterns with trailing slashes', async () => {
-      await updateGitExclude(gitDir, ['_bmad', '.claude', '_bmad-output'])
+      await updateGitExclude(gitDir, ['_bmad', '.claude', '.codex', '_bmad-output'])
 
       const content = await fs.readFile(excludePath, 'utf8')
 
       expect(content).to.include('_bmad/')
       expect(content).to.include('.claude/')
+      expect(content).to.include('.codex/')
       expect(content).to.include('_bmad-output/')
     })
 

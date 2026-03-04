@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs'
 import { isCommandAvailable, lookupExecutables } from './executable-policy.js'
 import { isWindowsPlatform } from './platform-adapter.js'
 
-export function selectMsysBashFromLookupPaths(paths: string[]): string | null {
+export function selectMsysBashFromLookupPaths(paths: string[]): null | string {
   for (const candidate of paths) {
     const trimmed = candidate.trim()
     if (trimmed && /git|msys|mingw/iu.test(trimmed)) return trimmed
@@ -13,7 +13,7 @@ export function selectMsysBashFromLookupPaths(paths: string[]): string | null {
   return null
 }
 
-export function deriveMsysBashFromGitPath(gitPath: string): string | null {
+export function deriveMsysBashFromGitPath(gitPath: string): null | string {
   const trimmed = gitPath.trim()
   if (!trimmed) return null
 
@@ -22,7 +22,7 @@ export function deriveMsysBashFromGitPath(gitPath: string): string | null {
   return `${gitMatch[1]}\\usr\\bin\\bash.exe`
 }
 
-export function findMsysBash(): string | null {
+export function findMsysBash(): null | string {
   const directBash = selectMsysBashFromLookupPaths(lookupExecutables('bash', { platform: 'win32' }))
   if (directBash) return directBash
 
@@ -58,20 +58,6 @@ export function isTmuxReachableViaBash(bashPath: string): boolean {
   }
 }
 
-export function isWinptyReachableViaBash(bashPath: string): boolean {
-  try {
-    execFileSync(bashPath, ['-lc', 'command -v winpty'], {
-      timeout: 3000,
-      stdio: 'ignore',
-      env: { ...process.env, MSYS_NO_PATHCONV: '1' },
-      windowsHide: true,
-    })
-    return true
-  } catch {
-    return false
-  }
-}
-
 export function isNativeTmuxAvailable(platform: NodeJS.Platform = process.platform): boolean {
   return isCommandAvailable('tmux', platform)
 }
@@ -94,10 +80,6 @@ export function preflightWindowsTmux(): WindowsTmuxPreflight {
 
   if (!isTmuxReachableViaBash(bashPath)) {
     return { available: false, bashPath, reason: 'tmux not available in Git Bash' }
-  }
-
-  if (!isWinptyReachableViaBash(bashPath)) {
-    return { available: false, bashPath, reason: 'winpty not available in Git Bash (required for TUI apps in MSYS2 tmux)' }
   }
 
   return { available: true, bashPath }

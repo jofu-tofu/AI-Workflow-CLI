@@ -823,6 +823,50 @@ export default class ClearCommand extends BaseCommand {
     return toRemove.length > 0 || pruned
   }
 
+  private async countMatchingManagedFiles(sourceDir: string, targetDir: string): Promise<number> {
+    let entries
+    try {
+      entries = await fs.readdir(sourceDir, {withFileTypes: true})
+    } catch {
+      return 0
+    }
+
+    let count = 0
+    for (const entry of entries) {
+      const sourcePath = join(sourceDir, entry.name)
+      const targetPath = join(targetDir, entry.name)
+      if (entry.isDirectory()) {
+        // eslint-disable-next-line no-await-in-loop
+        count += await this.countMatchingManagedFiles(sourcePath, targetPath)
+        continue
+      }
+
+      if (!entry.isFile()) continue
+      if (SETTINGS_FILES_TO_SKIP.has(entry.name)) continue
+      // eslint-disable-next-line no-await-in-loop
+      if (await pathExists(targetPath)) count++
+    }
+
+    return count
+  }
+
+  private async countSharedIdeManagedFiles(targetDir: string): Promise<number> {
+    const sharedTemplatePath = await this.getSharedTemplatePathSafe()
+    if (!sharedTemplatePath) return 0
+
+    let total = 0
+    for (const ide of Object.values(IDE_FOLDERS)) {
+      const sourceIdeRoot = join(sharedTemplatePath, ide.root)
+      const targetIdeRoot = join(targetDir, ide.root)
+      // eslint-disable-next-line no-await-in-loop
+      if (!(await pathExists(sourceIdeRoot)) || !(await pathExists(targetIdeRoot))) continue
+      // eslint-disable-next-line no-await-in-loop
+      total += await this.countMatchingManagedFiles(sourceIdeRoot, targetIdeRoot)
+    }
+
+    return total
+  }
+
   /**
    * Display a list of folders to remove.
    *
@@ -850,6 +894,8 @@ export default class ClearCommand extends BaseCommand {
    * @param folders.workflowFolders - Workflow folders to remove
    * @param folders.outputMethodFolders - Output method folders to remove
    * @param folders.ideMethodFolders - IDE method folders to remove
+   * @param folders.coreRuntimeFolders - Core/shared runtime folders to remove
+   * @param folders.sharedIdeFilesToRemove - Number of shared IDE files to remove
    * @param folders.methodsToRemove - Method names being removed
    */
   private async displayPendingChanges(
@@ -996,78 +1042,11 @@ export default class ClearCommand extends BaseCommand {
     return methods
   }
 
-  private async resolveMethodsToRemove(
-    targetDir: string,
-    template: string | undefined,
-    workflowFolders: string[],
-  ): Promise<string[]> {
-    if (template) return [template]
-    const installedMethods = await getInstalledMethodNames(targetDir)
-    const discoveredFromFolders = this.extractMethodNames(workflowFolders)
-    for (const method of discoveredFromFolders) {
-      installedMethods.add(method)
-    }
-
-    return [...installedMethods]
-  }
-
   private async findCoreRuntimeFolders(targetDir: string): Promise<string[]> {
     const containerDir = join(targetDir, AIWCLI_CONTAINER)
     const paths = CORE_RUNTIME_FOLDERS.map((name) => join(containerDir, name))
     const checks = await Promise.all(paths.map((p) => pathExists(p)))
     return paths.filter((_, index) => checks[index])
-  }
-
-  private async countSharedIdeManagedFiles(targetDir: string): Promise<number> {
-    const sharedTemplatePath = await this.getSharedTemplatePathSafe()
-    if (!sharedTemplatePath) return 0
-
-    let total = 0
-    for (const ide of Object.values(IDE_FOLDERS)) {
-      const sourceIdeRoot = join(sharedTemplatePath, ide.root)
-      const targetIdeRoot = join(targetDir, ide.root)
-      // eslint-disable-next-line no-await-in-loop
-      if (!(await pathExists(sourceIdeRoot)) || !(await pathExists(targetIdeRoot))) continue
-      // eslint-disable-next-line no-await-in-loop
-      total += await this.countMatchingManagedFiles(sourceIdeRoot, targetIdeRoot)
-    }
-
-    return total
-  }
-
-  private async countMatchingManagedFiles(sourceDir: string, targetDir: string): Promise<number> {
-    let entries
-    try {
-      entries = await fs.readdir(sourceDir, {withFileTypes: true})
-    } catch {
-      return 0
-    }
-
-    let count = 0
-    for (const entry of entries) {
-      const sourcePath = join(sourceDir, entry.name)
-      const targetPath = join(targetDir, entry.name)
-      if (entry.isDirectory()) {
-        // eslint-disable-next-line no-await-in-loop
-        count += await this.countMatchingManagedFiles(sourcePath, targetPath)
-        continue
-      }
-
-      if (!entry.isFile()) continue
-      if (SETTINGS_FILES_TO_SKIP.has(entry.name)) continue
-      // eslint-disable-next-line no-await-in-loop
-      if (await pathExists(targetPath)) count++
-    }
-
-    return count
-  }
-
-  private async getSharedTemplatePathSafe(): Promise<null | string> {
-    try {
-      return await getTemplatePath(SHARED_TEMPLATE_NAME)
-    } catch {
-      return null
-    }
   }
 
   /**
@@ -1216,6 +1195,14 @@ export default class ClearCommand extends BaseCommand {
     }
 
     return foundFolders
+  }
+
+  private async getSharedTemplatePathSafe(): Promise<null | string> {
+    try {
+      return await getTemplatePath(SHARED_TEMPLATE_NAME)
+    } catch {
+      return null
+    }
   }
 
   /**
@@ -1392,29 +1379,6 @@ export default class ClearCommand extends BaseCommand {
     return removedFiles
   }
 
-  private async stripAiwSettingsForFullClear(targetDir: string): Promise<void> {
-    const ops = Object.values(IDE_FOLDERS).map(async (ide) => {
-      if (!ide.settingsFile) return
-      const settingsPath = join(targetDir, ide.root, ide.settingsFile)
-      try {
-        const raw = await fs.readFile(settingsPath, 'utf8')
-        const parsed = JSON.parse(raw)
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return
-
-        delete parsed.methods
-        delete parsed.hooks
-        delete parsed.statusLine
-        delete parsed.fileSuggestion
-
-        await fs.writeFile(settingsPath, JSON.stringify(parsed, null, 2) + '\n', 'utf8')
-      } catch {
-        // Ignore invalid/missing settings files
-      }
-    })
-
-    await Promise.all(ops)
-  }
-
   /**
    * Report the results of a clear operation.
    *
@@ -1422,6 +1386,7 @@ export default class ClearCommand extends BaseCommand {
    * @param deleteCounts.deletedWorkflow - Number of workflow folders deleted
    * @param deleteCounts.deletedOutput - Number of output folders deleted
    * @param deleteCounts.deletedIde - Number of IDE method folders deleted
+   * @param deleteCounts.deletedCoreRuntime - Number of core/shared runtime folders deleted
    * @param cleanup - Cleanup operation results
    * @param cleanup.gitExcludeUpdated - Whether git exclude was updated
    * @param cleanup.removedOutputDir - Whether _output dir was removed
@@ -1429,6 +1394,7 @@ export default class ClearCommand extends BaseCommand {
    * @param cleanup.removedClaudeDir - Whether .claude dir was removed
    * @param cleanup.removedCodexDir - Whether .codex dir was removed
    * @param cleanup.removedWindsurfDir - Whether .windsurf dir was removed
+   * @param cleanup.removedSharedIdeFiles - Number of shared IDE files removed
    * @param cleanup.updatedClaudeSettings - Whether Claude settings were updated
    * @param cleanup.updatedWindsurfSettings - Whether Windsurf settings were updated
    */
@@ -1472,6 +1438,44 @@ export default class ClearCommand extends BaseCommand {
     if (cleanup.updatedWindsurfSettings) {
       this.logSuccess('Updated .windsurf/hooks.json (backup: hooks.json.backup).')
     }
+  }
+
+  private async resolveMethodsToRemove(
+    targetDir: string,
+    template: string | undefined,
+    workflowFolders: string[],
+  ): Promise<string[]> {
+    if (template) return [template]
+    const installedMethods = await getInstalledMethodNames(targetDir)
+    const discoveredFromFolders = this.extractMethodNames(workflowFolders)
+    for (const method of discoveredFromFolders) {
+      installedMethods.add(method)
+    }
+
+    return [...installedMethods]
+  }
+
+  private async stripAiwSettingsForFullClear(targetDir: string): Promise<void> {
+    const ops = Object.values(IDE_FOLDERS).map(async (ide) => {
+      if (!ide.settingsFile) return
+      const settingsPath = join(targetDir, ide.root, ide.settingsFile)
+      try {
+        const raw = await fs.readFile(settingsPath, 'utf8')
+        const parsed = JSON.parse(raw)
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return
+
+        delete parsed.methods
+        delete parsed.hooks
+        delete parsed.statusLine
+        delete parsed.fileSuggestion
+
+        await fs.writeFile(settingsPath, JSON.stringify(parsed, null, 2) + '\n', 'utf8')
+      } catch {
+        // Ignore invalid/missing settings files
+      }
+    })
+
+    await Promise.all(ops)
   }
 
   /**

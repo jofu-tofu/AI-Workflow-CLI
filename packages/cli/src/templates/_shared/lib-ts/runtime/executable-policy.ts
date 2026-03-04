@@ -13,7 +13,7 @@ export function parseLookupLines(stdout: string): string[] {
     .filter(Boolean)
 }
 
-export function pickWindowsPath(lines: string[], profile: WindowsLookupProfile): string | null {
+export function pickWindowsPath(lines: string[], profile: WindowsLookupProfile): null | string {
   if (lines.length === 0) return null
 
   if (profile === 'cmdOrExeFirst') {
@@ -31,7 +31,7 @@ export function selectLookupPath(
   lines: string[],
   platform: NodeJS.Platform = process.platform,
   windowsProfile: WindowsLookupProfile = 'cmdOrExeFirst',
-): string | null {
+): null | string {
   if (lines.length === 0) return null
   if (!isWindowsPlatform(platform)) return lines[0] ?? null
   return pickWindowsPath(lines, windowsProfile)
@@ -41,11 +41,11 @@ export function resolveExecutable(
   name: string,
   options?: {
     platform?: NodeJS.Platform | undefined
-    windowsProfile?: WindowsLookupProfile | undefined
     timeoutMs?: number | undefined
     windowsHide?: boolean | undefined
+    windowsProfile?: undefined | WindowsLookupProfile
   },
-): string | null {
+): null | string {
   const platform = options?.platform ?? process.platform
   const lines = lookupExecutables(name, {
     platform,

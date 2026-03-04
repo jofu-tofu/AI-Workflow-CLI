@@ -45,20 +45,15 @@ oclif-based CLI (`aiw`). Installs the core runtime (`.aiwcli/_core`) plus option
 
 ## Windows Tmux Architecture
 
-On Windows, tmux runs under MSYS2 with winpty bridging Unix PTYs to Windows ConPTY:
+On Windows, tmux runs under MSYS2/Git Bash and launches tools directly from the pane shell:
 
 ```
-Terminal (mintty/WT) ←→ tmux (Unix PTY) ←→ winpty (bridge) ←→ Node.js (ConPTY)
+Terminal (mintty/WT) ←→ tmux (MSYS2 PTY) ←→ tool process
 ```
-
-**Why winpty is required:** Node.js on Windows only recognizes Windows console handles as TTYs. Without winpty, `process.stdout.isTTY` is `undefined` inside MSYS2 tmux, so TUI apps fall back to non-interactive mode.
-
-**Do NOT use `winpty --mouse`:** It intercepts mouse events before tmux, bypassing tmux's copy-mode scroll. Without `--mouse`, tmux handles scroll wheel via copy-mode — same as Linux.
 
 **Windows-specific tmux overrides (`tmux-session.ts`):**
-- `Ss@:Se@:Cs@:Cr@` — suppress cursor shape changes (flicker through winpty)
+- `Ss@:Se@:Cs@:Cr@` — suppress cursor shape/color churn
 - `kmous=\E[<` — SGR extended mouse mode for mintty/WT
-- `status off` — disable status bar (redraws cause cursor position jumps through winpty)
 
 ## Context Tree
 

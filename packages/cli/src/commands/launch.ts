@@ -28,7 +28,7 @@ import {EXIT_CODES} from '../types/index.js'
  */
 export default class LaunchCommand extends BaseCommand {
   static override description =
-    'Launch Claude Code or Codex with AIW configuration (sandbox disabled, tmux-first with inline fallback)\n\n' +
+    'Launch Claude Code or Codex with AIW configuration (sandbox disabled, tmux-first; Windows opens mintty window first with inline fallback)\n\n' +
     'FLAGS\n' +
     '  --codex/-c: Launch Codex instead of Claude Code (uses --yolo flag)\n' +
     '  --new/-n: Open a new terminal in the current directory and launch there\n' +
@@ -91,6 +91,12 @@ static override flags = {
       required: false,
       hidden: true,
     }),
+    'spawned-window': Flags.boolean({
+      description: 'Internal: marks launch as re-entered in a spawned terminal window',
+      required: false,
+      hidden: true,
+      default: false,
+    }),
     'prompt-path': Flags.string({
       description: 'Path to prompt file for REPL-mode tools',
       required: false,
@@ -135,6 +141,7 @@ static override flags = {
     const launchFlag = useCodex ? '--codex' : ''
     const disableTmux = flags['no-tmux']
     const insideTmux = Boolean(process.env.TMUX)
+    const spawnedWindow = Boolean(flags['spawned-window'])
     const interactiveTty = Boolean(process.stdin.isTTY && process.stdout.isTTY)
     const wantJson = flags.json
     const wantWait = flags.wait
@@ -164,17 +171,19 @@ static override flags = {
       const cwd = process.cwd()
       this.debug(`Launching new terminal in: ${cwd}`)
 
-      let launchCmd = useCodex ? 'aiw launch --codex' : 'aiw launch'
-      if (promptText) {
-        const tmpFile = path.join(os.tmpdir(), `aiwcli-prompt-${Date.now()}-${process.pid}.txt`)
-        writeFileSync(tmpFile, promptText, {encoding: 'utf8', mode: 0o600})
-        launchCmd += ` --prompt-file ${this.shellQuote(tmpFile)}`
-      }
+      const launchCmd = this.buildSpawnedWindowCommand({
+        useCodex,
+        disableTmux,
+        ...(promptPath ? {promptPath} : {}),
+        ...(promptText ? {promptText} : {}),
+        ...(flags.env ? {rawEnvJson: flags.env} : {}),
+        ...(flags['tmux-session'] ? {tmuxSessionFlag: flags['tmux-session']} : {}),
+      })
 
       const result = await launchTerminal({
         cwd,
         command: launchCmd,
-        windowsShellPreference: useCodex && process.platform === 'win32' ? 'git-bash' : 'default',
+        windowsShellPreference: process.platform === 'win32' ? 'mintty' : 'default',
         debugLog: (msg) => this.debug(msg),
       })
 
@@ -253,6 +262,40 @@ static override flags = {
 
     // ── Normal launch flow (no pane manager detected) ──
     const shouldAutoTmux = !disableTmux && !insideTmux && interactiveTty
+    if (
+      process.platform === 'win32' &&
+      shouldAutoTmux &&
+      !spawnedWindow &&
+      !wantJson &&
+      !wantWait
+    ) {
+      const launchCmd = this.buildSpawnedWindowCommand({
+        useCodex,
+        disableTmux: false,
+        ...(promptPath ? {promptPath} : {}),
+        ...(promptText ? {promptText} : {}),
+        ...(flags.env ? {rawEnvJson: flags.env} : {}),
+        ...(flags['tmux-session'] ? {tmuxSessionFlag: flags['tmux-session']} : {}),
+      })
+
+      const windowResult = await launchTerminal({
+        cwd: process.cwd(),
+        command: launchCmd,
+        windowsShellPreference: 'mintty',
+        debugLog: (msg) => this.debug(msg),
+      })
+
+      if (windowResult.success) {
+        this.logInfo('Opened new mintty window for tmux-first launch on Windows')
+        this.exit(0)
+      }
+
+      this.logWarning(`${windowResult.error ?? 'failed to open new window'} — launching inline without tmux`)
+      const fallbackExit = await this.launchInline(cliCommand, cliArgs, promptText)
+      this.exit(fallbackExit)
+      return
+    }
+
     let exitCode: number
 
     try {
@@ -294,6 +337,43 @@ static override flags = {
     }
 
     this.exit(exitCode)
+  }
+
+  private buildCodexArgs(): string[] {
+    if (process.platform !== 'win32') return ['--yolo']
+    return ['-c', 'shell_type="bash"', '--yolo']
+  }
+
+  private buildSpawnedWindowCommand(params: {
+    disableTmux: boolean;
+    promptPath?: string;
+    promptText?: string;
+    rawEnvJson?: string;
+    tmuxSessionFlag?: string;
+    useCodex: boolean;
+  }): string {
+    const {useCodex, disableTmux, promptText, promptPath, rawEnvJson, tmuxSessionFlag} = params
+    const parts = ['aiw', 'launch', '--spawned-window']
+
+    if (useCodex) parts.push('--codex')
+    if (disableTmux) parts.push('--no-tmux')
+    if (tmuxSessionFlag?.trim()) {
+      parts.push('--tmux-session', this.shellQuote(tmuxSessionFlag.trim()))
+    }
+
+    if (rawEnvJson?.trim()) {
+      parts.push('--env', this.shellQuote(rawEnvJson))
+    }
+
+    if (promptPath) {
+      parts.push('--prompt-path', this.shellQuote(promptPath))
+    } else if (promptText) {
+      const tmpFile = path.join(os.tmpdir(), `aiwcli-prompt-${Date.now()}-${process.pid}.txt`)
+      writeFileSync(tmpFile, promptText, {encoding: 'utf8', mode: 0o600})
+      parts.push('--prompt-file', this.shellQuote(tmpFile))
+    }
+
+    return parts.join(' ')
   }
 
   private buildUniqueTmuxSessionName(base: string): string {
@@ -384,11 +464,6 @@ static override flags = {
 
   private shellQuote(input: string): string {
     return `'${input.replaceAll("'", `'"'"'`)}'`
-  }
-
-  private buildCodexArgs(): string[] {
-    if (process.platform !== 'win32') return ['--yolo']
-    return ['-c', 'shell_type="bash"', '--yolo']
   }
 
   private async waitForSentinel(result: LaunchDriverResult): Promise<void> {

@@ -220,23 +220,6 @@ export function getWindowsTmuxPreflightFailureReason(
   return result.reason ?? 'Windows tmux preflight failed'
 }
 
-export function withWindowsTmuxWinpty(
-  command: string,
-  backend: PaneBackend,
-  toolName?: string,
-  platform: NodeJS.Platform = process.platform,
-): string {
-  if (backend !== 'tmux' || !isWindowsPlatform(platform)) return command
-  const mode = process.env.AIW_WINPTY_MODE?.trim().toLowerCase()
-  if (mode === 'never') return command
-  // Do NOT use winpty --mouse: it would intercept mouse events before tmux,
-  // preventing tmux copy-mode scroll. Without --mouse, tmux handles scroll
-  // wheel via copy-mode (same as Linux).
-  if (mode === 'always') return `winpty bash -lc ${quoteForSh(command)}`
-  void toolName
-  return `winpty bash -lc ${quoteForSh(command)}`
-}
-
 function buildCommandForBackend(params: {
   backend: PaneBackend;
   toolPath: string;
@@ -345,7 +328,7 @@ export async function launchDriverInTmuxOrFallback(
     const sentinel = createSentinelIpcPaths(`aiwcli-pane-${options.toolName}`)
 
     // Tmux does not always propagate COLORTERM into panes.
-    // On winpty, avoid advertising truecolor because it causes palette corruption.
+    // Keep a 256-color policy on Windows tmux sessions.
     const effectiveEnvVars = paneLauncher.backend === 'tmux'
       ? buildTmuxLaunchEnv(envVars)
       : envVars
@@ -359,16 +342,11 @@ export async function launchDriverInTmuxOrFallback(
         mode,
         ...(options.promptPath ? { promptPath: options.promptPath } : {}),
       })
-      const effectiveBaseCommand = withWindowsTmuxWinpty(
-        baseCommand,
-        paneLauncher.backend,
-        options.toolName,
-      )
 
       const holdMessage = options.holdMessage ?? '[aiwcli] Driver exited. Pane held open.'
       const paneCommand = wrapPaneCommand({
         backend: paneLauncher.backend,
-        command: effectiveBaseCommand,
+        command: baseCommand,
         sentinelPath: sentinel.sentinelPath,
         autoClose: Boolean(options.autoClose),
         holdPane: Boolean(options.holdPane) && !options.autoClose,

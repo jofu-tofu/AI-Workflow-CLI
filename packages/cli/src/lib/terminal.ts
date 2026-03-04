@@ -29,6 +29,8 @@
  */
 
 import {spawn} from 'node:child_process'
+import {existsSync} from 'node:fs'
+import path from 'node:path'
 
 import {isCommandAvailable} from './runtime/executable-policy.js'
 import {isWindowsPlatform} from './runtime/platform-adapter.js'
@@ -67,17 +69,18 @@ interface TerminalLaunchOptions {
   cwd: string
 
   /**
-   * Preferred shell when launching on Windows.
-   * - default: Existing behavior (PowerShell in wt or fallback)
-   * - git-bash: Prefer Git Bash in wt, fallback to PowerShell if unavailable
-   */
-  windowsShellPreference?: 'default' | 'git-bash'
-
-  /**
    * Optional debug logging function.
    * If provided, debug messages will be passed to this function.
    */
   debugLog?: (message: string) => void
+
+  /**
+   * Preferred shell when launching on Windows.
+   * - default: Existing behavior (PowerShell in wt or fallback)
+   * - mintty: Prefer mintty + Git Bash, fallback to git-bash in wt, then PowerShell
+   * - git-bash: Prefer Git Bash in wt, fallback to PowerShell if unavailable
+   */
+  windowsShellPreference?: 'default' | 'git-bash' | 'mintty'
 }
 
 /**
@@ -145,19 +148,55 @@ async function launchPowerShellFallback(
  *
  * @param cwd - Working directory
  * @param command - Command to execute
+ * @param shellPreference - Preferred shell for Windows launches
  * @param debugLog - Optional debug logging function
  */
 async function launchWindowsTerminal(
   cwd: string,
   command: string,
-  shellPreference: 'default' | 'git-bash',
+  shellPreference: 'default' | 'git-bash' | 'mintty',
   debugLog?: (message: string) => void,
 ): Promise<TerminalLaunchResult> {
   const powershellCmd = detectPowerShell()
   debugLog?.(`Detected PowerShell: ${powershellCmd}; shell preference: ${shellPreference}`)
 
-  if (shellPreference === 'git-bash') {
-    const gitBashPath = findMsysBash()
+  const gitBashPath = findMsysBash()
+
+  if (shellPreference === 'mintty') {
+    const minttyPath = gitBashPath
+      ? path.join(path.dirname(gitBashPath), 'mintty.exe')
+      : null
+    const hasMintty = Boolean(minttyPath && existsSync(minttyPath))
+
+    if (hasMintty && gitBashPath && minttyPath) {
+      const escapedPath = cwd.replaceAll("'", String.raw`'\''`)
+      const bashCmd = `cd '${escapedPath}' && ${command}; exec bash`
+      debugLog?.(`Using mintty for Windows terminal: ${minttyPath}`)
+
+      return new Promise<TerminalLaunchResult>((resolve) => {
+        const terminal = spawn(minttyPath, [gitBashPath, '-lc', bashCmd], {
+          detached: true,
+          stdio: 'ignore',
+          env: cleanTerminalEnv(),
+          windowsHide: true,
+        })
+
+        terminal.on('error', (err) => {
+          debugLog?.(`mintty launch failed (${err.message}), falling back to Windows Terminal`)
+          launchWindowsTerminal(cwd, command, 'git-bash', debugLog)
+            .then(resolve)
+            .catch(() => resolve({success: false, error: 'Failed to launch fallback terminal'}))
+        })
+
+        terminal.unref()
+        resolve({success: true})
+      })
+    }
+
+    debugLog?.('mintty requested but not found, falling back to git-bash in Windows Terminal')
+  }
+
+  if (shellPreference === 'git-bash' || shellPreference === 'mintty') {
     if (gitBashPath) {
       const escapedPath = cwd.replaceAll("'", String.raw`'\''`)
       const bashCmd = `cd '${escapedPath}' && ${command}; exec bash`

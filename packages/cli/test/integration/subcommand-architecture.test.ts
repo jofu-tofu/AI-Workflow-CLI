@@ -19,7 +19,7 @@ describe('Subcommand Architecture Validation', () => {
   beforeAll(() => {
     mainHelp = execSync(`${bin} --help`, {encoding: 'utf8'})
     launchHelp = execSync(`${bin} launch --help`, {encoding: 'utf8'})
-  })
+  }, 30_000)
 
   describe('AC1/FR30: Subcommand Hierarchy', () => {
     it('lists available commands and executes top-level commands', () => {

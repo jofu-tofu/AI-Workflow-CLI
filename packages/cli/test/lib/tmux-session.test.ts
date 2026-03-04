@@ -76,31 +76,15 @@ describe('tmux-session', () => {
       expect(result).to.include('kmous=')
     })
 
-    it('uses winpty for tools on Windows by default', () => {
+    it('executes tools directly on Windows', () => {
       const result = buildShellCommand({
         sessionName: 'test',
-        toolPath: 'C:\\tools\\claude.exe',
+        toolPath: String.raw`C:\tools\claude.exe`,
         toolArgs: ['--dangerously-skip-permissions'],
         platform: 'win32',
       })
 
-      expect(result).to.include('exec winpty bash -c')
-    })
-
-    it('can disable winpty via AIW_WINPTY_MODE=never', () => {
-      const prev = process.env.AIW_WINPTY_MODE
-      process.env.AIW_WINPTY_MODE = 'never'
-      const result = buildShellCommand({
-        sessionName: 'test',
-        toolPath: 'C:\\tools\\codex.exe',
-        toolArgs: ['--yolo'],
-        platform: 'win32',
-      })
-      if (prev === undefined) delete process.env.AIW_WINPTY_MODE
-      else process.env.AIW_WINPTY_MODE = prev
-
-      expect(result).to.not.include('exec winpty bash -c')
-      expect(result).to.include("exec '/c/tools/codex.exe' '--yolo'")
+      expect(result).to.include("exec '/c/tools/claude.exe' '--dangerously-skip-permissions'")
     })
   })
 

@@ -13,7 +13,7 @@ const execFileAsync = promisify(execFile)
 const AIW_EXCLUDE_HEADER = '# AIW Installation'
 
 /** Standard exclude entries managed by AIW */
-export const AIW_EXCLUDE_ENTRIES = ['.aiwcli', '_output', '.claude', '.windsurf']
+export const AIW_EXCLUDE_ENTRIES = ['.aiwcli', '_output', '.claude', '.codex', '.windsurf']
 
 /** Entries that should NEVER be removed from exclude, even on clear */
 const AIW_PERMANENT_ENTRIES = ['_output']

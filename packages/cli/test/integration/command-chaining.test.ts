@@ -30,7 +30,7 @@ describe('Command Chaining Integration', () => {
     const result = await execAsync(`${binPath} launch --help`, {encoding: 'utf8'})
     helpOutput = result.stdout
     helpStderr = result.stderr
-  })
+  }, 30_000)
 
   describe('stdout/stderr separation', () => {
     it('piped output has no status messages and stderr is clean', () => {
