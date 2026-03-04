@@ -18,6 +18,7 @@ import {
   waitForSentinelFile,
 } from "../../runtime/sentinel-ipc.js";
 import { execFileAsync, findExecutable } from "../../runtime/subprocess-utils.js";
+import { findPsmux } from "../../runtime/tmux-preflight.js";
 import type { ExecutionBackend, ExecutionRequest, ExecutionResult } from "../execution-backend.js";
 
 export interface TmuxBackendOptions {
@@ -41,7 +42,11 @@ export class TmuxBackend implements ExecutionBackend {
   }
 
   async execute(request: ExecutionRequest): Promise<ExecutionResult> {
-    if (!process.env.TMUX) {
+    // On Windows, use psmux (native ConPTY multiplexer) instead of tmux
+    const isWindows = process.platform === "win32";
+    const muxBinary = isWindows ? "psmux" : "tmux";
+
+    if (!isWindows && !process.env.TMUX) {
       return {
         stdout: "",
         stderr: "tmux pane launch failed: TMUX is not set",
@@ -51,11 +56,11 @@ export class TmuxBackend implements ExecutionBackend {
       };
     }
 
-    const tmuxPath = findExecutable("tmux");
+    const tmuxPath = isWindows ? findPsmux() : findExecutable("tmux");
     if (!tmuxPath) {
       return {
         stdout: "",
-        stderr: "tmux pane launch failed: tmux not found on PATH",
+        stderr: `${muxBinary} pane launch failed: ${muxBinary} not found on PATH`,
         exitCode: 1,
         killed: false,
         signal: null,
@@ -84,7 +89,13 @@ export class TmuxBackend implements ExecutionBackend {
       if (this.options.splitTarget) {
         tmuxArgs.push("-t", this.options.splitTarget);
       }
-      tmuxArgs.push(`bash -lc ${quoteForSh(script)}`);
+      // On Windows (psmux), run directly — no bash wrapper needed.
+      // On Unix (tmux), wrap in bash login shell.
+      if (isWindows) {
+        tmuxArgs.push(script);
+      } else {
+        tmuxArgs.push(`bash -lc ${quoteForSh(script)}`);
+      }
 
       const split = await execFileAsync(tmuxPath, tmuxArgs, { timeout: 5000 });
       if (split.exitCode !== 0) {

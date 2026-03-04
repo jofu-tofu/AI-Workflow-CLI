@@ -141,7 +141,7 @@ describe('branch command', () => {
     it('should show help output when requested', async () => {
       const {error} = await runCommand('branch --help')
       // oclif help can short-circuit via an EEXIT(0) error in-process.
-      expect((error as unknown)?.oclif?.exit ?? 0).to.equal(0)
+      expect((error as Record<string, any>)?.oclif?.exit ?? 0).to.equal(0)
     })
 
     it('should error when --launch provided without branch name', async () => {
@@ -160,7 +160,7 @@ describe('branch command', () => {
       const {error} = await runCommand('branch')
       expect(error).to.exist
       // oclif sets exitCode on errors
-      expect((error as unknown).oclif?.exit).to.equal(2)
+      expect((error as Record<string, any>).oclif?.exit).to.equal(2)
     })
   })
 

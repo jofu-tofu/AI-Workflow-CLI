@@ -31,8 +31,8 @@ describe('install-state', () => {
     const state = await readInstallState(testDir)
     expect(state).to.exist
     expect(state?.core.installed).to.equal(true)
-    expect(state?.ides.claude.managed).to.equal(true)
-    expect(state?.ides.codex.managed).to.equal(true)
+    expect(state?.ides.claude!.managed).to.equal(true)
+    expect(state?.ides.codex!.managed).to.equal(true)
   })
 
   it('tracks method install/remove lifecycle', async () => {

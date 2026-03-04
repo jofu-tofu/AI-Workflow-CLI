@@ -23,10 +23,11 @@ oclif-based CLI (`aiw`). Installs the core runtime (`.aiwcli/_core`) plus option
 | `src/lib/template-installer.ts` | Template installation: status check, file copying, merge logic |
 | `src/lib/ide-path-resolver.ts` | Path resolution for `.aiwcli/` and IDE-specific directories |
 | `src/lib/settings-hierarchy.ts` | Merge settings across all active installed templates |
-| `src/lib/tmux-session.ts` | Tmux session creation, bootstrap commands, color/mouse config |
-| `src/lib/pane-driver.ts` | Pane launch orchestrator — consolidates all tmux/window pane splitting |
-| `src/lib/pane-launcher.ts` | Abstract pane launcher interface + factory (tmux in-session only) |
-| `src/lib/sentinel-ipc.ts` | Temp file IPC for pane-launched process results |
+| `src/lib/multiplexer.ts` | Unified multiplexer interface + `detectMultiplexer()` factory |
+| `src/lib/multiplexers/tmux.ts` | TmuxMultiplexer — tmux split/session (Unix) |
+| `src/lib/multiplexers/psmux.ts` | PsmuxMultiplexer — psmux split/session (Windows) |
+| `src/lib/tmux-session.ts` | Tmux bootstrap commands, color/mouse config, `findToolPath()` |
+| `src/lib/runtime/sentinel-ipc.ts` | Temp file IPC for pane-launched process results |
 | `src/templates/` | Template source files (kept in sync with `.aiwcli/`) |
 
 ## Constraints
@@ -43,13 +44,25 @@ oclif-based CLI (`aiw`). Installs the core runtime (`.aiwcli/_core`) plus option
 - IDE settings tracked as: `settings.methods[templateName] = { ides, installedAt }`
 - Template-specific IDE dirs use method-namespaced subdirectory layout
 
-## Windows Tmux Architecture
+## Launch Architecture (Multiplexer-First)
 
-On Windows, tmux runs under MSYS2/Git Bash and launches tools directly from the pane shell:
+`aiw launch` prefers running the REPL inside a terminal multiplexer for persistent
+sessions, pane splitting, and scrollback. The unified flow is:
 
 ```
-Terminal (mintty/WT) ←→ tmux (MSYS2 PTY) ←→ tool process
+detectMultiplexer() → Multiplexer | null
+  ├─ win32 → PsmuxMultiplexer (native ConPTY, install: winget install psmux)
+  └─ unix  → TmuxMultiplexer  (install: apt/brew install tmux)
+
+if (--no-tmux || !mux)     → inline (direct spawn in current terminal)
+else if (mux.isInsideSession()) → split pane in current session
+else                        → create new multiplexer session with REPL
 ```
+
+**Inside-session detection:**
+- tmux: `Boolean(process.env.TMUX)`
+- psmux: `Boolean(process.env.PSMUX_PANE)` — injected by `createSession()`;
+  only detects sessions we created (acceptable until psmux natively sets an env var)
 
 **Windows-specific tmux overrides (`tmux-session.ts`):**
 - `Ss@:Se@:Cs@:Cr@` — suppress cursor shape/color churn

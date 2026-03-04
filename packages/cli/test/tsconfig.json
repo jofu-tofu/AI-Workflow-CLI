@@ -2,11 +2,9 @@
   "extends": "../tsconfig",
   "compilerOptions": {
     "noEmit": true,
-    "types": ["node", "vitest/globals", "chai"],
-    "rootDir": "."
+    "types": ["node", "vitest/globals"],
+    "rootDir": "..",
+    "skipLibCheck": true
   },
-  "include": ["./**/*"],
-  "references": [
-    {"path": ".."}
-  ]
+  "include": ["./**/*", "../src/**/*"]
 }

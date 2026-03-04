@@ -7,12 +7,12 @@ import {Flags} from '@oclif/core'
 import BaseCommand from '../lib/base-command.js'
 import {ProcessSpawnError} from '../lib/errors.js'
 import {ensureLspPatch} from '../lib/lsp-patch.js'
-import {launchDriverInTmuxOrFallback, type LaunchDriverResult} from '../lib/pane-driver.js'
-import {createPaneLauncher} from '../lib/pane-launcher.js'
+import {detectMultiplexer, type SplitPaneResult} from '../lib/multiplexer.js'
 import {readSentinelExitCode, waitForSentinelFile} from '../lib/runtime/sentinel-ipc.js'
+import {findExecutable} from '../lib/runtime/subprocess-utils.js'
 import {spawnProcess} from '../lib/spawn.js'
 import {launchTerminal} from '../lib/terminal.js'
-import {enableTmuxColors, enableTmuxMouse, findToolPath, launchInTmuxSession} from '../lib/tmux-session.js'
+import {enableTmuxColors, enableTmuxMouse, findToolPath} from '../lib/tmux-session.js'
 import {checkVersionCompatibility, getClaudeCodeVersion} from '../lib/version.js'
 import {EXIT_CODES} from '../types/index.js'
 
@@ -23,8 +23,24 @@ import {EXIT_CODES} from '../types/index.js'
  * or Codex CLI with --yolo flag, enabling unattended execution.
  * Supports multiple parallel sessions.
  *
- * When already inside tmux, splits a new pane (absorbs template pane-driver logic).
- * Use --wait to block until the pane exits, --json for machine-readable output.
+ * ## Multiplexer-first launch (preferred)
+ *
+ * When a terminal multiplexer is available (psmux on Windows, tmux on Unix),
+ * the launch flow is:
+ *   - **Inside an existing session** → split a new pane in the current session
+ *   - **Outside any session** → create a new multiplexer session with the REPL
+ *
+ * This gives persistent sessions, pane splitting, and scrollback.
+ * Use `--no-tmux` to bypass the multiplexer and launch inline.
+ *
+ * ## Inline fallback
+ *
+ * When no multiplexer is available (or `--no-tmux` is set), the REPL launches
+ * directly in the current terminal.
+ *
+ * ## Install multiplexer
+ *   - Windows: `winget install psmux`  (native ConPTY multiplexer)
+ *   - Unix:    `apt install tmux` / `brew install tmux`
  */
 export default class LaunchCommand extends BaseCommand {
   static override description =
@@ -117,7 +133,6 @@ static override flags = {
     }),
   }
 
-  // eslint-disable-next-line complexity
   async run(): Promise<void> {
     const {flags} = await this.parse(LaunchCommand)
 
@@ -140,8 +155,6 @@ static override flags = {
     const cliArgs = useCodex ? this.buildCodexArgs() : ['--dangerously-skip-permissions']
     const launchFlag = useCodex ? '--codex' : ''
     const disableTmux = flags['no-tmux']
-    const insideTmux = Boolean(process.env.TMUX)
-    const spawnedWindow = Boolean(flags['spawned-window'])
     const interactiveTty = Boolean(process.stdin.isTTY && process.stdout.isTTY)
     const wantJson = flags.json
     const wantWait = flags.wait
@@ -195,138 +208,135 @@ static override flags = {
       return
     }
 
-    // ── Pane splitting (new behavior) ──
-    // When a pane manager is available (tmux, Windows Terminal, etc.),
-    // use pane-driver to split a new pane instead of spawning directly.
-    // Uses the abstract factory to detect the backend automatically.
-    const shouldUsePaneLauncher = !disableTmux
-    const paneLauncher = shouldUsePaneLauncher
-      ? await createPaneLauncher({requireTmuxSession: true})
-      : null
-    if (paneLauncher && !flags.new) {
-      this.logInfo(`Pane manager detected (${paneLauncher.backend}); splitting new pane`)
-      if (insideTmux) {
-        enableTmuxMouse()
-        enableTmuxColors()
+    // Version check for Claude Code
+    if (!useCodex) {
+      const version = await getClaudeCodeVersion()
+      const versionCheck = checkVersionCompatibility(version)
+      this.debug(`Claude Code version: ${versionCheck.version ?? 'unknown'}`)
+      this.debug(`Compatibility status: ${versionCheck.compatible ? 'compatible' : 'incompatible'}`)
+      if (versionCheck.warning) {
+        this.warn(versionCheck.warning)
       }
-
-      const splitFlag = flags.split === 'v' ? '-v' as const
-        : flags.split === 'h' ? '-h' as const
-          : 'auto' as const
-
-      // Build prompt path if we have prompt text
-      let effectivePromptPath = promptPath
-      if (!effectivePromptPath && promptText) {
-        const tmpFile = path.join(os.tmpdir(), `aiwcli-prompt-${Date.now()}-${process.pid}.txt`)
-        writeFileSync(tmpFile, promptText, {encoding: 'utf8', mode: 0o600})
-        effectivePromptPath = tmpFile
-      }
-
-      const driverResult = await launchDriverInTmuxOrFallback({
-        toolName: cliCommand,
-        mode: 'repl',
-        args: cliArgs,
-        env: extraEnv,
-        cwd: process.cwd(),
-        splitFlag,
-        promptPath: effectivePromptPath,
-        allowExecFallback: false,
-      })
-
-      if (wantJson) {
-        await this.handleJsonOutput(driverResult, wantWait)
-        return
-      }
-
-      if (!driverResult.launched) {
-        // Fall back to direct spawn if pane-driver fails
-        this.warn(`Pane split failed (${driverResult.reason}), launching directly`)
-        const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
-        const exitCode = await spawnProcess(cliCommand, finalArgs)
-        this.exit(exitCode)
-        return
-      }
-
-      if (driverResult.paneId) {
-        this.logInfo(`Launched in tmux pane: ${driverResult.paneId}`)
-      } else {
-        this.logInfo(`Launched in ${driverResult.backend}`)
-      }
-
-      if (wantWait && driverResult.sentinelPath) {
-        await this.waitForSentinel(driverResult)
-      }
-
-      return
+    } else {
+      this.debug('Launching Codex with --yolo flag')
     }
 
-    // ── Normal launch flow (no pane manager detected) ──
-    const shouldAutoTmux = !disableTmux && !insideTmux && interactiveTty
-    if (
-      process.platform === 'win32' &&
-      shouldAutoTmux &&
-      !spawnedWindow &&
-      !wantJson &&
-      !wantWait
-    ) {
-      const launchCmd = this.buildSpawnedWindowCommand({
-        useCodex,
-        disableTmux: false,
-        ...(promptPath ? {promptPath} : {}),
-        ...(promptText ? {promptText} : {}),
-        ...(flags.env ? {rawEnvJson: flags.env} : {}),
-        ...(flags['tmux-session'] ? {tmuxSessionFlag: flags['tmux-session']} : {}),
-      })
-
-      const windowResult = await launchTerminal({
-        cwd: process.cwd(),
-        command: launchCmd,
-        windowsShellPreference: 'mintty',
-        debugLog: (msg) => this.debug(msg),
-      })
-
-      if (windowResult.success) {
-        this.logInfo('Opened new mintty window for tmux-first launch on Windows')
-        this.exit(0)
-      }
-
-      this.logWarning(`${windowResult.error ?? 'failed to open new window'} — launching inline without tmux`)
-      const fallbackExit = await this.launchInline(cliCommand, cliArgs, promptText)
-      this.exit(fallbackExit)
-      return
-    }
+    // ── Unified multiplexer flow ──
+    // detectMultiplexer(): Windows → psmux, Unix → tmux, null if unavailable
+    const mux = disableTmux ? null : await detectMultiplexer()
 
     let exitCode: number
 
     try {
-      if (useCodex) {
-        this.debug('Launching Codex with --yolo flag')
-      } else {
-        const version = await getClaudeCodeVersion()
-        const versionCheck = checkVersionCompatibility(version)
-        this.debug(`Claude Code version: ${versionCheck.version ?? 'unknown'}`)
-        this.debug(`Compatibility status: ${versionCheck.compatible ? 'compatible' : 'incompatible'}`)
-        if (versionCheck.warning) {
-          this.warn(versionCheck.warning)
-        }
-      }
-
-      if (shouldAutoTmux) {
-        exitCode = await this.launchViaAutoTmuxOrInline({
-          cliCommand,
-          cliArgs,
-          ...(promptText ? {promptText} : {}),
-          ...(flags['tmux-session'] ? {tmuxSessionFlag: flags['tmux-session']} : {}),
-        })
-      } else {
+      if (!mux) {
+        // No multiplexer available or disabled — inline launch
         if (disableTmux) {
-          this.logInfo('Tmux disabled via --no-tmux — launching inline')
+          this.logInfo('Multiplexer disabled via --no-tmux — launching inline')
         } else if (!interactiveTty) {
           this.logInfo('Non-interactive terminal — launching inline')
+        } else if (process.platform === 'win32') {
+          this.logInfo('No multiplexer found — launching inline. Install psmux for session management: winget install psmux')
+        } else {
+          this.logInfo('No multiplexer found — launching inline. Install tmux for session management.')
         }
 
         const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
         exitCode = await spawnProcess(cliCommand, finalArgs)
+      } else if (mux.isInsideSession()) {
+        // Inside session — split a new pane
+        this.logInfo(`Inside ${mux.backend} session — splitting new pane`)
+        if (mux.backend === 'tmux') {
+          enableTmuxMouse()
+          enableTmuxColors()
+        }
+
+        // Build prompt path if we have prompt text but no path
+        let effectivePromptPath = promptPath
+        if (!effectivePromptPath && promptText) {
+          const tmpFile = path.join(os.tmpdir(), `aiwcli-prompt-${Date.now()}-${process.pid}.txt`)
+          writeFileSync(tmpFile, promptText, {encoding: 'utf8', mode: 0o600})
+          effectivePromptPath = tmpFile
+        }
+
+        const splitResult = await mux.splitPane({
+          toolName: cliCommand,
+          args: cliArgs,
+          env: extraEnv,
+          cwd: process.cwd(),
+          split: (flags.split as 'auto' | 'h' | 'v') ?? 'auto',
+          promptPath: effectivePromptPath,
+          sentinel: wantWait || wantJson,
+        })
+
+        if (wantJson) {
+          await this.handleJsonOutput(splitResult, wantWait)
+          return
+        }
+
+        if (!splitResult.launched) {
+          this.warn(`Pane split failed (${splitResult.reason}), launching directly`)
+          const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
+          exitCode = await spawnProcess(cliCommand, finalArgs)
+        } else {
+          if (splitResult.paneId) {
+            this.logInfo(`Launched in ${mux.backend} pane: ${splitResult.paneId}`)
+          } else {
+            this.logInfo(`Launched in ${mux.backend}`)
+          }
+
+          if (wantWait && splitResult.sentinelPath) {
+            await this.waitForSentinel(splitResult)
+          }
+
+          return
+        }
+      } else {
+        // Outside session — create new session
+        // psmux runs commands via PowerShell, which needs .cmd shims (not POSIX shims).
+        // findExecutable prefers .cmd on Windows; findToolPath prefers extensionless (for bash/tmux).
+        const resolvedPath = mux.backend === 'psmux' ? findExecutable(cliCommand) : findToolPath(cliCommand)
+        if (!resolvedPath) {
+          this.logWarning(`${cliCommand} not found on PATH (install from https://claude.ai/download)`)
+          const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
+          exitCode = await spawnProcess(cliCommand, finalArgs)
+        } else {
+          const sessionFromFlag = flags['tmux-session']?.trim()
+          const reattach = Boolean(sessionFromFlag && sessionFromFlag.length > 0)
+          const sessionName = reattach
+            ? this.sanitizeSessionName(sessionFromFlag!)
+            : this.buildUniqueSessionName(`aiw-${path.basename(process.cwd())}`)
+
+          if (reattach) {
+            this.logInfo(`Launching in ${mux.backend} session: ${sessionName} (reuse/attach)`)
+          } else {
+            this.logInfo(`Launching in new ${mux.backend} session: ${sessionName}`)
+          }
+
+          const result = await mux.createSession({
+            sessionName,
+            reattach,
+            toolPath: resolvedPath,
+            toolArgs: cliArgs,
+            promptText,
+          })
+
+          if (result.usedMux) {
+            exitCode = result.exitCode
+          } else {
+            if (result.reason) {
+              if (result.reason.includes('not found') || result.reason.includes('unavailable')) {
+                this.logWarning(`${mux.backend} unavailable — launching inline. ${mux.backend === 'psmux' ? 'Install with: winget install psmux' : ''}`)
+              } else if (result.reason.includes('too old')) {
+                this.logWarning(`${result.reason} — launching inline. ${mux.backend === 'psmux' ? 'Update with: winget upgrade psmux' : ''}`)
+              } else {
+                this.logWarning(`${result.reason} — launching inline`)
+              }
+            }
+
+            const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
+            exitCode = await spawnProcess(cliCommand, finalArgs)
+          }
+        }
       }
     } catch (error) {
       if (error instanceof ProcessSpawnError) {
@@ -376,14 +386,14 @@ static override flags = {
     return parts.join(' ')
   }
 
-  private buildUniqueTmuxSessionName(base: string): string {
-    const safeBase = this.sanitizeTmuxSessionName(base)
+  private buildUniqueSessionName(base: string): string {
+    const safeBase = this.sanitizeSessionName(base)
     const timestamp = Date.now().toString(36)
     const pid = process.pid.toString(36)
-    return this.sanitizeTmuxSessionName(`${safeBase}-${timestamp}-${pid}`)
+    return this.sanitizeSessionName(`${safeBase}-${timestamp}-${pid}`)
   }
 
-  private async handleJsonOutput(result: LaunchDriverResult, wait: boolean): Promise<void> {
+  private async handleJsonOutput(result: SplitPaneResult, wait: boolean): Promise<void> {
     let {exitCode} = result
 
     if (wait && result.launched && result.sentinelPath) {
@@ -403,57 +413,7 @@ static override flags = {
     this.exit(exitCode ?? 0)
   }
 
-  private async launchInline(
-    cliCommand: string,
-    cliArgs: string[],
-    promptText?: string,
-  ): Promise<number> {
-    this.logInfo(`Launching ${cliCommand} inline`)
-    const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
-    return spawnProcess(cliCommand, finalArgs)
-  }
-
-  private async launchViaAutoTmuxOrInline(params: {
-    cliArgs: string[];
-    cliCommand: string;
-    promptText?: string;
-    tmuxSessionFlag?: string;
-  }): Promise<number> {
-    const {cliCommand, cliArgs, promptText, tmuxSessionFlag} = params
-    const resolvedPath = findToolPath(cliCommand)
-
-    if (!resolvedPath) {
-      this.logWarning(`${cliCommand} not found on PATH (install from https://claude.ai/download)`)
-      return this.launchInline(cliCommand, cliArgs, promptText)
-    }
-
-    const sessionFromFlag = tmuxSessionFlag?.trim()
-    const reattach = Boolean(sessionFromFlag && sessionFromFlag.length > 0)
-    const sessionName = reattach
-      ? this.sanitizeTmuxSessionName(sessionFromFlag!)
-      : this.buildUniqueTmuxSessionName(`aiw-${path.basename(process.cwd())}`)
-
-    if (reattach) {
-      this.logInfo(`Launching in tmux session: ${sessionName} (reuse/attach)`)
-    } else {
-      this.logInfo(`Launching in new tmux session: ${sessionName}`)
-    }
-
-    const result = await launchInTmuxSession({
-      sessionName,
-      reattach,
-      toolPath: resolvedPath,
-      toolArgs: cliArgs,
-      promptText,
-    })
-
-    if (result.usedTmux) return result.exitCode
-
-    if (result.reason) this.logWarning(`${result.reason} — launching inline`)
-    return this.launchInline(cliCommand, cliArgs, promptText)
-  }
-
-  private sanitizeTmuxSessionName(input: string): string {
+  private sanitizeSessionName(input: string): string {
     const trimmed = input.trim().toLowerCase()
     const safe = trimmed
       .replaceAll(/[^a-z0-9_-]/g, '-')
@@ -466,7 +426,7 @@ static override flags = {
     return `'${input.replaceAll("'", `'"'"'`)}'`
   }
 
-  private async waitForSentinel(result: LaunchDriverResult): Promise<void> {
+  private async waitForSentinel(result: SplitPaneResult): Promise<void> {
     if (!result.sentinelPath) return
     const finished = await waitForSentinelFile(result.sentinelPath, 14_400_000)
     if (finished) {
@@ -477,6 +437,3 @@ static override flags = {
     }
   }
 }
-
-
-

@@ -46,16 +46,14 @@ describe('launch command', () => {
 
     it('exposes launch helpers used by run flow', () => {
       const methods = getPrototypeMethods()
-      expect(methods.has('launchInline')).to.equal(true)
-      expect(methods.has('launchViaAutoTmuxOrInline')).to.equal(true)
       expect(methods.has('waitForSentinel')).to.equal(true)
       expect(methods.has('handleJsonOutput')).to.equal(true)
     })
 
     it('exposes helper utilities for session/prompt handling', () => {
       const methods = getPrototypeMethods()
-      expect(methods.has('buildUniqueTmuxSessionName')).to.equal(true)
-      expect(methods.has('sanitizeTmuxSessionName')).to.equal(true)
+      expect(methods.has('buildUniqueSessionName')).to.equal(true)
+      expect(methods.has('sanitizeSessionName')).to.equal(true)
       expect(methods.has('shellQuote')).to.equal(true)
     })
   })
@@ -143,8 +141,13 @@ describe('launch command', () => {
     })
 
     it('defines --split enum options', () => {
-      const splitFlag = LaunchCommand.flags.split as {options?: string[]}
+      const splitFlag = LaunchCommand.flags.split as {options?: readonly string[]}
       expect(splitFlag.options).to.deep.equal(['auto', 'h', 'v'])
+    })
+
+    it('--split has no default so psmux skips splitting unless explicit', () => {
+      const splitFlag = LaunchCommand.flags.split as {default?: string}
+      expect(splitFlag.default).to.equal(undefined)
     })
   })
 })

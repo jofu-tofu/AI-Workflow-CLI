@@ -472,7 +472,7 @@ if (!result.launched) {
   process.exit(0);
 }
 
-const backendLabel = result.backend === "tmux" ? "tmux pane" : "window";
+const backendLabel = result.backend === "tmux" ? "tmux pane" : result.backend === "psmux" ? "psmux pane" : "window";
 if (result.paneId) {
   console.log(`Codex launched in ${backendLabel}: ${result.paneId}`);
 } else {

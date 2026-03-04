@@ -115,7 +115,7 @@ describe('Command Chaining Integration', () => {
       expect(result).to.include('OK')
     })
 
-    it('PowerShell chains work (Windows only)', function () {
+    it('PowerShell chains work (Windows only)', function (this: any) {
       if (!isWindows) {
         this.skip()
       }

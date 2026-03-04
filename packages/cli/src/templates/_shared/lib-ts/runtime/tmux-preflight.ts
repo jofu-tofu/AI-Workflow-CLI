@@ -62,6 +62,13 @@ export function isNativeTmuxAvailable(platform: NodeJS.Platform = process.platfo
   return isCommandAvailable('tmux', platform)
 }
 
+/** Find psmux (native Windows terminal multiplexer) on PATH. */
+export function findPsmux(): null | string {
+  if (!isWindowsPlatform()) return null
+  const candidates = lookupExecutables('psmux', { platform: 'win32' })
+  return candidates[0]?.trim() || null
+}
+
 export interface WindowsTmuxPreflight {
   available: boolean
   bashPath?: string

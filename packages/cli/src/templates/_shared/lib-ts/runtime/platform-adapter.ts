@@ -17,20 +17,17 @@ export function shouldUseShell(platform: NodeJS.Platform = process.platform): bo
 }
 
 export function resolveTmuxColorModeForPlatform(
-  platform: NodeJS.Platform = process.platform,
+  _platform?: NodeJS.Platform,
 ): TmuxColorMode {
-  return isWindowsPlatform(platform) ? 'c256' : 'truecolor'
+  // Always truecolor — Windows now uses psmux (native ConPTY) which supports truecolor natively.
+  // The c256 degradation was only needed for tmux-via-MSYS2-bash.
+  return 'truecolor'
 }
 
 export function applyTmuxLaunchEnv(
   envVars: Record<string, string>,
-  platform: NodeJS.Platform = process.platform,
+  _platform?: NodeJS.Platform,
 ): Record<string, string> {
-  if (isNonWindowsPlatform(platform)) {
-    return { COLORTERM: 'truecolor', ...envVars }
-  }
-
-  const rest = { ...envVars }
-  delete rest.COLORTERM
-  return rest
+  // Always inject truecolor — psmux on Windows and tmux on Unix both support it.
+  return { COLORTERM: 'truecolor', ...envVars }
 }
