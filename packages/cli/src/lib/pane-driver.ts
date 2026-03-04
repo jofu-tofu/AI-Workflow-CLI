@@ -229,6 +229,9 @@ export function withWindowsTmuxWinpty(
   if (backend !== 'tmux' || !isWindowsPlatform(platform)) return command
   const mode = process.env.AIW_WINPTY_MODE?.trim().toLowerCase()
   if (mode === 'never') return command
+  // Do NOT use winpty --mouse: it would intercept mouse events before tmux,
+  // preventing tmux copy-mode scroll. Without --mouse, tmux handles scroll
+  // wheel via copy-mode (same as Linux).
   if (mode === 'always') return `winpty bash -lc ${quoteForSh(command)}`
   void toolName
   return `winpty bash -lc ${quoteForSh(command)}`

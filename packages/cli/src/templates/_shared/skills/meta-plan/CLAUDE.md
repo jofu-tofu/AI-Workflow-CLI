@@ -27,7 +27,7 @@ meta-plan/
 
 ## Design Decisions
 
-**Reasoning lenses, not action steps:** Each of the 7 analysis categories is a lens for examining the problem from a specific angle. They contain concrete instructions for deepening understanding, not for producing implementation steps. This makes MetaPlan fully functional without unknown external skill system. Skills are system-agnostic — they work in unknown AI environment.
+**Reasoning lenses, not action steps:** Each of the 7 analysis categories is a lens for examining the problem from a specific angle. They contain concrete instructions for deepening understanding, not for producing implementation steps. This makes MetaPlan fully functional without requiring any external skill system. Skills are system-agnostic — they work in any AI environment.
 
 **Prompt amplification model:** MetaPlan's output is an "Amplified Request" — the original prompt enriched with decomposition, approach analysis, trade-offs, risks, and a recommended direction. This becomes the input for a planning session, not the plan itself.
 

@@ -64,9 +64,17 @@ export function buildTmuxRuntimeBootstrapCommands(
     commands.push('tmux set -a terminal-overrides ",xterm*:Tc,alacritty:Tc" >/dev/null 2>&1 || true')
   }
   if (isWindowsPlatform(platform)) {
-    // Suppress cursor shape changes — they cause visible flicker through winpty bridge.
-    // Enable SGR extended mouse mode (1006) for proper scroll wheel support in mintty/WT.
-    commands.push('tmux set -as terminal-overrides ",*:Ss@:Se@:Cs@:Cr@:kmous=\\\\E[<" >/dev/null 2>&1 || true')
+    // Reset terminal-overrides to clear stale entries (e.g. kmous@ from older AIW runs)
+    // then set Windows-specific overrides:
+    //   Ss@:Se@:Cs@:Cr@ — suppress cursor shape changes (flicker through winpty)
+    //   kmous=\E[< — SGR extended mouse mode for scroll wheel in mintty/WT
+    commands.push('tmux set -gu terminal-overrides >/dev/null 2>&1 || true')
+    commands.push('tmux set -g terminal-overrides ",*:Ss@:Se@:Cs@:Cr@:kmous=\\E[<" >/dev/null 2>&1 || true')
+
+    // Disable status bar — on Windows/winpty, tmux status redraws cause visible cursor
+    // jumps because winpty translates every intermediate cursor position into a Win32
+    // SetConsoleCursorPosition call with no buffering.
+    commands.push('tmux set-option -g status off >/dev/null 2>&1 || true')
   }
 
   return commands
@@ -329,9 +337,14 @@ export function enableTmuxColors(): void {
 
     // Separate try/catch so terminal-overrides failure doesn't suppress default-terminal success
     try {
-      // Suppress cursor shape changes on Windows to reduce flicker through winpty bridge.
-      // Enable SGR extended mouse mode for scroll wheel support.
-      execFileSync(bashPath, ['-lc', `${tmuxPrefix} set -as terminal-overrides ',*:Ss@:Se@:Cs@:Cr@:kmous=\\E[<'`], winOpts)
+      // Clear stale overrides then set Windows-specific ones
+      execFileSync(bashPath, ['-lc', `${tmuxPrefix} set -gu terminal-overrides`], winOpts)
+      execFileSync(bashPath, ['-lc', `${tmuxPrefix} set -g terminal-overrides ',*:Ss@:Se@:Cs@:Cr@:kmous=\\E[<'`], winOpts)
+    } catch { /* best-effort */ }
+
+    // Disable status bar to avoid cursor position jumps from tmux status redraws
+    try {
+      execFileSync(bashPath, ['-lc', `${tmuxPrefix} set-option -g status off`], winOpts)
     } catch { /* best-effort */ }
   } catch {
     // Best-effort — ignore failures

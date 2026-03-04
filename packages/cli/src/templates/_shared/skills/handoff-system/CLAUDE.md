@@ -169,6 +169,8 @@ If `plan_hash` differs from `plan_hash_consumed`, new plan detected:
 
 ## Scripts
 
+> Note: This file documents template source paths (`.aiwcli/_shared/...`). During installation, settings command paths are normalized to runtime `.aiwcli/_core/...`.
+
 ### save_handoff.ts
 
 **Usage:**
@@ -309,7 +311,7 @@ function buildDeadEndsSection(deadEnds: DeadEnd[]): string
 
 **Used by:** `/aiwcli-shared:handoff` workflow to programmatically generate handoff content before piping to `save_handoff.ts`.
 
-**Note:** Currently not imported by unknown files. Moved here for logical grouping and completeness.
+**Note:** Currently not imported by runtime hooks directly. Kept here for logical grouping and completeness.
 
 ## Skill Integration
 

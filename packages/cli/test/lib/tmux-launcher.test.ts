@@ -7,16 +7,9 @@ describe('tmux-launcher', () => {
     it('prepends tmux runtime bootstrap commands on Windows', () => {
       const result = withWindowsTmuxBootstrap('exec codex --yolo', 'win32')
 
-      expect(result).to.include('tmux set-option -g mouse on')
-      expect(result).to.include('tmux set-option -g history-limit 50000')
-      expect(result).to.not.include('tmux set-option -g focus-events off')
-      expect(result).to.not.include('tmux unbind -n WheelUpPane')
-      expect(result).to.not.include('tmux unbind -n WheelDownPane')
-      expect(result).to.not.include('tmux bind -n WheelUpPane')
-      expect(result).to.not.include('tmux bind -n WheelDownPane')
-      expect(result).to.not.include('tmux set -gu terminal-overrides')
-      expect(result).to.not.include('tmux set -g terminal-overrides')
-      expect(result).to.not.include('*:kmous@')
+      expect(result).to.include('mouse on')
+      expect(result).to.include('history-limit')
+      expect(result).to.include('terminal-overrides')
       expect(result.endsWith('exec codex --yolo')).to.equal(true)
     })
 

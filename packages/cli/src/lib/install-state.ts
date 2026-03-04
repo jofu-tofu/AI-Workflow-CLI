@@ -83,6 +83,13 @@ export async function markCoreInstalled(targetDir: string, ides: string[]): Prom
   await writeInstallState(targetDir, state)
 }
 
+export async function markCoreRemoved(targetDir: string): Promise<void> {
+  const state = await ensureInstallState(targetDir)
+  state.core.installed = false
+  state.updatedAt = new Date().toISOString()
+  await writeInstallState(targetDir, state)
+}
+
 export async function markMethodInstalled(targetDir: string, method: string, ides: string[]): Promise<void> {
   const state = await ensureInstallState(targetDir)
   const now = new Date().toISOString()

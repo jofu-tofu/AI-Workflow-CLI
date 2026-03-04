@@ -21,7 +21,7 @@ These cause silent failures or UI noise when violated:
 - **stdout is sacred:** Only hook JSON output goes to stdout. Use logger functions for diagnostics, never `console.log()` or `print()`
 - **stderr is opt-in:** `logDebug/logInfo/logWarn/logError` write to file only. Use `logBlocking()` when you NEED stderr visibility
 - **Catch non-critical errors locally:** Uncaught errors bubble to `runHook` which writes to stderr, showing "hook error" in the UI even on exit 0
-- **No reverse imports:** Never import from method lib (e.g., `_cc-native/lib/`) into shared lib
+- **No reverse imports:** Never import from method-specific libraries into shared lib
 
 ---
 
@@ -89,7 +89,7 @@ Hooks have multiple channels back to the session. Pick the right one:
 
 | Want to... | Function | Who sees it |
 |------------|----------|-------------|
-| **Block (unknown event)** | `emitBlock(reason, context?)` | Claude + user — auto-dispatches to correct mechanism |
+| **Block (event-aware)** | `emitBlock(reason, context?)` | Claude + user — auto-dispatches to correct mechanism |
 | Block tool (PreToolUse only) | `emitContextAndBlock(context, reason)` | Claude + user (denial reason prominent) |
 | Return message, don't block | `emitContext(context)` | Claude + user (in transcript) |
 | Log only (diagnostics) | `logInfo()` / `logWarn()` / etc. | Nobody in session — file only |
@@ -157,7 +157,7 @@ emitPermissionDecision("deny", { message: "Why denied" });
 emitPermissionDecision("allow", { updatedInput: { /* modified input */ } });
 ```
 
-### Channel 6: Non-blocking Context (unknown hook event)
+### Channel 6: Non-blocking Context (supported hook events)
 
 ```typescript
 emitContext("Information added to Claude's context");
@@ -238,7 +238,7 @@ Claude Code validates `hookSpecificOutput` using a Zod discriminated union keyed
 | **0** + deny JSON | Yes | Yes (PreToolUse only) | `additionalContext` + denial reason | Yes |
 | **0** + context JSON | Yes | No | `additionalContext` in transcript | Yes |
 | **1** | No | No | stderr in verbose mode only | Yes |
-| **2** | No | Yes (unknown event) | stderr fed as system-reminder | Yes |
+| **2** | No | Yes (event-dependent) | stderr fed as system-reminder | Yes |
 
 **Key insight:** Exit 0 + `permissionDecision: "deny"` is the correct way to block a tool. Exit 2 is a blunt instrument — it ignores your JSON and feeds raw stderr to Claude. Use exit 0 + deny for clean blocking with structured feedback.
 
@@ -255,7 +255,7 @@ Early testing suggested ExitPlanMode was "immune" to PreToolUse deny. **This was
 - Exit 2 also appeared to "not work" for PreToolUse (JSON was ignored as expected, but the blocking was via stderr, not deny)
 - PostToolUse with exit 2 appeared to work because it used stderr (not JSON), bypassing the Zod issue
 
-**Lesson:** When a hook output seems to be "silently ignored," check the JSON schema first. The Zod validator rejects malformed output without unknown error message.
+**Lesson:** When a hook output seems to be "silently ignored," check the JSON schema first. The Zod validator rejects malformed output without an explicit error message.
 
 ### Debugging Checklist
 
@@ -311,7 +311,7 @@ Use this table to find the right file. Read the source for full API details.
 | `git-state.ts` | Git snapshot | `captureGitState()` |
 | `subprocess-utils.ts` | Recursive call guard | `isInternalCall()` |
 | `stop-words.ts` | Word list for ID generation | Used by `utils.ts` internally |
-| `lint-dispatch.ts` | Post-edit lint dispatching | `dispatchLint()` |
+| `lint-dispatch.ts` | Post-edit lint dispatching | `getLinterForFile()`, `runLinter()`, `formatLintErrors()` |
 
 ### `context/` — Context State Management
 
@@ -369,14 +369,14 @@ These run for ALL templates. Method-specific hooks live in `_{method}/hooks/`.
 ---
 ## Context Maintenance
 
-**After modifying files in this directory:** scan the entries above — if unknown claim is now
+**After modifying files in this directory:** scan the entries above — if any claim is now
 false or incomplete, update this file before ending the task. Do not defer.
 
 **Add** an entry only if an agent would fail without knowing it, it is not obvious from
 the code, and it belongs at this scope (project-wide rule → root CLAUDE.md; WHY decision
 → inline comment or ADR; inferable from code → nowhere).
 
-**Remove** unknown entry that fails the falsifiability test: if removing it would not change
+**Remove** any entry that fails the falsifiability test: if removing it would not change
 how an agent acts here, remove it. If a convention here conflicts with the codebase,
 the codebase wins — update this file, do not work around it. Prune aggressively.
 

@@ -1,6 +1,6 @@
 # CLI Package (`packages/cli`)
 
-oclif-based CLI (`aiw`). Installs cc-native and other templates into user projects.
+oclif-based CLI (`aiw`). Installs the core runtime (`.aiwcli/_core`) plus optional method templates into user projects.
 
 ## Commands
 
@@ -17,9 +17,13 @@ oclif-based CLI (`aiw`). Installs cc-native and other templates into user projec
 | File | Role |
 |------|------|
 | `src/commands/init/index.ts` | `init` command: template selection, IDE wizard, install flow |
+| `src/lib/core-installer.ts` | Installs core runtime from `src/templates/_shared` into `.aiwcli/_core` |
+| `src/lib/core-ide-base.ts` | Base Claude/Windsurf settings commands for `_core` hooks/scripts |
+| `src/lib/template-settings-reconstructor.ts` | Reconstructs IDE settings from active templates and normalizes `_shared` paths to `_core` |
 | `src/lib/template-installer.ts` | Template installation: status check, file copying, merge logic |
 | `src/lib/ide-path-resolver.ts` | Path resolution for `.aiwcli/` and IDE-specific directories |
 | `src/lib/settings-hierarchy.ts` | Merge settings across all active installed templates |
+| `src/lib/tmux-session.ts` | Tmux session creation, bootstrap commands, color/mouse config |
 | `src/lib/pane-driver.ts` | Pane launch orchestrator — consolidates all tmux/window pane splitting |
 | `src/lib/pane-launcher.ts` | Abstract pane launcher interface + factory (tmux in-session only) |
 | `src/lib/sentinel-ipc.ts` | Temp file IPC for pane-launched process results |
@@ -34,9 +38,27 @@ oclif-based CLI (`aiw`). Installs cc-native and other templates into user projec
 
 ## Conventions
 
-- Template detection: directories under `.aiwcli/` using non-dot naming
+- Core runtime path is `.aiwcli/_core`; method paths remain `.aiwcli/_{method}`
+- Template source for core runtime is `src/templates/_shared`
 - IDE settings tracked as: `settings.methods[templateName] = { ides, installedAt }`
 - Template-specific IDE dirs use method-namespaced subdirectory layout
+
+## Windows Tmux Architecture
+
+On Windows, tmux runs under MSYS2 with winpty bridging Unix PTYs to Windows ConPTY:
+
+```
+Terminal (mintty/WT) ←→ tmux (Unix PTY) ←→ winpty (bridge) ←→ Node.js (ConPTY)
+```
+
+**Why winpty is required:** Node.js on Windows only recognizes Windows console handles as TTYs. Without winpty, `process.stdout.isTTY` is `undefined` inside MSYS2 tmux, so TUI apps fall back to non-interactive mode.
+
+**Do NOT use `winpty --mouse`:** It intercepts mouse events before tmux, bypassing tmux's copy-mode scroll. Without `--mouse`, tmux handles scroll wheel via copy-mode — same as Linux.
+
+**Windows-specific tmux overrides (`tmux-session.ts`):**
+- `Ss@:Se@:Cs@:Cr@` — suppress cursor shape changes (flicker through winpty)
+- `kmous=\E[<` — SGR extended mouse mode for mintty/WT
+- `status off` — disable status bar (redraws cause cursor position jumps through winpty)
 
 ## Context Tree
 
@@ -52,4 +74,4 @@ with the actual codebase, the codebase wins.
 **When to trigger audit:** after adding new commands, after renaming lib files, or after
 template structure changes.
 
-<!-- context-layer: generated=2026-02-18 | last-audited=2026-02-18 | version=1 -->
+<!-- context-layer: generated=2026-02-18 | last-audited=2026-03-03 | version=2 -->

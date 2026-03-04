@@ -6,8 +6,9 @@ import {Flags} from '@oclif/core'
 
 import BaseCommand from '../lib/base-command.js'
 import {computeExcludeRemovals, pruneExcludeStaleEntries, removeExcludeEntries, resolveGitDir} from '../lib/git-exclude-manager.js'
-import {deleteInstallStateIfPresent, getInstalledMethodsFromState, markMethodRemoved, readInstallState} from '../lib/install-state.js'
+import {deleteInstallStateIfPresent, getInstalledMethodsFromState, markCoreRemoved, markMethodRemoved, readInstallState} from '../lib/install-state.js'
 import {pathExists} from '../lib/paths.js'
+import {getTemplatePath} from '../lib/template-resolver.js'
 import {reconstructIdeSettings} from '../lib/template-settings-reconstructor.js'
 import {EXIT_CODES} from '../types/exit-codes.js'
 
@@ -22,6 +23,9 @@ const AIWCLI_CONTAINER = '.aiwcli'
  * Structure: .aiwcli/_output/{method}/ (e.g., .aiwcli/_output/bmad/, .aiwcli/_output/gsd/)
  */
 const OUTPUT_FOLDER_NAME = '_output'
+const SHARED_TEMPLATE_NAME = '_shared'
+const SETTINGS_FILES_TO_SKIP = new Set(['hooks.json', 'settings.json'])
+const CORE_RUNTIME_FOLDERS = ['_core', '_shared']
 
 interface IdeFolderConfig {
   root: string
@@ -414,6 +418,59 @@ async function checkArchiveDir(contextsPath: string): Promise<null | {count: num
 }
 
 /**
+ * Recursively remove files from targetDir that have a matching file in sourceDir.
+ * This removes only AIW-managed template files and leaves unknown user files intact.
+ *
+ * @param sourceDir - Template source subtree
+ * @param targetDir - Target subtree in project
+ * @returns Number of files removed
+ */
+async function removeMatchingFiles(sourceDir: string, targetDir: string): Promise<number> {
+  let entries
+  try {
+    entries = await fs.readdir(sourceDir, {withFileTypes: true})
+  } catch {
+    return 0
+  }
+
+  let removed = 0
+  for (const entry of entries) {
+    const sourcePath = join(sourceDir, entry.name)
+    const targetPath = join(targetDir, entry.name)
+
+    if (entry.isDirectory()) {
+      // eslint-disable-next-line no-await-in-loop
+      removed += await removeMatchingFiles(sourcePath, targetPath)
+      continue
+    }
+
+    if (!entry.isFile()) continue
+    if (SETTINGS_FILES_TO_SKIP.has(entry.name)) continue
+
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      if (!(await pathExists(targetPath))) continue
+      // eslint-disable-next-line no-await-in-loop
+      await fs.rm(targetPath, {force: true})
+      removed++
+    } catch {
+      // Best-effort deletion
+    }
+  }
+
+  try {
+    const leftovers = await fs.readdir(targetDir)
+    if (leftovers.length === 0) {
+      await fs.rmdir(targetDir)
+    }
+  } catch {
+    // Target dir doesn't exist or isn't empty
+  }
+
+  return removed
+}
+
+/**
  * Clear workflow folders, output folders, IDE method folders, and update configurations.
  */
 export default class ClearCommand extends BaseCommand {
@@ -456,6 +513,7 @@ export default class ClearCommand extends BaseCommand {
   async run(): Promise<void> {
     const {flags} = await this.parse(ClearCommand)
     const targetDir = process.cwd()
+    const isTemplateScoped = Boolean(flags.template)
 
     // Handle --output flag separately (mutually exclusive with --template)
     if (flags.output) {
@@ -468,20 +526,28 @@ export default class ClearCommand extends BaseCommand {
       const workflowFolders = await this.findWorkflowFolders(targetDir, flags.template)
       const outputMethodFolders = await this.findOutputFolders(targetDir, flags.template)
       const ideMethodFolders = await this.findIdeMethodFolders(targetDir, flags.template)
+      const coreRuntimeFolders = isTemplateScoped ? [] : await this.findCoreRuntimeFolders(targetDir)
+      const sharedIdeFilesToRemove = isTemplateScoped ? 0 : await this.countSharedIdeManagedFiles(targetDir)
+      const methodsToRemove = await this.resolveMethodsToRemove(targetDir, flags.template, workflowFolders)
 
       // Nothing to clear
-      if (workflowFolders.length === 0 && outputMethodFolders.length === 0 && ideMethodFolders.length === 0) {
+      if (
+        workflowFolders.length === 0 &&
+        outputMethodFolders.length === 0 &&
+        ideMethodFolders.length === 0 &&
+        coreRuntimeFolders.length === 0 &&
+        sharedIdeFilesToRemove === 0
+      ) {
         const msg = flags.template
           ? `No folders found for template '${flags.template}'.`
-          : 'No workflow, output, or IDE method folders found.'
+          : 'No AIW-managed folders or shared template files found.'
         this.logInfo(msg)
         return
       }
 
       // Display pending changes
-      const methodsToRemove = this.extractMethodNames(workflowFolders)
       await this.displayPendingChanges(targetDir, {
-        workflowFolders, outputMethodFolders, ideMethodFolders, methodsToRemove,
+        workflowFolders, outputMethodFolders, ideMethodFolders, coreRuntimeFolders, methodsToRemove, sharedIdeFilesToRemove,
       })
 
       // Dry run - just show what would happen
@@ -491,10 +557,11 @@ export default class ClearCommand extends BaseCommand {
       }
 
       // Confirm deletion
-      const totalFolders = workflowFolders.length + outputMethodFolders.length + ideMethodFolders.length
+      const totalFolders = workflowFolders.length + outputMethodFolders.length + ideMethodFolders.length + coreRuntimeFolders.length
+      const sharedFilesSuffix = sharedIdeFilesToRemove > 0 ? ` and clean ${sharedIdeFilesToRemove} shared IDE file(s)` : ''
       if (!flags.force) {
         const shouldDelete = await confirm({
-          message: `Delete ${totalFolders} folder(s)?`,
+          message: `Delete ${totalFolders} folder(s)${sharedFilesSuffix}?`,
           default: false,
         })
 
@@ -506,9 +573,9 @@ export default class ClearCommand extends BaseCommand {
 
       // Execute deletion and cleanup
       const deleteCounts = await this.executeFolderDeletion(
-        workflowFolders, outputMethodFolders, ideMethodFolders,
+        workflowFolders, outputMethodFolders, ideMethodFolders, coreRuntimeFolders,
       )
-      const cleanupResult = await this.performPostDeleteCleanup(targetDir, methodsToRemove)
+      const cleanupResult = await this.performPostDeleteCleanup(targetDir, methodsToRemove, !isTemplateScoped)
       this.reportClearResults(deleteCounts, cleanupResult)
     } catch (error) {
       const err = error as NodeJS.ErrnoException
@@ -788,18 +855,33 @@ export default class ClearCommand extends BaseCommand {
   private async displayPendingChanges(
     targetDir: string,
     folders: {
+      coreRuntimeFolders: string[]
       ideMethodFolders: string[]
       methodsToRemove: string[]
       outputMethodFolders: string[]
+      sharedIdeFilesToRemove: number
       workflowFolders: string[]
     },
   ): Promise<void> {
-    const {workflowFolders, outputMethodFolders, ideMethodFolders, methodsToRemove} = folders
+    const {
+      workflowFolders,
+      outputMethodFolders,
+      ideMethodFolders,
+      coreRuntimeFolders,
+      methodsToRemove,
+      sharedIdeFilesToRemove,
+    } = folders
     this.log('')
 
     this.displayFolderList(targetDir, workflowFolders, 'Workflow folders')
     this.displayFolderList(targetDir, outputMethodFolders, 'Output folders')
     this.displayFolderList(targetDir, ideMethodFolders, 'IDE method folders')
+    this.displayFolderList(targetDir, coreRuntimeFolders, 'Core/shared runtime folders')
+
+    if (sharedIdeFilesToRemove > 0) {
+      this.logInfo(`Shared IDE template files to remove (${sharedIdeFilesToRemove})`)
+      this.log('')
+    }
 
     if (methodsToRemove.length > 0) {
       this.logInfo(`Will update settings files to remove method entries: ${methodsToRemove.join(', ')}`)
@@ -864,7 +946,8 @@ export default class ClearCommand extends BaseCommand {
     workflowFolders: string[],
     outputMethodFolders: string[],
     ideMethodFolders: string[],
-  ): Promise<{deletedIde: number; deletedOutput: number; deletedWorkflow: number}> {
+    coreRuntimeFolders: string[],
+  ): Promise<{deletedCoreRuntime: number; deletedIde: number; deletedOutput: number; deletedWorkflow: number}> {
     const deleteFolder = async (
       folder: string,
       type: string,
@@ -884,12 +967,14 @@ export default class ClearCommand extends BaseCommand {
       ...workflowFolders.map((f) => deleteFolder(f, 'workflow')),
       ...outputMethodFolders.map((f) => deleteFolder(f, 'output')),
       ...ideMethodFolders.map((f) => deleteFolder(f, 'IDE method')),
+      ...coreRuntimeFolders.map((f) => deleteFolder(f, 'core runtime')),
     ])
 
     return {
       deletedWorkflow: deleteResults.filter((r) => r.success && r.type === 'workflow').length,
       deletedOutput: deleteResults.filter((r) => r.success && r.type === 'output').length,
       deletedIde: deleteResults.filter((r) => r.success && r.type === 'IDE method').length,
+      deletedCoreRuntime: deleteResults.filter((r) => r.success && r.type === 'core runtime').length,
     }
   }
 
@@ -909,6 +994,80 @@ export default class ClearCommand extends BaseCommand {
     }
 
     return methods
+  }
+
+  private async resolveMethodsToRemove(
+    targetDir: string,
+    template: string | undefined,
+    workflowFolders: string[],
+  ): Promise<string[]> {
+    if (template) return [template]
+    const installedMethods = await getInstalledMethodNames(targetDir)
+    const discoveredFromFolders = this.extractMethodNames(workflowFolders)
+    for (const method of discoveredFromFolders) {
+      installedMethods.add(method)
+    }
+
+    return [...installedMethods]
+  }
+
+  private async findCoreRuntimeFolders(targetDir: string): Promise<string[]> {
+    const containerDir = join(targetDir, AIWCLI_CONTAINER)
+    const paths = CORE_RUNTIME_FOLDERS.map((name) => join(containerDir, name))
+    const checks = await Promise.all(paths.map((p) => pathExists(p)))
+    return paths.filter((_, index) => checks[index])
+  }
+
+  private async countSharedIdeManagedFiles(targetDir: string): Promise<number> {
+    const sharedTemplatePath = await this.getSharedTemplatePathSafe()
+    if (!sharedTemplatePath) return 0
+
+    let total = 0
+    for (const ide of Object.values(IDE_FOLDERS)) {
+      const sourceIdeRoot = join(sharedTemplatePath, ide.root)
+      const targetIdeRoot = join(targetDir, ide.root)
+      // eslint-disable-next-line no-await-in-loop
+      if (!(await pathExists(sourceIdeRoot)) || !(await pathExists(targetIdeRoot))) continue
+      // eslint-disable-next-line no-await-in-loop
+      total += await this.countMatchingManagedFiles(sourceIdeRoot, targetIdeRoot)
+    }
+
+    return total
+  }
+
+  private async countMatchingManagedFiles(sourceDir: string, targetDir: string): Promise<number> {
+    let entries
+    try {
+      entries = await fs.readdir(sourceDir, {withFileTypes: true})
+    } catch {
+      return 0
+    }
+
+    let count = 0
+    for (const entry of entries) {
+      const sourcePath = join(sourceDir, entry.name)
+      const targetPath = join(targetDir, entry.name)
+      if (entry.isDirectory()) {
+        // eslint-disable-next-line no-await-in-loop
+        count += await this.countMatchingManagedFiles(sourcePath, targetPath)
+        continue
+      }
+
+      if (!entry.isFile()) continue
+      if (SETTINGS_FILES_TO_SKIP.has(entry.name)) continue
+      // eslint-disable-next-line no-await-in-loop
+      if (await pathExists(targetPath)) count++
+    }
+
+    return count
+  }
+
+  private async getSharedTemplatePathSafe(): Promise<null | string> {
+    try {
+      return await getTemplatePath(SHARED_TEMPLATE_NAME)
+    } catch {
+      return null
+    }
   }
 
   /**
@@ -1069,18 +1228,21 @@ export default class ClearCommand extends BaseCommand {
   private async performPostDeleteCleanup(
     targetDir: string,
     methodsToRemove: string[],
+    isFullClear: boolean,
   ): Promise<{
     gitExcludeUpdated: boolean
     removedAiwcliContainer: boolean
     removedClaudeDir: boolean
     removedCodexDir: boolean
     removedOutputDir: boolean
+    removedSharedIdeFiles: number
     removedWindsurfDir: boolean
     updatedClaudeSettings: boolean
     updatedWindsurfSettings: boolean
   }> {
     const containerDir = join(targetDir, AIWCLI_CONTAINER)
     const outputDir = join(containerDir, OUTPUT_FOLDER_NAME)
+    let removedSharedIdeFiles = 0
 
     // Check if _output folder is now empty and remove it
     const removedOutputDir = await tryRemoveEmptyDir(outputDir)
@@ -1097,9 +1259,13 @@ export default class ClearCommand extends BaseCommand {
     // Smart git exclude removal
     const gitExcludeUpdated = await this.cleanupGitExclude(targetDir)
 
+    if (isFullClear) {
+      removedSharedIdeFiles = await this.removeSharedIdeContent(targetDir)
+    }
+
     // Reconstruct IDE settings
     let {updatedClaudeSettings, updatedWindsurfSettings} =
-      await this.reconstructSettingsAfterRemoval(targetDir, methodsToRemove)
+      await this.reconstructSettingsAfterRemoval(targetDir, methodsToRemove, isFullClear)
 
     // Clean up backup files
     await this.cleanupBackupFiles(targetDir)
@@ -1114,6 +1280,7 @@ export default class ClearCommand extends BaseCommand {
     if (removedWindsurfDir) updatedWindsurfSettings = false
 
     return {
+      removedSharedIdeFiles,
       removedOutputDir, removedAiwcliContainer, removedClaudeDir, removedCodexDir, removedWindsurfDir,
       updatedClaudeSettings, updatedWindsurfSettings, gitExcludeUpdated,
     }
@@ -1129,38 +1296,42 @@ export default class ClearCommand extends BaseCommand {
   private async reconstructSettingsAfterRemoval(
     targetDir: string,
     methodsToRemove: string[],
+    isFullClear: boolean,
   ): Promise<{updatedClaudeSettings: boolean; updatedWindsurfSettings: boolean}> {
     let updatedClaudeSettings = false
     let updatedWindsurfSettings = false
 
-    if (methodsToRemove.length === 0) {
-      return {updatedClaudeSettings, updatedWindsurfSettings}
-    }
-
     await this.removeMethodEntries(targetDir, methodsToRemove)
 
-    const allMethods = await getInstalledMethodNames(targetDir)
-    const remainingTemplates = [...allMethods].filter(m => !methodsToRemove.includes(m))
-
-    const ides: string[] = []
-    if (await pathExists(join(targetDir, IDE_FOLDERS.claude.root))) ides.push('claude')
-    if (await pathExists(join(targetDir, IDE_FOLDERS.windsurf.root))) ides.push('windsurf')
-
-    if (ides.length > 0) {
-      await reconstructIdeSettings(targetDir, remainingTemplates, ides)
-      if (ides.includes('claude')) {
-        this.logDebug('Reconstructed .claude/settings.json (backup created)')
-        updatedClaudeSettings = true
-      }
-
-      if (ides.includes('windsurf')) {
-        this.logDebug('Reconstructed .windsurf/hooks.json (backup created)')
-        updatedWindsurfSettings = true
+    if (methodsToRemove.length > 0) {
+      for (const method of methodsToRemove) {
+        await markMethodRemoved(targetDir, method) // eslint-disable-line no-await-in-loop
       }
     }
 
-    for (const method of methodsToRemove) {
-      await markMethodRemoved(targetDir, method) // eslint-disable-line no-await-in-loop
+    if (isFullClear) {
+      await markCoreRemoved(targetDir)
+      await this.stripAiwSettingsForFullClear(targetDir)
+    } else if (methodsToRemove.length > 0) {
+      const allMethods = await getInstalledMethodNames(targetDir)
+      const remainingTemplates = [...allMethods].filter(m => !methodsToRemove.includes(m))
+
+      const ides: string[] = []
+      if (await pathExists(join(targetDir, IDE_FOLDERS.claude.root))) ides.push('claude')
+      if (await pathExists(join(targetDir, IDE_FOLDERS.windsurf.root))) ides.push('windsurf')
+
+      if (ides.length > 0) {
+        await reconstructIdeSettings(targetDir, remainingTemplates, ides)
+        if (ides.includes('claude')) {
+          this.logDebug('Reconstructed .claude/settings.json (backup created)')
+          updatedClaudeSettings = true
+        }
+
+        if (ides.includes('windsurf')) {
+          this.logDebug('Reconstructed .windsurf/hooks.json (backup created)')
+          updatedWindsurfSettings = true
+        }
+      }
     }
 
     const currentState = await readInstallState(targetDir)
@@ -1204,6 +1375,46 @@ export default class ClearCommand extends BaseCommand {
     await Promise.all(ops)
   }
 
+  private async removeSharedIdeContent(targetDir: string): Promise<number> {
+    const sharedTemplatePath = await this.getSharedTemplatePathSafe()
+    if (!sharedTemplatePath) return 0
+
+    let removedFiles = 0
+    for (const ide of Object.values(IDE_FOLDERS)) {
+      const sourceIdeRoot = join(sharedTemplatePath, ide.root)
+      const targetIdeRoot = join(targetDir, ide.root)
+      // eslint-disable-next-line no-await-in-loop
+      if (!(await pathExists(sourceIdeRoot)) || !(await pathExists(targetIdeRoot))) continue
+      // eslint-disable-next-line no-await-in-loop
+      removedFiles += await removeMatchingFiles(sourceIdeRoot, targetIdeRoot)
+    }
+
+    return removedFiles
+  }
+
+  private async stripAiwSettingsForFullClear(targetDir: string): Promise<void> {
+    const ops = Object.values(IDE_FOLDERS).map(async (ide) => {
+      if (!ide.settingsFile) return
+      const settingsPath = join(targetDir, ide.root, ide.settingsFile)
+      try {
+        const raw = await fs.readFile(settingsPath, 'utf8')
+        const parsed = JSON.parse(raw)
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return
+
+        delete parsed.methods
+        delete parsed.hooks
+        delete parsed.statusLine
+        delete parsed.fileSuggestion
+
+        await fs.writeFile(settingsPath, JSON.stringify(parsed, null, 2) + '\n', 'utf8')
+      } catch {
+        // Ignore invalid/missing settings files
+      }
+    })
+
+    await Promise.all(ops)
+  }
+
   /**
    * Report the results of a clear operation.
    *
@@ -1222,13 +1433,14 @@ export default class ClearCommand extends BaseCommand {
    * @param cleanup.updatedWindsurfSettings - Whether Windsurf settings were updated
    */
   private reportClearResults(
-    deleteCounts: {deletedIde: number; deletedOutput: number; deletedWorkflow: number},
+    deleteCounts: {deletedCoreRuntime: number; deletedIde: number; deletedOutput: number; deletedWorkflow: number},
     cleanup: {
       gitExcludeUpdated: boolean
       removedAiwcliContainer: boolean
       removedClaudeDir: boolean
       removedCodexDir: boolean
       removedOutputDir: boolean
+      removedSharedIdeFiles: number
       removedWindsurfDir: boolean
       updatedClaudeSettings: boolean
       updatedWindsurfSettings: boolean
@@ -1239,6 +1451,8 @@ export default class ClearCommand extends BaseCommand {
     if (deleteCounts.deletedWorkflow > 0) parts.push(`${deleteCounts.deletedWorkflow} workflow folder(s)`)
     if (deleteCounts.deletedOutput > 0) parts.push(`${deleteCounts.deletedOutput} output folder(s)`)
     if (deleteCounts.deletedIde > 0) parts.push(`${deleteCounts.deletedIde} IDE method folder(s)`)
+    if (deleteCounts.deletedCoreRuntime > 0) parts.push(`${deleteCounts.deletedCoreRuntime} core/shared runtime folder(s)`)
+    if (cleanup.removedSharedIdeFiles > 0) parts.push(`${cleanup.removedSharedIdeFiles} shared IDE file(s)`)
     if (cleanup.removedOutputDir) parts.push(`${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder`)
     if (cleanup.removedAiwcliContainer) parts.push(`${AIWCLI_CONTAINER}/ folder`)
     if (cleanup.removedClaudeDir) parts.push(`${IDE_FOLDERS.claude.root}/ folder`)
