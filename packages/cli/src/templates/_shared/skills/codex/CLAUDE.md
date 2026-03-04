@@ -19,9 +19,9 @@ codex/
 
 **Usage:**
 ```bash
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--no-yolo] [--no-watch] [--context <id>] plan
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--no-yolo] [--no-watch] [--context <id>] --file <path>
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--no-yolo] [--no-watch] [--context <id>] <inline text...>
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--no-yolo] [--no-watch] [--context <id>] plan
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--no-yolo] [--no-watch] [--context <id>] --file <path>
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/codex/scripts/launch-codex.ts [--model <tier|id>] [--sandbox <sandbox-mode>] [--prompt <text>] [--no-yolo] [--no-watch] [--context <id>] <inline text...>
 ```
 
 **Args:**

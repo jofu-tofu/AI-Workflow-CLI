@@ -9,7 +9,7 @@ The script blocks until Codex exits and prints a session summary. Run with Bash 
 ## Command
 
 ```
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [flags] <mode>
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/codex/scripts/launch-codex.ts [flags] <mode>
 ```
 
 **Modes:** `plan` | `--file <path>` | `<inline text...>`
@@ -41,7 +41,7 @@ If neither is available, check `_output/hook-log.jsonl` for `codex-capture` or `
 For small or tightly coupled plans. One sub-agent implements the whole plan.
 
 ```bash
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts --context <ctx-id> plan
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/codex/scripts/launch-codex.ts --context <ctx-id> plan
 ```
 
 Run with `run_in_background: true`. Wait for the summary. Review the changes.
@@ -57,10 +57,10 @@ Run each with `run_in_background: true`. Summaries arrive as separate background
 For tasks outside a plan. Pass inline text or a file path.
 
 ```bash
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts \
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/codex/scripts/launch-codex.ts \
   "Fix the failing test in auth.ts"
 
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts \
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/codex/scripts/launch-codex.ts \
   --file path/to/task-description.md
 ```
 

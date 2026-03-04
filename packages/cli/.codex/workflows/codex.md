@@ -1,10 +1,10 @@
 # Codex Workflow
 
-Use Codex CLI handoff instructions from `.aiwcli/_shared/skills/codex/SKILL.md`.
+Use Codex CLI handoff instructions from `.aiwcli/_core/skills/codex/SKILL.md`.
 
 ## Command
 
-`bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [flags] <mode>`
+`bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/codex/scripts/launch-codex.ts [flags] <mode>`
 
 **Modes:** `plan` | `--file <path>` | `<inline text...>`
 

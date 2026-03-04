@@ -4,7 +4,7 @@ description: Delegate implementation to Codex sub-agents. USE WHEN codex OR send
 user-invocable: true
 ---
 
-Read `.aiwcli/_shared/skills/codex/SKILL.md` for delegation patterns and examples.
+Read `.aiwcli/_core/skills/codex/SKILL.md` for delegation patterns and examples.
 
 ## Role
 
@@ -13,7 +13,7 @@ You are the orchestrator. Codex instances are your implementation sub-agents. De
 ## Command
 
 ```
-bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-codex.ts [flags] <mode>
+bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/codex/scripts/launch-codex.ts [flags] <mode>
 ```
 
 The script blocks until Codex exits and prints a summary — run with Bash `run_in_background: true` so you stay unblocked.
