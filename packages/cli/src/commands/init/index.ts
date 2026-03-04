@@ -199,24 +199,7 @@ export default class Init extends BaseCommand {
       this.logInfo('Next steps:')
       this.logInfo('  aiw launch    Start Claude Code with agents')
     } catch (error) {
-      const err = error as NodeJS.ErrnoException
-
-      // Categorize errors for better user feedback
-      // Check error codes first, then fall back to message matching
-      if (err.code === 'EACCES' || err.code === 'EPERM') {
-        this.error(`Permission denied. Cannot write to current directory. ${err.message}`, {
-          exit: EXIT_CODES.ENVIRONMENT_ERROR,
-        })
-      }
-
-      if (err.code === 'ENOENT' || err.message?.includes('not found') || err.message?.includes('not available')) {
-        this.error(err.message || 'Resource not found', {exit: EXIT_CODES.INVALID_USAGE})
-      }
-
-      // Generic error fallback
-      this.error(`Installation failed: ${err.message}`, {
-        exit: EXIT_CODES.GENERAL_ERROR,
-      })
+      this.handleRunError(error)
     }
   }
 
@@ -232,6 +215,26 @@ export default class Init extends BaseCommand {
     }
 
     return descriptions[template] || 'Custom template'
+  }
+
+  private handleRunError(error: unknown): never {
+    const err = error as NodeJS.ErrnoException
+
+    // Categorize errors for better user feedback
+    // Check error codes first, then fall back to message matching
+    if (err.code === 'EACCES' || err.code === 'EPERM') {
+      this.error(`Permission denied. Cannot write to current directory. ${err.message}`, {
+        exit: EXIT_CODES.ENVIRONMENT_ERROR,
+      })
+    }
+
+    if (err.code === 'ENOENT' || err.message?.includes('not found') || err.message?.includes('not available')) {
+      this.error(err.message || 'Resource not found', {exit: EXIT_CODES.INVALID_USAGE})
+    }
+
+    this.error(`Installation failed: ${err.message}`, {
+      exit: EXIT_CODES.GENERAL_ERROR,
+    })
   }
 
   /**

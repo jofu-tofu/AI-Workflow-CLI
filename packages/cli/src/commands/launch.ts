@@ -268,44 +268,12 @@ static override flags = {
       }
 
       if (shouldAutoTmux) {
-        const resolvedPath = findToolPath(cliCommand)
-
-        if (resolvedPath) {
-          const sessionFromFlag = flags['tmux-session']?.trim()
-          const reattach = Boolean(sessionFromFlag && sessionFromFlag.length > 0)
-
-          let sessionName: string
-          if (reattach) {
-            sessionName = this.sanitizeTmuxSessionName(sessionFromFlag!)
-            this.logInfo(`Launching in tmux session: ${sessionName} (reuse/attach)`)
-          } else {
-            const sessionBase = `aiw-${path.basename(process.cwd())}`
-            sessionName = this.buildUniqueTmuxSessionName(sessionBase)
-            this.logInfo(`Launching in new tmux session: ${sessionName}`)
-          }
-
-          const result = await launchInTmuxSession({
-            sessionName,
-            reattach,
-            toolPath: resolvedPath ?? cliCommand,
-            toolArgs: cliArgs,
-            promptText,
-          })
-
-          if (result.usedTmux) {
-            exitCode = result.exitCode
-          } else {
-            if (result.reason) this.logWarning(`${result.reason} — launching inline`)
-            this.logInfo(`Launching ${cliCommand} inline`)
-            const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
-            exitCode = await spawnProcess(cliCommand, finalArgs)
-          }
-        } else {
-          this.logWarning(`${cliCommand} not found on PATH (install from https://claude.ai/download)`)
-          this.logInfo(`Launching ${cliCommand} inline`)
-          const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
-          exitCode = await spawnProcess(cliCommand, finalArgs)
-        }
+        exitCode = await this.launchViaAutoTmuxOrInline({
+          cliCommand,
+          cliArgs,
+          promptText,
+          tmuxSessionFlag: flags['tmux-session'],
+        })
       } else {
         if (disableTmux) {
           this.logInfo('Tmux disabled via --no-tmux — launching inline')
@@ -352,6 +320,56 @@ static override flags = {
     }
     this.log(JSON.stringify(output))
     this.exit(exitCode ?? 0)
+  }
+
+  private async launchInline(
+    cliCommand: string,
+    cliArgs: string[],
+    promptText?: string,
+  ): Promise<number> {
+    this.logInfo(`Launching ${cliCommand} inline`)
+    const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
+    return spawnProcess(cliCommand, finalArgs)
+  }
+
+  private async launchViaAutoTmuxOrInline(params: {
+    cliArgs: string[];
+    cliCommand: string;
+    promptText?: string;
+    tmuxSessionFlag?: string;
+  }): Promise<number> {
+    const {cliCommand, cliArgs, promptText, tmuxSessionFlag} = params
+    const resolvedPath = findToolPath(cliCommand)
+
+    if (!resolvedPath) {
+      this.logWarning(`${cliCommand} not found on PATH (install from https://claude.ai/download)`)
+      return this.launchInline(cliCommand, cliArgs, promptText)
+    }
+
+    const sessionFromFlag = tmuxSessionFlag?.trim()
+    const reattach = Boolean(sessionFromFlag && sessionFromFlag.length > 0)
+    const sessionName = reattach
+      ? this.sanitizeTmuxSessionName(sessionFromFlag!)
+      : this.buildUniqueTmuxSessionName(`aiw-${path.basename(process.cwd())}`)
+
+    if (reattach) {
+      this.logInfo(`Launching in tmux session: ${sessionName} (reuse/attach)`)
+    } else {
+      this.logInfo(`Launching in new tmux session: ${sessionName}`)
+    }
+
+    const result = await launchInTmuxSession({
+      sessionName,
+      reattach,
+      toolPath: resolvedPath,
+      toolArgs: cliArgs,
+      promptText,
+    })
+
+    if (result.usedTmux) return result.exitCode
+
+    if (result.reason) this.logWarning(`${result.reason} — launching inline`)
+    return this.launchInline(cliCommand, cliArgs, promptText)
   }
 
   private sanitizeTmuxSessionName(input: string): string {
