@@ -3,11 +3,11 @@ import * as os from 'node:os'
 import path from 'node:path'
 
 export interface SentinelIpcPaths {
-  inputPath: string
-  sentinelPath: string
-  stderrPath: string
-  stdoutPath: string
   tmpDir: string
+  inputPath: string
+  stdoutPath: string
+  stderrPath: string
+  sentinelPath: string
 }
 
 function sanitizePrefix(prefix: string): string {
@@ -29,7 +29,7 @@ export function createSentinelIpcPaths(prefix: string): SentinelIpcPaths {
 
 export function buildShellCaptureScript(
   command: string,
-  paths: Pick<SentinelIpcPaths, 'inputPath' | 'sentinelPath' | 'stderrPath' | 'stdoutPath'>,
+  paths: Pick<SentinelIpcPaths, 'inputPath' | 'stdoutPath' | 'stderrPath' | 'sentinelPath'>,
   quote: (input: string) => string,
 ): string {
   return [
@@ -47,18 +47,14 @@ export async function waitForSentinelFile(
   pollIntervalMs = 250,
 ): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
-  const poll = async (): Promise<boolean> => {
+  while (Date.now() < deadline) {
     if (fs.existsSync(sentinelPath)) return true
-    if (Date.now() >= deadline) return fs.existsSync(sentinelPath)
-
     await new Promise<void>((resolve) => {
       setTimeout(resolve, pollIntervalMs)
     })
-
-    return poll()
   }
 
-  return poll()
+  return fs.existsSync(sentinelPath)
 }
 
 export function readSentinelExitCode(sentinelPath: string, fallback = 1): number {
@@ -91,4 +87,5 @@ export function cleanupSentinelPath(sentinelPath: string | undefined): void {
     // Best-effort cleanup.
   }
 }
+
 

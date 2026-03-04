@@ -26,6 +26,11 @@ let _cachedHookName: string | null = null;
 // Pre-fetched input stash
 let _prefetchedInput: Record<string, unknown> | null = null;
 
+function readStringField(value: Record<string, unknown>, key: string): null | string {
+  const field = value[key];
+  return typeof field === "string" ? field : null;
+}
+
 /**
  * Load and parse JSON from stdin (or return prefetched input if set).
  * Returns null if stdin is empty or invalid JSON.
@@ -36,10 +41,10 @@ export function loadHookInput(): HookInput | null {
     const result = _prefetchedInput;
     _prefetchedInput = null; // consume once
     if (result && typeof result === "object") {
-      _lastHookEvent = result.hook_event_name ?? null;
-      _lastToolName = result.tool_name ?? null;
+      _lastHookEvent = readStringField(result, "hook_event_name");
+      _lastToolName = readStringField(result, "tool_name");
     }
-    return result as HookInput;
+    return result as unknown as HookInput;
   }
 
   try {
@@ -47,12 +52,12 @@ export function loadHookInput(): HookInput | null {
     const inputData = fs.readFileSync(0, "utf8").trim();
     if (!inputData) return null;
 
-    const result = JSON.parse(inputData);
+    const result = JSON.parse(inputData) as Record<string, unknown>;
     if (result && typeof result === "object") {
-      _lastHookEvent = result.hook_event_name ?? null;
-      _lastToolName = result.tool_name ?? null;
+      _lastHookEvent = readStringField(result, "hook_event_name");
+      _lastToolName = readStringField(result, "tool_name");
     }
-    return result as HookInput;
+    return result as unknown as HookInput;
   } catch {
     return null;
   }
@@ -95,7 +100,11 @@ export function checkSkipPersistence(
   if (!toolInput) return false;
 
   const {metadata} = toolInput;
-  if (metadata && typeof metadata === "object" && metadata.skip_persistence) {
+  if (
+    metadata &&
+    typeof metadata === "object" &&
+    Boolean((metadata as Record<string, unknown>).skip_persistence)
+  ) {
     logDebug(hookName, "Skipping persistence (skip_persistence flag set)");
     return true;
   }
@@ -172,7 +181,7 @@ function _logEmit(type: "context" | "systemMessage" | "block", chars: number, pa
   const event = payload.event ?? "unknown";
   const mechanism = payload.mechanism ? ` via ${payload.mechanism}` : "";
   const msg = type === "block"
-    ? `HOOK_OUTPUT [${type}] ${event} ${chars} chars${mechanism}, reason="${(payload.blockReason ?? "").slice(0, 80)}"`
+    ? `HOOK_OUTPUT [${type}] ${event} ${chars} chars${mechanism}, reason="${String(payload.blockReason ?? "").slice(0, 80)}"`
     : `HOOK_OUTPUT [${type}] ${event} ${chars} chars`;
   hookLog("info", hook, msg, { data: payload });
 }
@@ -397,10 +406,11 @@ function _earlyReadInput(prefetchedInput?: Record<string, unknown>): void {
 
   // If we already have prefetched input, extract metadata from it
   if (_prefetchedInput && typeof _prefetchedInput === "object") {
-    _lastHookEvent = _prefetchedInput.hook_event_name ?? null;
-    _lastToolName = _prefetchedInput.tool_name ?? null;
-    if (_prefetchedInput.session_id) {
-      setSessionId(_prefetchedInput.session_id);
+    _lastHookEvent = readStringField(_prefetchedInput, "hook_event_name");
+    _lastToolName = readStringField(_prefetchedInput, "tool_name");
+    const sessionId = readStringField(_prefetchedInput, "session_id");
+    if (sessionId) {
+      setSessionId(sessionId);
     }
     return;
   }
@@ -409,13 +419,14 @@ function _earlyReadInput(prefetchedInput?: Record<string, unknown>): void {
   try {
     const inputData = fs.readFileSync(0, "utf8").trim();
     if (inputData) {
-      const parsed = JSON.parse(inputData);
+      const parsed = JSON.parse(inputData) as Record<string, unknown>;
       if (parsed && typeof parsed === "object") {
         _prefetchedInput = parsed;
-        _lastHookEvent = parsed.hook_event_name ?? null;
-        _lastToolName = parsed.tool_name ?? null;
-        if (parsed.session_id) {
-          setSessionId(parsed.session_id);
+        _lastHookEvent = readStringField(parsed, "hook_event_name");
+        _lastToolName = readStringField(parsed, "tool_name");
+        const sessionId = readStringField(parsed, "session_id");
+        if (sessionId) {
+          setSessionId(sessionId);
         }
       }
     }
@@ -439,7 +450,8 @@ export function runHook(
   // Ensure cwd is project root so relative paths in hooks resolve correctly,
   // even when cwd has drifted via `cd` in a Bash tool call.
   try {
-    const projectRoot = getProjectRoot(_prefetchedInput?.cwd);
+    const cwd = _prefetchedInput ? readStringField(_prefetchedInput, "cwd") ?? undefined : undefined;
+    const projectRoot = getProjectRoot(cwd);
     if (process.cwd() !== projectRoot) process.chdir(projectRoot);
   } catch { /* non-fatal — proceed with current cwd */ }
 
@@ -497,7 +509,8 @@ export function runHookAsync(
   // Ensure cwd is project root so relative paths in hooks resolve correctly,
   // even when cwd has drifted via `cd` in a Bash tool call.
   try {
-    const projectRoot = getProjectRoot(_prefetchedInput?.cwd);
+    const cwd = _prefetchedInput ? readStringField(_prefetchedInput, "cwd") ?? undefined : undefined;
+    const projectRoot = getProjectRoot(cwd);
     if (process.cwd() !== projectRoot) process.chdir(projectRoot);
   } catch { /* non-fatal — proceed with current cwd */ }
 

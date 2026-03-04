@@ -32,32 +32,31 @@ const LEVELS: Record<string, number> = {
 const MAX_LOG_LINES = 10_000; // Max lines in global log before pruning
 
 // Module-level session ID cache
-let _cachedSessionId: null | string = null;
+let _cachedSessionId: string | null = null;
 
 // Module-level context path cache (kept for external callers)
-let _cachedContextPath: null | string = null;
+let _cachedContextPath: string | null = null;
 let _contextResolved = false;
 
 /**
  * Set the session ID for this process. All subsequent log calls include it.
  */
-export function setSessionId(sessionId: null | string): void {
+export function setSessionId(sessionId: string | null): void {
   _cachedSessionId = sessionId;
 }
 
 /**
  * Set the context path for this process. Kept for external callers.
  */
-export function setContextPath(contextPath: null | string): void {
+export function setContextPath(contextPath: string | null): void {
   _cachedContextPath = contextPath;
   _contextResolved = true;
 }
 
-export function getContextPath(): null | string {
+export function getContextPath(): string | null {
   if (!_contextResolved) {
     _contextResolved = true; // Don't retry
   }
-
   return _cachedContextPath;
 }
 
@@ -78,56 +77,6 @@ function getProjectRoot(): string {
   return process.env.CLAUDE_PROJECT_DIR || process.cwd();
 }
 
-function pruneLogFile(logPath: string): void {
-  try {
-    if (!fs.existsSync(logPath)) return;
-    const content = fs.readFileSync(logPath, "utf8");
-    const lines = content.split(/\r?\n/);
-    if (lines.length > MAX_LOG_LINES) {
-      fs.writeFileSync(
-        logPath,
-        lines.slice(lines.length - MAX_LOG_LINES).join("\n"),
-        "utf8",
-      );
-    }
-  } catch {
-    // ignore
-  }
-}
-
-function buildLogEntry(
-  levelLower: string,
-  hookName: string,
-  message: string,
-  opts?: {
-    component?: string;
-    data?: unknown;
-    tracebackStr?: string;
-  },
-): Record<string, unknown> {
-  const ts = new Date().toISOString().replace("Z", "").slice(0, 23);
-  const entry: Record<string, unknown> = {
-    ts,
-    level: levelLower,
-    hook: hookName,
-    msg: message,
-  };
-  if (_cachedSessionId) entry.sid = _cachedSessionId;
-  if (opts?.component) entry.component = opts.component;
-
-  if (opts?.data !== undefined && opts.data !== null) {
-    try {
-      JSON.stringify(opts.data);
-      entry.data = opts.data;
-    } catch {
-      entry.data = String(opts.data);
-    }
-  }
-
-  if (opts?.tracebackStr) entry.tb = opts.tracebackStr.trimEnd();
-  return entry;
-}
-
 /**
  * Write a structured log entry to the global hook log.
  *
@@ -141,15 +90,15 @@ export function hookLog(
   opts?: {
     component?: string;
     data?: unknown;
+    traceback_str?: string;
     stderr?: boolean;
-    tracebackStr?: string;
   },
 ): void {
   try {
     const levelLower = level.toLowerCase();
     const levelNum = LEVELS[levelLower] ?? 0;
     const component = opts?.component ?? "";
-    const tracebackStr = opts?.tracebackStr ?? "";
+    const tracebackStr = opts?.traceback_str ?? "";
     const stderrEnabled = opts?.stderr === true;
 
     // Write to stderr
@@ -168,11 +117,29 @@ export function hookLog(
 
     // Check minimum level
     if (levelNum < getMinLevel()) return;
-    const line = JSON.stringify(buildLogEntry(levelLower, hookName, message, {
-      component,
-      data: opts?.data,
-      tracebackStr,
-    })) + "\n";
+
+    // Build JSONL entry
+    const now = new Date();
+    const ts = now.toISOString().replace("Z", "").slice(0, 23);
+    const entry: Record<string, unknown> = {
+      ts,
+      level: levelLower,
+      hook: hookName,
+      msg: message,
+    };
+    if (_cachedSessionId) entry.sid = _cachedSessionId;
+    if (component) entry.component = component;
+    if (opts?.data !== undefined && opts.data !== null) {
+      try {
+        JSON.stringify(opts.data);
+        entry.data = opts.data;
+      } catch {
+        entry.data = String(opts.data);
+      }
+    }
+    if (tracebackStr) entry.tb = tracebackStr.trimEnd();
+
+    const line = JSON.stringify(entry) + "\n";
 
     // Always write to global log
     const logPath = path.join(getProjectRoot(), "_output", "hook-log.jsonl");
@@ -182,7 +149,21 @@ export function hookLog(
     fs.mkdirSync(dir, { recursive: true });
 
     // Line-count guard: prune to last MAX_LOG_LINES
-    pruneLogFile(logPath);
+    try {
+      if (fs.existsSync(logPath)) {
+        const content = fs.readFileSync(logPath, "utf8");
+        const lines = content.split(/\r?\n/);
+        if (lines.length > MAX_LOG_LINES) {
+          fs.writeFileSync(
+            logPath,
+            lines.slice(lines.length - MAX_LOG_LINES).join("\n"),
+            "utf8",
+          );
+        }
+      }
+    } catch {
+      // ignore
+    }
 
     fs.appendFileSync(logPath, line, "utf8");
   } catch {
@@ -223,11 +204,11 @@ export function logDiagnostic(
   phase: string,
   summary: string,
   opts?: {
+    inputs?: unknown;
+    decision?: unknown;
+    reasoning?: unknown;
     component?: string;
     data?: unknown;
-    decision?: unknown;
-    inputs?: unknown;
-    reasoning?: unknown;
   },
 ): void {
   const diagData: Record<string, unknown> = { phase };
@@ -237,7 +218,6 @@ export function logDiagnostic(
   if (opts?.data && typeof opts.data === "object") {
     Object.assign(diagData, opts.data);
   }
-
   hookLog("debug", hookName, `[DIAG:${phase}] ${summary}`, {
     component: opts?.component ?? "diag",
     data: diagData,
@@ -261,12 +241,10 @@ export function logHookError(
       ? error.constructor.name
       : "Error";
   hookLog("error", hookName, `[${hookEvent}] ${errType}: ${msg}`, {
-    tracebackStr,
+    traceback_str: tracebackStr,
     stderr: true,
   });
 }
-
-
 
 
 

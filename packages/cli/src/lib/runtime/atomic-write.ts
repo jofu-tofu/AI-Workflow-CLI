@@ -7,6 +7,7 @@
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as _os from "node:os";
 import path from "node:path";
 
 /**

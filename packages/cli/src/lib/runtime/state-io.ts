@@ -16,20 +16,20 @@ import type { ContextState, Mode } from "../types.js";
 const MODE_MIGRATION: Record<string, Mode> = {
   none: "idle",
   planning: "idle",
-  pendingImplementation: "hasStagedWork",
+  pending_implementation: "has_staged_work",
   implementing: "active",
 };
 
 /** Legacy state data structure for migration type safety. */
 interface LegacyStateData {
-  handoffConsumed?: boolean;
-  handoffPath?: null | string;
   mode?: string;
-  nextArtifactType?: "handoff" | "plan" | null;
-  planConsumed?: boolean;
-  planHash?: null | string;
-  planPath?: null | string;
-  workConsumed?: boolean;
+  plan_path?: string | null;
+  plan_hash?: string | null;
+  handoff_path?: string | null;
+  plan_consumed?: boolean;
+  handoff_consumed?: boolean;
+  work_consumed?: boolean;
+  next_artifact_type?: "plan" | "handoff" | null;
 }
 
 /**
@@ -43,12 +43,11 @@ export function toDict(state: ContextState): Record<string, unknown> {
       result[key] = value;
     }
   }
-
   return result;
 }
 
 /**
- * Migrate old consumed flags to unified workConsumed.
+ * Migrate old consumed flags to unified work_consumed.
  * Runs on every state.json read for transparent backward compatibility.
  * Idempotent: safe to run multiple times.
  */
@@ -57,47 +56,47 @@ function migrateConsumedFlags(data: Record<string, unknown>): void {
 
   // Skip if already migrated (check both fields and mode)
   const alreadyMigrated =
-    typeof legacy.workConsumed === "boolean" &&
+    typeof legacy.work_consumed === "boolean" &&
     legacy.mode !== "has_plan" &&
     legacy.mode !== "has_handoff";
   if (alreadyMigrated) return;
 
-  const hasPlan = Boolean(legacy.planPath && legacy.planHash);
-  const hasHandoff = Boolean(legacy.handoffPath);
+  const hasPlan = Boolean(legacy.plan_path && legacy.plan_hash);
+  const hasHandoff = Boolean(legacy.handoff_path);
 
   // Migrate consumed flag (plan takes precedence if both exist)
-  if (hasPlan && typeof legacy.planConsumed === "boolean") {
-    (data as Record<string, unknown>).workConsumed = legacy.planConsumed;
-  } else if (hasHandoff && typeof legacy.handoffConsumed === "boolean") {
-    (data as Record<string, unknown>).workConsumed = legacy.handoffConsumed;
+  if (hasPlan && typeof legacy.plan_consumed === "boolean") {
+    (data as Record<string, unknown>).work_consumed = legacy.plan_consumed;
+  } else if (hasHandoff && typeof legacy.handoff_consumed === "boolean") {
+    (data as Record<string, unknown>).work_consumed = legacy.handoff_consumed;
   } else {
-    (data as Record<string, unknown>).workConsumed = false;
+    (data as Record<string, unknown>).work_consumed = false;
   }
 
-  // Migrate mode: has_plan/has_handoff → hasStagedWork
+  // Migrate mode: has_plan/has_handoff → has_staged_work
   if (legacy.mode === "has_plan" || legacy.mode === "has_handoff") {
     const artifactType = legacy.mode === "has_handoff" ? "handoff" : "plan";
-    (data as Record<string, unknown>).mode = "hasStagedWork";
-    (data as Record<string, unknown>).nextArtifactType = artifactType;
+    (data as Record<string, unknown>).mode = "has_staged_work";
+    (data as Record<string, unknown>).next_artifact_type = artifactType;
   }
 
-  // Set nextArtifactType based on which artifact exists
-  if (!legacy.nextArtifactType) {
+  // Set next_artifact_type based on which artifact exists
+  if (!legacy.next_artifact_type) {
     if (hasPlan && hasHandoff) {
       // Both exist - conflict resolution: plan priority during migration
       // (Cannot determine "latest" without timestamps - plan takes precedence)
-      (data as Record<string, unknown>).nextArtifactType = "plan";
-      (data as Record<string, unknown>).handoffPath = null;
+      (data as Record<string, unknown>).next_artifact_type = "plan";
+      (data as Record<string, unknown>).handoff_path = null;
     } else if (hasPlan) {
-      (data as Record<string, unknown>).nextArtifactType = "plan";
+      (data as Record<string, unknown>).next_artifact_type = "plan";
     } else if (hasHandoff) {
-      (data as Record<string, unknown>).nextArtifactType = "handoff";
+      (data as Record<string, unknown>).next_artifact_type = "handoff";
     }
   }
 
   // Delete old flags (clean cut migration)
-  delete (data as Record<string, unknown>).planConsumed;
-  delete (data as Record<string, unknown>).handoffConsumed;
+  delete (data as Record<string, unknown>).plan_consumed;
+  delete (data as Record<string, unknown>).handoff_consumed;
 }
 
 /**
@@ -137,7 +136,7 @@ export function writeStateJson(
   contextId: string,
   state: ContextState,
   projectRoot?: string,
-): [boolean, null | string] {
+): [boolean, string | null] {
   const sp = statePath(contextId, projectRoot);
   const dir = path.dirname(sp);
   fs.mkdirSync(dir, { recursive: true });
@@ -160,22 +159,36 @@ export function dictToState(data: Record<string, unknown>): ContextState {
     typeof data.mode === "string" ? data.mode : "idle";
   const mode: Mode = (MODE_MIGRATION[rawMode] ?? rawMode) as Mode;
 
-  const state: unknown = {
+  const state: Record<string, unknown> = {
     id: data.id,
     status: data.status ?? "active",
     summary: data.summary ?? "",
     method: data.method ?? "",
     tags: data.tags ?? [],
-    createdAt: data.createdAt ?? "",
-    lastActive: data.lastActive ?? "",
+    created_at: data.created_at ?? "",
+    last_active: data.last_active ?? "",
     mode,
-    planAnchors: data.planAnchors ?? [],
-    workConsumed: data.workConsumed ?? false,
-    sessionIds: data.sessionIds ?? [],
+    plan_anchors: data.plan_anchors ?? [],
+    work_consumed: data.work_consumed ?? false,
+    session_ids: data.session_ids ?? [],
     tasks: data.tasks ?? [],
   };
 
-  applyOptionalStateFields(state, data);
+  // Only set nullable fields if they exist in the source data
+  if ("plan_path" in data) state.plan_path = data.plan_path;
+  if ("plan_hash" in data) state.plan_hash = data.plan_hash;
+  if ("plan_signature" in data) state.plan_signature = data.plan_signature;
+  if ("plan_id" in data) state.plan_id = data.plan_id;
+  if ("handoff_path" in data) state.handoff_path = data.handoff_path;
+  if ("next_artifact_type" in data) state.next_artifact_type = data.next_artifact_type;
+  if ("last_session" in data) state.last_session = data.last_session;
+
+  // Migration: plan_hash_consumed (added in multi-plan context fix)
+  if ("plan_hash_consumed" in data) {
+    state.plan_hash_consumed = data.plan_hash_consumed;
+  } else {
+    state.plan_hash_consumed = null;  // Default for old contexts
+  }
 
   // Preserve method-specific extension data (e.g., cc_native) that isn't
   // part of the core ContextState interface. Without this, round-trip
@@ -186,27 +199,8 @@ export function dictToState(data: Record<string, unknown>): ContextState {
     }
   }
 
-  return state as ContextState;
+  return state as unknown as ContextState;
 }
-
-function applyOptionalStateFields(state: Record<string, unknown>, data: Record<string, unknown>): void {
-  const mappings: Array<[string, string]> = [
-    ["planPath", "planPath"],
-    ["planHash", "planHash"],
-    ["planSignature", "planSignature"],
-    ["planId", "planId"],
-    ["handoffPath", "handoffPath"],
-    ["nextArtifactType", "nextArtifactType"],
-    ["lastSession", "lastSession"],
-  ];
-
-  for (const [sourceKey, targetKey] of mappings) {
-    if (sourceKey in data) state[targetKey] = data[sourceKey];
-  }
-
-  state.planHashConsumed = "planHashConsumed" in data ? data.planHashConsumed : null;
-}
-
 
 
 

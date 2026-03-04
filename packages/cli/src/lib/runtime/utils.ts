@@ -4,7 +4,6 @@
  */
 
 import { sanitizeTitle } from "./constants.js";
-import { generateContextIdSlug } from "./inference.js";
 import { logDebug, logError, logWarn } from "./logger.js";
 import { STOP_WORDS } from "./stop-words.js";
 
@@ -63,7 +62,7 @@ export function parseIsoTimestamp(isoStr: string): Date | null {
   try {
     const normalized = isoStr.replace("Z", "+00:00");
     const d = new Date(normalized);
-    if (Number.isNaN(d.getTime())) return null;
+    if (isNaN(d.getTime())) return null;
     return d;
   } catch {
     return null;
@@ -110,6 +109,8 @@ export function generateSlug(
 
   // Tier 1: AI inference via generateContextIdSlug (sync — uses execFileSync)
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef
+    const { generateContextIdSlug } = require("./inference.js");
     const aiSlug = generateContextIdSlug(text);
     if (aiSlug) {
       const filteredWords = aiSlug

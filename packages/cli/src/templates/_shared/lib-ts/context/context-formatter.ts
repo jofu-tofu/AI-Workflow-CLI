@@ -81,7 +81,8 @@ export function formatRelativeTime(isoTimestamp: string | null): string {
 
 function taskAttr(task: Task | Record<string, unknown>, key: string, defaultVal = ""): string {
   if (typeof task === "object" && task !== null) {
-    return (task as unknown)[key] ?? defaultVal;
+    const value = (task as Record<string, unknown>)[key];
+    return typeof value === "string" ? value : defaultVal;
   }
   return defaultVal;
 }

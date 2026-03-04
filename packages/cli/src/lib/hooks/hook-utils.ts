@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 
 import { getContextBySessionId } from "../context/context-store.js";
 import { getProjectRoot } from "../runtime/constants.js";
-import { getContextPath as _getContextPath,  hookLog,     logDebug, logWarn,  setSessionId } from "../runtime/logger.js";
+import { logDebug,  logWarn,     hookLog, setSessionId,  getContextPath as _getContextPath } from "../runtime/logger.js";
 import type { HookInput, HookOutput, PermissionRequestOutput } from "../types.js";
 
 // Re-export logger functions for convenience (matches Python hook_utils re-exports)
@@ -19,12 +19,17 @@ export const CONTEXT_BASELINE_TOKENS = 22_600;
 export const DEFAULT_CONTEXT_WINDOW_SIZE = 200_000;
 
 // Event metadata stash — populated by loadHookInput(), read by runHook()
-let _lastHookEvent: null | string = null;
-let _lastToolName: null | string = null;
-let _cachedHookName: null | string = null;
+let _lastHookEvent: string | null = null;
+let _lastToolName: string | null = null;
+let _cachedHookName: string | null = null;
 
 // Pre-fetched input stash
-let _prefetchedInput: null | Record<string, unknown> = null;
+let _prefetchedInput: Record<string, unknown> | null = null;
+
+function readStringField(value: Record<string, unknown>, key: string): null | string {
+  const field = value[key];
+  return typeof field === "string" ? field : null;
+}
 
 /**
  * Load and parse JSON from stdin (or return prefetched input if set).
@@ -36,11 +41,10 @@ export function loadHookInput(): HookInput | null {
     const result = _prefetchedInput;
     _prefetchedInput = null; // consume once
     if (result && typeof result === "object") {
-      _lastHookEvent = result.hook_event_name ?? null;
-      _lastToolName = result.tool_name ?? null;
+      _lastHookEvent = readStringField(result, "hook_event_name");
+      _lastToolName = readStringField(result, "tool_name");
     }
-
-    return result as HookInput;
+    return result as unknown as HookInput;
   }
 
   try {
@@ -48,13 +52,12 @@ export function loadHookInput(): HookInput | null {
     const inputData = fs.readFileSync(0, "utf8").trim();
     if (!inputData) return null;
 
-    const result = JSON.parse(inputData);
+    const result = JSON.parse(inputData) as Record<string, unknown>;
     if (result && typeof result === "object") {
-      _lastHookEvent = result.hook_event_name ?? null;
-      _lastToolName = result.tool_name ?? null;
+      _lastHookEvent = readStringField(result, "hook_event_name");
+      _lastToolName = readStringField(result, "tool_name");
     }
-
-    return result as HookInput;
+    return result as unknown as HookInput;
   } catch {
     return null;
   }
@@ -80,7 +83,7 @@ export function validateHookEvent(
  */
 export function getToolInput(
   payload: HookInput,
-): null | Record<string, unknown> {
+): Record<string, unknown> | null {
   const toolInput = payload.tool_input;
   return toolInput && typeof toolInput === "object" ? toolInput : null;
 }
@@ -97,11 +100,14 @@ export function checkSkipPersistence(
   if (!toolInput) return false;
 
   const {metadata} = toolInput;
-  if (metadata && typeof metadata === "object" && metadata.skip_persistence) {
+  if (
+    metadata &&
+    typeof metadata === "object" &&
+    Boolean((metadata as Record<string, unknown>).skip_persistence)
+  ) {
     logDebug(hookName, "Skipping persistence (skip_persistence flag set)");
     return true;
   }
-
   return false;
 }
 
@@ -154,7 +160,6 @@ export function emitContextAndBlock(
       `emitContextAndBlock() called from ${eventName} — permissionDecision only works for PreToolUse. ` +
       `Use emitBlock() or the event-specific function instead.`);
   }
-
   const tool = _lastToolName;
   const out: HookOutput = {
     hookSpecificOutput: {
@@ -171,12 +176,12 @@ export function emitContextAndBlock(
 }
 
 /** Log hook output (context, systemMessage, or block) to hook-log.jsonl for visibility. */
-function _logEmit(type: "block" | "context" | "systemMessage", chars: number, payload: Record<string, unknown>): void {
+function _logEmit(type: "context" | "systemMessage" | "block", chars: number, payload: Record<string, unknown>): void {
   const hook = _cachedHookName ?? "unknown";
   const event = payload.event ?? "unknown";
   const mechanism = payload.mechanism ? ` via ${payload.mechanism}` : "";
   const msg = type === "block"
-    ? `HOOK_OUTPUT [${type}] ${event} ${chars} chars${mechanism}, reason="${(payload.blockReason ?? "").slice(0, 80)}"`
+    ? `HOOK_OUTPUT [${type}] ${event} ${chars} chars${mechanism}, reason="${String(payload.blockReason ?? "").slice(0, 80)}"`
     : `HOOK_OUTPUT [${type}] ${event} ${chars} chars`;
   hookLog("info", hook, msg, { data: payload });
 }
@@ -192,7 +197,6 @@ export function emitBlockPrompt(reason: string, context?: string): void {
     logWarn(_cachedHookName ?? "unknown",
       `emitBlockPrompt() called from ${eventName} — only works for UserPromptSubmit`);
   }
-
   const out: HookOutput = {
     decision: "block",
     reason,
@@ -236,7 +240,6 @@ export function emitBlockTopLevel(reason: string): void {
     logWarn(_cachedHookName ?? "unknown",
       `emitBlockTopLevel() called from ${eventName} — only works for Stop/SubagentStop`);
   }
-
   const out = { decision: "block", reason };
   _logEmit("block", reason.length, {
     event: eventName ?? "unknown",
@@ -291,29 +294,24 @@ export function emitBlock(reason: string, context?: string): void {
       emitPermissionDecision("deny", { message: reason });
       break;
     }
-
     case "PostToolUse":
     case "PostToolUseFailure": {
       emitBlockViaExit(reason, context);
       break;
     }
-
     case "PreToolUse": {
       emitContextAndBlock(context ?? reason, reason);
       break;
     }
-
     case "Stop":
     case "SubagentStop": {
       emitBlockTopLevel(reason);
       break;
     }
-
     case "UserPromptSubmit": {
       emitBlockPrompt(reason, context);
       break;
     }
-
     default: {
       logWarn(_cachedHookName ?? "unknown",
         `emitBlock() called from ${event ?? "unknown"} — no blocking mechanism exists for this event type, ignoring`);
@@ -327,22 +325,9 @@ export function emitBlock(reason: string, context?: string): void {
  */
 function detectTemplate(scriptPath = ""): string {
   const p = (scriptPath || (process.argv[1] ?? "")).replaceAll('\\', "/");
-  if (
-    p.includes("/_shared/hooks/") ||
-    p.startsWith("_shared/hooks/") ||
-    p.includes("/_core/hooks-ts/") ||
-    p.startsWith("_core/hooks-ts/") ||
-    p.includes("/_core/hooks/shared/") ||
-    p.startsWith("_core/hooks/shared/")
-  ) {
+  if (p.includes("/_shared/hooks/") || p.startsWith("_shared/hooks/")) {
     return "shared";
   }
-
-  // New canonical form: _core/hooks/methods/<method>/
-  const coreMethodMatch = p.match(/_core\/hooks\/methods\/([a-z][a-z0-9-]*)\//);
-  if (coreMethodMatch?.[1]) return coreMethodMatch[1];
-
-  // Legacy form: _{method}/hooks/
   const match = p.match(/_([a-z][a-z0-9-]*)\/hooks\//);
   if (match?.[1]) return match[1]; // e.g., "cc-native"
   return "unknown";
@@ -355,7 +340,7 @@ function detectTemplate(scriptPath = ""): string {
  */
 export function parseContextWindow(
   hookInput: HookInput,
-): [null | number, null | number] {
+): [number | null, number | null] {
   const contextWindow = hookInput.context_window;
   if (!contextWindow) return [null, null];
 
@@ -381,7 +366,7 @@ export function parseContextWindow(
  */
 export function getContextPercentRemaining(
   hookInput: HookInput,
-): [null | number, null | number, null | number] {
+): [number | null, number | null, number | null] {
   const [tokensUsed, maxTokens] = parseContextWindow(hookInput);
 
   if (tokensUsed !== null && maxTokens !== null && maxTokens > 0) {
@@ -395,12 +380,12 @@ export function getContextPercentRemaining(
 
   // Source 2: context.json fallback (written by status_line.py)
   try {
-    const {sessionId} = hookInput;
+    const sessionId = hookInput.session_id;
     if (sessionId) {
       const projectRoot = getProjectRoot(hookInput.cwd);
       const context = getContextBySessionId(sessionId, projectRoot);
-      if (context?.lastSession?.context_remaining_pct !== undefined) {
-        return [context.lastSession.context_remaining_pct, null, null];
+      if (context?.last_session?.context_remaining_pct !== undefined) {
+        return [context.last_session.context_remaining_pct, null, null];
       }
     }
   } catch {
@@ -411,7 +396,7 @@ export function getContextPercentRemaining(
 }
 
 /**
- * Read stdin early and extract sessionId + event metadata.
+ * Read stdin early and extract session_id + event metadata.
  * Stashes parsed input for loadHookInput() to consume later.
  */
 function _earlyReadInput(prefetchedInput?: Record<string, unknown>): void {
@@ -421,12 +406,12 @@ function _earlyReadInput(prefetchedInput?: Record<string, unknown>): void {
 
   // If we already have prefetched input, extract metadata from it
   if (_prefetchedInput && typeof _prefetchedInput === "object") {
-    _lastHookEvent = _prefetchedInput.hook_event_name ?? null;
-    _lastToolName = _prefetchedInput.tool_name ?? null;
-    if (_prefetchedInput.sessionId) {
-      setSessionId(_prefetchedInput.sessionId);
+    _lastHookEvent = readStringField(_prefetchedInput, "hook_event_name");
+    _lastToolName = readStringField(_prefetchedInput, "tool_name");
+    const sessionId = readStringField(_prefetchedInput, "session_id");
+    if (sessionId) {
+      setSessionId(sessionId);
     }
-
     return;
   }
 
@@ -434,13 +419,14 @@ function _earlyReadInput(prefetchedInput?: Record<string, unknown>): void {
   try {
     const inputData = fs.readFileSync(0, "utf8").trim();
     if (inputData) {
-      const parsed = JSON.parse(inputData);
+      const parsed = JSON.parse(inputData) as Record<string, unknown>;
       if (parsed && typeof parsed === "object") {
         _prefetchedInput = parsed;
-        _lastHookEvent = parsed.hook_event_name ?? null;
-        _lastToolName = parsed.tool_name ?? null;
-        if (parsed.sessionId) {
-          setSessionId(parsed.sessionId);
+        _lastHookEvent = readStringField(parsed, "hook_event_name");
+        _lastToolName = readStringField(parsed, "tool_name");
+        const sessionId = readStringField(parsed, "session_id");
+        if (sessionId) {
+          setSessionId(sessionId);
         }
       }
     }
@@ -457,14 +443,15 @@ export function runHook(
   mainFunc: () => number | void,
   hookName = "unknown",
   prefetchedInput?: Record<string, unknown>,
-): void {
+): never {
   _earlyReadInput(prefetchedInput);
   _cachedHookName = hookName;
 
   // Ensure cwd is project root so relative paths in hooks resolve correctly,
   // even when cwd has drifted via `cd` in a Bash tool call.
   try {
-    const projectRoot = getProjectRoot(_prefetchedInput?.cwd);
+    const cwd = _prefetchedInput ? readStringField(_prefetchedInput, "cwd") ?? undefined : undefined;
+    const projectRoot = getProjectRoot(cwd);
     if (process.cwd() !== projectRoot) process.chdir(projectRoot);
   } catch { /* non-fatal — proceed with current cwd */ }
 
@@ -488,12 +475,12 @@ export function runHook(
   try {
     const result = mainFunc();
     exitCode = typeof result === "number" ? result : 0;
-    status = exitCode === 0 ? "success" : "blocked";
+    status = exitCode !== 0 ? "blocked" : "success";
   } catch (error: unknown) {
     if (error instanceof Error && error.message.startsWith("SystemExit:")) {
-      const code = Number.parseInt(error.message.slice(11), 10);
-      exitCode = Number.isNaN(code) ? (error.message.slice(11) ? 1 : 0) : code;
-      status = exitCode === 0 ? "success" : "blocked";
+      const code = parseInt(error.message.slice(11), 10);
+      exitCode = isNaN(code) ? (error.message.slice(11) ? 1 : 0) : code;
+      status = exitCode !== 0 ? "blocked" : "success";
     } else {
       exitCode = 0; // Non-blocking
       status = "error";
@@ -502,18 +489,8 @@ export function runHook(
     }
   }
 
-  _emitHookEnd({
-    hookName,
-    startTime,
-    exitCode,
-    status,
-    errorInfo,
-    startData,
-    event,
-    tool,
-    template,
-  });
-  process.exitCode = exitCode;
+  _emitHookEnd(hookName, startTime, exitCode, status, errorInfo, startData, event, tool, template);
+  process.exit(exitCode);
 }
 
 /**
@@ -532,7 +509,8 @@ export function runHookAsync(
   // Ensure cwd is project root so relative paths in hooks resolve correctly,
   // even when cwd has drifted via `cd` in a Bash tool call.
   try {
-    const projectRoot = getProjectRoot(_prefetchedInput?.cwd);
+    const cwd = _prefetchedInput ? readStringField(_prefetchedInput, "cwd") ?? undefined : undefined;
+    const projectRoot = getProjectRoot(cwd);
     if (process.cwd() !== projectRoot) process.chdir(projectRoot);
   } catch { /* non-fatal — proceed with current cwd */ }
 
@@ -552,17 +530,7 @@ export function runHookAsync(
   mainFunc()
     .then((result) => {
       const exitCode = typeof result === "number" ? result : 0;
-      _emitHookEnd({
-        hookName,
-        startTime,
-        exitCode,
-        status: exitCode === 0 ? "success" : "blocked",
-        errorInfo: null,
-        startData,
-        event,
-        tool,
-        template,
-      });
+      _emitHookEnd(hookName, startTime, exitCode, exitCode !== 0 ? "blocked" : "success", null, startData, event, tool, template);
       _drainAndExit(exitCode);
     })
     .catch((error: unknown) => {
@@ -571,43 +539,32 @@ export function runHookAsync(
       let errorInfo: [Error, string] | null = null;
 
       if (error instanceof Error && error.message.startsWith("SystemExit:")) {
-        const code = Number.parseInt(error.message.slice(11), 10);
-        exitCode = Number.isNaN(code) ? (error.message.slice(11) ? 1 : 0) : code;
-        status = exitCode === 0 ? "success" : "blocked";
+        const code = parseInt(error.message.slice(11), 10);
+        exitCode = isNaN(code) ? (error.message.slice(11) ? 1 : 0) : code;
+        status = exitCode !== 0 ? "blocked" : "success";
       } else {
         exitCode = 0; // Non-blocking (fail open)
         const stack = error instanceof Error ? error.stack ?? "" : "";
         errorInfo = [error instanceof Error ? error : new Error(String(error)), stack];
       }
 
-      _emitHookEnd({
-        hookName,
-        startTime,
-        exitCode,
-        status,
-        errorInfo,
-        startData,
-        event,
-        tool,
-        template,
-      });
+      _emitHookEnd(hookName, startTime, exitCode, status, errorInfo, startData, event, tool, template);
       _drainAndExit(exitCode);
     });
 }
 
 /** Shared HOOK_END logic for runHook and runHookAsync */
-function _emitHookEnd(params: {
-  hookName: string;
-  startTime: number;
-  exitCode: number;
-  status: string;
-  errorInfo: [Error, string] | null;
-  startData: Record<string, unknown>;
-  event: string;
-  tool: null | string;
-  template: string;
-}): void {
-  const { hookName, startTime, exitCode, status, errorInfo, startData, event, tool, template } = params;
+function _emitHookEnd(
+  hookName: string,
+  startTime: number,
+  exitCode: number,
+  status: string,
+  errorInfo: [Error, string] | null,
+  startData: Record<string, unknown>,
+  event: string,
+  tool: string | null,
+  template: string,
+): void {
   // Retroactive HOOK_START to per-context log (context_path resolved after main runs)
   const resolvedAfter = _getContextPath();
   if (resolvedAfter && fs.existsSync(resolvedAfter)) {
@@ -620,8 +577,8 @@ function _emitHookEnd(params: {
   const endData: Record<string, unknown> = {
     lifecycle: "end",
     status,
-    durationMs,
-    exitCode,
+    duration_ms: durationMs,
+    exit_code: exitCode,
     template,
     event: endEvent,
   };
@@ -629,9 +586,9 @@ function _emitHookEnd(params: {
 
   if (errorInfo) {
     const [err, tb] = errorInfo;
-    endData.errorType = err.constructor.name;
-    hookLog("error", hookName, `[${endEvent}] ${err.constructor.name}: ${String(err).replaceAll(/[\n\r]/g, " ").slice(0, 200)}`, { tracebackStr: tb });
-    hookLog("error", hookName, `HOOK_END: ${err}`, { data: endData, tracebackStr: tb });
+    endData.error_type = err.constructor.name;
+    hookLog("error", hookName, `[${endEvent}] ${err.constructor.name}: ${String(err).replaceAll(/[\n\r]/g, " ").slice(0, 200)}`, { traceback_str: tb });
+    hookLog("error", hookName, `HOOK_END: ${err}`, { data: endData, traceback_str: tb });
   } else if (status === "blocked") {
     hookLog("warn", hookName, "HOOK_END", { data: endData });
   } else {
@@ -647,20 +604,16 @@ function _emitHookEnd(params: {
 function _drainAndExit(code: number): void {
   // If stdout is already finished or not writable, exit immediately
   if (!process.stdout.writable || process.stdout.writableFinished) {
-    process.exitCode = code;
-    return;
+    process.exit(code);
   }
 
   // Attempt to end stdout and wait for drain
-  const timeout = setTimeout(() => {
-    process.exitCode = code;
-  }, 1000); // safety fallback
+  const timeout = setTimeout(() => process.exit(code), 1000); // safety fallback
   process.stdout.end(() => {
     clearTimeout(timeout);
-    process.exitCode = code;
+    process.exit(code);
   });
 }
 
 export {hookLog, logBlocking, logDebug, logDiagnostic, logError, logHookError, logInfo, logWarn, setContextPath, setSessionId} from "../runtime/logger.js";
-
 

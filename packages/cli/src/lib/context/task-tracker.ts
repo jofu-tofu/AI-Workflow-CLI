@@ -7,9 +7,9 @@
  */
 
 import { logWarn } from "../runtime/logger.js";
-import { readStateJson, writeStateJson } from "../runtime/state-io.js";
+import { readStateJson, toDict as _toDict, writeStateJson } from "../runtime/state-io.js";
 import { nowIso } from "../runtime/utils.js";
-import type { Task } from "../types.js";
+import type { ContextState as _ContextState, Task } from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -42,17 +42,11 @@ export function generateNextTaskId(contextId: string, projectRoot?: string): str
 export function addTask(
   contextId: string,
   subject: string,
-  options?: {
-    activeForm?: string;
-    description?: string;
-    projectRoot?: string;
-    sessionId?: string;
-  },
+  description = "",
+  activeForm = "",
+  sessionId = "",
+  projectRoot?: string,
 ): null | Task {
-  const description = options?.description ?? "";
-  const activeForm = options?.activeForm ?? "";
-  const sessionId = options?.sessionId ?? "";
-  const projectRoot = options?.projectRoot;
   const state = readStateJson(contextId, projectRoot);
   if (!state) return null;
 
@@ -61,18 +55,18 @@ export function addTask(
     id: taskId,
     subject,
     description,
-    activeForm,
+    active_form: activeForm,
     status: "pending",
-    createdAt: nowIso(),
-    completedAt: null,
+    created_at: nowIso(),
+    completed_at: null,
     evidence: "",
-    workSummary: "",
-    filesChanged: [],
-    sessionId,
+    work_summary: "",
+    files_changed: [],
+    session_id: sessionId,
   };
 
   state.tasks.push(task);
-  state.lastActive = nowIso();
+  state.last_active = nowIso();
 
   const [success] = writeStateJson(contextId, state, projectRoot);
   return success ? task : null;
@@ -87,10 +81,10 @@ export function updateTask(
   taskId: string,
   opts?: {
     evidence?: string;
-    filesChanged?: string[];
-    sessionId?: string;
+    files_changed?: string[];
+    session_id?: string;
     status?: string;
-    workSummary?: string;
+    work_summary?: string;
   },
   projectRoot?: string,
 ): boolean {
@@ -102,15 +96,15 @@ export function updateTask(
       if (opts?.status !== undefined) {
         task.status = opts.status as Task["status"];
         if (opts.status === "completed") {
-          task.completedAt = nowIso();
+          task.completed_at = nowIso();
         }
       }
 
       if (opts?.evidence) task.evidence = opts.evidence;
-      if (opts?.workSummary) task.workSummary = opts.workSummary;
-      if (opts?.filesChanged !== undefined) task.filesChanged = opts.filesChanged;
-      if (opts?.sessionId) task.sessionId = opts.sessionId;
-      state.lastActive = nowIso();
+      if (opts?.work_summary) task.work_summary = opts.work_summary;
+      if (opts?.files_changed !== undefined) task.files_changed = opts.files_changed;
+      if (opts?.session_id) task.session_id = opts.session_id;
+      state.last_active = nowIso();
       const [success] = writeStateJson(contextId, state, projectRoot);
       return success;
     }
@@ -140,7 +134,7 @@ export function deleteTask(
     return false;
   }
 
-  state.lastActive = nowIso();
+  state.last_active = nowIso();
   const [success] = writeStateJson(contextId, state, projectRoot);
   return success;
 }
@@ -164,14 +158,14 @@ export function generateTaskSummary(contextId: string, projectRoot?: string): st
   if (tasks.length === 0) return "No tasks in this context.";
 
   const completed = tasks.filter(t => t.status === "completed");
-  const inProgress = tasks.filter(t => t.status === "inProgress");
+  const inProgress = tasks.filter(t => t.status === "in_progress");
   const pending = tasks.filter(t => t.status === "pending");
   const blocked = tasks.filter(t => t.status === "blocked");
 
   const lines: string[] = [`### Tasks (${tasks.length} total)`, ""];
 
   for (const t of completed) {
-    const ws = t.workSummary ? `\n  Work: ${t.workSummary}` : "";
+    const ws = t.work_summary ? `\n  Work: ${t.work_summary}` : "";
     lines.push(`- [x] ${t.id}: ${t.subject}${ws}`);
   }
 
@@ -189,5 +183,3 @@ export function generateTaskSummary(contextId: string, projectRoot?: string): st
 
   return lines.join("\n");
 }
-
-

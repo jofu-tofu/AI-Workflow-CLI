@@ -71,7 +71,44 @@ const templateOverrides = {
     'max-params': 'off',
     'max-depth': 'off',
     'complexity': 'off',
+    'prefer-destructuring': 'off',
     'jsdoc/check-param-names': 'off',
+    'perfectionist/sort-interfaces': 'off',
+    'perfectionist/sort-named-imports': 'off',
+    'perfectionist/sort-union-types': 'off',
+    'perfectionist/sort-object-types': 'off',
+    '@stylistic/padding-line-between-statements': 'off',
+  },
+}
+
+// Shared runtime/context library uses snake_case data contracts and
+// portability-first patterns that intentionally differ from app-level style rules.
+const sharedLibOverrides = {
+  files: [
+    'src/lib/context/**/*.ts',
+    'src/lib/runtime/**/*.ts',
+    'src/lib/hooks/**/*.ts',
+    'src/lib/types.ts',
+    'src/lib/pane-driver.ts',
+    'src/lib/tmux-session.ts',
+  ],
+  rules: {
+    'camelcase': 'off',
+    '@typescript-eslint/no-explicit-any': 'off',
+    '@typescript-eslint/no-unused-vars': ['error', {argsIgnorePattern: '^_', varsIgnorePattern: '^_'}],
+    'n/no-process-exit': 'off',
+    'unicorn/no-process-exit': 'off',
+    'unicorn/prefer-number-properties': 'off',
+    'unicorn/no-array-push-push': 'off',
+    'unicorn/no-negated-condition': 'off',
+    'unicorn/prefer-ternary': 'off',
+    'unicorn/prefer-string-raw': 'off',
+    'unicorn/prefer-module': 'off',
+    'no-await-in-loop': 'off',
+    'max-params': 'off',
+    'max-depth': 'off',
+    'complexity': 'off',
+    'prefer-destructuring': 'off',
     'perfectionist/sort-interfaces': 'off',
     'perfectionist/sort-named-imports': 'off',
     'perfectionist/sort-union-types': 'off',
@@ -89,4 +126,4 @@ const binOverrides = {
   },
 }
 
-export default [includeIgnoreFile(gitignorePath), ...oclif, paiCliRules, templateOverrides, binOverrides, prettier]
+export default [includeIgnoreFile(gitignorePath), ...oclif, paiCliRules, templateOverrides, sharedLibOverrides, binOverrides, prettier]

@@ -12,18 +12,18 @@ import path from "node:path";
 
 import { atomicWrite } from "../runtime/atomic-write.js";
 import {
-  getArchiveContextDir,
-  getArchiveDir,
-  getArchiveIndexPath,
   getContextDir,
   getContextsDir,
   getIndexPath,
+  getArchiveDir,
+  getArchiveContextDir,
+  getArchiveIndexPath,
   validateContextId,
 } from "../runtime/constants.js";
-import { logError, logInfo, logWarn, setContextPath } from "../runtime/logger.js";
+import { logInfo, logWarn, logError, setContextPath } from "../runtime/logger.js";
 import { readStateJson, writeStateJson } from "../runtime/state-io.js";
-import { generateContextId, nowIso } from "../runtime/utils.js";
-import type { ContextState, IndexEntry, IndexFile, Mode } from "../types.js";
+import { nowIso, generateContextId } from "../runtime/utils.js";
+import type { ContextState, IndexFile, IndexEntry, Mode } from "../types.js";
 
 const INDEX_VERSION = "3.0";
 
@@ -33,7 +33,7 @@ const INDEX_VERSION = "3.0";
 
 /**
  * Determine artifact type from context state.
- * Checks explicit nextArtifactType field first, falls back to field detection.
+ * Checks explicit next_artifact_type field first, falls back to field detection.
  *
  * Edge cases:
  * - Both artifacts exist: Log warning, return "plan" (deterministic fallback for corrupted state)
@@ -41,15 +41,15 @@ const INDEX_VERSION = "3.0";
  */
 export function determineArtifactType(
   state: ContextState,
-): "handoff" | "plan" | null {
+): "plan" | "handoff" | null {
   // Explicit field takes precedence
-  if (state.nextArtifactType) {
-    return state.nextArtifactType;
+  if (state.next_artifact_type) {
+    return state.next_artifact_type;
   }
 
   // Implicit detection
-  const hasPlan = Boolean(state.planPath && state.planHash);
-  const hasHandoff = Boolean(state.handoffPath);
+  const hasPlan = Boolean(state.plan_path && state.plan_hash);
+  const hasHandoff = Boolean(state.handoff_path);
 
   // Edge case: Both exist (shouldn't happen - indicates bug in replacement logic)
   // Fallback: Pick plan (deterministic, no filesystem I/O)
@@ -82,18 +82,16 @@ function loadIndex(projectRoot?: string): IndexFile {
       logWarn("context_store", `Failed to read index, recreating: ${error}`);
     }
   }
-
-  return { version: INDEX_VERSION, updatedAt: nowIso(), sessions: {}, contexts: {} };
+  return { version: INDEX_VERSION, updated_at: nowIso(), sessions: {}, contexts: {} };
 }
 
 function saveIndex(index: IndexFile, projectRoot?: string): boolean {
-  index.updatedAt = nowIso();
+  index.updated_at = nowIso();
   const content = JSON.stringify(index, null, 2);
   const [success, error] = atomicWrite(getIndexPath(projectRoot), content);
   if (!success) {
     logWarn("context_store", `Failed to write index: ${error}`);
   }
-
   return success;
 }
 
@@ -101,52 +99,8 @@ function toIndexEntry(state: ContextState): IndexEntry {
   return {
     summary: state.summary,
     mode: state.mode,
-    lastActive: state.lastActive,
+    last_active: state.last_active,
   };
-}
-
-function collectExistingContextIds(projectRoot?: string): Set<string> {
-  const existingIds = new Set<string>();
-  const contextsDir = getContextsDir(projectRoot);
-  if (!fs.existsSync(contextsDir)) return existingIds;
-
-  for (const entry of fs.readdirSync(contextsDir)) {
-    const fullPath = path.join(contextsDir, entry);
-    try {
-      if (fs.statSync(fullPath).isDirectory()) {
-        existingIds.add(entry);
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  return existingIds;
-}
-
-function scanContextsFromFolders(status: undefined | string, projectRoot?: string): ContextState[] {
-  const contextsDir = getContextsDir(projectRoot);
-  const results: ContextState[] = [];
-  try {
-    for (const entry of fs.readdirSync(contextsDir)) {
-      if (entry.startsWith("_")) continue;
-      const fullPath = path.join(contextsDir, entry);
-      try {
-        if (!fs.statSync(fullPath).isDirectory()) continue;
-      } catch {
-        continue;
-      }
-
-      const state = loadState(entry, projectRoot);
-      if (state && (!status || state.status === status)) {
-        results.push(state);
-      }
-    }
-  } catch {
-    // empty dir / unreadable
-  }
-
-  return results;
 }
 
 /**
@@ -163,13 +117,13 @@ function migrateContextJson(contextId: string, projectRoot?: string): ContextSta
     const MODE_MIGRATION: Record<string, string> = {
       none: "idle",
       planning: "idle",
-      pendingImplementation: "has_plan",
+      pending_implementation: "has_plan",
       implementing: "active",
     };
     const mode = (MODE_MIGRATION[oldMode] ?? "idle") as Mode;
 
-    const sessionIds: string[] = inFlight.sessionIds ??
-      (inFlight.sessionId ? [inFlight.sessionId] : []);
+    const sessionIds: string[] = inFlight.session_ids ??
+      (inFlight.session_id ? [inFlight.session_id] : []);
 
     return {
       id: data.id ?? contextId,
@@ -177,22 +131,22 @@ function migrateContextJson(contextId: string, projectRoot?: string): ContextSta
       summary: data.summary ?? "",
       method: data.method ?? "",
       tags: data.tags ?? [],
-      createdAt: data.createdAt ?? "",
-      lastActive: data.lastActive ?? "",
+      created_at: data.created_at ?? "",
+      last_active: data.last_active ?? "",
       mode,
-      planPath: inFlight.artifact_path ?? null,
-      planHash: inFlight.artifact_hash ?? null,
-      planSignature: null,
-      planId: null,
-      planAnchors: [],
-      planHashConsumed: null,
-      planConsumed: false,
-      handoffPath: inFlight.handoffPath ?? null,
-      handoffConsumed: false,
-      workConsumed: false,
-      nextArtifactType: null,
-      sessionIds,
-      lastSession: null,
+      plan_path: inFlight.artifact_path ?? null,
+      plan_hash: inFlight.artifact_hash ?? null,
+      plan_signature: null,
+      plan_id: null,
+      plan_anchors: [],
+      plan_hash_consumed: null,
+      plan_consumed: false,
+      handoff_path: inFlight.handoff_path ?? null,
+      handoff_consumed: false,
+      work_consumed: false,
+      next_artifact_type: null,
+      session_ids: sessionIds,
+      last_session: null,
       tasks: [],
     };
   } catch (error: unknown) {
@@ -225,7 +179,7 @@ export function saveState(
   contextId: string,
   state: ContextState,
   projectRoot?: string,
-): [boolean, null | string] {
+): [boolean, string | null] {
   // Ensure the state ID matches
   state.id = contextId;
 
@@ -239,16 +193,14 @@ export function saveState(
   const index = loadIndex(projectRoot);
   index.contexts[contextId] = toIndexEntry(state);
   // Keep session mappings in sync
-  for (const sid of state.sessionIds) {
+  for (const sid of state.session_ids) {
     if (!index.sessions) index.sessions = {} as Record<string, string>;
     index.sessions[sid] = contextId;
   }
-
   const indexOk = saveIndex(index, projectRoot);
   if (!indexOk) {
     return [true, "state.json saved but index.json update failed"];
   }
-
   return [true, null];
 }
 
@@ -258,20 +210,26 @@ export function saveState(
  * See SPEC.md §7.4
  */
 export function createContext(
-  contextId: null | string,
+  contextId: string | null,
   summary: string,
-  options?: {
-    method?: string;
-    projectRoot?: string;
-    tags?: string[];
-  },
+  method = "",
+  projectRoot?: string,
+  tags?: string[],
 ): ContextState {
-  const method = options?.method ?? "";
-  const projectRoot = options?.projectRoot;
-  const tags = options?.tags;
   // Generate ID if needed
   if (!contextId) {
-    const existingIds = collectExistingContextIds(projectRoot);
+    const existingIds = new Set<string>();
+    const contextsDir = getContextsDir(projectRoot);
+    if (fs.existsSync(contextsDir)) {
+      for (const entry of fs.readdirSync(contextsDir)) {
+        const fullPath = path.join(contextsDir, entry);
+        try {
+          if (fs.statSync(fullPath).isDirectory()) {
+            existingIds.add(entry);
+          }
+        } catch { /* ignore */ }
+      }
+    }
     contextId = generateContextId(summary, existingIds);
   }
 
@@ -292,20 +250,20 @@ export function createContext(
     summary,
     method,
     tags: tags ?? [],
-    createdAt: now,
-    lastActive: now,
+    created_at: now,
+    last_active: now,
     mode: "idle",
-    planPath: null,
-    planHash: null,
-    planSignature: null,
-    planId: null,
-    planAnchors: [],
-    planHashConsumed: null,
-    handoffPath: null,
-    workConsumed: false, // CHANGED: unified flag
-    nextArtifactType: null,
-    sessionIds: [],
-    lastSession: null,
+    plan_path: null,
+    plan_hash: null,
+    plan_signature: null,
+    plan_id: null,
+    plan_anchors: [],
+    plan_hash_consumed: null,
+    handoff_path: null,
+    work_consumed: false, // CHANGED: unified flag
+    next_artifact_type: null,
+    session_ids: [],
+    last_session: null,
     tasks: [],
   };
 
@@ -324,14 +282,13 @@ export function getContext(contextId: string, projectRoot?: string): ContextStat
   } catch {
     return null;
   }
-
   return loadState(contextId, projectRoot);
 }
 
 /**
  * List contexts from index.json, loading each state.json.
  * Falls back to scanning context folders if index is missing.
- * Results sorted by lastActive descending.
+ * Results sorted by last_active descending.
  * See SPEC.md §7.6
  */
 export function getAllContexts(
@@ -354,10 +311,23 @@ export function getAllContexts(
       }
     }
   } else {
-    results.push(...scanContextsFromFolders(status, projectRoot));
+    // Fallback: scan folders
+    try {
+      for (const entry of fs.readdirSync(contextsDir)) {
+        if (entry.startsWith("_")) continue;
+        const fullPath = path.join(contextsDir, entry);
+        try {
+          if (!fs.statSync(fullPath).isDirectory()) continue;
+        } catch { continue; }
+        const state = loadState(entry, projectRoot);
+        if (state && (!status || state.status === status)) {
+          results.push(state);
+        }
+      }
+    } catch { /* empty dir */ }
   }
 
-  results.sort((a, b) => (b.lastActive || "").localeCompare(a.lastActive || ""));
+  results.sort((a, b) => (b.last_active || "").localeCompare(a.last_active || ""));
   return results;
 }
 
@@ -367,7 +337,7 @@ export function getAllContexts(
  */
 export function updateContext(
   contextId: string,
-  updates: Partial<Pick<ContextState, "method" | "summary" | "tags">>,
+  updates: Partial<Pick<ContextState, "summary" | "tags" | "method">>,
   projectRoot?: string,
 ): ContextState | null {
   const state = getContext(contextId, projectRoot);
@@ -380,7 +350,7 @@ export function updateContext(
 
   if (!changed) return state;
 
-  state.lastActive = nowIso();
+  state.last_active = nowIso();
   saveState(contextId, state, projectRoot);
   return state;
 }
@@ -412,12 +382,11 @@ export function getContextBySessionId(
 
   // Fallback: scan all contexts
   for (const state of getAllContexts("active", projectRoot)) {
-    if (state.sessionIds.includes(sessionId)) {
+    if (state.session_ids.includes(sessionId)) {
       setLoggerContext(state.id, projectRoot);
       return state;
     }
   }
-
   return null;
 }
 
@@ -433,7 +402,7 @@ function setLoggerContext(contextId: string, projectRoot?: string): void {
 }
 
 /**
- * Add sessionId to both index.json sessions map and state.json sessionIds.
+ * Add session_id to both index.json sessions map and state.json session_ids.
  * See SPEC.md §7.9
  */
 export function bindSession(
@@ -446,11 +415,10 @@ export function bindSession(
   const state = getContext(contextId, projectRoot);
   if (!state) return false;
 
-  if (!state.sessionIds.includes(sessionId)) {
-    state.sessionIds.push(sessionId);
+  if (!state.session_ids.includes(sessionId)) {
+    state.session_ids.push(sessionId);
   }
-
-  state.lastActive = nowIso();
+  state.last_active = nowIso();
 
   const [success] = saveState(contextId, state, projectRoot);
   return success;
@@ -465,43 +433,43 @@ export function updateMode(
   mode: Mode,
   projectRoot?: string,
   opts?: {
-    planAnchors?: string[];
-    planHash?: string;
-    planHashConsumed?: string;
-    planId?: string;
-    planPath?: string;
-    planSignature?: string;
-    workConsumed?: boolean; // FIXED: unified flag (was planConsumed/handoffConsumed)
+    plan_path?: string;
+    plan_hash?: string;
+    plan_signature?: string;
+    plan_id?: string;
+    plan_anchors?: string[];
+    work_consumed?: boolean; // FIXED: unified flag (was plan_consumed/handoff_consumed)
+    plan_hash_consumed?: string;
   },
 ): ContextState | null {
   const state = getContext(contextId, projectRoot);
   if (!state) return null;
 
   state.mode = mode;
-  state.lastActive = nowIso();
+  state.last_active = nowIso();
 
   if (opts) {
-    if (opts.planPath !== undefined) state.planPath = opts.planPath;
-    if (opts.planHash !== undefined) state.planHash = opts.planHash;
-    if (opts.planSignature !== undefined) state.planSignature = opts.planSignature;
-    if (opts.planId !== undefined) state.planId = opts.planId;
-    if (opts.planAnchors !== undefined) state.planAnchors = opts.planAnchors;
-    if (opts.workConsumed !== undefined) state.workConsumed = opts.workConsumed; // CHANGED: unified flag
-    if (opts.planHashConsumed !== undefined)
-      state.planHashConsumed = opts.planHashConsumed;
+    if (opts.plan_path !== undefined) state.plan_path = opts.plan_path;
+    if (opts.plan_hash !== undefined) state.plan_hash = opts.plan_hash;
+    if (opts.plan_signature !== undefined) state.plan_signature = opts.plan_signature;
+    if (opts.plan_id !== undefined) state.plan_id = opts.plan_id;
+    if (opts.plan_anchors !== undefined) state.plan_anchors = opts.plan_anchors;
+    if (opts.work_consumed !== undefined) state.work_consumed = opts.work_consumed; // CHANGED: unified flag
+    if (opts.plan_hash_consumed !== undefined)
+      state.plan_hash_consumed = opts.plan_hash_consumed;
   }
 
   // Clear plan/handoff fields when returning to idle
   if (mode === "idle") {
-    state.planPath = null;
-    state.planHash = null;
-    state.planSignature = null;
-    state.planId = null;
-    state.planAnchors = [];
-    state.planHashConsumed = null;
-    state.handoffPath = null;
-    state.workConsumed = false; // CHANGED: unified flag
-    state.nextArtifactType = null;
+    state.plan_path = null;
+    state.plan_hash = null;
+    state.plan_signature = null;
+    state.plan_id = null;
+    state.plan_anchors = [];
+    state.plan_hash_consumed = null;
+    state.handoff_path = null;
+    state.work_consumed = false; // CHANGED: unified flag
+    state.next_artifact_type = null;
   }
 
   saveState(contextId, state, projectRoot);
@@ -509,7 +477,7 @@ export function updateMode(
 }
 
 /**
- * Transition idle/hasStagedWork → active, unless in plan mode.
+ * Transition idle/has_staged_work → active, unless in plan mode.
  * See SPEC.md §7.11
  */
 export function maybeActivate(
@@ -523,10 +491,10 @@ export function maybeActivate(
   const state = getContext(contextId, projectRoot);
   if (!state) return false;
 
-  if (state.mode === "idle" || state.mode === "hasStagedWork") {
+  if (state.mode === "idle" || state.mode === "has_staged_work") {
     const oldMode = state.mode;
     const opts: Record<string, unknown> = {};
-    if (oldMode === "hasStagedWork") opts.workConsumed = true; // CHANGED: unified flag
+    if (oldMode === "has_staged_work") opts.work_consumed = true; // CHANGED: unified flag
     updateMode(contextId, "active", projectRoot, opts);
     logInfo(
       "context_store",
@@ -556,7 +524,7 @@ export function completeContext(contextId: string, projectRoot?: string): Contex
   }
 
   state.status = "completed";
-  state.lastActive = nowIso();
+  state.last_active = nowIso();
   saveState(contextId, state, projectRoot);
   logInfo("context_store", `Completed context: ${contextId}`);
 
@@ -574,7 +542,6 @@ export function archiveContext(contextId: string, projectRoot?: string): Context
     logWarn("context_store", `Cannot archive: context '${contextId}' not found`);
     return null;
   }
-
   if (state.status !== "completed") {
     logWarn("context_store", `Cannot archive: context '${contextId}' not completed`);
     return null;
@@ -605,7 +572,6 @@ export function archiveContext(contextId: string, projectRoot?: string): Context
   for (const [sid, cid] of Object.entries(sessions)) {
     if (cid === contextId) delete sessions[sid];
   }
-
   saveIndex(index, projectRoot);
 
   // Add to archive index
@@ -625,7 +591,6 @@ export function reopenContext(contextId: string, projectRoot?: string): ContextS
   if (!state) {
     state = restoreFromArchive(contextId, projectRoot);
   }
-
   if (!state) return null;
 
   if (state.status === "active") {
@@ -634,7 +599,7 @@ export function reopenContext(contextId: string, projectRoot?: string): ContextS
   }
 
   state.status = "active";
-  state.lastActive = nowIso();
+  state.last_active = nowIso();
   saveState(contextId, state, projectRoot);
   logInfo("context_store", `Reopened context: ${contextId}`);
   return state;
@@ -660,11 +625,9 @@ export function createContextFromPrompt(
   return createContext(
     null,
     summary,
-    {
-      method: "auto-created",
-      projectRoot,
-      tags: ["auto-created"],
-    },
+    "auto-created",
+    projectRoot,
+    ["auto-created"],
   );
 }
 
@@ -680,7 +643,7 @@ function updateArchiveIndex(state: ContextState, projectRoot?: string): boolean 
 
   let archiveIndex: IndexFile = {
     version: INDEX_VERSION,
-    updatedAt: nowIso(),
+    updated_at: nowIso(),
     sessions: {},
     contexts: {},
   };
@@ -694,14 +657,13 @@ function updateArchiveIndex(state: ContextState, projectRoot?: string): boolean 
   }
 
   archiveIndex.contexts[state.id] = toIndexEntry(state);
-  archiveIndex.updatedAt = nowIso();
+  archiveIndex.updated_at = nowIso();
 
   const content = JSON.stringify(archiveIndex, null, 2);
   const [success, error] = atomicWrite(archiveIndexPath, content);
   if (!success) {
     logWarn("context_store", `Failed to write archive index: ${error}`);
   }
-
   return success;
 }
 
@@ -738,7 +700,7 @@ function removeFromArchiveIndex(contextId: string, projectRoot?: string): boolea
     const archiveIndex = JSON.parse(fs.readFileSync(archiveIndexPath, "utf8")) as IndexFile;
     if (archiveIndex.contexts[contextId]) {
       delete archiveIndex.contexts[contextId];
-      archiveIndex.updatedAt = nowIso();
+      archiveIndex.updated_at = nowIso();
       const content = JSON.stringify(archiveIndex, null, 2);
       const [success, error] = atomicWrite(archiveIndexPath, content);
       if (!success) {
@@ -746,14 +708,12 @@ function removeFromArchiveIndex(contextId: string, projectRoot?: string): boolea
         return false;
       }
     }
-
     return true;
   } catch (error: unknown) {
     logWarn("context_store", `Failed to read archive index: ${error}`);
     return false;
   }
 }
-
 
 
 

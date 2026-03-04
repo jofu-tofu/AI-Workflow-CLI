@@ -6,24 +6,24 @@
  */
 
 import { logDebug, logWarn } from "./logger.js";
-import { execFileAsync, findExecutable, getInternalSubprocessEnv } from "./subprocess-utils.js";
+import { findExecutable, execFileAsync, getInternalSubprocessEnv } from "./subprocess-utils.js";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface PreflightCommandConfig {
-  buildArgs: (model: string) => string[];
   cliName: string;
+  buildArgs: (model: string) => string[];
   input: string;
 }
 
 export interface PreflightCheckResult {
-  available: boolean;
-  error?: string;
-  latencyMs: number;
-  model: string;
   provider: string;
+  model: string;
+  available: boolean;
+  latencyMs: number;
+  error?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -32,9 +32,9 @@ export interface PreflightCheckResult {
 
 export function classifyError(
   stderr: string,
-  exitCode: null | number,
+  exitCode: number | null,
   killed: boolean,
-  signal: null | string,
+  signal: string | null,
 ): string {
   if (killed || signal === "SIGTERM") return "Preflight timed out";
   if (/model.*not found|not available/i.test(stderr)) return "Model not available for this account";
@@ -56,13 +56,9 @@ export async function checkProviderModel(
   provider: string,
   model: string,
   config: PreflightCommandConfig,
-  options?: {
-    hook?: string;
-    timeoutMs?: number;
-  },
+  timeoutMs: number,
+  hook = "preflight",
 ): Promise<PreflightCheckResult> {
-  const timeoutMs = options?.timeoutMs ?? 0;
-  const hook = options?.hook ?? "preflight";
   const cliPath = findExecutable(config.cliName);
   if (!cliPath) {
     return { provider, model, available: false, latencyMs: 0, error: `CLI '${config.cliName}' not found on PATH` };

@@ -2,4 +2,5 @@ dist/
 node_modules/
 dist-test/
 _output/
+.aiwcli/
 bin/aiw

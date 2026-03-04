@@ -14,8 +14,7 @@ import path from "node:path";
 
 import { atomicWrite } from "../runtime/atomic-write.js";
 import { getContextPlansDir, sanitizeTitle } from "../runtime/constants.js";
-import { logDebug, logError, logInfo, logWarn } from "../runtime/logger.js";
-import { readStateJson } from "../runtime/state-io.js";
+import { logDebug, logInfo, logWarn, logError } from "../runtime/logger.js";
 import { generateSlug } from "../runtime/utils.js";
 
 // ---------------------------------------------------------------------------
@@ -35,7 +34,7 @@ export function archivePlan(
   planPath: string,
   contextId: string,
   projectRoot?: string,
-): [null | string, null | string, null | string] {
+): [string | null, string | null, string | null] {
   if (!fs.existsSync(planPath)) {
     logWarn("plan_manager", `Plan file not found: ${planPath}`);
     return [null, null, null];
@@ -116,12 +115,10 @@ function extractPlanSummary(content: string): string {
       const heading = trimmed.replace(/^#+\s*/, "");
       if (heading.length > 2) parts.push(heading);
     }
-
     // Grab first substantial non-heading line as context
     if (!firstParagraph && !trimmed.startsWith("#") && trimmed.length > 20) {
       firstParagraph = trimmed.slice(0, 120);
     }
-
     // Enough material for the AI
     if (parts.length >= 5) break;
   }
@@ -136,21 +133,24 @@ function extractPlanSummary(content: string): string {
 
 /**
  * Find the most relevant plan file for a context.
- * Priority: state.json planPath > most recent .md in plans/ dir.
+ * Priority: state.json plan_path > most recent .md in plans/ dir.
  * See SPEC.md §9.3
  */
 export function findLatestPlan(
   contextId: string,
   projectRoot?: string,
-): null | string {
-  // 1. Check state.json planPath first
+): string | null {
+  // 1. Check state.json plan_path first
   try {
-    const state = readStateJson(contextId, projectRoot);
-    if (state?.planPath && fs.existsSync(state.planPath)) {
-      return state.planPath;
+    // Dynamic import to avoid circular dependency at module level
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- dynamic require to avoid circular dependency
+    const stateIo = require("../runtime/state-io.js");
+    const state = stateIo.readStateJson(contextId, projectRoot);
+    if (state?.plan_path && fs.existsSync(state.plan_path)) {
+      return state.plan_path;
     }
   } catch (error: unknown) {
-    logWarn("plan_manager", `Failed to check state.json planPath: ${error}`);
+    logWarn("plan_manager", `Failed to check state.json plan_path: ${error}`);
   }
 
   // 2. Fall back to most recent .md in plans/ dir
@@ -211,10 +211,8 @@ export function extractPlanAnchors(content: string, maxAnchors = 5): string[] {
     } else if (anchors.length === 0 && trimmed.length > 20) {
       anchors.push(trimmed.slice(0, 80));
     }
-
     if (anchors.length >= maxAnchors) break;
   }
-
   return anchors;
 }
 
@@ -229,7 +227,7 @@ const MAX_TRANSCRIPT_SIZE = 50 * 1024 * 1024; // 50 MB
  * Searches in reverse for the most recent Write tool call targeting .claude/plans/.
  * See SPEC.md §9.7
  */
-export function findPlanPathInTranscript(transcriptPath: string): null | string {
+export function findPlanPathInTranscript(transcriptPath: string): string | null {
   if (!transcriptPath) return null;
 
   if (!fs.existsSync(transcriptPath)) {
@@ -270,7 +268,8 @@ export function findPlanPathInTranscript(transcriptPath: string): null | string 
 
     let contentArr: unknown;
     try {
-      contentArr = data.message?.content;
+      const message = (data as { message?: { content?: unknown } }).message;
+      contentArr = message?.content;
     } catch {
       continue;
     }
@@ -308,13 +307,11 @@ export function findPlanPathInTranscript(transcriptPath: string): null | string 
  * Parses the pattern: "Your plan has been saved to: <path>"
  * See SPEC.md §9.8
  */
-export function extractPlanPathFromResult(toolResult: string): null | string {
+export function extractPlanPathFromResult(toolResult: string): string | null {
   if (!toolResult) return null;
   const match = toolResult.match(/Your plan has been saved to:\s*(.+\.md)/);
   return match ? match[1]!.trim() : null;
 }
-
-
 
 
 

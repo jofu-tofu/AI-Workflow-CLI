@@ -159,7 +159,7 @@ export function dictToState(data: Record<string, unknown>): ContextState {
     typeof data.mode === "string" ? data.mode : "idle";
   const mode: Mode = (MODE_MIGRATION[rawMode] ?? rawMode) as Mode;
 
-  const state: unknown = {
+  const state: Record<string, unknown> = {
     id: data.id,
     status: data.status ?? "active",
     summary: data.summary ?? "",
@@ -199,7 +199,7 @@ export function dictToState(data: Record<string, unknown>): ContextState {
     }
   }
 
-  return state as ContextState;
+  return state as unknown as ContextState;
 }
 
 

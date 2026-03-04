@@ -6,7 +6,7 @@
  * Returns [contextId, method, outputText].
  *
  * Selection priority:
- * 1. session_match       — sessionId found in index.json sessions map
+ * 1. session_match       — session_id found in index.json sessions map
  * 2. caret_command       — prompt starts with ^ → parse and execute
  * 3. plan_content_match  — FALLBACK: match against has_plan contexts
  * 3b. handoff_match      — FALLBACK: match against has_handoff contexts
@@ -17,27 +17,27 @@ import * as crypto from "node:crypto";
 
 import {
   formatActiveContextReminder,
-  formatCommandFeedback,
   formatContextCreated,
   formatContextPickerStderr,
+  formatCommandFeedback,
   formatHandoffContinuation,
   formatPlanContinuation,
 } from "./context-formatter.js";
 import {
-  bindSession,
-  completeContext,
-  createContext,
-  createContextFromPrompt,
-  determineArtifactType,
-  getAllContexts,
   getContext,
+  getAllContexts,
   getContextBySessionId,
+  createContextFromPrompt,
+  createContext,
+  completeContext,
+  bindSession,
   updateMode,
+  determineArtifactType,
 } from "./context-store.js";
 import { normalizePlanContent } from "./plan-manager.js";
-import { logDebug, logError, logInfo } from "../runtime/logger.js";
+import { logDebug, logInfo, logError } from "../runtime/logger.js";
 import { isInternalCall } from "../runtime/subprocess-utils.js";
-import type { CaretCommand, ContextState } from "../types.js";
+import type { ContextState, CaretCommand } from "../types.js";
 
 /** Minimum characters required for new context description. */
 const MIN_NEW_CONTEXT_CHARS = 10;
@@ -68,7 +68,7 @@ export class BlockRequest extends Error {
 export function resolveContextByPrefix(
   query: string,
   contexts: ContextState[],
-): [null | number, null | string] {
+): [number | null, string | null] {
   const q = query.toLowerCase();
   const available = contexts.map(c => c.id).join(", ");
 
@@ -110,7 +110,7 @@ export function resolveContextByPrefix(
 export function parseChainedCaret(
   prompt: string,
   contexts: ContextState[],
-): [CaretCommand | null, null | string] {
+): [CaretCommand | null, string | null] {
   if (!prompt.startsWith("^")) return [null, null];
 
   const match = prompt.match(/^\^(\S+)(?:\s+(.*))?$/s);
@@ -123,7 +123,7 @@ export function parseChainedCaret(
 
   // ^N shorthand
   if (/^\d+$/.test(commandStr)) {
-    const num = Number.parseInt(commandStr, 10);
+    const num = parseInt(commandStr, 10);
     if (num === 0) {
       if (remaining.length < MIN_NEW_CONTEXT_CHARS) {
         return [null,
@@ -133,25 +133,21 @@ export function parseChainedCaret(
           `Example: ^0 implement user authentication with JWT tokens`,
         ];
       }
-
-      return [{ ends: [], select: null, newContextDesc: remaining, remainingPrompt: "" }, null];
+      return [{ ends: [], select: null, new_context_desc: remaining, remaining_prompt: "" }, null];
     }
-
     if (num < 1 || num > contexts.length) {
       if (contexts.length === 0) {
         return [null, "No existing contexts. Use ^0 <description> to create a new one."];
       }
-
       return [null, `Invalid selection. Choose 1-${contexts.length} for existing contexts, or ^0 for new.`];
     }
-
     const ctx = contexts[num - 1]!;
-    return [{ ends: [], select: ctx.id, newContextDesc: null, remainingPrompt: remaining }, null];
+    return [{ ends: [], select: ctx.id, new_context_desc: null, remaining_prompt: remaining }, null];
   }
 
   // Parse chained commands
   const ends: string[] = [];
-  let select: null | string = null;
+  let select: string | null = null;
   let pos = 0;
 
   while (pos < commandStr.length) {
@@ -181,13 +177,11 @@ export function parseChainedCaret(
         if (numStart === pos) {
           return [null, `Expected number, '*', or ':prefix' after 'E' at position ${numStart + 1}`];
         }
-
-        const num = Number.parseInt(commandStr.slice(numStart, pos), 10);
+        const num = parseInt(commandStr.slice(numStart, pos), 10);
         if (num < 1 || num > contexts.length) {
           if (contexts.length === 0) return [null, "No contexts to end."];
           return [null, `Context ^E${num} invalid. Choose 1-${contexts.length}.`];
         }
-
         if (pos < commandStr.length && commandStr[pos] === "+") {
           pos++;
           for (let i = num; i <= contexts.length; i++) {
@@ -217,16 +211,13 @@ export function parseChainedCaret(
         if (numStart === pos) {
           return [null, `Expected number or ':prefix' after 'S' at position ${numStart + 1}`];
         }
-
-        const num = Number.parseInt(commandStr.slice(numStart, pos), 10);
+        const num = parseInt(commandStr.slice(numStart, pos), 10);
         if (num < 1 || num > contexts.length) {
           if (contexts.length === 0) return [null, "No contexts to select."];
           return [null, `Context ^S${num} invalid. Choose 1-${contexts.length}.`];
         }
-
         ctx = contexts[num - 1]!;
       }
-
       if (select === null) select = ctx.id;
     } else {
       return [null,
@@ -241,7 +232,7 @@ export function parseChainedCaret(
     return [null, `Cannot select context '${select}' because it's being ended.`];
   }
 
-  return [{ ends, select, newContextDesc: null, remainingPrompt: remaining }, null];
+  return [{ ends, select, new_context_desc: null, remaining_prompt: remaining }, null];
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +247,7 @@ function matchPlanContent(prompt: string, hasPlanContexts: ContextState[]): Cont
   if (idMatch) {
     const foundId = idMatch[1]!;
     for (const ctx of hasPlanContexts) {
-      if (ctx.planId === foundId) {
+      if (ctx.plan_id === foundId) {
         logDebug("context_selector", `Tier 1 plan-id match: ${ctx.id} (id: ${foundId})`);
         return ctx;
       }
@@ -267,7 +258,7 @@ function matchPlanContent(prompt: string, hasPlanContexts: ContextState[]): Cont
   const normalized = normalizePlanContent(prompt);
   const normHash = crypto.createHash("sha256").update(normalized, "utf8").digest("hex").slice(0, 12);
   for (const ctx of hasPlanContexts) {
-    if (ctx.planHash && ctx.planHash === normHash) {
+    if (ctx.plan_hash && ctx.plan_hash === normHash) {
       logDebug("context_selector", `Tier 2 normalized hash match: ${ctx.id} (hash: ${normHash})`);
       return ctx;
     }
@@ -275,7 +266,7 @@ function matchPlanContent(prompt: string, hasPlanContexts: ContextState[]): Cont
 
   // Tier 3: Multi-anchor signature match
   for (const ctx of hasPlanContexts) {
-    const anchors = ctx.planAnchors ?? [];
+    const anchors = ctx.plan_anchors ?? [];
     if (anchors.length > 0) {
       const hits = anchors.filter(a => prompt.includes(a)).length;
       if (hits >= 2 && hits >= Math.floor(anchors.length / 2)) {
@@ -288,7 +279,7 @@ function matchPlanContent(prompt: string, hasPlanContexts: ContextState[]): Cont
   // Tier 4 (legacy): Signature match
   const promptHead = new Set(prompt.slice(0, 500));
   for (const ctx of hasPlanContexts) {
-    if (ctx.planSignature && promptHead.has(ctx.planSignature)) {
+    if (ctx.plan_signature && promptHead.has(ctx.plan_signature)) {
       logDebug("context_selector", `Tier 4 legacy signature match: ${ctx.id}`);
       return ctx;
     }
@@ -304,7 +295,7 @@ function matchPlanContent(prompt: string, hasPlanContexts: ContextState[]): Cont
 function createNewContext(
   prompt: string,
   projectRoot?: string,
-): [null | string, string, null | string] {
+): [string | null, string, string | null] {
   try {
     const newCtx = createContextFromPrompt(prompt, projectRoot);
     updateMode(newCtx.id, "active", projectRoot);
@@ -324,11 +315,9 @@ function createNewContext(
       const newCtx = createContext(
         fallbackId,
         prompt.trim().slice(0, 200) || "New context",
-        {
-          method: "auto-created-fallback",
-          projectRoot,
-          tags: ["auto-created", "fallback"],
-        },
+        "auto-created-fallback",
+        projectRoot,
+        ["auto-created", "fallback"],
       );
       updateMode(newCtx.id, "active", projectRoot);
       newCtx.mode = "active";
@@ -349,7 +338,7 @@ function handleCaretCommand(
   prompt: string,
   contexts: ContextState[],
   projectRoot?: string,
-): [null | string, string, null | string] {
+): [string | null, string, string | null] {
   if (contexts.length === 0) {
     const match = prompt.match(/^\^(\S+)(?:\s+(.*))?$/s);
     if (!match) {
@@ -358,16 +347,14 @@ function handleCaretCommand(
         "Example: ^0 implement user authentication system",
       );
     }
-
     const prefixValue = match[1]!;
     const remaining = match[2] ?? "";
-    if (!/^\d+$/.test(prefixValue) || Number.parseInt(prefixValue, 10) !== 0) {
+    if (!/^\d+$/.test(prefixValue) || parseInt(prefixValue, 10) !== 0) {
       throw new BlockRequest(
         "No existing contexts to select. Use ^0 <description> to create a new context.\n" +
         "Example: ^0 implement user authentication system",
       );
     }
-
     const description = remaining.trim();
     if (description.length < MIN_NEW_CONTEXT_CHARS) {
       throw new BlockRequest(
@@ -377,7 +364,6 @@ function handleCaretCommand(
         `Example: ^0 implement user authentication with JWT tokens`,
       );
     }
-
     return createNewContext(description, projectRoot);
   }
 
@@ -391,21 +377,19 @@ function handleCaretCommand(
     if (!ctxToEnd) {
       throw new BlockRequest(`Context '${ctxId}' no longer exists.\n` + formatContextPickerStderr(contexts));
     }
-
     completeContext(ctxToEnd.id, projectRoot);
     endedContexts.push(ctxToEnd);
     logInfo("context_selector", `Ended context: ${ctxToEnd.id}`);
   }
 
-  if (cmd.newContextDesc) {
-    const [ctxId, method, output] = createNewContext(cmd.newContextDesc, projectRoot);
+  if (cmd.new_context_desc) {
+    const [ctxId, method, output] = createNewContext(cmd.new_context_desc, projectRoot);
     if (ctxId && endedContexts.length > 0) {
       const newCtx = getContext(ctxId, projectRoot);
       const feedback = formatCommandFeedback(endedContexts, newCtx);
-      return [ctxId, method === "creation_failed" ? method : "caret_new", feedback];
+      return [ctxId, method !== "creation_failed" ? "caret_new" : method, feedback];
     }
-
-    return [ctxId, method === "creation_failed" ? method : "caret_new", output];
+    return [ctxId, method !== "creation_failed" ? "caret_new" : method, output];
   }
 
   if (cmd.select) {
@@ -413,7 +397,6 @@ function handleCaretCommand(
     if (!selectedCtx) {
       throw new BlockRequest(`Context '${cmd.select}' no longer exists.\n` + formatContextPickerStderr(contexts));
     }
-
     logInfo("context_selector", `Caret-selected context: ${selectedCtx.id}`);
     return [selectedCtx.id, "caret_select", formatCommandFeedback(endedContexts, selectedCtx)];
   }
@@ -428,7 +411,6 @@ function handleCaretCommand(
         "Example: implement user authentication system",
       );
     }
-
     throw new BlockRequest(
       feedback + "\nNo context selected.\n\nSelect a context to continue:\n" +
       formatContextPickerStderr(remainingContexts),
@@ -453,7 +435,7 @@ export function determineContext(
   prompt: string,
   sessionId?: string,
   projectRoot?: string,
-): [null | string, string, null | string] {
+): [string | null, string, string | null] {
   if (isInternalCall()) {
     logDebug("context_selector", "Skipping: internal subprocess call");
     return [null, "skip_internal", null];
@@ -481,7 +463,6 @@ export function determineContext(
         "Example: implement user authentication system",
       );
     }
-
     throw new BlockRequest(formatContextPickerStderr(contexts));
   }
 
@@ -492,7 +473,7 @@ export function determineContext(
 
   // --- Case 3: Staged work match (CHANGED: unified mode) ---
   const stagedContexts = getAllContexts("active", projectRoot).filter(
-    (c) => c.mode === "hasStagedWork",
+    (c) => c.mode === "has_staged_work",
   );
 
   if (stagedContexts.length > 0) {
@@ -510,8 +491,8 @@ export function determineContext(
       if (matched) {
         if (sessionId) bindSession(matched.id, sessionId, projectRoot);
         updateMode(matched.id, "active", projectRoot, {
-          workConsumed: true, // CHANGED: unified flag
-          ...(matched.planHash ? {planHashConsumed: matched.planHash} : {}),
+          work_consumed: true, // CHANGED: unified flag
+          ...(matched.plan_hash ? {plan_hash_consumed: matched.plan_hash} : {}),
         });
         matched.mode = "active";
         logInfo("context_selector", `Plan match (fallback): ${matched.id}`);
@@ -527,7 +508,7 @@ export function determineContext(
     if (handoffContexts.length > 0) {
       const target = handoffContexts[0]!;
       if (sessionId) bindSession(target.id, sessionId, projectRoot);
-      updateMode(target.id, "active", projectRoot, { workConsumed: true }); // CHANGED
+      updateMode(target.id, "active", projectRoot, { work_consumed: true }); // CHANGED
       target.mode = "active";
       logInfo("context_selector", `Handoff match (fallback): ${target.id}`);
       return [
@@ -541,7 +522,5 @@ export function determineContext(
   // --- Case 4: default ---
   return createNewContext(prompt, projectRoot);
 }
-
-
 
 

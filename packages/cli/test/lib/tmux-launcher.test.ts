@@ -10,6 +10,8 @@ describe('tmux-launcher', () => {
       expect(result).to.include('tmux set-option -g mouse on')
       expect(result).to.include('tmux set-option -g history-limit 50000')
       expect(result).to.include('tmux set-option -g focus-events off')
+      expect(result).to.include('tmux bind -n WheelUpPane')
+      expect(result).to.include('tmux bind -n WheelDownPane')
       expect(result).to.include('tmux set -a terminal-overrides')
       expect(result).to.include('*:kmous@')
       expect(result.endsWith('exec codex --yolo')).to.equal(true)

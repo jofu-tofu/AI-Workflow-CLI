@@ -3,8 +3,8 @@
  * See SPEC.md §11
  *
  * All functions accept a ContextState with fields:
- *   id, summary, mode, lastActive, planPath, handoffPath,
- *   tasks[], lastSession, sessionIds, status, method, tags
+ *   id, summary, mode, last_active, plan_path, handoff_path,
+ *   tasks[], last_session, session_ids, status, method, tags
  */
 
 import * as fs from "node:fs";
@@ -23,7 +23,7 @@ const MAX_PLAN_INLINE_CHARS = 30_000;
 
 const MODE_DISPLAY_MAP: Record<string, string> = {
   idle: "",
-  hasStagedWork: "[Staged]", // CHANGED: unified mode (plan or handoff)
+  has_staged_work: "[Staged]", // CHANGED: unified mode (plan or handoff)
   active: "[Active]",
 };
 
@@ -43,7 +43,7 @@ export function getModeDisplay(mode: string): string {
  * Format ISO timestamp as '2 hours ago', 'yesterday', etc.
  * See SPEC.md §11.3
  */
-export function formatRelativeTime(isoTimestamp: null | string): string {
+export function formatRelativeTime(isoTimestamp: string | null): string {
   if (!isoTimestamp) return "unknown";
 
   const dt = parseIsoTimestamp(isoTimestamp);
@@ -63,10 +63,8 @@ export function formatRelativeTime(isoTimestamp: null | string): string {
       if (diffMin === 0) return "just now";
       return diffMin === 1 ? "1 minute ago" : `${diffMin} minutes ago`;
     }
-
     return diffHours === 1 ? "1 hour ago" : `${diffHours} hours ago`;
   }
-
   if (diffDays === 1) return "yesterday";
   if (diffDays < 7) return `${diffDays} days ago`;
 
@@ -81,15 +79,15 @@ export function formatRelativeTime(isoTimestamp: null | string): string {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function taskAttr(task: Record<string, unknown> | Task, key: string, defaultVal = ""): string {
+function taskAttr(task: Task | Record<string, unknown>, key: string, defaultVal = ""): string {
   if (typeof task === "object" && task !== null) {
-    return (task as unknown)[key] ?? defaultVal;
+    const value = (task as Record<string, unknown>)[key];
+    return typeof value === "string" ? value : defaultVal;
   }
-
   return defaultVal;
 }
 
-function readPlanContent(planPath: string): [null | string, boolean, number] {
+function readPlanContent(planPath: string): [string | null, boolean, number] {
   try {
     if (!fs.existsSync(planPath)) return [null, false, 0];
     const content = fs.readFileSync(planPath, "utf8");
@@ -97,7 +95,6 @@ function readPlanContent(planPath: string): [null | string, boolean, number] {
     if (total > MAX_PLAN_INLINE_CHARS) {
       return [content.slice(0, MAX_PLAN_INLINE_CHARS), true, total];
     }
-
     return [content, false, total];
   } catch {
     return [null, false, 0];
@@ -110,7 +107,7 @@ function modeLabel(ctx: ContextState): string {
 }
 
 /**
- * Build restore sections from lastSession, tasks, and planPath.
+ * Build restore sections from last_session, tasks, and plan_path.
  * See SPEC.md §11.4
  */
 export function buildRestoreSections(
@@ -119,7 +116,7 @@ export function buildRestoreSections(
   inlinePlan = false,
 ): string {
   const sections: string[] = [];
-  const lastSession = ctx.lastSession ?? {};
+  const lastSession = ctx.last_session ?? {};
 
   if (lastSession) {
     const savedAt = lastSession.saved_at ?? "";
@@ -134,7 +131,7 @@ export function buildRestoreSections(
   if (tasks.length > 0) {
     const buckets: Record<string, string[]> = {
       completed: [],
-      inProgress: [],
+      in_progress: [],
       pending: [],
       blocked: [],
     };
@@ -144,12 +141,11 @@ export function buildRestoreSections(
         buckets[s]!.push(taskAttr(t, "subject"));
       }
     }
-
     if (Object.values(buckets).some(b => b.length > 0)) {
       sections.push("", `### Previous Work (${tasks.length} tasks)`, "");
       const marks: Record<string, string> = {
         completed: "[x]",
-        inProgress: "[~]",
+        in_progress: "[~]",
         pending: "[ ]",
         blocked: "[!]",
       };
@@ -161,7 +157,7 @@ export function buildRestoreSections(
     }
   }
 
-  const {planPath} = ctx;
+  const planPath = ctx.plan_path;
   if (planPath) {
     if (inlinePlan) {
       const [content, truncated, totalChars] = readPlanContent(planPath);
@@ -183,8 +179,8 @@ export function buildRestoreSections(
   const gitState = lastSession?.git_state ?? {};
   if (gitState && Object.keys(gitState).length > 0) {
     const branch = gitState.branch ?? "unknown";
-    const uncommitted: string[] = gitState.uncommittedFiles ?? [];
-    const lastCommit = gitState.lastCommitShort ?? "";
+    const uncommitted: string[] = gitState.uncommitted_files ?? [];
+    const lastCommit = gitState.last_commit_short ?? "";
     let uncStr = uncommitted.length > 0 ? uncommitted.slice(0, 5).join(", ") : "none";
     if (uncommitted.length > 5) uncStr += ` (+${uncommitted.length - 5} more)`;
     sections.push("", "### Git State", `Branch: ${branch} | Uncommitted: ${uncStr}`);
@@ -202,7 +198,8 @@ function resumeBlock(ctx: ContextState, projectRoot: string | undefined, modeTex
   ];
   const restore = buildRestoreSections(ctx, projectRoot, true);
   if (restore) lines.push(restore);
-  lines.push("", "---", "", "**Instructions:**", ...instructions);
+  lines.push("", "---", "", "**Instructions:**");
+  lines.push(...instructions);
   return lines.join("\n");
 }
 
@@ -215,7 +212,7 @@ function resumeBlock(ctx: ContextState, projectRoot: string | undefined, modeTex
  * See SPEC.md §11.5
  */
 export function formatHandoffContinuation(ctx: ContextState, projectRoot?: string): string {
-  const handoffPath = ctx.handoffPath ?? "";
+  const handoffPath = ctx.handoff_path ?? "";
   const lines = [
     `## Resuming Context: ${ctx.id} (Handoff Available)`, "",
     `**Summary:** ${ctx.summary}`,
@@ -294,19 +291,18 @@ export function formatContextList(contexts: ContextState[]): string {
   const lines = ["## Active Contexts\n"];
   for (const [i, context_] of contexts.entries()) {
     const ctx = context_!;
-    const timeStr = formatRelativeTime(ctx.lastActive);
+    const timeStr = formatRelativeTime(ctx.last_active);
     const md = getModeDisplay(ctx.mode ?? "idle");
     const si = md ? ` ${md}` : "";
-    lines.push(`**${i + 1}. ${ctx.id}**${si}`, `   ${ctx.summary}`);
+    lines.push(`**${i + 1}. ${ctx.id}**${si}`);
+    lines.push(`   ${ctx.summary}`);
     if (ctx.method) {
       lines.push(`   Method: ${ctx.method} | Last active: ${timeStr}`);
     } else {
       lines.push(`   Last active: ${timeStr}`);
     }
-
     lines.push("");
   }
-
   return lines.join("\n");
 }
 
@@ -332,7 +328,7 @@ export function formatActiveContextReminder(
   projectRoot?: string,
   includeRestore = false,
 ): string {
-  const timeStr = formatRelativeTime(ctx.lastActive);
+  const timeStr = formatRelativeTime(ctx.last_active);
   const label = modeLabel(ctx);
 
   if (includeRestore) {
@@ -378,13 +374,13 @@ export function formatContextPickerStderr(contexts: ContextState[]): string {
   let selectableCount = 0;
   for (const [i, context_] of contexts.entries()) {
     const ctx = context_!;
-    const timeStr = formatRelativeTime(ctx.lastActive);
+    const timeStr = formatRelativeTime(ctx.last_active);
     const mode = ctx.mode ?? "idle";
-    const isSelectable = mode === "active" || Boolean(ctx.handoffPath);
+    const isSelectable = mode === "active" || Boolean(ctx.handoff_path);
     if (isSelectable) selectableCount++;
 
     let status = "";
-    if (ctx.handoffPath) {
+    if (ctx.handoff_path) {
       status = " [Handoff Ready]";
     } else if (getModeDisplay(mode)) {
       status = ` ${getModeDisplay(mode)}`;
@@ -393,7 +389,10 @@ export function formatContextPickerStderr(contexts: ContextState[]): string {
     const summary = ctx.summary.length > 48 ? ctx.summary.slice(0, 45) + "..." : ctx.summary;
     const selTag = isSelectable ? " [selectable]" : " [end only]";
 
-    lines.push(`|  ^${i + 1}  ${ctx.id}${status}${selTag}`, `|       ${summary}`, `|       [${timeStr}]`, "|");
+    lines.push(`|  ^${i + 1}  ${ctx.id}${status}${selTag}`);
+    lines.push(`|       ${summary}`);
+    lines.push(`|       [${timeStr}]`);
+    lines.push("|");
   }
 
   lines.push(
@@ -418,7 +417,6 @@ export function formatContextPickerStderr(contexts: ContextState[]): string {
       "+----------------------------------------------------------------+",
     );
   }
-
   lines.push("");
   return lines.join("\n");
 }
@@ -438,13 +436,12 @@ export function formatCommandFeedback(
       const s = ctx.summary.length > 50 ? ctx.summary.slice(0, 50) + "..." : ctx.summary;
       lines.push(`- **${ctx.id}**: ${s}`);
     }
-
     lines.push("");
   }
 
   if (selectedContext) {
     const label = modeLabel(selectedContext);
-    const timeStr = formatRelativeTime(selectedContext.lastActive);
+    const timeStr = formatRelativeTime(selectedContext.last_active);
     lines.push(
       `## Active Context: ${selectedContext.id}`, "",
       `**Summary:** ${selectedContext.summary}`,
@@ -454,7 +451,6 @@ export function formatCommandFeedback(
       "Tasks created with TaskCreate will be persisted to this context.",
     );
   }
-
   return lines.join("\n");
 }
 
@@ -467,7 +463,7 @@ type InventoryCollector = (
   contextId: string,
   contextDir: string,
   state: ContextState,
-) => null | string;
+) => string | null;
 
 /** Descriptions for known context subfolders. */
 const KNOWN_FOLDERS: Record<string, string> = {
@@ -478,23 +474,21 @@ const KNOWN_FOLDERS: Record<string, string> = {
   "notes": "Analysis files, reports, and documentation that don't belong in the codebase",
 };
 
-function collectFolderPath(contextId: string, contextDir: string, _state: ContextState): null | string {
+function collectFolderPath(contextId: string, contextDir: string, _state: ContextState): string | null {
   if (!fs.existsSync(contextDir)) return null;
   return `**Context folder:** \`${displayPath(contextDir)}\`\n**State file:** \`${displayPath(path.join(contextDir, "state.json"))}\` — contains session history, task records, plan/handoff metadata`;
 }
 
-function collectStatePointers(contextId: string, contextDir: string, state: ContextState): null | string {
+function collectStatePointers(contextId: string, contextDir: string, state: ContextState): string | null {
   const pointers: string[] = [];
-  if (state.planPath) {
-    const exists = fs.existsSync(state.planPath);
-    pointers.push(`- **Active plan:** \`${displayPath(state.planPath)}\`${exists ? "" : " (not found)"}`);
+  if (state.plan_path) {
+    const exists = fs.existsSync(state.plan_path);
+    pointers.push(`- **Active plan:** \`${displayPath(state.plan_path)}\`${exists ? "" : " (not found)"}`);
   }
-
-  if (state.handoffPath) {
-    const exists = fs.existsSync(state.handoffPath);
-    pointers.push(`- **Active handoff:** \`${displayPath(state.handoffPath)}\`${exists ? "" : " (not found)"}`);
+  if (state.handoff_path) {
+    const exists = fs.existsSync(state.handoff_path);
+    pointers.push(`- **Active handoff:** \`${displayPath(state.handoff_path)}\`${exists ? "" : " (not found)"}`);
   }
-
   if (pointers.length === 0) return null;
   return "**Key artifacts:**\n" + pointers.join("\n");
 }
@@ -511,11 +505,10 @@ function countFilesRecursive(dirPath: string): number {
       }
     }
   } catch { /* permission errors, etc. */ }
-
   return count;
 }
 
-function collectFolderInventory(contextId: string, contextDir: string, _state: ContextState): null | string {
+function collectFolderInventory(contextId: string, contextDir: string, _state: ContextState): string | null {
   if (!fs.existsSync(contextDir)) return null;
   let entries: fs.Dirent[];
   try {
@@ -530,14 +523,13 @@ function collectFolderInventory(contextId: string, contextDir: string, _state: C
     const dirPath = path.join(contextDir, dir.name);
     const desc = KNOWN_FOLDERS[dir.name] ?? "Project-specific artifacts";
     const fileCount = countFilesRecursive(dirPath);
-    lines.push(`- \`${dir.name}/\` — ${desc} (${fileCount} file${fileCount === 1 ? "" : "s"})`);
+    lines.push(`- \`${dir.name}/\` — ${desc} (${fileCount} file${fileCount !== 1 ? "s" : ""})`);
   }
-
   return lines.join("\n");
 }
 
-function collectSessionStats(contextId: string, contextDir: string, state: ContextState): null | string {
-  const sessionCount = (state.sessionIds ?? []).length;
+function collectSessionStats(contextId: string, contextDir: string, state: ContextState): string | null {
+  const sessionCount = (state.session_ids ?? []).length;
   if (sessionCount === 0) return null;
 
   const transcriptsDir = path.join(contextDir, "session-transcripts");
@@ -558,13 +550,12 @@ function collectSessionStats(contextId: string, contextDir: string, state: Conte
 
   let line = `**Sessions:** ${sessionCount} total`;
   if (transcriptCount > 0) {
-    line += `, ${transcriptCount} transcript${transcriptCount === 1 ? "" : "s"} archived${timeRange}`;
+    line += `, ${transcriptCount} transcript${transcriptCount !== 1 ? "s" : ""} archived${timeRange}`;
   }
-
   return line;
 }
 
-function collectNotesGuidance(contextId: string, contextDir: string, _state: ContextState): null | string {
+function collectNotesGuidance(contextId: string, contextDir: string, _state: ContextState): string | null {
   const notesDir = path.join(contextDir, "notes");
   return `**Notes:** Put notes and files that don't belong in the codebase here. Reference them in other documents as needed: \`${displayPath(notesDir)}\``;
 }
@@ -585,7 +576,7 @@ const INVENTORY_COLLECTORS: InventoryCollector[] = [
 export function buildContextInventory(
   state: ContextState,
   projectRoot: string,
-): null | string {
+): string | null {
   const contextDir = getContextDir(state.id, projectRoot);
   if (!fs.existsSync(contextDir)) return null;
 
@@ -596,7 +587,6 @@ export function buildContextInventory(
   if (sections.length === 0) return null;
   return "### Context Resources\n\n" + sections.join("\n\n");
 }
-
 
 
 

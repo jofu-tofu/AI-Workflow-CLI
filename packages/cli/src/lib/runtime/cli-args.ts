@@ -14,9 +14,9 @@ import { getInternalSubprocessEnv, shellQuoteWin } from "./subprocess-utils.js";
 // Types
 // ---------------------------------------------------------------------------
 
-export type InvocationMode = "preflight" | "print" | "structured";
+export type InvocationMode = "structured" | "print" | "preflight";
 export type CliProvider = "claude" | "codex";
-export type ModelTier = "fast" | "smart" | "standard";
+export type ModelTier = "fast" | "standard" | "smart";
 
 const VALID_SANDBOXES = ["read-only", "workspace-write", "danger-full-access"] as const;
 export type CodexSandbox = (typeof VALID_SANDBOXES)[number];
@@ -26,33 +26,33 @@ export function isCodexSandbox(value: string): value is CodexSandbox {
 }
 
 export interface CliArgSpec {
-  extraArgs?: string[];
+  provider: CliProvider;
+  model: string | ModelTier;
+  mode: InvocationMode;
   jsonSchema?: Record<string, unknown>;
   maxTurns?: number;
-  mode: InvocationMode;
-  model: ModelTier | string;
-  outputFilePath?: string;
-  outputSchemaPath?: string;
-  provider: CliProvider;
-  sandbox?: CodexSandbox;
   systemPrompt?: string;
+  sandbox?: CodexSandbox;
+  outputSchemaPath?: string;
+  outputFilePath?: string;
+  extraArgs?: string[];
 }
 
 /** Codex REPL spec — model optional (Codex uses its default when omitted). */
 export interface CodexReplSpec {
-  extraArgs?: string[];
-  mode: "repl";
-  model?: ModelTier | string;
   provider: "codex";
+  mode: "repl";
+  model?: string | ModelTier;
   sandbox?: CodexSandbox;
   yolo?: boolean;
+  extraArgs?: string[];
 }
 
 export interface CliInvocation {
-  args: string[];
   cliName: string;
-  env: Record<string, string | undefined>;
+  args: string[];
   needsShell: boolean;
+  env: Record<string, string | undefined>;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,13 +81,13 @@ export function isModelTier(value: string): value is ModelTier {
   return value in MODEL_TIERS;
 }
 
-export function resolveModel(model: ModelTier | string): string {
+export function resolveModel(model: string | ModelTier): string {
   if (isModelTier(model)) return MODEL_TIERS[model];
   return model;
 }
 
 export function resolveModelForProvider(
-  model: ModelTier | string,
+  model: string | ModelTier,
   provider: CliProvider,
 ): string {
   if (!isModelTier(model)) return model;
@@ -122,26 +122,19 @@ export function buildCliInvocation(spec: CliArgSpec | CodexReplSpec): CliInvocat
   const empty = isWin ? '""' : "";
 
   if (spec.provider === "claude") {
-    return buildClaudeInvocation({
-      spec: spec as CliArgSpec,
-      model: resolvedModel,
-      isWin,
-      empty,
-      env,
-    });
+    return buildClaudeInvocation(spec as CliArgSpec, resolvedModel, isWin, empty, env);
   }
 
   return buildCodexInvocation(spec as CliArgSpec, resolvedModel, env);
 }
 
-function buildClaudeInvocation(params: {
-  spec: CliArgSpec;
-  model: string;
-  isWin: boolean;
-  empty: string;
-  env: Record<string, string | undefined>;
-}): CliInvocation {
-  const { spec, model, isWin, empty, env } = params;
+function buildClaudeInvocation(
+  spec: CliArgSpec,
+  model: string,
+  isWin: boolean,
+  empty: string,
+  env: Record<string, string | undefined>,
+): CliInvocation {
   const args: string[] = [];
 
   args.push("--model", model);
@@ -160,7 +153,9 @@ function buildClaudeInvocation(params: {
     args.push("--max-turns", String(maxTurns));
   }
 
-  args.push("--setting-sources", empty, "-p", "--no-session-persistence");
+  args.push("--setting-sources", empty);
+  args.push("-p");
+  args.push("--no-session-persistence");
 
   if (spec.systemPrompt) {
     args.push("--system-prompt", shellQuoteWin(spec.systemPrompt));
@@ -229,7 +224,6 @@ export function preflightSpec(provider: CliProvider, model: string): CliArgSpec 
       sandbox: "read-only",
     };
   }
-
   return {
     provider: "claude",
     model,
@@ -237,7 +231,7 @@ export function preflightSpec(provider: CliProvider, model: string): CliArgSpec 
   };
 }
 
-export function inferenceSpec(model: ModelTier | string): CliArgSpec {
+export function inferenceSpec(model: string | ModelTier): CliArgSpec {
   return {
     provider: "claude",
     model,
@@ -259,7 +253,6 @@ export function reviewSpec(
       sandbox: "read-only",
     };
   }
-
   return {
     provider: "claude",
     model,
@@ -279,7 +272,7 @@ export function codexReplSpec(
     mode: "repl",
     ...(model ? {model} : {}),
     ...(sandbox ? {sandbox} : {}),
-    ...(yolo === undefined ? {} : {yolo}),
+    ...(yolo !== undefined ? {yolo} : {}),
   };
 }
 

@@ -1,5 +1,5 @@
 import {expect} from 'chai'
-import {stub, type SinonStub} from 'sinon'
+import {type SinonStub, stub} from 'sinon'
 
 import {adaptHookCommand, validateCommandsForPlatform} from '../../src/lib/platform-commands.js'
 

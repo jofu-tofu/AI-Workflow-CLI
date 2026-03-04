@@ -100,7 +100,6 @@ function findProjectRoot(startDir: string): string {
     if (parent === dir) break; // filesystem root reached
     dir = parent;
   }
-
   return startDir; // fallback: no .aiwcli anchor found
 }
 

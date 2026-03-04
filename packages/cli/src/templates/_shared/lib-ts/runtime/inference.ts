@@ -68,8 +68,15 @@ export function inference(
     };
   } catch (error: unknown) {
     const latencyMs = Date.now() - startTime;
+    const execError = error as {
+      code?: string;
+      killed?: boolean;
+      status?: number;
+      stderr?: unknown;
+      stdout?: unknown;
+    };
 
-    if (error.code === "ETIMEDOUT" || error.killed) {
+    if (execError.code === "ETIMEDOUT" || execError.killed) {
       return {
         success: false,
         output: "",
@@ -78,7 +85,7 @@ export function inference(
       };
     }
 
-    if (error.code === "ENOENT") {
+    if (execError.code === "ENOENT") {
       return {
         success: false,
         output: "",
@@ -88,11 +95,11 @@ export function inference(
     }
 
     // Non-zero exit code
-    if (error.status !== undefined && error.status !== 0) {
+    if (execError.status !== undefined && execError.status !== 0) {
       return {
         success: false,
-        output: (error.stdout ?? "").toString().trim(),
-        error: (error.stderr ?? "").toString().trim() || `Exit code: ${error.status}`,
+        output: String(execError.stdout ?? "").trim(),
+        error: String(execError.stderr ?? "").trim() || `Exit code: ${execError.status}`,
         latency_ms: latencyMs,
       };
     }

@@ -23,12 +23,12 @@ process.on('exit', () => {
 
 process.on('SIGINT', () => {
   cleanupChildren()
-  process.exitCode = 130
+  process.exit(130)
 })
 
 process.on('SIGTERM', () => {
   cleanupChildren()
-  process.exitCode = 143
+  process.exit(143)
 })
 
 export function isInternalCall(): boolean {
@@ -46,17 +46,17 @@ export function getInternalSubprocessEnv(): Record<string, string | undefined> {
   return env
 }
 
-export function findExecutable(name: string): null | string {
+export function findExecutable(name: string): string | null {
   return resolveExecutable(name, { windowsProfile: 'cmdOrExeFirst' })
 }
 
 export interface ExecSyncError {
   killed: boolean
-  message: string
-  signal: null | string
-  status: null | number
-  stderr: Buffer | string
+  signal: string | null
   stdout: Buffer | string
+  stderr: Buffer | string
+  status: number | null
+  message: string
 }
 
 export function isExecSyncError(error: unknown): error is ExecSyncError {
@@ -74,19 +74,19 @@ export function shellQuoteWin(arg: string): string {
 }
 
 export interface ExecResult {
+  stdout: string
+  stderr: string
   exitCode: number
   killed: boolean
-  signal: null | string
-  stderr: string
-  stdout: string
+  signal: string | null
 }
 
 export interface ExecAsyncOptions {
-  env?: Record<string, string | undefined> | undefined
   input?: string | undefined
+  timeout?: number | undefined
+  env?: Record<string, string | undefined> | undefined
   maxBuffer?: number | undefined
   shell?: boolean | undefined
-  timeout?: number | undefined
 }
 
 export function execFileAsync(
@@ -111,7 +111,12 @@ export function execFileAsync(
           resolve({
             stdout: String(stdout ?? ''),
             stderr: String(stderr ?? ''),
-            exitCode: typeof errObj.code === 'number' ? errObj.code : (error as unknown).status ?? 1,
+            exitCode:
+              typeof errObj.code === 'number'
+                ? errObj.code
+                : typeof errObj.status === 'number'
+                  ? errObj.status
+                  : 1,
             killed: Boolean(errObj.killed),
             signal: typeof errObj.signal === 'string' ? errObj.signal : null,
           })

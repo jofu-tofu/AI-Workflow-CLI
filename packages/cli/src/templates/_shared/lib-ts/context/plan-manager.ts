@@ -268,7 +268,8 @@ export function findPlanPathInTranscript(transcriptPath: string): string | null 
 
     let contentArr: unknown;
     try {
-      contentArr = data.message?.content;
+      const message = (data as { message?: { content?: unknown } }).message;
+      contentArr = message?.content;
     } catch {
       continue;
     }

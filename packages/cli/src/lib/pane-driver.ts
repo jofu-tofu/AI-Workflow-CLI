@@ -239,10 +239,22 @@ function buildCommandForBackend(params: {
 }): string {
   const { backend, toolPath, args, envVars, mode, promptPath } = params
   if (backend === 'tmux') {
-    return buildShToolCommand({ toolPath, args, env: envVars, mode, promptPath })
+    return buildShToolCommand({
+      toolPath,
+      args,
+      env: envVars,
+      mode,
+      ...(promptPath ? { promptPath } : {}),
+    })
   }
 
-  return buildPowerShellToolCommand({ toolPath, args, env: envVars, mode, promptPath })
+  return buildPowerShellToolCommand({
+    toolPath,
+    args,
+    env: envVars,
+    mode,
+    ...(promptPath ? { promptPath } : {}),
+  })
 }
 
 export async function launchDriverInTmuxOrFallback(
@@ -337,7 +349,7 @@ export async function launchDriverInTmuxOrFallback(
         args,
         envVars: effectiveEnvVars,
         mode,
-        promptPath: options.promptPath,
+        ...(options.promptPath ? { promptPath: options.promptPath } : {}),
       })
       const effectiveBaseCommand = withWindowsTmuxWinpty(baseCommand, paneLauncher.backend)
 

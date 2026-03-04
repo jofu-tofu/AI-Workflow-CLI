@@ -36,8 +36,8 @@ export interface LintError {
 
 function parseBiomeOutput(stdout: string, _stderr: string, _exitCode: number): LintError[] {
   try {
-    const data = JSON.parse(stdout);
-    const diagnostics: unknown[] = data?.diagnostics ?? [];
+    const data = JSON.parse(stdout) as { diagnostics?: any[] };
+    const diagnostics = data.diagnostics ?? [];
     return diagnostics.map((d) => ({
       line: d.location?.span?.start?.line ?? d.location?.sourceCode?.lineIndex ?? 0,
       column: d.location?.span?.start?.character ?? undefined,
@@ -52,7 +52,7 @@ function parseBiomeOutput(stdout: string, _stderr: string, _exitCode: number): L
 
 function parseRuffOutput(stdout: string, _stderr: string, _exitCode: number): LintError[] {
   try {
-    const items: unknown[] = JSON.parse(stdout);
+    const items = JSON.parse(stdout) as any[];
     return items.map((item) => ({
       line: item.location?.row ?? 0,
       column: item.location?.column ?? undefined,
@@ -67,8 +67,8 @@ function parseRuffOutput(stdout: string, _stderr: string, _exitCode: number): Li
 
 function parseShellcheckOutput(stdout: string, _stderr: string, _exitCode: number): LintError[] {
   try {
-    const data = JSON.parse(stdout);
-    const comments: unknown[] = data?.comments ?? [];
+    const data = JSON.parse(stdout) as { comments?: any[] };
+    const comments = data.comments ?? [];
     return comments.map((c) => ({
       line: c.line ?? 0,
       column: c.column ?? undefined,
@@ -83,8 +83,8 @@ function parseShellcheckOutput(stdout: string, _stderr: string, _exitCode: numbe
 
 function parseRubocopOutput(stdout: string, _stderr: string, _exitCode: number): LintError[] {
   try {
-    const data = JSON.parse(stdout);
-    const offenses: unknown[] = data?.files?.[0]?.offenses ?? [];
+    const data = JSON.parse(stdout) as { files?: Array<{ offenses?: any[] }> };
+    const offenses = data.files?.[0]?.offenses ?? [];
     return offenses.map((o) => ({
       line: o.location?.line ?? 0,
       column: o.location?.column ?? undefined,
@@ -118,8 +118,8 @@ function parseCppcheckOutput(_stdout: string, stderr: string, _exitCode: number)
 
 function parseEslintOutput(stdout: string, _stderr: string, _exitCode: number): LintError[] {
   try {
-    const files: unknown[] = JSON.parse(stdout);
-    const messages: unknown[] = files?.[0]?.messages ?? [];
+    const files = JSON.parse(stdout) as Array<{ messages?: any[] }>;
+    const messages = files[0]?.messages ?? [];
     return messages.map((m) => ({
       line: m.line ?? 0,
       column: m.column ?? undefined,

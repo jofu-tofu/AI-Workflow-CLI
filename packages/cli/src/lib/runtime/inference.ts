@@ -11,10 +11,10 @@ import { STOP_WORDS } from "./stop-words.js";
 import type { InferenceResult } from "../types.js";
 import {
   buildCliInvocation,
-  getTierTimeout,
   inferenceSpec,
   isModelTier,
   resolveModel,
+  getTierTimeout,
   TIER_TIMEOUTS,
 } from "./cli-args.js";
 import { CODEX_MODELS } from "./models.js";
@@ -30,12 +30,12 @@ export function inference(
   systemPrompt: string,
   userPrompt: string,
   level = "fast",
-  options?: number | { model?: string; timeout?: number },
+  timeout?: number,
+  options?: { model?: string },
 ): InferenceResult {
   const startTime = Date.now();
-  const resolvedOptions = typeof options === "number" ? { timeout: options } : (options ?? {});
-  const modelInput = resolvedOptions.model ?? level;
-  const timeoutSec = resolvedOptions.timeout ?? (isModelTier(modelInput) ? getTierTimeout(modelInput) : TIER_TIMEOUTS.fast);
+  const modelInput = options?.model ?? level;
+  const timeoutSec = timeout ?? (isModelTier(modelInput) ? getTierTimeout(modelInput) : TIER_TIMEOUTS.fast);
   const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
 
   const invocation = buildCliInvocation(inferenceSpec(modelInput));
@@ -64,36 +64,43 @@ export function inference(
     return {
       success: true,
       output: stdout.trim(),
-      latencyMs,
+      latency_ms: latencyMs,
     };
   } catch (error: unknown) {
     const latencyMs = Date.now() - startTime;
+    const execError = error as {
+      code?: string;
+      killed?: boolean;
+      status?: number;
+      stderr?: unknown;
+      stdout?: unknown;
+    };
 
-    if (error.code === "ETIMEDOUT" || error.killed) {
+    if (execError.code === "ETIMEDOUT" || execError.killed) {
       return {
         success: false,
         output: "",
         error: `Timeout after ${timeoutSec}s`,
-        latencyMs,
+        latency_ms: latencyMs,
       };
     }
 
-    if (error.code === "ENOENT") {
+    if (execError.code === "ENOENT") {
       return {
         success: false,
         output: "",
         error: "claude CLI not found",
-        latencyMs,
+        latency_ms: latencyMs,
       };
     }
 
     // Non-zero exit code
-    if (error.status !== undefined && error.status !== 0) {
+    if (execError.status !== undefined && execError.status !== 0) {
       return {
         success: false,
-        output: (error.stdout ?? "").toString().trim(),
-        error: (error.stderr ?? "").toString().trim() || `Exit code: ${error.status}`,
-        latencyMs,
+        output: String(execError.stdout ?? "").trim(),
+        error: String(execError.stderr ?? "").trim() || `Exit code: ${execError.status}`,
+        latency_ms: latencyMs,
       };
     }
 
@@ -101,7 +108,7 @@ export function inference(
       success: false,
       output: "",
       error: String(error),
-      latencyMs,
+      latency_ms: latencyMs,
     };
   }
 }
@@ -126,8 +133,8 @@ Output ONLY the keywords separated by spaces, nothing else.`;
 export function generateSemanticSummary(
   prompt: string,
   timeout = 15,
-): null | string {
-  const result = inference(CONTEXT_ID_SYSTEM_PROMPT, prompt, "standard", { timeout });
+): string | null {
+  const result = inference(CONTEXT_ID_SYSTEM_PROMPT, prompt, "standard", timeout);
 
   if (!result.success || !result.output) return null;
 
@@ -187,14 +194,15 @@ Respond with ONLY a JSON object: {"slug": "your 8-12 word phrase here"}`;
 export function generateContextIdSlug(
   prompt: string,
   timeout = 3,
-): null | string {
+): string | null {
   const truncated = prompt.slice(0, 500);
 
   const sparkResult = inference(
     CONTEXT_ID_SLUG_PROMPT,
     truncated,
     "fast",
-    { timeout, model: CONTEXT_ID_PRIMARY_MODEL },
+    timeout,
+    { model: CONTEXT_ID_PRIMARY_MODEL },
   );
   if (!sparkResult.success || !sparkResult.output) {
     logWarn(
@@ -202,10 +210,7 @@ export function generateContextIdSlug(
       `Context ID slug Spark (${CONTEXT_ID_PRIMARY_MODEL}) failed or returned empty output. Falling back to ${resolveModel("fast")}`,
     );
   }
-
-  const result = sparkResult.success && sparkResult.output
-    ? sparkResult
-    : inference(CONTEXT_ID_SLUG_PROMPT, truncated, "fast", { timeout });
+  const result = sparkResult.success && sparkResult.output ? sparkResult : inference(CONTEXT_ID_SLUG_PROMPT, truncated, "fast", timeout);
 
   if (!result.success || !result.output) {
     logWarn("inference", `Context ID slug inference failed: ${result.error}`);
@@ -215,7 +220,7 @@ export function generateContextIdSlug(
   const raw = result.output.trim();
 
   // Parse JSON response, fall back to raw text
-  let slug: null | string = null;
+  let slug: string | null = null;
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object" && "slug" in parsed) {
@@ -243,7 +248,7 @@ export function generateContextIdSlug(
   }
 
   const resultSlug = words.join(" ");
-  logDebug("inference", `Generated context ID slug: '${resultSlug}' (${result.latencyMs}ms)`);
+  logDebug("inference", `Generated context ID slug: '${resultSlug}' (${result.latency_ms}ms)`);
   return resultSlug;
 }
 
@@ -256,12 +261,12 @@ export async function inferenceAsync(
   systemPrompt: string,
   userPrompt: string,
   level = "fast",
-  options?: number | { model?: string; timeout?: number },
+  timeout?: number,
+  options?: { model?: string },
 ): Promise<InferenceResult> {
   const startTime = Date.now();
-  const resolvedOptions = typeof options === "number" ? { timeout: options } : (options ?? {});
-  const modelInput = resolvedOptions.model ?? level;
-  const timeoutSec = resolvedOptions.timeout ?? (isModelTier(modelInput) ? getTierTimeout(modelInput) : TIER_TIMEOUTS.fast);
+  const modelInput = options?.model ?? level;
+  const timeoutSec = timeout ?? (isModelTier(modelInput) ? getTierTimeout(modelInput) : TIER_TIMEOUTS.fast);
   const timeoutMs = timeoutSec * 1000;
   const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
 
@@ -282,19 +287,17 @@ export async function inferenceAsync(
   const latencyMs = Date.now() - startTime;
 
   if (result.killed) {
-    return { success: false, output: "", error: `Timeout after ${timeoutSec}s`, latencyMs };
+    return { success: false, output: "", error: `Timeout after ${timeoutSec}s`, latency_ms: latencyMs };
   }
-
   if (result.exitCode !== 0) {
     return {
       success: false,
       output: result.stdout.trim(),
       error: result.stderr.trim() || `Exit code: ${result.exitCode}`,
-      latencyMs,
+      latency_ms: latencyMs,
     };
   }
-
-  return { success: true, output: result.stdout.trim(), latencyMs };
+  return { success: true, output: result.stdout.trim(), latency_ms: latencyMs };
 }
 
 /**
@@ -308,7 +311,5 @@ function filterStopWords(text: string): string {
     .filter((w) => !STOP_WORDS.has(w) && w.length > 1)
     .join(" ");
 }
-
-
 
 

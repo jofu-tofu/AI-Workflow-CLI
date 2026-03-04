@@ -14,30 +14,30 @@ import { findExecutable } from "./subprocess-utils.js";
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface LinterConfig {
+  name: string;
+  extensions: string[];
+  source: "bundled" | "system";
   binaryName: string;
   buildArgs: (filePath: string) => string[];
-  extensions: string[];
+  parseOutput: (stdout: string, stderr: string, exitCode: number) => LintError[];
   /** Exit codes that mean "lint errors found" (parse output). Other non-zero = crash (skip). */
   lintExitCodes: number[];
-  name: string;
-  parseOutput: (stdout: string, stderr: string, exitCode: number) => LintError[];
-  source: "bundled" | "system";
 }
 
 export interface LintError {
-  column?: number;
   line: number;
+  column?: number;
+  severity: "error" | "warning";
   message: string;
   rule?: string;
-  severity: "error" | "warning";
 }
 
 // ─── Output Parsers ─────────────────────────────────────────────────────────
 
 function parseBiomeOutput(stdout: string, _stderr: string, _exitCode: number): LintError[] {
   try {
-    const data = JSON.parse(stdout);
-    const diagnostics: unknown[] = data?.diagnostics ?? [];
+    const data = JSON.parse(stdout) as { diagnostics?: any[] };
+    const diagnostics = data.diagnostics ?? [];
     return diagnostics.map((d) => ({
       line: d.location?.span?.start?.line ?? d.location?.sourceCode?.lineIndex ?? 0,
       column: d.location?.span?.start?.character ?? undefined,
@@ -52,7 +52,7 @@ function parseBiomeOutput(stdout: string, _stderr: string, _exitCode: number): L
 
 function parseRuffOutput(stdout: string, _stderr: string, _exitCode: number): LintError[] {
   try {
-    const items: unknown[] = JSON.parse(stdout);
+    const items = JSON.parse(stdout) as any[];
     return items.map((item) => ({
       line: item.location?.row ?? 0,
       column: item.location?.column ?? undefined,
@@ -67,8 +67,8 @@ function parseRuffOutput(stdout: string, _stderr: string, _exitCode: number): Li
 
 function parseShellcheckOutput(stdout: string, _stderr: string, _exitCode: number): LintError[] {
   try {
-    const data = JSON.parse(stdout);
-    const comments: unknown[] = data?.comments ?? [];
+    const data = JSON.parse(stdout) as { comments?: any[] };
+    const comments = data.comments ?? [];
     return comments.map((c) => ({
       line: c.line ?? 0,
       column: c.column ?? undefined,
@@ -83,8 +83,8 @@ function parseShellcheckOutput(stdout: string, _stderr: string, _exitCode: numbe
 
 function parseRubocopOutput(stdout: string, _stderr: string, _exitCode: number): LintError[] {
   try {
-    const data = JSON.parse(stdout);
-    const offenses: unknown[] = data?.files?.[0]?.offenses ?? [];
+    const data = JSON.parse(stdout) as { files?: Array<{ offenses?: any[] }> };
+    const offenses = data.files?.[0]?.offenses ?? [];
     return offenses.map((o) => ({
       line: o.location?.line ?? 0,
       column: o.location?.column ?? undefined,
@@ -105,22 +105,21 @@ function parseCppcheckOutput(_stdout: string, stderr: string, _exitCode: number)
     const m = CPPCHECK_RE.exec(line.trim());
     if (m) {
       errors.push({
-        line: Number.parseInt(m[2]!, 10),
-        column: Number.parseInt(m[3]!, 10),
+        line: parseInt(m[2]!, 10),
+        column: parseInt(m[3]!, 10),
         severity: m[4] === "error" ? "error" : "warning",
         message: m[5]!,
         ...(m[6] ? {rule: m[6]} : {}),
       });
     }
   }
-
   return errors;
 }
 
 function parseEslintOutput(stdout: string, _stderr: string, _exitCode: number): LintError[] {
   try {
-    const files: unknown[] = JSON.parse(stdout);
-    const messages: unknown[] = files?.[0]?.messages ?? [];
+    const files = JSON.parse(stdout) as Array<{ messages?: any[] }>;
+    const messages = files[0]?.messages ?? [];
     return messages.map((m) => ({
       line: m.line ?? 0,
       column: m.column ?? undefined,
@@ -141,14 +140,13 @@ function parseRustfmtOutput(stdout: string, _stderr: string, _exitCode: number):
     const m = RUSTFMT_DIFF_RE.exec(line.trim());
     if (m) {
       errors.push({
-        line: Number.parseInt(m[2]!, 10),
+        line: parseInt(m[2]!, 10),
         severity: "warning",
         message: "Formatting differs from rustfmt style",
         rule: "rustfmt",
       });
     }
   }
-
   return errors;
 }
 
@@ -245,7 +243,7 @@ export function getLinterForFile(filePath: string): LinterConfig | null {
  * System linters: check PATH only.
  * Returns null if binary not found.
  */
-function resolveBinary(config: LinterConfig, projectRoot: string): null | string {
+function resolveBinary(config: LinterConfig, projectRoot: string): string | null {
   if (config.source === "bundled") {
     // 1. Project-local node_modules
     const localBin = path.join(projectRoot, "node_modules", ".bin", config.binaryName);
@@ -268,7 +266,7 @@ export function runLinter(
   config: LinterConfig,
   filePath: string,
   projectRoot: string,
-): null | { errors: LintError[] } {
+): { errors: LintError[] } | null {
   const binary = resolveBinary(config, projectRoot);
   if (!binary) {
     logDebug("lint-dispatch", `${config.name} binary not found, skipping`);
@@ -334,7 +332,8 @@ export function formatLintErrors(
     lines.push(`- ... and ${errors.length - maxShown} more`);
   }
 
-  lines.push("", "Fix these lint errors in the file you just edited.");
+  lines.push("");
+  lines.push("Fix these lint errors in the file you just edited.");
 
   return lines.join("\n");
 }

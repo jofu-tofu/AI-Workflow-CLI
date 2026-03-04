@@ -111,7 +111,12 @@ export function execFileAsync(
           resolve({
             stdout: String(stdout ?? ''),
             stderr: String(stderr ?? ''),
-            exitCode: typeof errObj.code === 'number' ? errObj.code : (error as unknown).status ?? 1,
+            exitCode:
+              typeof errObj.code === 'number'
+                ? errObj.code
+                : typeof errObj.status === 'number'
+                  ? errObj.status
+                  : 1,
             killed: Boolean(errObj.killed),
             signal: typeof errObj.signal === 'string' ? errObj.signal : null,
           })

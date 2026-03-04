@@ -27,13 +27,13 @@ export function getGitState(projectRoot: string): Record<string, unknown> {
         .filter(Boolean)
         .slice(0, 10)
         .map(line => line.trimStart().split(/\s+/).slice(1).join(" "));
-      if (files.length > 0) gitState.uncommittedFiles = files;
+      if (files.length > 0) gitState.uncommitted_files = files;
     }
   } catch { /* non-fatal */ }
 
   try {
     const log = execFileSync("git", ["log", "-1", "--oneline"], opts);
-    if (log) gitState.lastCommitShort = log.trim();
+    if (log) gitState.last_commit_short = log.trim();
   } catch { /* non-fatal */ }
 
   return gitState;
@@ -56,7 +56,5 @@ export function getGitStatusShort(projectRoot?: string): string {
     return "(git status unavailable)";
   }
 }
-
-
 
 

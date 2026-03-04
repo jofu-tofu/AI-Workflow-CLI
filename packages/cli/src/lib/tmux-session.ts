@@ -36,6 +36,8 @@ export interface TmuxSessionResult {
 export type TmuxColorMode = 'c256' | 'truecolor'
 
 function windowsTerminalOverrides(colorMode: TmuxColorMode): string {
+  // Suppress app-level mouse reporting on Windows tmux+winpty.
+  // winpty mangles mouse passthrough for TUIs and can cause cursor/focus churn.
   const stabilityOverrides = '*:kmous@,*:Ss@,*:Se@,*:Cs@,*:Cr@'
   if (colorMode === 'truecolor') {
     return `,xterm*:Tc,alacritty:Tc,${stabilityOverrides}`
@@ -59,6 +61,10 @@ export function buildTmuxRuntimeBootstrapCommands(
   commands.push('tmux set-option -g history-limit 50000 >/dev/null 2>&1 || true')
   if (isWindowsPlatform(platform)) {
     commands.push('tmux set-option -g focus-events off >/dev/null 2>&1 || true')
+    if (enableMouse) {
+      commands.push("tmux bind -n WheelUpPane if-shell -F '#{pane_in_mode}' 'send-keys -M' 'copy-mode -e \\; send-keys -M' >/dev/null 2>&1 || true")
+      commands.push("tmux bind -n WheelDownPane if-shell -F '#{pane_in_mode}' 'send-keys -M' 'copy-mode -e \\; send-keys -M' >/dev/null 2>&1 || true")
+    }
   }
 
   // Configure terminal overrides for the active color mode.
@@ -278,8 +284,19 @@ export function enableTmuxMouse(): void {
     execFileSync(bashPath, ['-lc', `${tmuxPrefix} set-option -g history-limit 50000`], winOpts)
     execFileSync(bashPath, ['-lc', `${tmuxPrefix} set-option -g focus-events off`], winOpts)
 
-    // Strip 'kmous' so tmux handles mouse internally instead of forwarding to winpty
-    // (winpty mangles wheel events into arrow keys). See buildShellCommand() for details.
+    // Force wheel behavior to tmux copy-mode scrolling on Windows.
+    execFileSync(
+      bashPath,
+      ['-lc', `${tmuxPrefix} bind -n WheelUpPane if-shell -F '#{pane_in_mode}' 'send-keys -M' 'copy-mode -e \\\\; send-keys -M'`],
+      winOpts,
+    )
+    execFileSync(
+      bashPath,
+      ['-lc', `${tmuxPrefix} bind -n WheelDownPane if-shell -F '#{pane_in_mode}' 'send-keys -M' 'copy-mode -e \\\\; send-keys -M'`],
+      winOpts,
+    )
+
+    // Keep Windows terminal stability overrides (including kmous@ suppression).
     const setCommand = process.env.TMUX ? 'set -a' : 'set -ga'
     execFileSync(
       bashPath,
