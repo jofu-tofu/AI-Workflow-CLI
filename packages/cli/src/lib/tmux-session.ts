@@ -35,22 +35,20 @@ export interface TmuxSessionResult {
 
 export type TmuxColorMode = 'c256' | 'truecolor'
 
-function windowsTerminalOverrides(colorMode: TmuxColorMode): string {
-  // Keep cursor-shape stability overrides on Windows tmux+winpty, but avoid
-  // disabling mouse reporting so tmux can preserve native wheel/copy behavior.
-  const stabilityOverrides = '*:Ss@,*:Se@,*:Cs@,*:Cr@'
-  if (colorMode === 'truecolor') {
-    return `,xterm*:Tc,alacritty:Tc,${stabilityOverrides}`
-  }
+function shouldWrapWinptyForTool(toolPath: string): boolean {
+  const mode = process.env.AIW_WINPTY_MODE?.trim().toLowerCase()
+  if (mode === 'never') return false
+  if (mode === 'always') return true
 
-  return `,${stabilityOverrides}`
+  // Default: keep winpty enabled on Windows tmux.
+  void toolPath
+  return true
 }
 
 export function buildTmuxRuntimeBootstrapCommands(
   platform: NodeJS.Platform = process.platform,
   enableMouse = true,
 ): string[] {
-  const colorMode = resolveTmuxColorMode(platform)
   const commands: string[] = []
 
   if (enableMouse) {
@@ -59,21 +57,16 @@ export function buildTmuxRuntimeBootstrapCommands(
 
   // Increase scrollback buffer from default 2000
   commands.push('tmux set-option -g history-limit 50000 >/dev/null 2>&1 || true')
-  if (isWindowsPlatform(platform)) {
-    commands.push('tmux set-option -g focus-events off >/dev/null 2>&1 || true')
-    // Cleanup legacy AIW mouse wheel binds from prior versions.
-    commands.push('tmux unbind -n WheelUpPane >/dev/null 2>&1 || true')
-    commands.push('tmux unbind -n WheelDownPane >/dev/null 2>&1 || true')
-  }
 
   // Configure terminal overrides for the active color mode.
   // Note: default-terminal is set before session creation.
-  if (isWindowsPlatform(platform)) {
-    // Reset then apply overrides to scrub stale kmous@ from older AIW runs.
-    commands.push('tmux set -gu terminal-overrides >/dev/null 2>&1 || true')
-    commands.push(`tmux set -g terminal-overrides "${windowsTerminalOverrides(colorMode)}" >/dev/null 2>&1 || true`)
-  } else {
+  if (isNonWindowsPlatform(platform)) {
     commands.push('tmux set -a terminal-overrides ",xterm*:Tc,alacritty:Tc" >/dev/null 2>&1 || true')
+  }
+  if (isWindowsPlatform(platform)) {
+    // Suppress cursor shape changes — they cause visible flicker through winpty bridge.
+    // Enable SGR extended mouse mode (1006) for proper scroll wheel support in mintty/WT.
+    commands.push('tmux set -as terminal-overrides ",*:Ss@:Se@:Cs@:Cr@:kmous=\\\\E[<" >/dev/null 2>&1 || true')
   }
 
   return commands
@@ -158,7 +151,11 @@ export function buildShellCommand(opts: TmuxSessionOptions): string {
   // then runs the shell script that execs into node.exe.
   if (isWindowsPlatform(platform)) {
     const innerCmd = cmdParts.join(' ')
-    parts.push(`exec winpty bash -c ${quoteForSh(innerCmd)}`)
+    if (shouldWrapWinptyForTool(toolPath)) {
+      parts.push(`exec winpty bash -c ${quoteForSh(innerCmd)}`)
+    } else {
+      parts.push(`exec ${innerCmd}`)
+    }
   } else {
     parts.push(`exec ${cmdParts.join(' ')}`)
   }
@@ -283,17 +280,6 @@ export function enableTmuxMouse(): void {
 
     execFileSync(bashPath, ['-lc', `${tmuxPrefix} set-option -g mouse on`], winOpts)
     execFileSync(bashPath, ['-lc', `${tmuxPrefix} set-option -g history-limit 50000`], winOpts)
-    execFileSync(bashPath, ['-lc', `${tmuxPrefix} set-option -g focus-events off`], winOpts)
-    execFileSync(bashPath, ['-lc', `${tmuxPrefix} unbind -n WheelUpPane`], winOpts)
-    execFileSync(bashPath, ['-lc', `${tmuxPrefix} unbind -n WheelDownPane`], winOpts)
-
-    // Keep Windows terminal stability overrides while preserving mouse reporting.
-    execFileSync(bashPath, ['-lc', `${tmuxPrefix} set -gu terminal-overrides`], winOpts)
-    execFileSync(
-      bashPath,
-      ['-lc', `${tmuxPrefix} set -g terminal-overrides '${windowsTerminalOverrides('c256')}'`],
-      winOpts,
-    )
   } catch {
     // Best-effort — ignore failures
   }
@@ -343,9 +329,9 @@ export function enableTmuxColors(): void {
 
     // Separate try/catch so terminal-overrides failure doesn't suppress default-terminal success
     try {
-      const override = windowsTerminalOverrides(colorMode)
-      execFileSync(bashPath, ['-lc', `${tmuxPrefix} set -gu terminal-overrides`], winOpts)
-      execFileSync(bashPath, ['-lc', `${tmuxPrefix} set -g terminal-overrides '${override}'`], winOpts)
+      // Suppress cursor shape changes on Windows to reduce flicker through winpty bridge.
+      // Enable SGR extended mouse mode for scroll wheel support.
+      execFileSync(bashPath, ['-lc', `${tmuxPrefix} set -as terminal-overrides ',*:Ss@:Se@:Cs@:Cr@:kmous=\\E[<'`], winOpts)
     } catch { /* best-effort */ }
   } catch {
     // Best-effort — ignore failures

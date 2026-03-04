@@ -39,14 +39,23 @@ describe('pane-driver', () => {
   })
 
   describe('withWindowsTmuxWinpty', () => {
-    it('wraps tmux commands with winpty on Windows', () => {
-      const result = withWindowsTmuxWinpty('codex --yolo', 'tmux', 'win32')
+    it('wraps tmux commands with winpty on Windows by default', () => {
+      const result = withWindowsTmuxWinpty('claude --dangerously-skip-permissions', 'tmux', 'claude', 'win32')
       expect(result).to.match(/^winpty bash -lc /)
-      expect(result).to.include("'codex --yolo'")
+      expect(result).to.include("'claude --dangerously-skip-permissions'")
+    })
+
+    it('can disable wrapping via AIW_WINPTY_MODE=never', () => {
+      const prev = process.env.AIW_WINPTY_MODE
+      process.env.AIW_WINPTY_MODE = 'never'
+      const result = withWindowsTmuxWinpty('codex --yolo', 'tmux', 'codex', 'win32')
+      if (prev === undefined) delete process.env.AIW_WINPTY_MODE
+      else process.env.AIW_WINPTY_MODE = prev
+      expect(result).to.equal('codex --yolo')
     })
 
     it('does not wrap non-tmux backends', () => {
-      const result = withWindowsTmuxWinpty('codex --yolo', 'exec', 'win32')
+      const result = withWindowsTmuxWinpty('codex --yolo', 'exec', 'codex', 'win32')
       expect(result).to.equal('codex --yolo')
     })
   })

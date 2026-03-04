@@ -63,7 +63,7 @@ describe('tmux-session', () => {
       }
     })
 
-    it('adds Windows cursor-stability terminal overrides in tmux bootstrap', () => {
+    it('includes terminal-overrides for cursor suppression and mouse on Windows', () => {
       const result = buildShellCommand({
         sessionName: 'test',
         toolPath: '/c/Users/test/.local/bin/claude.exe',
@@ -71,36 +71,47 @@ describe('tmux-session', () => {
         platform: 'win32',
       })
 
-      expect(result).to.include('tmux set -gu terminal-overrides')
-      expect(result).to.include('tmux set -g terminal-overrides')
-      expect(result).to.include('*:Ss@')
-      expect(result).to.include('*:Se@')
-      expect(result).to.include('*:Cs@')
-      expect(result).to.include('*:Cr@')
-      expect(result).to.include('tmux set-option -g focus-events off')
-      expect(result).to.include('tmux unbind -n WheelUpPane')
-      expect(result).to.include('tmux unbind -n WheelDownPane')
-      expect(result).to.not.include('tmux bind -n WheelUpPane')
-      expect(result).to.not.include('tmux bind -n WheelDownPane')
-      expect(result).to.not.include('*:kmous@')
+      expect(result).to.include('terminal-overrides')
+      expect(result).to.include('Ss@')
+      expect(result).to.include('kmous=')
+    })
+
+    it('uses winpty for tools on Windows by default', () => {
+      const result = buildShellCommand({
+        sessionName: 'test',
+        toolPath: 'C:\\tools\\claude.exe',
+        toolArgs: ['--dangerously-skip-permissions'],
+        platform: 'win32',
+      })
+
+      expect(result).to.include('exec winpty bash -c')
+    })
+
+    it('can disable winpty via AIW_WINPTY_MODE=never', () => {
+      const prev = process.env.AIW_WINPTY_MODE
+      process.env.AIW_WINPTY_MODE = 'never'
+      const result = buildShellCommand({
+        sessionName: 'test',
+        toolPath: 'C:\\tools\\codex.exe',
+        toolArgs: ['--yolo'],
+        platform: 'win32',
+      })
+      if (prev === undefined) delete process.env.AIW_WINPTY_MODE
+      else process.env.AIW_WINPTY_MODE = prev
+
+      expect(result).to.not.include('exec winpty bash -c')
+      expect(result).to.include("exec '/c/tools/codex.exe' '--yolo'")
     })
   })
 
   describe('buildTmuxRuntimeBootstrapCommands', () => {
-    it('includes mouse/history/terminal overrides on Windows', () => {
+    it('includes mouse, history, and terminal overrides on Windows', () => {
       const commands = buildTmuxRuntimeBootstrapCommands('win32')
       const result = commands.join('; ')
 
-      expect(result).to.include('tmux set-option -g mouse on')
-      expect(result).to.include('tmux set-option -g history-limit 50000')
-      expect(result).to.include('tmux set-option -g focus-events off')
-      expect(result).to.include('tmux unbind -n WheelUpPane')
-      expect(result).to.include('tmux unbind -n WheelDownPane')
-      expect(result).to.include('tmux set -gu terminal-overrides')
-      expect(result).to.include('tmux set -g terminal-overrides')
-      expect(result).to.not.include('tmux bind -n WheelUpPane')
-      expect(result).to.not.include('tmux bind -n WheelDownPane')
-      expect(result).to.not.include('*:kmous@')
+      expect(result).to.include('mouse on')
+      expect(result).to.include('history-limit')
+      expect(result).to.include('terminal-overrides')
     })
 
     it('omits mouse command when enableMouse is false', () => {
@@ -108,6 +119,8 @@ describe('tmux-session', () => {
       const result = commands.join('; ')
 
       expect(result).to.not.include('tmux set-option -g mouse on')
+      expect(result).to.not.include('tmux bind -n WheelUpPane')
+      expect(result).to.not.include('tmux bind -n WheelDownPane')
       expect(result).to.include('tmux set-option -g history-limit 50000')
     })
   })

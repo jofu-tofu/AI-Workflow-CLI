@@ -223,9 +223,14 @@ export function getWindowsTmuxPreflightFailureReason(
 export function withWindowsTmuxWinpty(
   command: string,
   backend: PaneBackend,
+  toolName?: string,
   platform: NodeJS.Platform = process.platform,
 ): string {
   if (backend !== 'tmux' || !isWindowsPlatform(platform)) return command
+  const mode = process.env.AIW_WINPTY_MODE?.trim().toLowerCase()
+  if (mode === 'never') return command
+  if (mode === 'always') return `winpty bash -lc ${quoteForSh(command)}`
+  void toolName
   return `winpty bash -lc ${quoteForSh(command)}`
 }
 
@@ -351,7 +356,11 @@ export async function launchDriverInTmuxOrFallback(
         mode,
         ...(options.promptPath ? { promptPath: options.promptPath } : {}),
       })
-      const effectiveBaseCommand = withWindowsTmuxWinpty(baseCommand, paneLauncher.backend)
+      const effectiveBaseCommand = withWindowsTmuxWinpty(
+        baseCommand,
+        paneLauncher.backend,
+        options.toolName,
+      )
 
       const holdMessage = options.holdMessage ?? '[aiwcli] Driver exited. Pane held open.'
       const paneCommand = wrapPaneCommand({
