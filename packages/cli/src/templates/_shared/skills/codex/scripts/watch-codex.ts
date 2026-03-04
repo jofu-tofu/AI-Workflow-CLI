@@ -11,7 +11,7 @@ import {
   SUMMARY_UNAVAILABLE_MESSAGE,
   summarizeFromSessionFileFallback,
   summarizeViaResume,
-  summarizeViaSessionFileSpark,
+  summarizeViaSessionFile,
   waitForPaneClose,
 } from "../lib/codex-watcher.js";
 
@@ -27,7 +27,7 @@ async function main(): Promise<void> {
   const sf = sessionFile ?? "";
   const sid = sessionId ?? "";
   const summary =
-    summarizeViaSessionFileSpark(sf) ??
+    (await summarizeViaSessionFile(sf)) ??
     (sid ? await summarizeViaResume(sid) : null) ??
     summarizeFromSessionFileFallback(sf) ??
     SUMMARY_UNAVAILABLE_MESSAGE;

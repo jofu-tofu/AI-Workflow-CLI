@@ -47,8 +47,8 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 - Watch is enabled by default.
 - `launch-codex.ts` launches Codex, waits for completion (pane close or sentinel), and prints a summary.
 - Summary cascade:
-  1. Spark transcript summary from session file
-  2. `codex exec resume <session_id>` summary
+  1. Session-file summary (`summarizeViaSessionFile`): Codex CLI Spark primary, `fast` tier (Haiku) fallback
+  2. `codex exec resume <session_id>` summary (output file, then stdout/stderr parse fallback)
   3. Transcript-line fallback
   4. Static `Summary unavailable` message
 - Summary persistence:
@@ -67,7 +67,7 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/skills/codex/scripts/launch-cod
 
 Reusable side-effect-free watch/summarize functions used by launch flow:
 - `waitForPaneClose(target, timeoutMs?)` where `target` can be tmux pane id or `{ backend, paneId, sentinelPath }`
-- `summarizeViaSessionFileSpark(sessionFile)`
+- `summarizeViaSessionFile(sessionFile)`
 - `summarizeViaResume(sessionId)`
 - `summarizeFromSessionFileFallback(sessionFile)`
 - `collectTranscriptLines(sessionFile)`

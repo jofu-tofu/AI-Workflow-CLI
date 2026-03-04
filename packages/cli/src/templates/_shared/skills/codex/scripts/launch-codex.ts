@@ -486,7 +486,7 @@ if (watch && (result.paneId || result.sentinelPath)) {
       SUMMARY_UNAVAILABLE_MESSAGE,
       summarizeFromSessionFileFallback,
       summarizeViaResume,
-      summarizeViaSessionFileSpark,
+      summarizeViaSessionFile,
       waitForPaneClose,
     } = await import("../lib/codex-watcher.js");
 
@@ -499,7 +499,7 @@ if (watch && (result.paneId || result.sentinelPath)) {
 
     const sessionFile = sessionInfo?.sessionFile ?? "";
     const sessionId = sessionInfo?.sessionId ?? "";
-    const summary = summarizeViaSessionFileSpark(sessionFile)
+    const summary = (await summarizeViaSessionFile(sessionFile))
       ?? (sessionId ? await summarizeViaResume(sessionId) : null)
       ?? summarizeFromSessionFileFallback(sessionFile)
       ?? SUMMARY_UNAVAILABLE_MESSAGE;

@@ -237,17 +237,32 @@ export async function waitForPaneClose(
   }
 }
 
-export function summarizeViaSessionFileSpark(sessionFile: string): string | null {
+export async function summarizeViaSessionFile(sessionFile: string): Promise<string | null> {
   const transcriptLines = collectTranscriptLines(sessionFile);
   if (transcriptLines.length === 0) return null;
 
   const transcript = transcriptLines.join("\n");
+  const fullPrompt = `${TRANSCRIPT_SUMMARY_PROMPT}\n\nSession transcript excerpt:\n\n${transcript}`;
+
+  const codexResult = await execFileAsync(
+    "codex",
+    ["exec", fullPrompt, "--model", CODEX_MODELS.spark, "--json"],
+    { timeout: SUMMARY_TIMEOUT_SEC * 1000 },
+  );
+  if (codexResult.exitCode === 0 && codexResult.stdout.trim()) {
+    const output = codexResult.stdout.trim();
+    if (!looksLikeBadSummary(output)) return output;
+  }
+  logWarn(
+    "codex-capture",
+    `Codex Spark transcript summary failed (exit=${codexResult.exitCode}), falling back to Haiku`,
+  );
+
   const result = inference(
     TRANSCRIPT_SUMMARY_PROMPT,
     `Session transcript excerpt:\n\n${transcript}`,
     "fast",
     SUMMARY_TIMEOUT_SEC,
-    { model: CODEX_MODELS.spark },
   );
 
   if (result.success && result.output && result.output.trim() && !looksLikeBadSummary(result.output)) {
@@ -259,6 +274,31 @@ export function summarizeViaSessionFileSpark(sessionFile: string): string | null
     `Session-file Spark summary failed: ${result.error ?? "empty or low-signal output"}`,
   );
   return null;
+}
+
+export function extractResumeSummary(text: string): string {
+  if (!text) return "";
+
+  const normalized = text.replaceAll("\r", "");
+  const marker = /(?:^|\n)codex\n/.exec(normalized);
+  if (!marker) return "";
+
+  const lines = normalized.slice(marker.index + marker[0].length).split("\n");
+  const bullets: string[] = [];
+  let collecting = false;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!collecting && line.length === 0) continue;
+    if (line.startsWith("- ")) {
+      bullets.push(line);
+      collecting = true;
+      continue;
+    }
+    if (collecting) break;
+  }
+
+  return bullets.length >= 2 ? bullets.join("\n") : "";
 }
 
 export async function summarizeViaResume(sessionId: string): Promise<string | null> {
@@ -284,7 +324,16 @@ export async function summarizeViaResume(sessionId: string): Promise<string | nu
   safeCleanup(outputFile);
 
   if (summary && !looksLikeBadSummary(summary)) return summary;
-  logWarn("codex-capture", `codex exec resume failed for ${sessionId}: exit=${result.exitCode}, stderr=${result.stderr.trim() || "none"}`);
+
+  const stdoutSummary = extractResumeSummary(result.stdout);
+  if (stdoutSummary && !looksLikeBadSummary(stdoutSummary)) return stdoutSummary;
+
+  const stderrSummary = extractResumeSummary(result.stderr);
+  if (stderrSummary && !looksLikeBadSummary(stderrSummary)) return stderrSummary;
+
+  const stderrTrimmed = result.stderr.trim();
+  const stderrPreview = stderrTrimmed.length > 200 ? `${stderrTrimmed.slice(0, 200)}...` : (stderrTrimmed || "none");
+  logWarn("codex-capture", `codex exec resume failed for ${sessionId}: exit=${result.exitCode}, stderr=${stderrPreview}`);
   return null;
 }
 

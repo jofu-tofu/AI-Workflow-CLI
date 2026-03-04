@@ -7,7 +7,9 @@
     "noUncheckedIndexedAccess": true,
     "outDir": "dist",
     "rootDir": ".",
-    "declaration": true
+    "declaration": true,
+    "types": ["node", "bun-types"],
+    "skipLibCheck": true
   },
   "include": ["./**/*.ts"]
 }
