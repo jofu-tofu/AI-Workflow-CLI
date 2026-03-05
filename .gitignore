@@ -137,6 +137,8 @@ _bmad-output/
 
 # AIW Installation (user-installed, not template source)
 .aiwcli/
+/.codex/
+/.cognition/
 /_gsd/
 /_GSD_OUTPUT/
 /_cc-native/
