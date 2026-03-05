@@ -232,16 +232,26 @@ describe('psmux multiplexer unit', () => {
 
     const encodedInput = mocks.toEncodedPowerShell.mock.calls.at(-1)?.[0] as string
     expect(encodedInput).toContain("$env:FOO='bar'")
-    expect(encodedInput).toContain(`Read startup instructions from this file path before taking action: ${path.resolve('.\\prompt.md')}. Use that file as the initial context.`)
+    expect(encodedInput).toContain(`Read startup instructions from this file path before taking action: ${path.resolve('.\\prompt.md').replaceAll('\\', '/')}. Use that file as the initial context.`)
   })
 
-  it('createSession injects PSMUX_PANE and builds reattach new-session command', async () => {
+  it('createSession creates detached session and then attaches', async () => {
     platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const mux = await PsmuxMultiplexer.create()
+    mocks.execFileAsync.mockReset()
+    mocks.execFileAsync
+      .mockResolvedValueOnce(okExec()) // new-session -d
+      .mockResolvedValueOnce(okExec()) // has-session
+      .mockResolvedValueOnce(okExec()) // set-option mouse
+      .mockResolvedValueOnce(okExec()) // set-option history
+      .mockResolvedValueOnce(okExec()) // set-option cursor-blink
+      .mockResolvedValueOnce(okExec()) // set-option cursor-style
+      .mockResolvedValueOnce(okExec()) // set-option status-interval
+      .mockResolvedValueOnce(okExec()) // set-option terminal-overrides
 
     await mux!.createSession({
       sessionName: 'aiw-main',
-      reattach: true,
+      reattach: false,
       toolPath: 'C:\\tools\\claude.exe',
       toolArgs: ['--dangerously-skip-permissions'],
       promptText: 'hello from test',
@@ -251,18 +261,91 @@ describe('psmux multiplexer unit', () => {
     expect(mocks.writeFileSync).toHaveBeenCalled()
     const encodedInput = mocks.toEncodedPowerShell.mock.calls.at(-1)?.[0] as string
     expect(encodedInput).toContain("$env:PSMUX_PANE='1';")
+    expect(encodedInput).toContain('Read startup instructions from this file path before taking action: C:/tmp/aiwcli-prompt-')
+
+    expect(mocks.execFileAsync).toHaveBeenCalledWith(
+      'C:\\tools\\psmux.exe',
+      expect.arrayContaining(['new-session', '-d', '-c', process.cwd(), '-s', 'aiw-main']),
+      {timeout: 5000},
+    )
     expect(mocks.spawnAttached).toHaveBeenCalledWith(
       'C:\\tools\\psmux.exe',
-      expect.arrayContaining(['new-session', '-A', '-c', process.cwd(), '-s', 'aiw-main']),
+      ['attach', '-t', 'aiw-main'],
       {AIWCLI_INTERNAL_CALL: 'true'},
       'psmux',
     )
   })
 
-  it('createSession runs bootstrap set-option commands', async () => {
+  it('createSession checks has-session in reattach mode and skips detached create when session exists', async () => {
     platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const mux = await PsmuxMultiplexer.create()
-    mocks.execFileAsync.mockResolvedValue(okExec())
+    mocks.execFileAsync.mockReset()
+    mocks.execFileAsync
+      .mockResolvedValueOnce(okExec()) // has-session exists check
+      .mockResolvedValueOnce(okExec()) // has-session ready check
+      .mockResolvedValueOnce(okExec()) // set-option mouse
+      .mockResolvedValueOnce(okExec()) // set-option history
+      .mockResolvedValueOnce(okExec()) // set-option cursor-blink
+      .mockResolvedValueOnce(okExec()) // set-option cursor-style
+      .mockResolvedValueOnce(okExec()) // set-option status-interval
+      .mockResolvedValueOnce(okExec()) // set-option terminal-overrides
+
+    await mux!.createSession({
+      sessionName: 'aiw-main',
+      reattach: true,
+      toolPath: 'C:\\tools\\claude.exe',
+      toolArgs: [],
+      enableMouse: true,
+    })
+
+    const callArgs = mocks.execFileAsync.mock.calls.map((call) => call[1] as string[])
+    expect(callArgs.some((args) => args[0] === 'new-session')).toBe(false)
+    expect(callArgs.filter((args) => args[0] === 'has-session').length).toBe(2)
+  })
+
+  it('createSession creates detached session in reattach mode when session is missing', async () => {
+    platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const mux = await PsmuxMultiplexer.create()
+    mocks.execFileAsync.mockReset()
+    mocks.execFileAsync
+      .mockResolvedValueOnce({ ...okExec(), exitCode: 1 }) // has-session exists check (missing)
+      .mockResolvedValueOnce(okExec()) // new-session -d
+      .mockResolvedValueOnce(okExec()) // has-session ready check
+      .mockResolvedValueOnce(okExec()) // set-option mouse
+      .mockResolvedValueOnce(okExec()) // set-option history
+      .mockResolvedValueOnce(okExec()) // set-option cursor-blink
+      .mockResolvedValueOnce(okExec()) // set-option cursor-style
+      .mockResolvedValueOnce(okExec()) // set-option status-interval
+      .mockResolvedValueOnce(okExec()) // set-option terminal-overrides
+
+    await mux!.createSession({
+      sessionName: 'aiw-main',
+      reattach: true,
+      toolPath: 'C:\\tools\\claude.exe',
+      toolArgs: [],
+      enableMouse: true,
+    })
+
+    expect(mocks.execFileAsync).toHaveBeenCalledWith(
+      'C:\\tools\\psmux.exe',
+      expect.arrayContaining(['new-session', '-d', '-c', process.cwd(), '-s', 'aiw-main']),
+      {timeout: 5000},
+    )
+  })
+
+  it('createSession runs bootstrap set-option commands sequentially', async () => {
+    platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const mux = await PsmuxMultiplexer.create()
+    mocks.execFileAsync.mockReset()
+    mocks.execFileAsync
+      .mockResolvedValueOnce(okExec()) // new-session -d
+      .mockResolvedValueOnce(okExec()) // has-session
+      .mockResolvedValueOnce(okExec()) // set-option mouse
+      .mockResolvedValueOnce(okExec()) // set-option history
+      .mockResolvedValueOnce(okExec()) // set-option cursor-blink
+      .mockResolvedValueOnce(okExec()) // set-option cursor-style
+      .mockResolvedValueOnce(okExec()) // set-option status-interval
+      .mockResolvedValueOnce(okExec()) // set-option terminal-overrides
 
     await mux!.createSession({
       sessionName: 'aiw-main',
@@ -272,8 +355,79 @@ describe('psmux multiplexer unit', () => {
       enableMouse: true,
     })
 
-    expect(mocks.execFileAsync).toHaveBeenCalledWith('C:\\tools\\psmux.exe', ['set-option', '-g', 'mouse', 'on'], {timeout: 3000})
-    expect(mocks.execFileAsync).toHaveBeenCalledWith('C:\\tools\\psmux.exe', ['set-option', '-g', 'history-limit', '50000'], {timeout: 3000})
+    const callArgs = mocks.execFileAsync.mock.calls.map((call) => call[1] as string[])
+    const mouseIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g mouse on')
+    const historyIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g history-limit 50000')
+    const cursorBlinkIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g cursor-blink off')
+    const cursorStyleIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g cursor-style block')
+    const statusIntervalIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g status-interval 0')
+    const terminalOverridesIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g terminal-overrides ,*:Ss@:Se@:Cs@:Cr@')
+    expect(mouseIndex).toBeGreaterThanOrEqual(0)
+    expect(historyIndex).toBeGreaterThan(mouseIndex)
+    expect(cursorBlinkIndex).toBeGreaterThan(historyIndex)
+    expect(cursorStyleIndex).toBeGreaterThan(cursorBlinkIndex)
+    expect(statusIntervalIndex).toBeGreaterThan(cursorStyleIndex)
+    expect(terminalOverridesIndex).toBeGreaterThan(statusIntervalIndex)
+  })
+
+  it('createSession retries attach once on exit code 1 and succeeds', async () => {
+    platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const mux = await PsmuxMultiplexer.create()
+    mocks.execFileAsync.mockReset()
+    mocks.execFileAsync
+      .mockResolvedValueOnce(okExec()) // new-session -d
+      .mockResolvedValueOnce(okExec()) // has-session
+      .mockResolvedValueOnce(okExec()) // set-option mouse
+      .mockResolvedValueOnce(okExec()) // set-option history
+      .mockResolvedValueOnce(okExec()) // set-option cursor-blink
+      .mockResolvedValueOnce(okExec()) // set-option cursor-style
+      .mockResolvedValueOnce(okExec()) // set-option status-interval
+      .mockResolvedValueOnce(okExec()) // set-option terminal-overrides
+
+    mocks.spawnAttached
+      .mockResolvedValueOnce({exitCode: 1, usedMux: false, reason: 'psmux exited with code 1'})
+      .mockResolvedValueOnce({exitCode: 0, usedMux: true})
+
+    const result = await mux!.createSession({
+      sessionName: 'aiw-main',
+      reattach: false,
+      toolPath: 'C:\\tools\\claude.exe',
+      toolArgs: [],
+      enableMouse: true,
+    })
+
+    expect(mocks.spawnAttached).toHaveBeenCalledTimes(2)
+    expect(result).toEqual({exitCode: 0, usedMux: true})
+  })
+
+  it('createSession returns usedMux=false after attach retry fails with exit code 1', async () => {
+    platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const mux = await PsmuxMultiplexer.create()
+    mocks.execFileAsync.mockReset()
+    mocks.execFileAsync
+      .mockResolvedValueOnce(okExec()) // new-session -d
+      .mockResolvedValueOnce(okExec()) // has-session
+      .mockResolvedValueOnce(okExec()) // set-option mouse
+      .mockResolvedValueOnce(okExec()) // set-option history
+      .mockResolvedValueOnce(okExec()) // set-option cursor-blink
+      .mockResolvedValueOnce(okExec()) // set-option cursor-style
+      .mockResolvedValueOnce(okExec()) // set-option status-interval
+      .mockResolvedValueOnce(okExec()) // set-option terminal-overrides
+
+    mocks.spawnAttached
+      .mockResolvedValueOnce({exitCode: 1, usedMux: false, reason: 'psmux exited with code 1'})
+      .mockResolvedValueOnce({exitCode: 1, usedMux: false, reason: 'psmux exited with code 1'})
+
+    const result = await mux!.createSession({
+      sessionName: 'aiw-main',
+      reattach: false,
+      toolPath: 'C:\\tools\\claude.exe',
+      toolArgs: [],
+      enableMouse: true,
+    })
+
+    expect(result.usedMux).toBe(false)
+    expect(result.reason).toContain('attach failed after retry')
   })
 })
 

@@ -123,6 +123,7 @@ function createCommand(flags: LaunchFlags): {
     error: ReturnType<typeof vi.spyOn>
     exit: ReturnType<typeof vi.spyOn>
     log: ReturnType<typeof vi.spyOn>
+    logWarning: ReturnType<typeof vi.spyOn>
     warn: ReturnType<typeof vi.spyOn>
   }
 } {
@@ -130,7 +131,7 @@ function createCommand(flags: LaunchFlags): {
   vi.spyOn(command as LaunchCommand, 'parse').mockResolvedValue({flags} as never)
   vi.spyOn(command as LaunchCommand, 'debug').mockImplementation(() => {})
   vi.spyOn(command as LaunchCommand, 'logInfo').mockImplementation(() => {})
-  vi.spyOn(command as LaunchCommand, 'logWarning').mockImplementation(() => {})
+  const logWarning = vi.spyOn(command as LaunchCommand, 'logWarning').mockImplementation(() => {})
   const log = vi.spyOn(command as LaunchCommand, 'log').mockImplementation(() => {})
   const warn = vi.spyOn(command as LaunchCommand, 'warn').mockImplementation(() => {})
   const exit = vi.spyOn(command, 'exit').mockImplementation(() => undefined as never)
@@ -140,7 +141,7 @@ function createCommand(flags: LaunchFlags): {
     throw err
   })
 
-  return {command, spies: {error, exit, log, warn}}
+  return {command, spies: {error, exit, log, logWarning, warn}}
 }
 
 describe('launch command unit', () => {
@@ -252,6 +253,22 @@ describe('launch command unit', () => {
     expect(mux.createSession).toHaveBeenCalled()
     expect(mocks.spawnProcess).toHaveBeenCalledWith('claude', ['--dangerously-skip-permissions'])
     expect(spies.exit).toHaveBeenCalledWith(0)
+  })
+
+  it('shows psmux recovery hint for attach-failed createSession fallback', async () => {
+    const mux = createMux({
+      backend: 'psmux',
+      isInsideSession: vi.fn(() => false),
+      createSession: vi.fn(async () => ({exitCode: 1, usedMux: false, reason: 'psmux attach failed after retry (auth/session readiness race)'})),
+    })
+    const {command, spies} = createCommand(makeFlags())
+    mocks.detectMultiplexer.mockResolvedValueOnce(mux)
+
+    await command.run()
+
+    expect(mocks.spawnProcess).toHaveBeenCalledWith('claude', ['--dangerously-skip-permissions'])
+    const warningText = spies.logWarning.mock.calls.map((call) => String(call[0])).join('\n')
+    expect(warningText).toContain('Recovery: run "psmux kill-server" and relaunch if this persists.')
   })
 
   it('uses codex executable and codex args when --codex is set', async () => {

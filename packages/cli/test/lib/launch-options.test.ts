@@ -106,6 +106,36 @@ describe('launch-options', () => {
         '/tmp/prompt-file.txt',
       ])
     })
+
+    it('builds argument list with --devin flag', () => {
+      const args = buildSpawnedWindowArgs({
+        useCodex: false,
+        useDevin: true,
+        disableTmux: false,
+      })
+
+      expect(args).toEqual([
+        'aiw',
+        'launch',
+        '--spawned-window',
+        '--devin',
+      ])
+    })
+
+    it('prefers --devin over --codex when both are set', () => {
+      const args = buildSpawnedWindowArgs({
+        useCodex: true,
+        useDevin: true,
+        disableTmux: false,
+      })
+
+      expect(args).toEqual([
+        'aiw',
+        'launch',
+        '--spawned-window',
+        '--devin',
+      ])
+    })
   })
 
   describe('sanitizeSessionName', () => {

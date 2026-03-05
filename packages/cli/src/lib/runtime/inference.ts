@@ -188,7 +188,7 @@ Respond with ONLY a JSON object: {"slug": "your 8-12 word phrase here"}`;
 
 /**
  * Generate a 5-12 word context ID slug from a user prompt.
- * Uses 5.3 Codex Spark first, then falls back to current fast tier for resilience.
+ * Uses Codex Spark first, then falls back to current fast tier for resilience.
  * See SPEC.md §6.3
  */
 export function generateContextIdSlug(

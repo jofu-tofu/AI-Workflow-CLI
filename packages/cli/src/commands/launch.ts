@@ -25,11 +25,11 @@ import {checkVersionCompatibility, getClaudeCodeVersion} from '../lib/version.js
 import {EXIT_CODES} from '../types/index.js'
 
 /**
- * Launch Claude Code or Codex with AIW configuration.
+ * Launch Claude Code, Codex, or Devin with AIW configuration.
  *
  * Spawns Claude Code CLI with --dangerously-skip-permissions flag,
- * or Codex CLI with --yolo flag, enabling unattended execution.
- * Supports multiple parallel sessions.
+ * Codex CLI with --yolo flag, or Devin CLI with --permission-mode dangerous,
+ * enabling unattended execution. Supports multiple parallel sessions.
  *
  * ## Multiplexer-first launch (preferred)
  *
@@ -52,9 +52,10 @@ import {EXIT_CODES} from '../types/index.js'
  */
 export default class LaunchCommand extends BaseCommand {
   static override description =
-    'Launch Claude Code or Codex with AIW configuration (sandbox disabled, tmux-first; Windows opens mintty window first with inline fallback)\n\n' +
+    'Launch Claude Code, Codex, or Devin with AIW configuration (sandbox disabled, tmux-first; Windows opens mintty window first with inline fallback)\n\n' +
     'FLAGS\n' +
     '  --codex/-c: Launch Codex instead of Claude Code (uses --yolo flag)\n' +
+    '  --devin/-e: Launch Devin CLI instead of Claude Code (uses --permission-mode dangerous)\n' +
     '  --new/-n: Open a new terminal in the current directory and launch there\n' +
     '  --no-tmux/-t: Launch directly in current shell instead of auto-launching tmux\n' +
     '  --tmux-session/-s: tmux session name to reuse when auto-launching tmux\n' +
@@ -68,10 +69,11 @@ export default class LaunchCommand extends BaseCommand {
     '  0  Success - AI assistant launched and exited successfully\n' +
     '  1  General error - unexpected runtime failure\n' +
     '  2  Invalid usage - check your arguments and flags\n' +
-    '  3  Environment error - CLI not found (install Claude Code from https://claude.ai/download, Codex from npm)'
+    '  3  Environment error - CLI not found (install Claude Code from https://claude.ai/download, Codex from npm, Devin from https://cli.devin.ai)'
 static override examples = [
     '<%= config.bin %> <%= command.id %>  # Auto-launches tmux with a fresh session when not already in tmux',
     '<%= config.bin %> <%= command.id %> --codex  # Launch Codex with --yolo flag',
+    '<%= config.bin %> <%= command.id %> --devin  # Launch Devin CLI with --permission-mode dangerous',
     '<%= config.bin %> <%= command.id %> --new  # Launch in a new terminal window',
     '<%= config.bin %> <%= command.id %> --no-tmux  # Run directly in current shell',
     '<%= config.bin %> <%= command.id %> --tmux-session aiw-main  # Reuse/attach explicit tmux session name',
@@ -86,6 +88,13 @@ static override flags = {
       char: 'c',
       description: 'Launch Codex instead of Claude Code (uses --yolo flag for full auto mode)',
       default: false,
+      exclusive: ['devin'],
+    }),
+    devin: Flags.boolean({
+      char: 'e',
+      description: 'Launch Devin CLI instead of Claude Code (uses --permission-mode dangerous)',
+      default: false,
+      exclusive: ['codex'],
     }),
     env: Flags.string({
       description: 'Extra env vars as JSON object string (e.g. \'{"FOO":"bar"}\')',
@@ -159,9 +168,10 @@ static override flags = {
 
     // Determine which CLI to launch
     const useCodex = flags.codex
-    const cliCommand = useCodex ? 'codex' : 'claude'
-    const cliArgs = useCodex ? this.buildCodexArgs() : ['--dangerously-skip-permissions']
-    const launchFlag = useCodex ? '--codex' : ''
+    const useDevin = flags.devin
+    const cliCommand = useDevin ? 'devin' : useCodex ? 'codex' : 'claude'
+    const cliArgs = useDevin ? this.buildDevinArgs() : useCodex ? this.buildCodexArgs() : ['--dangerously-skip-permissions']
+    const launchFlag = useDevin ? '--devin' : useCodex ? '--codex' : ''
     const disableTmux = flags['no-tmux']
     const interactiveTty = Boolean(process.stdin.isTTY && process.stdout.isTTY)
     const wantJson = flags.json
@@ -196,6 +206,7 @@ static override flags = {
 
       const launchArgs = buildSpawnedWindowArgs({
         useCodex,
+        useDevin,
         disableTmux,
         ...(promptPath ? {promptPath} : {}),
         ...(promptFilePath ? {promptFilePath} : {}),
@@ -222,6 +233,8 @@ static override flags = {
     // Version check for Claude Code
     if (useCodex) {
       this.debug('Launching Codex with --yolo flag')
+    } else if (useDevin) {
+      this.debug('Launching Devin with --permission-mode dangerous')
     } else {
       const version = await getClaudeCodeVersion()
       const versionCheck = checkVersionCompatibility(version)
@@ -335,6 +348,8 @@ static override flags = {
                 this.logWarning(`${mux.backend} unavailable — launching inline. ${mux.backend === 'psmux' ? 'Install with: winget install psmux' : ''}`)
               } else if (result.reason.includes('too old')) {
                 this.logWarning(`${result.reason} — launching inline. ${mux.backend === 'psmux' ? 'Update with: winget upgrade psmux' : ''}`)
+              } else if (mux.backend === 'psmux' && result.reason.includes('attach failed')) {
+                this.logWarning(`${result.reason} — launching inline. Recovery: run "psmux kill-server" and relaunch if this persists.`)
               } else {
                 this.logWarning(`${result.reason} — launching inline`)
               }
@@ -363,6 +378,10 @@ static override flags = {
   private buildCodexArgs(): string[] {
     if (process.platform !== 'win32') return ['--yolo']
     return ['-c', 'shell_type="bash"', '--yolo']
+  }
+
+  private buildDevinArgs(): string[] {
+    return ['--permission-mode', 'dangerous']
   }
 
   private buildUniqueSessionName(base: string): string {

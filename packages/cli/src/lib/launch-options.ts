@@ -41,13 +41,15 @@ export interface BuildSpawnedWindowArgsParams {
   rawEnvJson?: string | undefined
   tmuxSessionFlag?: string | undefined
   useCodex: boolean
+  useDevin?: boolean
 }
 
 export function buildSpawnedWindowArgs(params: BuildSpawnedWindowArgsParams): string[] {
-  const {useCodex, disableTmux, promptFilePath, promptPath, rawEnvJson, tmuxSessionFlag} = params
+  const {useCodex, useDevin, disableTmux, promptFilePath, promptPath, rawEnvJson, tmuxSessionFlag} = params
   const parts = ['aiw', 'launch', '--spawned-window']
 
-  if (useCodex) parts.push('--codex')
+  if (useDevin) parts.push('--devin')
+  else if (useCodex) parts.push('--codex')
   if (disableTmux) parts.push('--no-tmux')
 
   const tmuxSession = tmuxSessionFlag?.trim()

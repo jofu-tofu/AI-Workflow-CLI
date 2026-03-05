@@ -27,6 +27,9 @@ interface PsmuxVersion {
 }
 
 const MIN_VERSION: PsmuxVersion = {major: 0, minor: 4, patch: 0}
+const ATTACH_RETRY_DELAY_MS = 200
+const SESSION_READY_BACKOFF_MS = [50, 100, 150, 250] as const
+const PSMUX_TERMINAL_OVERRIDES = ',*:Ss@:Se@:Cs@:Cr@'
 
 function meetsMinVersion(v: PsmuxVersion): boolean {
   if (v.major > MIN_VERSION.major) return true
@@ -46,7 +49,7 @@ function buildCommandArgs(
   if (mode !== 'repl' || !promptPath) return args
 
   const absolutePromptPath = path.resolve(promptPath)
-  const bootstrap = `Read startup instructions from this file path before taking action: ${absolutePromptPath}. Use that file as the initial context.`
+  const bootstrap = `Read startup instructions from this file path before taking action: ${formatPromptPathForBootstrap(absolutePromptPath)}. Use that file as the initial context.`
   return [...args, bootstrap]
 }
 
@@ -118,12 +121,6 @@ export class PsmuxMultiplexer implements Multiplexer {
   async createSession(options: CreateSessionOptions): Promise<CreateSessionResult> {
     const {sessionName, reattach, enableMouse = true} = options
 
-    // Run bootstrap commands (mouse, scrollback) — best effort
-    const bootstrapCmds = buildPsmuxBootstrapCommands(enableMouse)
-    await Promise.allSettled(
-      bootstrapCmds.map((cmd) => execFileAsync(this.psmuxPath, cmd, {timeout: 3000})),
-    )
-
     let promptFilePath: string | undefined
     if (options.promptText) {
       promptFilePath = path.join(os.tmpdir(), `aiwcli-prompt-${Date.now()}-${process.pid}.txt`)
@@ -136,15 +133,65 @@ export class PsmuxMultiplexer implements Multiplexer {
     // Inject PSMUX_PANE=1 for inside-session detection
     const commandWithEnv = `$env:PSMUX_PANE='1'; ${shellCommand}`
 
-    const psmuxArgs = ['new-session']
-    if (reattach) psmuxArgs.push('-A')
-    psmuxArgs.push(
+    const psmuxArgs = ['new-session', '-d',
       '-c', process.cwd(),
       '-s', sessionName,
       toEncodedPowerShell(commandWithEnv),
-    )
+    ]
 
-    return spawnAttached(this.psmuxPath, psmuxArgs, cleanClaudeEnv(), this.backend)
+    if (reattach) {
+      const exists = await this.hasSession(sessionName)
+      if (!exists) {
+        const detachedCreate = await execFileAsync(this.psmuxPath, psmuxArgs, {timeout: 5000})
+        if (detachedCreate.exitCode !== 0) {
+          const stderr = detachedCreate.stderr.trim()
+          return {
+            exitCode: detachedCreate.exitCode ?? 1,
+            usedMux: false,
+            reason: stderr ? `psmux new-session failed: ${stderr}` : 'psmux new-session failed',
+          }
+        }
+      }
+    } else {
+      const detachedCreate = await execFileAsync(this.psmuxPath, psmuxArgs, {timeout: 5000})
+      if (detachedCreate.exitCode !== 0) {
+        const stderr = detachedCreate.stderr.trim()
+        return {
+          exitCode: detachedCreate.exitCode ?? 1,
+          usedMux: false,
+          reason: stderr ? `psmux new-session failed: ${stderr}` : 'psmux new-session failed',
+        }
+      }
+    }
+
+    const ready = await this.waitForSessionReady(sessionName)
+    if (!ready) {
+      return {
+        exitCode: 1,
+        usedMux: false,
+        reason: `psmux session '${sessionName}' not ready for attach`,
+      }
+    }
+
+    // Run bootstrap commands (mouse, scrollback) — best effort, sequentially.
+    await runBootstrapCommands(this.psmuxPath, buildPsmuxBootstrapCommands(enableMouse))
+
+    const attachArgs = ['attach', '-t', sessionName]
+    const env = cleanClaudeEnv()
+
+    const firstAttach = await spawnAttached(this.psmuxPath, attachArgs, env, this.backend)
+    if (firstAttach.usedMux || firstAttach.exitCode !== 1) return firstAttach
+
+    await waitMs(ATTACH_RETRY_DELAY_MS)
+
+    const secondAttach = await spawnAttached(this.psmuxPath, attachArgs, env, this.backend)
+    if (secondAttach.usedMux || secondAttach.exitCode !== 1) return secondAttach
+
+    return {
+      ...secondAttach,
+      reason: 'psmux attach failed after retry (auth/session readiness race)',
+      usedMux: false,
+    }
   }
 
   /**
@@ -249,6 +296,19 @@ export class PsmuxMultiplexer implements Multiplexer {
     }
   }
 
+  private async hasSession(sessionName: string): Promise<boolean> {
+    try {
+      const result = await execFileAsync(
+        this.psmuxPath,
+        ['has-session', '-t', sessionName],
+        {timeout: 3000},
+      )
+      return result.exitCode === 0
+    } catch {
+      return false
+    }
+  }
+
   private async resolveAutoSplit(): Promise<PsmuxSplitFlag> {
     try {
       const size = await execFileAsync(
@@ -269,6 +329,21 @@ export class PsmuxMultiplexer implements Multiplexer {
     } catch {
       return '-h'
     }
+  }
+
+  private async waitForSessionReady(sessionName: string): Promise<boolean> {
+    if (await this.hasSession(sessionName)) return true
+
+    const poll = async (index: number): Promise<boolean> => {
+      const backoffMs = SESSION_READY_BACKOFF_MS[index]
+      if (backoffMs === undefined) return false
+
+      await waitMs(backoffMs)
+      if (await this.hasSession(sessionName)) return true
+      return poll(index + 1)
+    }
+
+    return poll(0)
   }
 }
 
@@ -300,7 +375,13 @@ function buildPsmuxBootstrapCommands(enableMouse = true): string[][] {
     commands.push(['set-option', '-g', 'mouse', 'on'])
   }
 
-  commands.push(['set-option', '-g', 'history-limit', '50000'])
+  commands.push(
+    ['set-option', '-g', 'history-limit', '50000'],
+    ['set-option', '-g', 'cursor-blink', 'off'],
+    ['set-option', '-g', 'cursor-style', 'block'],
+    ['set-option', '-g', 'status-interval', '0'],
+    ['set-option', '-g', 'terminal-overrides', PSMUX_TERMINAL_OVERRIDES],
+  )
   return commands
 }
 
@@ -315,9 +396,33 @@ function buildPsmuxShellCommand(opts: CreateSessionOptions, promptFilePath?: str
   }
 
   if (promptFilePath) {
-    const bootstrap = `Read startup instructions from this file path before taking action: ${promptFilePath}. Use that file as the initial context.`
+    const bootstrap = `Read startup instructions from this file path before taking action: ${formatPromptPathForBootstrap(promptFilePath)}. Use that file as the initial context.`
     cmdParts.push(quoteForPowerShell(bootstrap))
   }
 
   return cmdParts.join(' ')
+}
+
+function formatPromptPathForBootstrap(promptPath: string): string {
+  if (process.platform !== 'win32') return promptPath
+  return promptPath.replaceAll('\\', '/')
+}
+
+async function runBootstrapCommands(psmuxPath: string, commands: string[][], index = 0): Promise<void> {
+  const command = commands[index]
+  if (!command) return
+
+  try {
+    await execFileAsync(psmuxPath, command, {timeout: 3000})
+  } catch {
+    // Best effort only.
+  }
+
+  await runBootstrapCommands(psmuxPath, commands, index + 1)
+}
+
+function waitMs(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
 }

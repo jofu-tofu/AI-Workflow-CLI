@@ -52,10 +52,11 @@ aiw launch --tmux-session aiw-main  # Reuse/attach a specific tmux session name
 On Windows (outside tmux), `aiw launch` opens a new mintty window first, then runs tmux there.
 If window launch fails, it falls back to inline non-tmux launch.
 
-If you prefer typing `codex`, route it through AIW launch behavior with an alias:
+If you prefer typing `codex` or `devin`, route them through AIW launch behavior with aliases:
 
 ```bash
 alias codex='aiw launch --codex'
+alias devin='aiw launch --devin'
 ```
 
 ### `aiw init`

@@ -11,6 +11,6 @@ export const CLAUDE_MODELS = {
 
 export const CODEX_MODELS = {
   spark: "gpt-5.3-codex-spark",
-  codex: "gpt-5.3-codex",
-  gpt: "gpt-5.2",
+  codex: "gpt-5.4",
+  gpt: "gpt-5.4",
 } as const;
