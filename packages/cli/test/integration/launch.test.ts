@@ -1,72 +1,104 @@
-/**
- * @file Integration tests for pai launch command.
- *
- * Tests complete command flow: CLI invocation → help display → command registration.
- *
- * Note: Actual Claude Code spawning requires mocking (tested in unit tests with sinon).
- * These tests verify CLI registration, help text, and cross-platform compatibility.
- */
+import {execFileSync} from 'node:child_process'
 
-import {runCommand} from '@oclif/test'
 import {expect} from 'chai'
+import {describe, it} from 'vitest'
 
-describe('pai launch - Integration Tests', () => {
-  describe('Task 6.4: debug flag integration from BaseCommand', () => {
-    it('Task 5.5: should accept --debug flag (no error)', async () => {
-      // Note: This test verifies flag is accepted, not debug output
-      // Debug output testing requires mocking (see unit tests)
-      // We expect this to fail with ENOENT since claude isn't installed,
-      // but it should accept the --debug flag without argument errors
-      try {
-        await runCommand(['launch', '--debug'])
-      } catch {
-        // Expected to fail with ENOENT (command not found)
-        // The test passes if --debug was accepted (no argument error)
-      }
+import {getCliBinJsPath} from '../helpers/cli-command.js'
 
-      // If we get here without invalid argument error, flag was accepted
-      expect(true).to.be.true
-    })
+interface ExecFailure {
+  status: null | number
+  stdout: Buffer | string
+  stderr: Buffer | string
+}
+
+const cliNodeArgs = ['--no-deprecation', '--loader', 'ts-node/esm', '--disable-warning=ExperimentalWarning']
+
+function runCli(args: string[], env: NodeJS.ProcessEnv = process.env): string {
+  return execFileSync(process.execPath, [...cliNodeArgs, getCliBinJsPath(), ...args], {
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env,
+  })
+}
+
+function runCliExpectFailure(args: string[], env: NodeJS.ProcessEnv = process.env): ExecFailure {
+  try {
+    runCli(args, env)
+    expect.fail(`Expected command to fail: ${args.join(' ')}`)
+  } catch (error: unknown) {
+    return error as ExecFailure
+  }
+}
+
+function runCliCapture(args: string[], env: NodeJS.ProcessEnv = process.env): {status: null | number; stderr: string; stdout: string} {
+  try {
+    const stdout = runCli(args, env)
+    return {status: 0, stdout, stderr: ''}
+  } catch (error: unknown) {
+    const execError = error as ExecFailure
+    return {
+      status: execError.status,
+      stdout: String(execError.stdout ?? ''),
+      stderr: String(execError.stderr ?? ''),
+    }
+  }
+}
+
+
+describe('launch command integration', () => {
+  it('prints expected sections in --help output', () => {
+    const stdout = runCli(['launch', '--help'])
+    expect(stdout).to.include('USAGE')
+    expect(stdout).to.include('FLAGS')
+    expect(stdout).to.include('DESCRIPTION')
   })
 
-  describe('Task 6.4: version check integration', () => {
-    it('displays version in debug mode (if Claude Code installed)', async () => {
-      // This test verifies that version check is integrated, even if claude isn't installed
-      // We can't guarantee claude is installed in CI, but we can verify the debug flag works
-      try {
-        await runCommand(['launch', '--debug'])
-      } catch {
-        // Expected to fail if claude not installed - we're just verifying no crash
-      }
+  it('accepts --json flag without crashing', () => {
+    // --json only produces structured output with a multiplexer backend.
+    // In inline mode (--no-tmux) it just runs normally. Verify it doesn't crash.
+    const result = runCliCapture(['launch', '--json', '--no-tmux'])
+    // Should exit (possibly non-zero since no stdin/prompt), but not with flag-parse error
+    expect(String(result.stderr)).to.not.include('Nonexistent flag')
+  })
 
-      // If we got here without throwing from --debug argument parsing, test passes
-      expect(true).to.be.true
-    })
+  it('exits non-zero for invalid flags', () => {
+    const error = runCliExpectFailure(['launch', '--invalid-flag'])
+    expect(error.status).to.be.a('number')
+    expect(error.status).to.be.greaterThan(0)
+    expect(String(error.stderr)).to.include('Nonexistent flag')
+  })
 
-    it('continues launch despite version warning (graceful degradation)', async () => {
-      // Verify that even if version check fails/warns, launch continues
-      // The launch will fail with ENOENT if claude isn't installed,
-      // but this proves version check doesn't block launch
-      try {
-        await runCommand(['launch'])
-      } catch {
-        // Expected to fail with ENOENT (claude not found) or similar
-        // The test is that it attempted to launch (didn't exit early due to version)
-        expect(true).to.be.true
-      }
-    })
+  it('accepts all documented launch flags', () => {
+    const longFlagOutput = runCli([
+      'launch',
+      '--debug',
+      '--quiet',
+      '--codex',
+      '--new',
+      '--no-tmux',
+      '--prompt', 'bootstrap prompt',
+      '--tmux-session', 'aiw-main',
+      '--split', 'h',
+      '--wait',
+      '--json',
+      '--env', '{"FOO":"bar"}',
+      '--prompt-path', 'prompt.txt',
+      '--help',
+    ])
 
-    it('version check does not cause launch to exit early', async () => {
-      // Version check should be non-blocking
-      // Even with incompatible/missing version, launch attempts to spawn claude
-      try {
-        await runCommand(['launch'])
-      } catch {
-        // Launch attempted (and likely failed because claude isn't installed)
-        // This proves version check didn't exit early
-      }
+    const shortFlagOutput = runCli([
+      'launch',
+      '-d',
+      '-q',
+      '-c',
+      '-n',
+      '-t',
+      '-p', 'bootstrap prompt',
+      '-s', 'aiw-main',
+      '--help',
+    ])
 
-      expect(true).to.be.true
-    })
+    expect(longFlagOutput).to.include('USAGE')
+    expect(shortFlagOutput).to.include('USAGE')
   })
 })

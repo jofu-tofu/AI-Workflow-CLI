@@ -9,6 +9,8 @@
 export interface HookCommand {
   /** If true, runs in background without blocking */
   async?: boolean
+  /** If false, hook failure will not block tool execution */
+  blockOnFail?: boolean
   /** Command to execute */
   command: string
   /** Optional timeout in seconds */
@@ -18,13 +20,32 @@ export interface HookCommand {
 }
 
 /**
+ * Hook prompt configuration
+ */
+export interface HookPrompt {
+  /** If true, runs in background without blocking */
+  async?: boolean
+  /** Prompt text shown to the model */
+  prompt: string
+  /** Optional timeout in seconds */
+  timeout?: number
+  /** Type of hook action */
+  type: 'prompt'
+}
+
+/**
+ * Hook action configuration
+ */
+export type HookAction = HookCommand | HookPrompt
+
+/**
  * Hook matcher configuration
  */
 export interface HookMatcher {
   /** Array of hook commands to execute */
-  hooks: HookCommand[]
+  hooks: HookAction[]
   /** Tool name pattern to match (regex supported) */
-  matcher: string
+  matcher?: string
   /** Execute only once per session */
   once?: boolean
 }

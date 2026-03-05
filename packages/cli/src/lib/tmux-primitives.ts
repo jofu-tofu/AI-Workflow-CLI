@@ -1,6 +1,8 @@
 import * as os from 'node:os'
 import path from 'node:path'
 
+export {quoteForSh} from './shell-quoting.js'
+
 /** Fixed tmux server socket. Multiple named sessions share one server. */
 export const TMUX_SOCKET_PATH = path.join(os.tmpdir(), 'aiwcli-tmux.sock')
 
@@ -11,10 +13,5 @@ export function toMsysPosixPath(winPath: string): string {
   const match = normalized.match(/^([A-Za-z]):\/(.*)/u)
   if (!match) return normalized
   return `/${match[1]!.toLowerCase()}/${match[2]!}`
-}
-
-/** Shell-safe single-quote escaping for bash command strings. */
-export function quoteForSh(input: string): string {
-  return `'${input.replaceAll("'", "'\"'\"'")}'`
 }
 

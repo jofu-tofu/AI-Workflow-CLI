@@ -1,20 +1,25 @@
 #!/usr/bin/env bun
 /**
  * SessionEnd hook: Save session state, assign plan fields (fallback),
- * stage has_plan/has_handoff for next session.
+ * stage has_staged_work for next session.
  */
-import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import path from "node:path";
 
-import { getContextBySessionId, saveState, determineArtifactType } from "../lib-ts/context/context-store.js";
+import { saveState, determineArtifactType } from "../lib-ts/context/context-store.js";
 import {
-  findLatestPlan, normalizePlanContent, generatePlanId, extractPlanAnchors,
+  findLatestPlan,
 } from "../lib-ts/context/plan-manager.js";
 import {
-  loadHookInput, runHook, logDebug, logInfo, logError, logDiagnostic,
+  requireBoundSession, runHook, logDebug, logInfo, logError, logDiagnostic,
 } from "../lib-ts/hooks/hook-utils.js";
-import { getProjectRoot, getContextDir } from "../lib-ts/runtime/constants.js";
+import {
+  buildSessionMetadata,
+  computePlanFallback,
+  generateArchiveFilename,
+  shouldStage,
+} from "../lib-ts/hooks/session-end-logic.js";
+import { getContextDir } from "../lib-ts/runtime/constants.js";
 import { getGitState } from "../lib-ts/runtime/git-state.js";
 import { nowIso } from "../lib-ts/runtime/utils.js";
 
@@ -39,25 +44,10 @@ function archiveTranscript(
   const transcriptsDir = path.join(contextDir, "session-transcripts");
   fs.mkdirSync(transcriptsDir, { recursive: true });
 
-  // 3. Generate archive filename: YYYY-MM-DD-HHMM-{session_id}.jsonl
-  const now = new Date();
-  // Format: 2026-02-14-1400 (year-month-day-hourminute)
-  // Note: Hours and minutes are concatenated without separator (HHMM)
-  const timestamp =
-    `${now.getFullYear()}-` +
-    `${String(now.getMonth() + 1).padStart(2, "0")}-` +
-    `${String(now.getDate()).padStart(2, "0")}-` +
-    `${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
-
-  // 4. Handle collisions (rare, but possible with rapid session churn)
-  let archiveName = `${timestamp}-${sessionId}.jsonl`;
-  let archivePath = path.join(transcriptsDir, archiveName);
-  let counter = 2;
-  while (fs.existsSync(archivePath)) {
-    archiveName = `${timestamp}-${sessionId}-${counter}.jsonl`;
-    archivePath = path.join(transcriptsDir, archiveName);
-    counter++;
-  }
+  // 3. Generate archive filename with collision handling
+  const existingNames = new Set(fs.readdirSync(transcriptsDir));
+  const archiveName = generateArchiveFilename(sessionId, new Date(), existingNames);
+  const archivePath = path.join(transcriptsDir, archiveName);
 
   // 5. Copy transcript file
   try {
@@ -70,46 +60,31 @@ function archiveTranscript(
 }
 
 function main(): void {
-  const payload = loadHookInput();
-  if (!payload) return;
+  const bound = requireBoundSession("session_end");
+  if (!bound) return;
 
-  const sessionId = payload.session_id;
-  if (!sessionId) {
-    logDebug("session_end", "No session_id, skipping");
-    return;
-  }
-
-  const projectRoot = getProjectRoot(payload.cwd);
+  const { payload, sessionId, projectRoot, state } = bound;
   const source = payload.source ?? "unknown";
   const permissionMode = payload.permission_mode ?? "";
-
-  const state = getContextBySessionId(sessionId, projectRoot);
-  if (!state) {
-    logDebug("session_end", `No context bound to session ${sessionId}`);
-    return;
-  }
 
   // Capture git state
   const gitState = getGitState(projectRoot);
 
   // Save session metadata
-  state.last_session = {
-    session_id: sessionId,
-    save_reason: source,
-    saved_at: nowIso(),
-    transcript_path: payload.transcript_path ?? undefined,
-    git_state: gitState,
-  };
+  state.last_session = buildSessionMetadata(
+    sessionId,
+    source,
+    payload.transcript_path ?? undefined,
+    gitState,
+  );
   state.last_active = nowIso();
 
-  // Archive transcript (NEW)
-  // Note: state is a ContextState object (from getContextBySessionId on line 33)
-  // state.id is the context ID used to construct paths like _output/contexts/{context_id}/
+  // Archive transcript
   if (payload.transcript_path) {
     try {
       const archived = archiveTranscript(
         payload.transcript_path,
-        state.id,  // Context ID, verified by existing code on line 98: saveState(state.id, ...)
+        state.id,
         sessionId,
         projectRoot,
       );
@@ -154,21 +129,11 @@ function main(): void {
     if (latestPlanPath) {
       try {
         const content = fs.readFileSync(latestPlanPath, "utf8");
-        const normalized = normalizePlanContent(content);
-        const planHash = crypto
-          .createHash("sha256")
-          .update(normalized, "utf8")
-          .digest("hex")
-          .slice(0, 12);
-
-        state.plan_hash = planHash;
-        state.plan_path = latestPlanPath;
-        state.plan_signature = content.slice(0, 200);
-        state.plan_id = generatePlanId();
-        state.plan_anchors = extractPlanAnchors(content);
-        state.work_consumed = state.work_consumed ?? false; // CHANGED: unified flag
-
-        logInfo("session_end", `Assigned plan fallback: hash=${planHash}`);
+        const fallback = computePlanFallback(state, content);
+        Object.assign(state, fallback, { plan_path: latestPlanPath });
+        if (fallback.plan_hash) {
+          logInfo("session_end", `Assigned plan fallback: hash=${fallback.plan_hash}`);
+        }
       } catch (error) {
         logError("session_end", `Failed to read plan: ${error}`);
       }
@@ -177,9 +142,7 @@ function main(): void {
 
   // Unified staging logic (replaces separate plan/handoff checks)
   const artifactType = determineArtifactType(state);
-  // Allow staging from active mode OR when session ends in plan mode (fixes plan mode staging bug)
-  const canStage = state.mode === "active" || permissionMode === "plan";
-  if (artifactType && canStage && !state.work_consumed) {
+  if (artifactType && shouldStage(state, permissionMode)) {
     state.mode = "has_staged_work"; // CHANGED: unified mode
     state.next_artifact_type = artifactType;
     logInfo("session_end", `Staged ${state.id}: ${state.mode} → has_staged_work (${artifactType})`);

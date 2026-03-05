@@ -24,6 +24,16 @@ export interface RunResult {
 let cachedConfig: Config | undefined
 
 /**
+ * Reset the cached oclif config for test isolation.
+ *
+ * Some test suites modify process-level state (cwd/env), and reusing a cached
+ * Config across those suites can retain stale command wiring.
+ */
+export function resetCommandCache(): void {
+  cachedConfig = undefined
+}
+
+/**
  * Run an oclif command in-process, capturing stdout/stderr.
  *
  * @param args - Command arguments, e.g. ['branch', '--help'] or 'branch --help'

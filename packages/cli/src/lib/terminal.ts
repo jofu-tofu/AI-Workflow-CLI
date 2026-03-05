@@ -32,27 +32,19 @@ import {spawn} from 'node:child_process'
 import {existsSync} from 'node:fs'
 import path from 'node:path'
 
+import {cleanClaudeEnv} from './mux-utils.js'
 import {isCommandAvailable} from './runtime/executable-policy.js'
 import {isWindowsPlatform} from './runtime/platform-adapter.js'
 import {findMsysBash} from './runtime/tmux-preflight.js'
-
-/**
- * Return a copy of process.env with Claude Code nesting-detection vars removed.
- *
- * Claude Code sets CLAUDECODE and CLAUDE_CODE_ENTRYPOINT when running. Child
- * processes that inherit these vars are blocked from launching their own Claude
- * Code instance ("cannot launch claude within claude").
- *
- * Source of truth: packages/cli/src/templates/_shared/lib-ts/base/subprocess-utils.ts
- * → getInternalSubprocessEnv() — if Claude Code adds more nesting-detection vars
- * in a future release, add them here too.
- */
-function cleanTerminalEnv(): NodeJS.ProcessEnv {
-  const env = {...process.env}
-  delete env['CLAUDECODE']
-  delete env['CLAUDE_CODE_ENTRYPOINT']
-  return env
-}
+import {escapeSingleQuotedPath} from './shell-quoting.js'
+import {
+  detectPowerShell,
+  findAvailableLinuxTerminal,
+  isWSL,
+  resolveWindowsTerminalStrategy,
+  type WindowsShellPreference,
+  type WindowsTerminalStrategy,
+} from './terminal-strategy.js'
 
 /**
  * Options for launching a new terminal window.
@@ -80,7 +72,7 @@ interface TerminalLaunchOptions {
    * - mintty: Prefer mintty + Git Bash, fallback to git-bash in wt, then PowerShell
    * - git-bash: Prefer Git Bash in wt, fallback to PowerShell if unavailable
    */
-  windowsShellPreference?: 'default' | 'git-bash' | 'mintty'
+  windowsShellPreference?: WindowsShellPreference
 }
 
 /**
@@ -99,16 +91,6 @@ interface TerminalLaunchResult {
 }
 
 /**
- * Detect which PowerShell is available on Windows.
- * Prefers PowerShell 7 (pwsh) over legacy PowerShell.
- *
- * @returns 'pwsh' if PowerShell 7 is available, 'powershell' otherwise
- */
-function detectPowerShell(): string {
-  return isCommandAvailable('pwsh') ? 'pwsh' : 'powershell'
-}
-
-/**
  * Launch PowerShell fallback when Windows Terminal is not available.
  *
  * @param cwd - Working directory
@@ -123,7 +105,7 @@ async function launchPowerShellFallback(
   debugLog?: (message: string) => void,
 ): Promise<TerminalLaunchResult> {
   return new Promise<TerminalLaunchResult>((resolve) => {
-    const escapedPath = cwd.replaceAll("'", "''")
+    const escapedPath = escapeSingleQuotedPath(cwd, 'powershell')
     const psCommand = `Start-Process ${powershellCmd} -ArgumentList '-NoExit','-Command',"cd '${escapedPath}'; ${command}"`
 
     debugLog?.(`Launching PowerShell fallback with command: ${psCommand}`)
@@ -131,7 +113,7 @@ async function launchPowerShellFallback(
     const terminal = spawn(powershellCmd, ['-Command', psCommand], {
       detached: true,
       stdio: 'ignore',
-      env: cleanTerminalEnv(),
+      env: cleanClaudeEnv(),
     })
 
     terminal.on('error', (err) => {
@@ -154,22 +136,31 @@ async function launchPowerShellFallback(
 async function launchWindowsTerminal(
   cwd: string,
   command: string,
-  shellPreference: 'default' | 'git-bash' | 'mintty',
+  shellPreference: WindowsShellPreference,
   debugLog?: (message: string) => void,
 ): Promise<TerminalLaunchResult> {
-  const powershellCmd = detectPowerShell()
+  const powershellCmd = detectPowerShell(isCommandAvailable)
   debugLog?.(`Detected PowerShell: ${powershellCmd}; shell preference: ${shellPreference}`)
 
   const gitBashPath = findMsysBash()
+  const minttyPath = gitBashPath
+    ? path.join(path.dirname(gitBashPath), 'mintty.exe')
+    : null
+  const hasMintty = Boolean(minttyPath && existsSync(minttyPath))
+  const strategyOrder = resolveWindowsTerminalStrategy(shellPreference, gitBashPath, hasMintty, powershellCmd)
 
-  if (shellPreference === 'mintty') {
-    const minttyPath = gitBashPath
-      ? path.join(path.dirname(gitBashPath), 'mintty.exe')
-      : null
-    const hasMintty = Boolean(minttyPath && existsSync(minttyPath))
+  const tryStrategy = async (strategy: WindowsTerminalStrategy): Promise<TerminalLaunchResult> => {
+    if (strategy === 'powershell-fallback') {
+      debugLog?.('Using PowerShell fallback launcher')
+      return launchPowerShellFallback(cwd, command, powershellCmd, debugLog)
+    }
 
-    if (hasMintty && gitBashPath && minttyPath) {
-      const escapedPath = cwd.replaceAll("'", String.raw`'\''`)
+    if (strategy === 'mintty') {
+      if (!minttyPath || !gitBashPath) {
+        return {success: false, error: 'mintty or Git Bash not found'}
+      }
+
+      const escapedPath = escapeSingleQuotedPath(cwd, 'bash')
       const bashCmd = `cd '${escapedPath}' && ${command}; exec bash`
       debugLog?.(`Using mintty for Windows terminal: ${minttyPath}`)
 
@@ -177,15 +168,12 @@ async function launchWindowsTerminal(
         const terminal = spawn(minttyPath, [gitBashPath, '-lc', bashCmd], {
           detached: true,
           stdio: 'ignore',
-          env: cleanTerminalEnv(),
+          env: cleanClaudeEnv(),
           windowsHide: true,
         })
 
         terminal.on('error', (err) => {
-          debugLog?.(`mintty launch failed (${err.message}), falling back to Windows Terminal`)
-          launchWindowsTerminal(cwd, command, 'git-bash', debugLog)
-            .then(resolve)
-            .catch(() => resolve({success: false, error: 'Failed to launch fallback terminal'}))
+          resolve({success: false, error: `mintty launch failed: ${err.message}`})
         })
 
         terminal.unref()
@@ -193,12 +181,12 @@ async function launchWindowsTerminal(
       })
     }
 
-    debugLog?.('mintty requested but not found, falling back to git-bash in Windows Terminal')
-  }
+    if (strategy === 'git-bash-in-wt') {
+      if (!gitBashPath) {
+        return {success: false, error: 'Git Bash not found'}
+      }
 
-  if (shellPreference === 'git-bash' || shellPreference === 'mintty') {
-    if (gitBashPath) {
-      const escapedPath = cwd.replaceAll("'", String.raw`'\''`)
+      const escapedPath = escapeSingleQuotedPath(cwd, 'bash')
       const bashCmd = `cd '${escapedPath}' && ${command}; exec bash`
       debugLog?.(`Using Git Bash for Windows terminal: ${gitBashPath}`)
 
@@ -206,22 +194,11 @@ async function launchWindowsTerminal(
         const terminal = spawn('wt', ['-d', cwd, gitBashPath, '-lc', bashCmd], {
           detached: true,
           stdio: 'ignore',
-          env: cleanTerminalEnv(),
+          env: cleanClaudeEnv(),
         })
 
         terminal.on('error', (err) => {
-          if (err.message.includes('ENOENT')) {
-            debugLog?.('wt.exe not found for Git Bash launch, falling back to PowerShell')
-            launchPowerShellFallback(cwd, command, powershellCmd, debugLog)
-              .then(resolve)
-              .catch(() => resolve({success: false, error: 'Failed to launch PowerShell fallback'}))
-            return
-          }
-
-          debugLog?.(`Git Bash launch via wt failed (${err.message}), falling back to PowerShell`)
-          launchPowerShellFallback(cwd, command, powershellCmd, debugLog)
-            .then(resolve)
-            .catch(() => resolve({success: false, error: 'Failed to launch PowerShell fallback'}))
+          resolve({success: false, error: `Git Bash launch via wt failed: ${err.message}`})
         })
 
         terminal.unref()
@@ -229,31 +206,36 @@ async function launchWindowsTerminal(
       })
     }
 
-    debugLog?.('Git Bash requested but not found, falling back to PowerShell')
+    debugLog?.('Using Windows Terminal with PowerShell')
+    return new Promise<TerminalLaunchResult>((resolve) => {
+      const terminal = spawn('wt', ['-d', cwd, powershellCmd, '-NoExit', '-Command', command], {
+        detached: true,
+        stdio: 'ignore',
+        env: cleanClaudeEnv(),
+      })
+
+      terminal.on('error', (err) => {
+        resolve({success: false, error: `Failed to launch terminal: ${err.message}`})
+      })
+
+      terminal.unref()
+      resolve({success: true})
+    })
   }
 
-  return new Promise<TerminalLaunchResult>((resolve) => {
-    const terminal = spawn('wt', ['-d', cwd, powershellCmd, '-NoExit', '-Command', command], {
-      detached: true,
-      stdio: 'ignore',
-      env: cleanTerminalEnv(),
-    })
+  const tryStrategies = async (index = 0): Promise<TerminalLaunchResult> => {
+    const strategy = strategyOrder[index]
+    if (!strategy) {
+      return {success: false, error: 'Failed to launch Windows terminal with all available strategies'}
+    }
 
-    terminal.on('error', (err) => {
-      // If wt.exe not found, try fallback to Start-Process
-      if (err.message.includes('ENOENT')) {
-        debugLog?.('Windows Terminal not found, using PowerShell fallback')
-        launchPowerShellFallback(cwd, command, powershellCmd, debugLog)
-          .then(resolve)
-          .catch(() => resolve({success: false, error: 'Failed to launch PowerShell fallback'}))
-      } else {
-        resolve({success: false, error: `Failed to launch terminal: ${err.message}`})
-      }
-    })
+    const result = await tryStrategy(strategy)
+    if (result.success) return result
+    debugLog?.(`Strategy ${strategy} failed: ${result.error}`)
+    return tryStrategies(index + 1)
+  }
 
-    terminal.unref()
-    resolve({success: true})
-  })
+  return tryStrategies()
 }
 
 /**
@@ -270,7 +252,7 @@ async function launchMacTerminal(
 ): Promise<TerminalLaunchResult> {
   return new Promise<TerminalLaunchResult>((resolve) => {
     // Escape single quotes for bash context
-    const escapedPath = cwd.replaceAll("'", String.raw`'\''`)
+    const escapedPath = escapeSingleQuotedPath(cwd, 'bash')
     const fullCommand = `cd '${escapedPath}' && ${command}`
     // Escape double quotes and backslashes for AppleScript context
     const escapedCommand = fullCommand.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)
@@ -280,7 +262,7 @@ async function launchMacTerminal(
     const terminal = spawn('osascript', ['-e', `tell application "Terminal" to do script "${escapedCommand}"`], {
       detached: true,
       stdio: 'ignore',
-      env: cleanTerminalEnv(),
+      env: cleanClaudeEnv(),
     })
 
     terminal.on('error', (err) => {
@@ -293,40 +275,10 @@ async function launchMacTerminal(
 }
 
 /**
- * Linux terminal emulator configurations.
- */
-const LINUX_TERMINALS = [
-  {cmd: 'gnome-terminal', getArgs: (command: string) => ['--', 'bash', '-c', `${command}; exec bash`]},
-  {cmd: 'konsole', getArgs: (command: string) => ['-e', `bash -c "${command}; exec bash"`]},
-  {cmd: 'xterm', getArgs: (command: string) => ['-e', `bash -c "${command}; exec bash"`]},
-  {cmd: 'x-terminal-emulator', getArgs: (command: string) => ['-e', `bash -c "${command}; exec bash"`]},
-]
-
-/**
- * Find the first available Linux terminal emulator.
- * Checks gnome-terminal, konsole, xterm, x-terminal-emulator in order.
- *
- * @returns Terminal configuration if found, null otherwise
- */
-function findAvailableLinuxTerminal(): (typeof LINUX_TERMINALS)[number] | null {
-  for (const terminal of LINUX_TERMINALS) {
-    if (isCommandAvailable(terminal.cmd, 'linux')) {
-      return terminal
-    }
-  }
-
-  return null
-}
-
-function isWSL(): boolean {
-  return Boolean(process.env['WSL_DISTRO_NAME'])
-}
-
-/**
  * Launch Windows Terminal (wt.exe) from WSL, running the command inside a new bash session.
  *
  * Uses wt.exe → wsl.exe → bash so the new terminal inherits the correct WSL distro.
- * Claude Code nesting-detection vars are stripped via cleanTerminalEnv().
+ * Claude Code nesting-detection vars are stripped via cleanClaudeEnv().
  *
  * @param cwd - Working directory (WSL path)
  * @param command - Command to execute
@@ -337,7 +289,7 @@ async function launchWSLTerminal(
   command: string,
   debugLog?: (message: string) => void,
 ): Promise<TerminalLaunchResult> {
-  const escapedPath = cwd.replaceAll("'", String.raw`'\''`)
+  const escapedPath = escapeSingleQuotedPath(cwd, 'bash')
   const bashCmd = `cd '${escapedPath}' && ${command}; exec bash`
 
   debugLog?.(`Launching WSL via wt.exe with command: ${bashCmd}`)
@@ -346,7 +298,7 @@ async function launchWSLTerminal(
     const proc = spawn('wt.exe', ['wsl.exe', '--', 'bash', '-c', bashCmd], {
       detached: true,
       stdio: 'ignore',
-      env: cleanTerminalEnv(),
+      env: cleanClaudeEnv(),
     })
     proc.on('error', (err) => {
       resolve({success: false, error: `wt.exe failed: ${err.message}`})
@@ -370,7 +322,7 @@ async function launchLinuxTerminal(
   debugLog?: (message: string) => void,
 ): Promise<TerminalLaunchResult> {
   // Find available terminal first (synchronous)
-  const terminal = findAvailableLinuxTerminal()
+  const terminal = findAvailableLinuxTerminal(isCommandAvailable)
 
   if (!terminal) {
     return {
@@ -380,7 +332,7 @@ async function launchLinuxTerminal(
   }
 
   // Escape single quotes for bash shell
-  const escapedPath = cwd.replaceAll("'", String.raw`'\''`)
+  const escapedPath = escapeSingleQuotedPath(cwd, 'bash')
   const fullCommand = `cd '${escapedPath}' && ${command}`
 
   debugLog?.(`Launching ${terminal.cmd} with command: ${fullCommand}`)
@@ -390,7 +342,7 @@ async function launchLinuxTerminal(
     const proc = spawn(terminal.cmd, terminal.getArgs(fullCommand), {
       detached: true,
       stdio: 'ignore',
-      env: cleanTerminalEnv(),
+      env: cleanClaudeEnv(),
     })
 
     proc.on('error', (err) => {

@@ -3,31 +3,15 @@
  * PostToolUse:TaskUpdate hook: Persist Claude's TaskUpdate calls to state.json.
  * Maps Claude's ephemeral task IDs to persistent aiw-N IDs.
  */
-import { getContextBySessionId } from "../lib-ts/context/context-store.js";
 import { deleteTask, updateTask } from "../lib-ts/context/task-tracker.js";
 import {
-  checkSkipPersistence, getToolInput, loadHookInput, logDebug,
-  logError as _logError, logInfo, logWarn, runHook, validateHookEvent,
+  logInfo, logWarn, requirePersistenceContext, runHook,
 } from "../lib-ts/hooks/hook-utils.js";
-import { getProjectRoot } from "../lib-ts/runtime/constants.js";
 
 function main(): void {
-  const payload = loadHookInput();
-  if (!payload) return;
-  if (!validateHookEvent(payload, "PostToolUse", "TaskUpdate")) return;
-
-  const toolInput = getToolInput(payload);
-  if (!toolInput) return;
-  if (checkSkipPersistence(payload, "task_update_capture")) return;
-
-  const projectRoot = getProjectRoot(payload.cwd);
-  const sessionId = payload.session_id ?? "unknown";
-
-  const state = getContextBySessionId(sessionId, projectRoot);
-  if (!state) {
-    logDebug("task_update_capture", `No context for session ${sessionId}`);
-    return;
-  }
+  const context = requirePersistenceContext("TaskUpdate", "task_update_capture");
+  if (!context) return;
+  const { toolInput, sessionId, projectRoot, state } = context;
 
   const claudeTaskId = toolInput.taskId as string | undefined;
   if (!claudeTaskId) {

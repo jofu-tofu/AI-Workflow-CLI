@@ -800,11 +800,11 @@ export default class ClearCommand extends BaseCommand {
    * @param targetDir - Project root directory
    * @returns True if git exclude was updated
    */
-  private async cleanupGitExclude(targetDir: string): Promise<boolean> {
+  private async cleanupGitExclude(targetDir: string, isFullClear = false): Promise<boolean> {
     const gitDir = await resolveGitDir(targetDir)
     if (!gitDir) return false
 
-    const {toRemove, toKeep} = await computeExcludeRemovals(gitDir, targetDir)
+    const {toRemove, toKeep} = await computeExcludeRemovals(gitDir, targetDir, isFullClear ? [] : undefined)
 
     for (const {entry, reason} of toKeep) {
       this.logDebug(`Keeping ${entry}/ in git exclude (${reason})`)
@@ -1231,20 +1231,35 @@ export default class ClearCommand extends BaseCommand {
     const outputDir = join(containerDir, OUTPUT_FOLDER_NAME)
     let removedSharedIdeFiles = 0
 
-    // Check if _output folder is now empty and remove it
-    const removedOutputDir = await tryRemoveEmptyDir(outputDir)
-    if (removedOutputDir) {
-      this.logDebug(`Removed empty ${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder`)
-    }
+    let removedOutputDir = false
+    let removedAiwcliContainer = false
 
-    // Check if .aiwcli container is now empty and remove it
-    const removedAiwcliContainer = await tryRemoveEmptyDir(containerDir)
-    if (removedAiwcliContainer) {
-      this.logDebug(`Removed empty ${AIWCLI_CONTAINER}/ folder`)
+    if (isFullClear) {
+      // Force-delete .aiwcli/ entirely on full clear (including _output/ and any remaining content)
+      try {
+        await fs.rm(containerDir, {recursive: true, force: true})
+        removedAiwcliContainer = true
+        removedOutputDir = true
+        this.logDebug(`Force-deleted ${AIWCLI_CONTAINER}/ folder`)
+      } catch {
+        // Directory may not exist
+      }
+    } else {
+      // Check if _output folder is now empty and remove it
+      removedOutputDir = await tryRemoveEmptyDir(outputDir)
+      if (removedOutputDir) {
+        this.logDebug(`Removed empty ${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder`)
+      }
+
+      // Check if .aiwcli container is now empty and remove it
+      removedAiwcliContainer = await tryRemoveEmptyDir(containerDir)
+      if (removedAiwcliContainer) {
+        this.logDebug(`Removed empty ${AIWCLI_CONTAINER}/ folder`)
+      }
     }
 
     // Smart git exclude removal
-    const gitExcludeUpdated = await this.cleanupGitExclude(targetDir)
+    const gitExcludeUpdated = await this.cleanupGitExclude(targetDir, isFullClear)
 
     if (isFullClear) {
       removedSharedIdeFiles = await this.removeSharedIdeContent(targetDir)

@@ -3,13 +3,12 @@
  * PostToolUse:* hook: Monitor context window usage, trigger mode transitions,
  * and progressive-save state when context runs low.
  */
-import { getContextBySessionId, maybeActivate, saveState } from "../lib-ts/context/context-store.js";
+import { getContextBySessionId, saveState } from "../lib-ts/context/context-store.js";
+import { selectWarningMessage } from "../lib-ts/hooks/context-monitor-logic.js";
 import {
   emitContext, getContextPercentRemaining, hookLog,
-  loadHookInput,
-  logDebug, logDiagnostic, logInfo, logWarn, runHook,
+  requireBoundSession, logDebug, logDiagnostic, logInfo, runHook, safeMaybeActivate,
 } from "../lib-ts/hooks/hook-utils.js";
-import { getProjectRoot } from "../lib-ts/runtime/constants.js";
 import { nowIso } from "../lib-ts/runtime/utils.js";
 import type { ContextState } from "../lib-ts/types.js";
 
@@ -17,39 +16,15 @@ const WRITE_TOOLS = new Set(["Bash", "Edit", "NotebookEdit", "Write"]);
 
 const SAVE_STATE_THRESHOLD = 60;
 
-const CONTEXT_WARNING_30 = "## Context Window: ~30% Remaining\n\n" +
-  "This session is approaching its context limit. Consider:\n\n" +
-  "- Completing your current task, then pausing for the user to decide next steps\n" +
-  "- If significant work remains, mention that `/aiwcli-shared:handoff` can capture progress " +
-  "for a fresh session\n\n" +
-  "Do not rush or cut corners — finish the current task properly. " +
-  "Just be aware that starting large new tasks may not complete before context runs out.";
-
-const CONTEXT_WARNING_15 = "## Context Window: ~15% Remaining — Wrap Up Now\n\n" +
-  "Context is critically low. After completing your current step:\n\n" +
-  "1. **Stop taking on new work**\n" +
-  "2. Summarize what was accomplished and what remains\n" +
-  "3. Offer to run `/aiwcli-shared:handoff` so progress transfers to a fresh session\n\n" +
-  "Do not start new multi-step tasks. Focus on clean closure.";
-
-const WARNING_THRESHOLDS = [
-  { pct: 15, msg: CONTEXT_WARNING_15 },  // Most urgent first
-  { pct: 30, msg: CONTEXT_WARNING_30 },
-];
-
-/** Transition idle/has_plan → active when implementation tools are used. */
+/** Transition idle/has_staged_work → active when implementation tools are used. */
 function checkAndTransitionMode(
-  state: ContextState,
+  stateId: string,
   toolName: string | undefined,
   permissionMode: string,
   projectRoot: string,
 ): void {
   if (!toolName || !WRITE_TOOLS.has(toolName)) return;
-  try {
-    maybeActivate(state.id, permissionMode, projectRoot, "context_monitor");
-  } catch (error) {
-    logWarn("context_monitor", `maybeActivate failed (non-critical): ${error}`);
-  }
+  safeMaybeActivate(stateId, permissionMode, projectRoot, "context_monitor");
 }
 
 /** Save state snapshot at SAVE_STATE_THRESHOLD. */
@@ -82,38 +57,31 @@ function checkContextWarnings(
     state.last_session = {};
   }
   const fired = state.last_session.context_warnings_fired ?? [];
+  const warning = selectWarningMessage(pctRemaining, fired);
+  if (!warning) return;
 
-  for (const { pct, msg } of WARNING_THRESHOLDS) {
-    if (pctRemaining <= pct && !fired.includes(pct)) {
-      emitContext(msg);
-      state.last_session.context_warnings_fired = [...fired, pct];
-      saveState(state.id, state, projectRoot);
-      logInfo("context_monitor", `Context warning emitted at ${pct}% threshold`);
-      return; // One warning per tool call — most urgent fires first
-    }
-  }
+  emitContext(warning.msg);
+  state.last_session.context_warnings_fired = [...fired, warning.pct];
+  saveState(state.id, state, projectRoot);
+  logInfo(
+    "context_monitor",
+    `Context warning emitted at ${warning.pct}% threshold`,
+  );
 }
 
 function main(): void {
-  const payload = loadHookInput();
-  if (!payload) return;
+  const bound = requireBoundSession("context_monitor");
+  if (!bound) return;
 
-  const sessionId = payload.session_id;
-  if (!sessionId) return;
-
-  const projectRoot = getProjectRoot(payload.cwd);
+  const { payload, sessionId, projectRoot } = bound;
   const permissionMode = payload.permission_mode ?? "";
   const toolName = payload.tool_name;
 
   // Initial context lookup
-  let state = getContextBySessionId(sessionId, projectRoot);
-  if (!state) {
-    logDebug("context_monitor", `No context for session ${sessionId}`);
-    return;
-  }
+  let state = bound.state;
 
   // Phase 1: Mode transition for write tools
-  checkAndTransitionMode(state, toolName, permissionMode, projectRoot);
+  checkAndTransitionMode(state.id, toolName, permissionMode, projectRoot);
 
   // Phase 2: Context window check (log only, no warnings emitted)
   const [pctRemaining, tokensUsed, maxTokens] = getContextPercentRemaining(payload);

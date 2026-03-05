@@ -8,14 +8,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import path from "node:path";
 
-import { getContextBySessionId } from "../lib-ts/context/context-store.js";
 import {
   archivePlan, extractPlanPathFromResult, findPlanPathInTranscript,
 } from "../lib-ts/context/plan-manager.js";
 import {
-  loadHookInput, logDebug, logError, logInfo, logWarn, runHookAsync,
+  loadHookInput, logDebug, logError, logInfo, logWarn, requireBoundSession, runHookAsync,
 } from "../lib-ts/hooks/hook-utils.js";
-import { getContextDir, getProjectRoot } from "../lib-ts/runtime/constants.js";
+import { getContextDir } from "../lib-ts/runtime/constants.js";
 
 /** Find the most recent .md file in a directory */
 function mostRecentMd(dir: string): null | string {
@@ -105,12 +104,9 @@ async function asyncMain(): Promise<void> {
     return;
   }
 
-  const projectRoot = getProjectRoot(payload.cwd);
-  const sessionId = payload.session_id;
-  if (!sessionId) {
-    logWarn("archive_plan", "No session_id");
-    return;
-  }
+  const bound = requireBoundSession("archive_plan", payload);
+  if (!bound) return;
+  const { projectRoot, state } = bound;
 
   // Find plan path
   let planPath = findPlanPath(payload as Record<string, unknown>, projectRoot);
@@ -127,13 +123,6 @@ async function asyncMain(): Promise<void> {
   // Verify exists
   if (!fs.existsSync(planPath)) {
     logWarn("archive_plan", `Plan file not found: ${planPath}`);
-    return;
-  }
-
-  // Find bound context
-  const state = getContextBySessionId(sessionId, projectRoot);
-  if (!state) {
-    logWarn("archive_plan", `No context bound to session ${sessionId}`);
     return;
   }
 

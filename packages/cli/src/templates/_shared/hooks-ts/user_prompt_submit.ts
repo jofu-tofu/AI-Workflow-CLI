@@ -6,14 +6,10 @@
  * Uses emitContext() for output — context text is passed via hookSpecificOutput JSON.
  * Catches BlockRequest and uses emitBlock() to block the prompt.
  */
-import { buildContextInventory } from "../lib-ts/context/context-formatter.js";
-import { determineContext, BlockRequest } from "../lib-ts/context/context-selector.js";
 import {
-  getContextBySessionId, bindSession, maybeActivate, saveState,
-} from "../lib-ts/context/context-store.js";
-import {
-  loadHookInput, runHookAsync, logDebug, logInfo, logWarn, hookLog, emitContext, emitBlock,
+  loadHookInput, runHookAsync, logDebug, emitContext, emitBlock,
 } from "../lib-ts/hooks/hook-utils.js";
+import { executePromptBinding } from "../lib-ts/hooks/prompt-binding-logic.js";
 import { getProjectRoot } from "../lib-ts/runtime/constants.js";
 
 async function asyncMain(): Promise<void> {
@@ -30,63 +26,19 @@ async function asyncMain(): Promise<void> {
     return;
   }
 
-  const outputs: string[] = [];
-
-  // Check if session is already bound to a context
-  const existingCtx = getContextBySessionId(sessionId, projectRoot);
-
-  if (existingCtx) {
-    // Returning user — context already bound (stderr: false to avoid "hook error" display)
-    try {
-      maybeActivate(existingCtx.id, permissionMode, projectRoot, "user_prompt_submit");
-    } catch (error) {
-      hookLog("warn", "user_prompt_submit", `maybeActivate failed (non-critical): ${error}`, { stderr: false });
-    }
-    hookLog("debug", "user_prompt_submit", `Session bound to ${existingCtx.id}`, { stderr: false });
-  } else if (prompt) {
-    // First prompt — need to determine context
-    try {
-      const [contextId, method, outputText] = await determineContext(prompt, sessionId, projectRoot);
-
-      if (contextId) {
-        bindSession(contextId, sessionId, projectRoot);
-        maybeActivate(contextId, permissionMode, projectRoot, "user_prompt_submit");
-
-        // Clear handoff_path after binding (prevents re-injection)
-        const state = getContextBySessionId(sessionId, projectRoot);
-        if (state && state.handoff_path) {
-          state.handoff_path = null;
-          saveState(state.id, state, projectRoot);
-        }
-
-        logInfo("user_prompt_submit", `Context ${contextId} via ${method}`);
-      }
-
-      if (outputText) {
-        outputs.push(outputText);
-      }
-
-      // Append context folder inventory
-      try {
-        const boundState = getContextBySessionId(sessionId, projectRoot);
-        if (boundState) {
-          const inventory = buildContextInventory(boundState, projectRoot);
-          if (inventory) outputs.push(inventory);
-        }
-      } catch (error) {
-        logWarn("user_prompt_submit", `Inventory failed (non-critical): ${error}`);
-      }
-    } catch (error) {
-      if (error instanceof BlockRequest) {
-        emitBlock((error as Error).message);
-        return;
-      }
-      throw error; // Re-throw unexpected errors
-    }
+  const result = await executePromptBinding(
+    prompt,
+    sessionId,
+    permissionMode,
+    projectRoot,
+  );
+  if (result.blockedReason) {
+    emitBlock(result.blockedReason);
+    return;
   }
 
-  if (outputs.length > 0) {
-    emitContext(outputs.join("\n\n"));
+  if (result.outputs.length > 0) {
+    emitContext(result.outputs.join("\n\n"));
   }
 }
 

@@ -86,15 +86,16 @@ async function reconstructClaudeSettings(
   // Merge each active template's settings (sequential for deterministic merge order)
    
   for (const template of activeTemplates) {
+    let templateSettingsPath = `<unresolved:${template}>/.claude/settings.json`
     try {
       const templatePath = await getTemplatePath(template) // eslint-disable-line no-await-in-loop
-      const templateSettingsPath = join(templatePath, '.claude', 'settings.json')
+      templateSettingsPath = join(templatePath, '.claude', 'settings.json')
       const templateSettings = await readClaudeSettings(templateSettingsPath) // eslint-disable-line no-await-in-loop
       if (templateSettings) {
         reconstructed = mergeClaudeSettings(reconstructed, normalizeTemplateSettingsPaths(templateSettings))
       }
-    } catch {
-      // Template not found — skip
+    } catch (error) {
+      reportTemplateMergeFailure('claude', template, templateSettingsPath, error)
     }
   }
 
@@ -125,15 +126,16 @@ async function reconstructWindsurfHooks(
   // Merge each active template's hooks (sequential for deterministic merge order)
    
   for (const template of activeTemplates) {
+    let templateHooksPath = `<unresolved:${template}>/.windsurf/hooks.json`
     try {
       const templatePath = await getTemplatePath(template) // eslint-disable-line no-await-in-loop
-      const templateHooksPath = join(templatePath, '.windsurf', 'hooks.json')
+      templateHooksPath = join(templatePath, '.windsurf', 'hooks.json')
       const templateHooks = await readWindsurfHooks(templateHooksPath) // eslint-disable-line no-await-in-loop
       if (templateHooks) {
         reconstructed = mergeWindsurfHooks(reconstructed, templateHooks)
       }
-    } catch {
-      // Template not found — skip
+    } catch (error) {
+      reportTemplateMergeFailure('windsurf', template, templateHooksPath, error)
     }
   }
 
@@ -186,7 +188,19 @@ function adaptSettingsForPlatform(settings: ClaudeSettings): ClaudeSettings {
   return result
 }
 
-function normalizeTemplateSettingsPaths(settings: ClaudeSettings): ClaudeSettings {
+function reportTemplateMergeFailure(
+  ide: 'claude' | 'windsurf',
+  template: string,
+  settingsPath: string,
+  error: unknown,
+): void {
+  const reason = error instanceof Error ? error.message : String(error)
+  process.stderr.write(
+    `[warn] Failed to merge ${ide} template "${template}" from ${settingsPath}: ${reason}\n`,
+  )
+}
+
+export function normalizeTemplateSettingsPaths(settings: ClaudeSettings): ClaudeSettings {
   const normalized: ClaudeSettings = structuredClone(settings)
 
   if (normalized.statusLine?.command) {
@@ -203,6 +217,7 @@ function normalizeTemplateSettingsPaths(settings: ClaudeSettings): ClaudeSetting
       if (!matchers) continue
       for (const matcher of matchers) {
         for (const hook of matcher.hooks) {
+          if (hook.type !== 'command') continue
           hook.command = normalizeTemplateCommandPath(hook.command)
         }
       }

@@ -3,7 +3,6 @@
  * Consolidates PsmuxLauncher + launchInPsmuxSession + command building from pane-driver.
  */
 
-import {type ChildProcess, spawn} from 'node:child_process'
 import {existsSync, readdirSync, writeFileSync} from 'node:fs'
 import * as os from 'node:os'
 import path from 'node:path'
@@ -15,8 +14,11 @@ import type {
   SplitPaneOptions,
   SplitPaneResult,
 } from '../multiplexer.js'
+import {cleanClaudeEnv, getLastLine, spawnAttached, splitFlagFromDimensions} from '../mux-utils.js'
 import {cleanupSentinelIpc, createSentinelIpcPaths} from '../runtime/sentinel-ipc.js'
 import {execFileAsync, findExecutable} from '../runtime/subprocess-utils.js'
+import {wrapSentinelPowerShell} from '../sentinel-wrapper.js'
+import {quoteForPowerShell, toEncodedPowerShell} from '../shell-quoting.js'
 
 interface PsmuxVersion {
   major: number
@@ -34,27 +36,7 @@ function meetsMinVersion(v: PsmuxVersion): boolean {
   return v.patch >= MIN_VERSION.patch
 }
 
-function quoteForPowerShell(input: string): string {
-  return `'${input.replaceAll("'", "''")}'`
-}
-
-/** Wrap a PowerShell command using -EncodedCommand to avoid all quoting issues. */
-function toEncodedPowerShell(command: string): string {
-  const encoded = Buffer.from(command, 'utf16le').toString('base64')
-  return `powershell.exe -NoProfile -EncodedCommand ${encoded}`
-}
-
-function getLastLine(text: string): string {
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
-  return lines.at(-1) ?? ''
-}
-
 type PsmuxSplitFlag = '-h' | '-v'
-
-function splitFlagFromDimensions(width: number, height: number): PsmuxSplitFlag {
-  const CELL_ASPECT_RATIO = 2
-  return width >= height * CELL_ASPECT_RATIO ? '-h' : '-v'
-}
 
 function buildCommandArgs(
   args: string[],
@@ -91,57 +73,10 @@ function buildPowerShellToolCommand(params: {
   return [envPrefix, body].filter(Boolean).join('; ')
 }
 
-function wrapSentinelCommand(params: {
-  autoClose: boolean;
-  command: string;
-  holdMessage: string;
-  holdPane: boolean;
-  sentinelPath: string;
-}): string {
-  const {command, sentinelPath, autoClose, holdPane, holdMessage} = params
-  const base = `${command}; $code = $LASTEXITCODE; Set-Content -Path ${quoteForPowerShell(sentinelPath)} -Value $code -NoNewline`
-
-  if (holdPane && !autoClose) {
-    return `${base}; Write-Host ''; Write-Host ${quoteForPowerShell(holdMessage)}; Read-Host -Prompt 'Press Enter to close' | Out-Null`
-  }
-
-  return `${base}; exit $code`
-}
-
-function cleanPsmuxEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
-  const env = {...process.env, ...extra}
-  delete env['CLAUDECODE']
-  delete env['CLAUDE_CODE_ENTRYPOINT']
-  return env
-}
-
-function spawnAttached(command: string, args: string[], env?: NodeJS.ProcessEnv): Promise<CreateSessionResult> {
-  return new Promise((resolve) => {
-    let child: ChildProcess
-    try {
-      child = spawn(command, args, {stdio: 'inherit', env: env ?? process.env})
-    } catch (error) {
-      resolve({exitCode: -1, usedMux: false, reason: error instanceof Error ? error.message : String(error)})
-      return
-    }
-
-    child.on('error', (error) => {
-      resolve({exitCode: -1, usedMux: false, reason: error.message})
-    })
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve({exitCode: 0, usedMux: true})
-      } else {
-        resolve({exitCode: code ?? 1, usedMux: false, reason: `psmux exited with code ${code ?? 1}`})
-      }
-    })
-  })
-}
-
 export class PsmuxMultiplexer implements Multiplexer {
   readonly backend = 'psmux' as const
   private readonly psmuxPath: string
+
   private constructor(psmuxPath: string) {
     this.psmuxPath = psmuxPath
   }
@@ -152,7 +87,7 @@ export class PsmuxMultiplexer implements Multiplexer {
    * (winget install doesn't always add packages to PATH).
    * Returns a PsmuxMultiplexer instance or null.
    */
-  static async create(): Promise<PsmuxMultiplexer | null> {
+  static async create(): Promise<null | PsmuxMultiplexer> {
     if (process.platform !== 'win32') return null
 
     const psmuxPath = findExecutable('psmux') ?? findPsmuxInWinget()
@@ -176,11 +111,53 @@ export class PsmuxMultiplexer implements Multiplexer {
   }
 
   /**
+   * Create a new psmux session.
+   * Injects PSMUX_PANE=1 into the PowerShell command so child processes
+   * can detect they're inside a psmux session.
+   */
+  async createSession(options: CreateSessionOptions): Promise<CreateSessionResult> {
+    const {sessionName, reattach, enableMouse = true} = options
+
+    // Run bootstrap commands (mouse, scrollback) — best effort
+    const bootstrapCmds = buildPsmuxBootstrapCommands(enableMouse)
+    await Promise.allSettled(
+      bootstrapCmds.map((cmd) => execFileAsync(this.psmuxPath, cmd, {timeout: 3000})),
+    )
+
+    let promptFilePath: string | undefined
+    if (options.promptText) {
+      promptFilePath = path.join(os.tmpdir(), `aiwcli-prompt-${Date.now()}-${process.pid}.txt`)
+      writeFileSync(promptFilePath, options.promptText, {encoding: 'utf8', mode: 0o600})
+    }
+
+    // Build the PowerShell command to run inside the psmux session
+    const shellCommand = buildPsmuxShellCommand(options, promptFilePath)
+
+    // Inject PSMUX_PANE=1 for inside-session detection
+    const commandWithEnv = `$env:PSMUX_PANE='1'; ${shellCommand}`
+
+    const psmuxArgs = ['new-session']
+    if (reattach) psmuxArgs.push('-A')
+    psmuxArgs.push(
+      '-c', process.cwd(),
+      '-s', sessionName,
+      toEncodedPowerShell(commandWithEnv),
+    )
+
+    return spawnAttached(this.psmuxPath, psmuxArgs, cleanClaudeEnv(), this.backend)
+  }
+
+  /**
    * Detect if we're inside a psmux session we created.
    * Uses PSMUX_PANE env var that we inject in createSession().
    */
   isInsideSession(): boolean {
     return Boolean(process.env.PSMUX_PANE)
+  }
+
+  async kill(paneId: string): Promise<void> {
+    if (!paneId) return
+    await execFileAsync(this.psmuxPath, ['kill-pane', '-t', paneId], {timeout: 3000})
   }
 
   async splitPane(options: SplitPaneOptions): Promise<SplitPaneResult> {
@@ -211,11 +188,11 @@ export class PsmuxMultiplexer implements Multiplexer {
       let paneCommand = baseCommand
       if (sentinel) {
         const holdMessage = options.holdMessage ?? '[aiwcli] Driver exited. Pane held open.'
-        paneCommand = wrapSentinelCommand({
+        paneCommand = wrapSentinelPowerShell({
           command: baseCommand,
           sentinelPath: sentinel.sentinelPath,
           autoClose: Boolean(options.autoClose),
-          holdPane: Boolean(options.holdPane) && !options.autoClose,
+          holdPane: Boolean(options.holdPane),
           holdMessage,
         })
       }
@@ -270,42 +247,6 @@ export class PsmuxMultiplexer implements Multiplexer {
         reason: `pane launch failed: ${String(error)}`,
       }
     }
-  }
-
-  /**
-   * Create a new psmux session.
-   * Injects PSMUX_PANE=1 into the PowerShell command so child processes
-   * can detect they're inside a psmux session.
-   */
-  async createSession(options: CreateSessionOptions): Promise<CreateSessionResult> {
-    const {sessionName, reattach, enableMouse = true} = options
-
-    // Run bootstrap commands (mouse, scrollback) — best effort
-    const bootstrapCmds = buildPsmuxBootstrapCommands(enableMouse)
-    await Promise.allSettled(
-      bootstrapCmds.map((cmd) => execFileAsync(this.psmuxPath, cmd, {timeout: 3000})),
-    )
-
-    // Build the PowerShell command to run inside the psmux session
-    const shellCommand = buildPsmuxShellCommand(options)
-
-    // Inject PSMUX_PANE=1 for inside-session detection
-    const commandWithEnv = `$env:PSMUX_PANE='1'; ${shellCommand}`
-
-    const psmuxArgs = ['new-session']
-    if (reattach) psmuxArgs.push('-A')
-    psmuxArgs.push(
-      '-c', process.cwd(),
-      '-s', sessionName,
-      toEncodedPowerShell(commandWithEnv),
-    )
-
-    return spawnAttached(this.psmuxPath, psmuxArgs, cleanPsmuxEnv())
-  }
-
-  async kill(paneId: string): Promise<void> {
-    if (!paneId) return
-    await execFileAsync(this.psmuxPath, ['kill-pane', '-t', paneId], {timeout: 3000})
   }
 
   private async resolveAutoSplit(): Promise<PsmuxSplitFlag> {
@@ -363,8 +304,8 @@ function buildPsmuxBootstrapCommands(enableMouse = true): string[][] {
   return commands
 }
 
-function buildPsmuxShellCommand(opts: CreateSessionOptions): string {
-  const {toolPath, toolArgs, promptText} = opts
+function buildPsmuxShellCommand(opts: CreateSessionOptions, promptFilePath?: string): string {
+  const {toolPath, toolArgs} = opts
 
   const cmdParts: string[] = []
   cmdParts.push(`& ${quoteForPowerShell(toolPath)}`)
@@ -373,10 +314,8 @@ function buildPsmuxShellCommand(opts: CreateSessionOptions): string {
     cmdParts.push(quoteForPowerShell(arg))
   }
 
-  if (promptText) {
-    const tmpFile = path.join(os.tmpdir(), `aiwcli-prompt-${Date.now()}-${process.pid}.txt`)
-    writeFileSync(tmpFile, promptText, {encoding: 'utf8', mode: 0o600})
-    const bootstrap = `Read startup instructions from this file path before taking action: ${tmpFile}. Use that file as the initial context.`
+  if (promptFilePath) {
+    const bootstrap = `Read startup instructions from this file path before taking action: ${promptFilePath}. Use that file as the initial context.`
     cmdParts.push(quoteForPowerShell(bootstrap))
   }
 

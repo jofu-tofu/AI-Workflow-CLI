@@ -6,10 +6,18 @@ import {Flags} from '@oclif/core'
 
 import BaseCommand from '../lib/base-command.js'
 import {ProcessSpawnError} from '../lib/errors.js'
+import {
+  buildSpawnedWindowArgs,
+  buildUniqueSessionName as buildUniqueSessionNameValue,
+  parseExtraEnv,
+  resolvePromptText,
+  sanitizeSessionName as sanitizeSessionNameValue,
+} from '../lib/launch-options.js'
 import {ensureLspPatch} from '../lib/lsp-patch.js'
 import {detectMultiplexer, type SplitPaneResult} from '../lib/multiplexer.js'
 import {readSentinelExitCode, waitForSentinelFile} from '../lib/runtime/sentinel-ipc.js'
 import {findExecutable} from '../lib/runtime/subprocess-utils.js'
+import {quoteForSh} from '../lib/shell-quoting.js'
 import {spawnProcess} from '../lib/spawn.js'
 import {launchTerminal} from '../lib/terminal.js'
 import {enableTmuxColors, enableTmuxMouse, findToolPath} from '../lib/tmux-session.js'
@@ -161,37 +169,40 @@ static override flags = {
 
     // Parse extra env vars
     let extraEnv: Record<string, string> = {}
-    if (flags.env) {
-      try {
-        extraEnv = JSON.parse(flags.env)
-      } catch {
-        this.error('--env must be a valid JSON object string', {exit: EXIT_CODES.INVALID_USAGE})
-      }
+    try {
+      extraEnv = parseExtraEnv(flags.env)
+    } catch (error) {
+      this.error(error instanceof Error ? error.message : '--env must be a valid JSON object string', {exit: EXIT_CODES.INVALID_USAGE})
     }
 
     // Resolve prompt from --prompt flag, --prompt-file, or --prompt-path
-    let promptText = flags.prompt?.trim() || undefined
     const promptPath = flags['prompt-path']?.trim() || undefined
-    if (!promptText && flags['prompt-file']) {
-      const pf = flags['prompt-file'].trim()
-      try {
-        if (existsSync(pf)) promptText = readFileSync(pf, 'utf8').trim() || undefined
-      } catch { /* ignore — prompt is best-effort enhancement */ }
-    }
+    const promptText = resolvePromptText(
+      flags.prompt,
+      flags['prompt-file'],
+      (filePath) => (existsSync(filePath) ? readFileSync(filePath, 'utf8') : undefined),
+    )
 
     // Handle --new flag: launch in a new terminal
     if (flags.new) {
       const cwd = process.cwd()
       this.debug(`Launching new terminal in: ${cwd}`)
 
-      const launchCmd = this.buildSpawnedWindowCommand({
+      let promptFilePath: string | undefined
+      if (!promptPath && promptText) {
+        promptFilePath = path.join(os.tmpdir(), `aiwcli-prompt-${Date.now()}-${process.pid}.txt`)
+        writeFileSync(promptFilePath, promptText, {encoding: 'utf8', mode: 0o600})
+      }
+
+      const launchArgs = buildSpawnedWindowArgs({
         useCodex,
         disableTmux,
         ...(promptPath ? {promptPath} : {}),
-        ...(promptText ? {promptText} : {}),
+        ...(promptFilePath ? {promptFilePath} : {}),
         ...(flags.env ? {rawEnvJson: flags.env} : {}),
         ...(flags['tmux-session'] ? {tmuxSessionFlag: flags['tmux-session']} : {}),
       })
+      const launchCmd = launchArgs.map((arg) => this.shellQuote(arg)).join(' ')
 
       const result = await launchTerminal({
         cwd,
@@ -209,7 +220,9 @@ static override flags = {
     }
 
     // Version check for Claude Code
-    if (!useCodex) {
+    if (useCodex) {
+      this.debug('Launching Codex with --yolo flag')
+    } else {
       const version = await getClaudeCodeVersion()
       const versionCheck = checkVersionCompatibility(version)
       this.debug(`Claude Code version: ${versionCheck.version ?? 'unknown'}`)
@@ -217,8 +230,6 @@ static override flags = {
       if (versionCheck.warning) {
         this.warn(versionCheck.warning)
       }
-    } else {
-      this.debug('Launching Codex with --yolo flag')
     }
 
     // ── Unified multiplexer flow ──
@@ -273,11 +284,7 @@ static override flags = {
           return
         }
 
-        if (!splitResult.launched) {
-          this.warn(`Pane split failed (${splitResult.reason}), launching directly`)
-          const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
-          exitCode = await spawnProcess(cliCommand, finalArgs)
-        } else {
+        if (splitResult.launched) {
           if (splitResult.paneId) {
             this.logInfo(`Launched in ${mux.backend} pane: ${splitResult.paneId}`)
           } else {
@@ -290,16 +297,16 @@ static override flags = {
 
           return
         }
+
+        this.warn(`Pane split failed (${splitResult.reason}), launching directly`)
+        const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
+        exitCode = await spawnProcess(cliCommand, finalArgs)
       } else {
         // Outside session — create new session
         // psmux runs commands via PowerShell, which needs .cmd shims (not POSIX shims).
         // findExecutable prefers .cmd on Windows; findToolPath prefers extensionless (for bash/tmux).
         const resolvedPath = mux.backend === 'psmux' ? findExecutable(cliCommand) : findToolPath(cliCommand)
-        if (!resolvedPath) {
-          this.logWarning(`${cliCommand} not found on PATH (install from https://claude.ai/download)`)
-          const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
-          exitCode = await spawnProcess(cliCommand, finalArgs)
-        } else {
+        if (resolvedPath) {
           const sessionFromFlag = flags['tmux-session']?.trim()
           const reattach = Boolean(sessionFromFlag && sessionFromFlag.length > 0)
           const sessionName = reattach
@@ -336,6 +343,10 @@ static override flags = {
             const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
             exitCode = await spawnProcess(cliCommand, finalArgs)
           }
+        } else {
+          this.logWarning(`${cliCommand} not found on PATH (install from https://claude.ai/download)`)
+          const finalArgs = promptText ? [...cliArgs, promptText] : cliArgs
+          exitCode = await spawnProcess(cliCommand, finalArgs)
         }
       }
     } catch (error) {
@@ -354,43 +365,8 @@ static override flags = {
     return ['-c', 'shell_type="bash"', '--yolo']
   }
 
-  private buildSpawnedWindowCommand(params: {
-    disableTmux: boolean;
-    promptPath?: string;
-    promptText?: string;
-    rawEnvJson?: string;
-    tmuxSessionFlag?: string;
-    useCodex: boolean;
-  }): string {
-    const {useCodex, disableTmux, promptText, promptPath, rawEnvJson, tmuxSessionFlag} = params
-    const parts = ['aiw', 'launch', '--spawned-window']
-
-    if (useCodex) parts.push('--codex')
-    if (disableTmux) parts.push('--no-tmux')
-    if (tmuxSessionFlag?.trim()) {
-      parts.push('--tmux-session', this.shellQuote(tmuxSessionFlag.trim()))
-    }
-
-    if (rawEnvJson?.trim()) {
-      parts.push('--env', this.shellQuote(rawEnvJson))
-    }
-
-    if (promptPath) {
-      parts.push('--prompt-path', this.shellQuote(promptPath))
-    } else if (promptText) {
-      const tmpFile = path.join(os.tmpdir(), `aiwcli-prompt-${Date.now()}-${process.pid}.txt`)
-      writeFileSync(tmpFile, promptText, {encoding: 'utf8', mode: 0o600})
-      parts.push('--prompt-file', this.shellQuote(tmpFile))
-    }
-
-    return parts.join(' ')
-  }
-
   private buildUniqueSessionName(base: string): string {
-    const safeBase = this.sanitizeSessionName(base)
-    const timestamp = Date.now().toString(36)
-    const pid = process.pid.toString(36)
-    return this.sanitizeSessionName(`${safeBase}-${timestamp}-${pid}`)
+    return buildUniqueSessionNameValue(base)
   }
 
   private async handleJsonOutput(result: SplitPaneResult, wait: boolean): Promise<void> {
@@ -398,7 +374,7 @@ static override flags = {
 
     if (wait && result.launched && result.sentinelPath) {
       const finished = await waitForSentinelFile(result.sentinelPath, 14_400_000)
-      exitCode = finished ? readSentinelExitCode(result.sentinelPath, 1) : -1;
+      exitCode = finished ? readSentinelExitCode(result.sentinelPath, 1) : -1
     }
 
     const output = {
@@ -414,16 +390,11 @@ static override flags = {
   }
 
   private sanitizeSessionName(input: string): string {
-    const trimmed = input.trim().toLowerCase()
-    const safe = trimmed
-      .replaceAll(/[^a-z0-9_-]/g, '-')
-      .replaceAll(/-+/g, '-')
-      .replaceAll(/^[-_]+|[-_]+$/g, '')
-    return safe || 'aiw'
+    return sanitizeSessionNameValue(input)
   }
 
   private shellQuote(input: string): string {
-    return `'${input.replaceAll("'", `'"'"'`)}'`
+    return quoteForSh(input)
   }
 
   private async waitForSentinel(result: SplitPaneResult): Promise<void> {

@@ -4,7 +4,7 @@
  * Uses emitContext() for non-blocking context injection — Claude sees errors and self-corrects.
  */
 import {
-  emitContext, getToolInput, loadHookInput, logDebug, runHook,
+  emitContext, logDebug, requireToolInput, runHook,
 } from "../lib-ts/hooks/hook-utils.js";
 import { getProjectRoot } from "../lib-ts/runtime/constants.js";
 import { formatLintErrors, getLinterForFile, runLinter } from "../lib-ts/runtime/lint-dispatch.js";
@@ -31,11 +31,9 @@ function shouldSkip(filePath: string): boolean {
 }
 
 function main(): void {
-  const payload = loadHookInput();
-  if (!payload) return;
-
-  const toolInput = getToolInput(payload);
-  if (!toolInput) return;
+  const context = requireToolInput("lint_after_edit");
+  if (!context) return;
+  const { payload, toolInput } = context;
 
   const filePath = toolInput.file_path as string | undefined;
   if (!filePath) return;

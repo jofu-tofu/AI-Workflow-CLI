@@ -1,18 +1,33 @@
-import type {ClaudeSettings, HookCommand, HookEventType, HookMatcher, HooksConfig} from './claude-settings-types.js'
+import type {ClaudeSettings, HookAction, HookEventType, HookMatcher, HooksConfig} from './claude-settings-types.js'
 import {mergeArraysWithDedup, mergeConfigByEventType} from './generic-merge.js'
 
 /**
- * Check if two hook commands are equivalent
+ * Check if two hook actions are equivalent
  */
-function areHookCommandsEqual(a: HookCommand, b: HookCommand): boolean {
-  return a.type === b.type && a.command === b.command && a.timeout === b.timeout
+function areHookActionsEqual(a: HookAction, b: HookAction): boolean {
+  if (a.type !== b.type) return false
+
+  if (a.type === 'command') {
+    return (
+      b.type === 'command' &&
+      a.command === b.command &&
+      a.timeout === b.timeout &&
+      a.async === b.async &&
+      a.blockOnFail === b.blockOnFail
+    )
+  }
+
+  return b.type === 'prompt' && a.prompt === b.prompt && a.timeout === b.timeout && a.async === b.async
 }
 
 /**
  * Check if two hook matchers are equivalent
  */
 function areHookMatchersEqual(a: HookMatcher, b: HookMatcher): boolean {
-  if (a.matcher !== b.matcher || a.once !== b.once) {
+  const matcherA = a.matcher ?? '*'
+  const matcherB = b.matcher ?? '*'
+
+  if (matcherA !== matcherB || a.once !== b.once) {
     return false
   }
 
@@ -21,7 +36,7 @@ function areHookMatchersEqual(a: HookMatcher, b: HookMatcher): boolean {
   }
 
   // Check if all hooks are equivalent (order-independent)
-  return a.hooks.every((hookA) => b.hooks.some((hookB) => areHookCommandsEqual(hookA, hookB)))
+  return a.hooks.every((hookA) => b.hooks.some((hookB) => areHookActionsEqual(hookA, hookB)))
 }
 
 /**

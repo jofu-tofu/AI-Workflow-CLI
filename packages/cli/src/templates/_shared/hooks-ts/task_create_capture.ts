@@ -2,31 +2,15 @@
 /**
  * PostToolUse:TaskCreate hook: Persist Claude's TaskCreate calls to state.json.
  */
-import { getContextBySessionId } from "../lib-ts/context/context-store.js";
 import { addTask } from "../lib-ts/context/task-tracker.js";
 import {
-  checkSkipPersistence, getToolInput, loadHookInput, logDebug,
-  logError, logInfo, logWarn, runHook, validateHookEvent,
+  logError, logInfo, logWarn, requirePersistenceContext, runHook,
 } from "../lib-ts/hooks/hook-utils.js";
-import { getProjectRoot } from "../lib-ts/runtime/constants.js";
 
 function main(): void {
-  const payload = loadHookInput();
-  if (!payload) return;
-  if (!validateHookEvent(payload, "PostToolUse", "TaskCreate")) return;
-
-  const toolInput = getToolInput(payload);
-  if (!toolInput) return;
-  if (checkSkipPersistence(payload, "task_create_capture")) return;
-
-  const projectRoot = getProjectRoot(payload.cwd);
-  const sessionId = payload.session_id ?? "unknown";
-
-  const state = getContextBySessionId(sessionId, projectRoot);
-  if (!state) {
-    logDebug("task_create_capture", `No context for session ${sessionId}`);
-    return;
-  }
+  const context = requirePersistenceContext("TaskCreate", "task_create_capture");
+  if (!context) return;
+  const { toolInput, sessionId, projectRoot, state } = context;
 
   const subject = toolInput.subject as string | undefined;
   if (!subject) {

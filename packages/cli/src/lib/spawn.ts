@@ -44,6 +44,7 @@ import type {ChildProcess, SpawnOptions} from 'node:child_process'
 
 import {debug, debugSpawn} from './debug.js'
 import {ProcessSpawnError} from './errors.js'
+import {classifySpawnError, resolveWindowsSpawnArgs} from './spawn-errors.js'
 
 /**
  * Spawn options for process execution.
@@ -130,9 +131,10 @@ export async function spawnProcess(
     } catch (error) {
       // If command not found and .cmd file exists, use cmd.exe wrapper
       // This avoids DEP0190 deprecation warning while supporting npm-installed commands
-      if (error instanceof ProcessSpawnError && error.code === 'ENOENT' && commandExistsInPath(`${command}.cmd`)) {
+      const windowsSpawnArgs = resolveWindowsSpawnArgs(command, args, commandExistsInPath)
+      if (error instanceof ProcessSpawnError && error.code === 'ENOENT' && windowsSpawnArgs) {
         // Use cmd.exe /c to execute .cmd file without shell mode or deprecation warning
-        return attemptSpawn('cmd.exe', ['/c', command, ...args], {cwd, stdio, detached, shell: false})
+        return attemptSpawn(windowsSpawnArgs.command, windowsSpawnArgs.args, {cwd, stdio, detached, shell: false})
       }
 
       throw error
@@ -166,23 +168,7 @@ function attemptSpawn(command: string, args: string[], spawnOptions: SpawnOption
 
       // Handle spawn errors (ENOENT, EACCES, etc.)
       childProcess.on('error', (error: NodeJS.ErrnoException) => {
-        if (error.code === 'ENOENT') {
-          reject(
-            new ProcessSpawnError(
-              `Command not found: ${command}. Install Claude Code from https://claude.ai/download.`,
-              'ENOENT',
-            ),
-          )
-        } else if (error.code === 'EACCES') {
-          reject(new ProcessSpawnError(`Permission denied: ${command}. Check file permissions.`, 'EACCES'))
-        } else {
-          reject(
-            new ProcessSpawnError(
-              `Failed to spawn ${command}: ${error.message}. Check that the command exists and is executable.`,
-              error.code,
-            ),
-          )
-        }
+        reject(classifySpawnError(command, error))
       })
 
       // Capture exit code on process close

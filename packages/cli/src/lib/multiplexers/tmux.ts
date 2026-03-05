@@ -3,10 +3,8 @@
  * Consolidates TmuxLauncher + launchInTmuxSession + command building from pane-driver.
  */
 
-import {type ChildProcess, execSync, spawn} from 'node:child_process'
+import {execSync} from 'node:child_process'
 import * as fs from 'node:fs'
-import * as os from 'node:os'
-import path from 'node:path'
 
 import type {
   CreateSessionOptions,
@@ -15,23 +13,17 @@ import type {
   SplitPaneOptions,
   SplitPaneResult,
 } from '../multiplexer.js'
-import {
-  isNonWindowsPlatform,
-  isWindowsPlatform,
-} from '../runtime/platform-adapter.js'
+import {cleanClaudeEnv, getLastLine, spawnAttached, splitFlagFromDimensions} from '../mux-utils.js'
+import {isNonWindowsPlatform, isWindowsPlatform} from '../runtime/platform-adapter.js'
 import {cleanupSentinelIpc, createSentinelIpcPaths} from '../runtime/sentinel-ipc.js'
 import {execFileAsync, findExecutable} from '../runtime/subprocess-utils.js'
 import {isNativeTmuxAvailable} from '../runtime/tmux-preflight.js'
+import {wrapSentinelSh} from '../sentinel-wrapper.js'
 import {findBestSplit, listPanes} from '../tmux-pane-placement.js'
 import {quoteForSh, toMsysPosixPath} from '../tmux-primitives.js'
 import {buildShellCommand, buildTmuxRuntimeBootstrapCommands} from '../tmux-session.js'
 
 type TmuxSplitFlag = '-h' | '-v'
-
-function getLastLine(text: string): string {
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
-  return lines.at(-1) ?? ''
-}
 
 function buildEnvPrefix(env: Record<string, string>): string {
   return Object.entries(env)
@@ -44,11 +36,12 @@ function buildShToolCommand(params: {
   env: Record<string, string>;
   mode: 'exec' | 'repl';
   promptPath?: string;
+  promptText?: string | undefined;
   toolPath: string;
 }): string {
-  const {toolPath, args, env, mode, promptPath} = params
+  const {toolPath, args, env, mode, promptPath, promptText} = params
   const envPrefix = buildEnvPrefix(env)
-  const commandArgs = buildCommandArgs(args, mode, promptPath)
+  const commandArgs = buildCommandArgs(args, mode, promptText)
   const argPart = commandArgs.map((arg) => quoteForSh(arg)).join(' ')
   const base = [envPrefix, quoteForSh(toolPath), argPart]
     .filter(Boolean)
@@ -64,32 +57,10 @@ function buildShToolCommand(params: {
 function buildCommandArgs(
   args: string[],
   mode: 'exec' | 'repl',
-  promptPath?: string,
+  promptText?: string,
 ): string[] {
-  if (mode !== 'repl' || !promptPath) return args
-  const promptText = fs.readFileSync(promptPath, 'utf8')
+  if (mode !== 'repl' || promptText === undefined) return args
   return [...args, promptText]
-}
-
-function wrapSentinelCommand(params: {
-  autoClose: boolean;
-  command: string;
-  holdMessage: string;
-  holdPane: boolean;
-  sentinelPath: string;
-}): string {
-  const {command, sentinelPath, autoClose, holdPane, holdMessage} = params
-  const base = `${command}; code=$?; printf '%s' "$code" > ${quoteForSh(sentinelPath)}`
-
-  if (autoClose) {
-    return `${base}; tmux kill-pane -t "$TMUX_PANE" >/dev/null 2>&1 || true; exit $code`
-  }
-
-  if (holdPane) {
-    return `${base}; echo; echo ${quoteForSh(holdMessage)}; exec bash`
-  }
-
-  return `${base}; exit $code`
 }
 
 function withWindowsTmuxBootstrap(command: string): string {
@@ -125,9 +96,8 @@ async function resolveAutoSplit(
         const width = Number.parseInt(parts[0] ?? '', 10)
         const height = Number.parseInt(parts[1] ?? '', 10)
         if (Number.isFinite(width) && Number.isFinite(height)) {
-          const CELL_ASPECT_RATIO = 2
           return {
-            splitFlag: width >= height * CELL_ASPECT_RATIO ? '-h' : '-v',
+            splitFlag: splitFlagFromDimensions(width, height),
             splitTarget: explicitTarget,
           }
         }
@@ -147,37 +117,6 @@ async function resolveAutoSplit(
   }
 }
 
-function cleanTmuxEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
-  const env = {...process.env, ...extra}
-  delete env['CLAUDECODE']
-  delete env['CLAUDE_CODE_ENTRYPOINT']
-  return env
-}
-
-function spawnAttached(command: string, args: string[], env?: NodeJS.ProcessEnv): Promise<CreateSessionResult> {
-  return new Promise((resolve) => {
-    let child: ChildProcess
-    try {
-      child = spawn(command, args, {stdio: 'inherit', env: env ?? process.env})
-    } catch (error) {
-      resolve({exitCode: -1, usedMux: false, reason: error instanceof Error ? error.message : String(error)})
-      return
-    }
-
-    child.on('error', (error) => {
-      resolve({exitCode: -1, usedMux: false, reason: error.message})
-    })
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve({exitCode: 0, usedMux: true})
-      } else {
-        resolve({exitCode: code ?? 1, usedMux: false, reason: `tmux exited with code ${code ?? 1}`})
-      }
-    })
-  })
-}
-
 export class TmuxMultiplexer implements Multiplexer {
   readonly backend = 'tmux' as const
   private readonly tmuxPath: string
@@ -186,14 +125,51 @@ export class TmuxMultiplexer implements Multiplexer {
     this.tmuxPath = tmuxPath
   }
 
-  static create(): TmuxMultiplexer | null {
+  static create(): null | TmuxMultiplexer {
     const tmuxPath = findExecutable('tmux')
     if (!tmuxPath) return null
     return new TmuxMultiplexer(tmuxPath)
   }
 
+  async createSession(options: CreateSessionOptions): Promise<CreateSessionResult> {
+    const {sessionName, reattach} = options
+
+    if (!isNonWindowsPlatform() || !isNativeTmuxAvailable()) {
+      return {exitCode: -1, usedMux: false, reason: 'tmux not available'}
+    }
+
+    // Set default-terminal BEFORE session creation
+    try {
+      execSync('tmux start-server', {stdio: 'ignore', timeout: 3000})
+      try {
+        execSync('tmux set -g default-terminal "tmux-256color"', {stdio: 'ignore', timeout: 3000})
+      } catch {
+        execSync('tmux set -g default-terminal "screen-256color"', {stdio: 'ignore', timeout: 3000})
+      }
+    } catch { /* best-effort */ }
+
+    const shellCommand = buildShellCommand({
+      sessionName,
+      toolPath: options.toolPath,
+      toolArgs: options.toolArgs,
+      promptText: options.promptText,
+      enableMouse: options.enableMouse ?? true,
+    })
+
+    const args = ['new-session']
+    if (reattach) args.push('-A')
+    args.push('-c', process.cwd(), '-s', sessionName, shellCommand)
+
+    return spawnAttached('tmux', args, cleanClaudeEnv(), this.backend)
+  }
+
   isInsideSession(): boolean {
     return Boolean(process.env.TMUX)
+  }
+
+  async kill(paneId: string): Promise<void> {
+    if (!paneId) return
+    await execFileAsync(this.tmuxPath, ['kill-pane', '-t', paneId], {timeout: 3000})
   }
 
   async splitPane(options: SplitPaneOptions): Promise<SplitPaneResult> {
@@ -227,22 +203,27 @@ export class TmuxMultiplexer implements Multiplexer {
     const effectiveEnvVars = {COLORTERM: 'truecolor', ...envVars}
 
     try {
+      const promptText = mode === 'repl' && options.promptPath
+        ? fs.readFileSync(options.promptPath, 'utf8')
+        : undefined
+
       const baseCommand = buildShToolCommand({
         toolPath: effectiveToolPath,
         args,
         env: effectiveEnvVars,
         mode,
+        promptText,
         ...(options.promptPath ? {promptPath: options.promptPath} : {}),
       })
 
       let paneCommand = baseCommand
       if (sentinel) {
         const holdMessage = options.holdMessage ?? '[aiwcli] Driver exited. Pane held open.'
-        paneCommand = wrapSentinelCommand({
+        paneCommand = wrapSentinelSh({
           command: baseCommand,
           sentinelPath: sentinel.sentinelPath,
           autoClose: Boolean(options.autoClose),
-          holdPane: Boolean(options.holdPane) && !options.autoClose,
+          holdPane: Boolean(options.holdPane),
           holdMessage,
         })
       }
@@ -305,40 +286,4 @@ export class TmuxMultiplexer implements Multiplexer {
     }
   }
 
-  async createSession(options: CreateSessionOptions): Promise<CreateSessionResult> {
-    const {sessionName, reattach} = options
-
-    if (!isNonWindowsPlatform() || !isNativeTmuxAvailable()) {
-      return {exitCode: -1, usedMux: false, reason: 'tmux not available'}
-    }
-
-    // Set default-terminal BEFORE session creation
-    try {
-      execSync('tmux start-server', {stdio: 'ignore', timeout: 3000})
-      try {
-        execSync('tmux set -g default-terminal "tmux-256color"', {stdio: 'ignore', timeout: 3000})
-      } catch {
-        execSync('tmux set -g default-terminal "screen-256color"', {stdio: 'ignore', timeout: 3000})
-      }
-    } catch { /* best-effort */ }
-
-    const shellCommand = buildShellCommand({
-      sessionName,
-      toolPath: options.toolPath,
-      toolArgs: options.toolArgs,
-      promptText: options.promptText,
-      enableMouse: options.enableMouse ?? true,
-    })
-
-    const args = ['new-session']
-    if (reattach) args.push('-A')
-    args.push('-c', process.cwd(), '-s', sessionName, shellCommand)
-
-    return spawnAttached('tmux', args, cleanTmuxEnv())
-  }
-
-  async kill(paneId: string): Promise<void> {
-    if (!paneId) return
-    await execFileAsync(this.tmuxPath, ['kill-pane', '-t', paneId], {timeout: 3000})
-  }
 }

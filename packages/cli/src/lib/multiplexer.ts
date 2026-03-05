@@ -61,8 +61,10 @@ export interface Multiplexer {
  * Unix → TmuxMultiplexer (if tmux binary on PATH)
  * Returns null if no multiplexer is available.
  */
-export async function detectMultiplexer(): Promise<Multiplexer | null> {
-  if (process.platform === 'win32') {
+export async function detectMultiplexer(
+  platform: NodeJS.Platform = process.platform,
+): Promise<Multiplexer | null> {
+  if (platform === 'win32') {
     const {PsmuxMultiplexer} = await import('./multiplexers/psmux.js')
     return PsmuxMultiplexer.create()
   }
