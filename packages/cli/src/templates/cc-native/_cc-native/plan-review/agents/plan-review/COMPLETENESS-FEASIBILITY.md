@@ -50,7 +50,7 @@ Evaluate the plan against these feasibility dimensions:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -64,4 +64,3 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of feasibility concerns, each with: severity (high/medium/low), category (e.g., "resource-gap", "expertise-gap", "technical-unknown", "timeline-risk", "integration-risk"), issue description, suggested_fix (identify what is needed or reduce scope)
 - **missing_sections**: Feasibility considerations the plan should address (resource requirements, expertise needs, technical unknowns)
 - **questions**: Feasibility aspects that need investigation before implementation
-

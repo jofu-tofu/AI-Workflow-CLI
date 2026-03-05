@@ -10,10 +10,10 @@ import type {
   IterationState,
   StuckDetectionState,
 } from "./types.js";
-import { getContextBySessionId, saveState } from "../../_core/lib-ts/context/context-store.js";
-import { logInfo, logWarn } from "../../_core/lib-ts/runtime/logger.js";
-import { nowIso } from "../../_core/lib-ts/runtime/utils.js";
-import type { ContextState } from "../../_core/lib-ts/types.js";
+import { logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
+import { nowIso } from "../../_shared/lib-ts/base/utils.js";
+import { getContextBySessionId, saveState } from "../../_shared/lib-ts/context/context-store.js";
+import type { ContextState } from "../../_shared/lib-ts/types.js";
 
 /**
  * ContextState extended with the cc_native method-specific data.
@@ -87,7 +87,7 @@ export function isPlanAlreadyReviewed(
 
 /**
  * Check if this plan hash was previously reviewed and denied.
- * Matches unknown deny variant: "deny", "hook_deny_iteration", "hook_deny_final".
+ * Matches any deny variant: "deny", "hook_deny_iteration", "hook_deny_final".
  */
 export function wasPlanPreviouslyDenied(
   sessionId: string,
@@ -177,7 +177,7 @@ export function markPlanReviewed(
 
 /**
  * Check if AskUserQuestion was called this session.
- * Returns false on unknown error (fail-safe: allow feature to work).
+ * Returns false on any error (fail-safe: allow feature to work).
  */
 export function wasQuestionsAsked(
   sessionId: string,
@@ -190,7 +190,7 @@ export function wasQuestionsAsked(
 
 /**
  * Check if early questions (Phase A: AskUserQuestion) were asked this session.
- * Returns false on unknown error (fail-safe: allow feature to work).
+ * Returns false on any error (fail-safe: allow feature to work).
  */
 export function wasEarlyQuestionsAsked(
   sessionId: string,
@@ -203,7 +203,7 @@ export function wasEarlyQuestionsAsked(
 
 /**
  * Check if plan questions agent (Phase B: independent question agent) ran this session.
- * Returns false on unknown error (fail-safe: allow feature to work).
+ * Returns false on any error (fail-safe: allow feature to work).
  */
 export function wasPlanQuestionsAgentAsked(
   sessionId: string,
@@ -315,5 +315,4 @@ export function updateStuckDetectionState(
     return false;
   }
 }
-
 

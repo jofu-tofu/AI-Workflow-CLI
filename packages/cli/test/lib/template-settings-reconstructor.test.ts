@@ -163,8 +163,7 @@ describe('Template Settings Reconstructor', () => {
       }
     })
 
-    it('should preserve existing methods tracking in settings', async () => {
-      // Write existing settings with methods tracking
+    it('removes legacy methods tracking from reconstructed settings', async () => {
       await fs.writeFile(
         join(testDir, '.claude', 'settings.json'),
         JSON.stringify({
@@ -183,10 +182,7 @@ describe('Template Settings Reconstructor', () => {
       const content = await fs.readFile(join(testDir, '.claude', 'settings.json'), 'utf8')
       const settings = JSON.parse(content)
 
-      // Methods tracking should be preserved
-      expect(settings).to.have.property('methods')
-      expect(settings.methods).to.have.property('cc-native')
-      expect(settings.methods['cc-native'].installedAt).to.equal('2026-01-01T00:00:00.000Z')
+      expect(settings).to.not.have.property('methods')
     })
 
     it('should produce same result on repeated calls (idempotent)', async () => {

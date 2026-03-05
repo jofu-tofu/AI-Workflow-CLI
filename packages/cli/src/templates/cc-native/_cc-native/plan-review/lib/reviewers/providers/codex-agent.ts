@@ -5,12 +5,12 @@
 
 import * as fs from "node:fs";
 import * as os from "node:os";
-import path from "node:path";
+import * as path from "node:path";
 
-import type { ExecutionResult } from "../../../../../_core/lib-ts/agent-exec/execution-backend.js";
-import { buildCliInvocation } from "../../../../../_core/lib-ts/runtime/cli-args.js";
-import { logDebug, logWarn } from "../../../../../_core/lib-ts/runtime/logger.js";
-import { getInternalSubprocessEnv, normalizePathForCli, shellQuoteWin } from "../../../../../_core/lib-ts/runtime/subprocess-utils.js";
+import type { ExecutionResult } from "../../../../../_shared/lib-ts/agent-exec/execution-backend.js";
+import { buildCliInvocation } from "../../../../../_shared/lib-ts/base/cli-args.js";
+import { logDebug, logWarn } from "../../../../../_shared/lib-ts/base/logger.js";
+import { getInternalSubprocessEnv, normalizePathForCli, shellQuoteWin } from "../../../../../_shared/lib-ts/base/subprocess-utils.js";
 import { debugLog, debugRaw } from "../../../../lib-ts/debug.js";
 import { parseJsonMaybe, coerceToReview } from "../../../../lib-ts/json-parser.js";
 import type { ReviewerResult } from "../../../../lib-ts/types.js";
@@ -39,7 +39,7 @@ export class CodexAgent extends BaseCliAgent<ReviewerResult> {
 
     const schemaPath = path.join(this.tempDir, "schema.json");
     const outPath = path.join(this.tempDir, "output.json");
-    fs.writeFileSync(schemaPath, JSON.stringify(this.schema, null, 2), "utf8");
+    fs.writeFileSync(schemaPath, JSON.stringify(this.schema, null, 2), "utf-8");
 
     const normalizedSchema = shellQuoteWin(normalizePathForCli(schemaPath));
     const normalizedOut = shellQuoteWin(normalizePathForCli(outPath));
@@ -92,7 +92,7 @@ export class CodexAgent extends BaseCliAgent<ReviewerResult> {
     const outExists = fs.existsSync(outPath);
 
     if (outExists) {
-      raw = fs.readFileSync(outPath, "utf8");
+      raw = fs.readFileSync(outPath, "utf-8");
     }
 
     logDebug(this.agent.name, `Codex output: exit=${result.exitCode}, outFile=${outExists} (${raw.length} chars), stdout=${result.stdout.length} chars`);
@@ -198,5 +198,3 @@ export class CodexAgent extends BaseCliAgent<ReviewerResult> {
     return this.tempDir ? fs.existsSync(this.getOutputPath()) : false;
   }
 }
-
-

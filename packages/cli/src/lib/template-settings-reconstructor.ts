@@ -74,12 +74,6 @@ async function reconstructClaudeSettings(
   const resolver = new IdePathResolver(targetDir)
   const settingsPath = resolver.getClaudeSettings()
 
-  // Read existing settings to preserve non-template fields (methods tracking, etc.)
-  const existingSettings = await readClaudeSettings(settingsPath)
-
-  // Preserve the methods tracking from existing settings
-  const methodsTracking = existingSettings?.methods
-
   // Start from core-owned base settings, then merge method templates.
   let reconstructed: ClaudeSettings = getCoreClaudeSettingsBase()
 
@@ -99,15 +93,10 @@ async function reconstructClaudeSettings(
     }
   }
 
-  // 3. Restore methods tracking
-  if (methodsTracking && Object.keys(methodsTracking).length > 0) {
-    reconstructed.methods = methodsTracking
-  }
-
-  // 4. Platform-adapt hook commands (Windows cmd.exe compatibility)
+  // 3. Platform-adapt hook commands (Windows cmd.exe compatibility)
   reconstructed = adaptSettingsForPlatform(reconstructed)
 
-  // 5. Write reconstructed settings
+  // 4. Write reconstructed settings
   await writeClaudeSettings(settingsPath, reconstructed)
 }
 

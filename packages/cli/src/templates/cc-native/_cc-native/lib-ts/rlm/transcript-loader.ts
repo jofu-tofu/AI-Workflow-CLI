@@ -65,7 +65,7 @@ async function loadTranscript(
   let project = "";
 
   const rl = createInterface({
-    input: createReadStream(filePath, { encoding: "utf8" }),
+    input: createReadStream(filePath, { encoding: "utf-8" }),
     crlfDelay: Infinity,
   });
 
@@ -288,4 +288,3 @@ function formatAssistantMessage(
 // ---------------------------------------------------------------------------
 
 export { loadTranscript };
-

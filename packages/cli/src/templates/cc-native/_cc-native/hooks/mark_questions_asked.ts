@@ -11,14 +11,14 @@
  * Fail-safe: Any error exits 0 (non-blocking).
  */
 
+import { getProjectRoot } from "../../_shared/lib-ts/base/constants.js";
 import {
   loadHookInput,
   runHook,
   logInfo,
   logDiagnostic,
-} from "../../_core/lib-ts/hooks/hook-utils.js";
-import { getProjectRoot } from "../../_core/lib-ts/runtime/constants.js";
-import { isInternalCall } from "../../_core/lib-ts/runtime/subprocess-utils.js";
+} from "../../_shared/lib-ts/base/hook-utils.js";
+import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
 import { markQuestionsAsked } from "../lib-ts/cc-native-state.js";
 
 function main(): void {

@@ -6,7 +6,7 @@ import {Flags} from '@oclif/core'
 
 import BaseCommand from '../lib/base-command.js'
 import {computeExcludeRemovals, pruneExcludeStaleEntries, removeExcludeEntries, resolveGitDir} from '../lib/git-exclude-manager.js'
-import {deleteInstallStateIfPresent, getInstalledMethodsFromState, markCoreRemoved, markMethodRemoved, readInstallState} from '../lib/install-state.js'
+import {deleteInstallStateIfPresent, getInstalledMethods, markMethodRemoved, readInstallState} from '../lib/install-state.js'
 import {pathExists} from '../lib/paths.js'
 import {getTemplatePath} from '../lib/template-resolver.js'
 import {reconstructIdeSettings} from '../lib/template-settings-reconstructor.js'
@@ -20,7 +20,7 @@ const AIWCLI_CONTAINER = '.aiwcli'
 
 /**
  * The output folder name that contains method subdirectories.
- * Structure: .aiwcli/_output/{method}/ (e.g., .aiwcli/_output/bmad/, .aiwcli/_output/gsd/)
+ * Structure: _output/{method}/ (e.g., _output/bmad/, _output/gsd/)
  */
 const OUTPUT_FOLDER_NAME = '_output'
 const SHARED_TEMPLATE_NAME = '_shared'
@@ -53,63 +53,6 @@ const IDE_FOLDERS: IdeFoldersConfig = {
     root: '.windsurf',
     settingsFile: 'hooks.json',
   },
-}
-
-/**
- * Get the set of installed method names by combining the settings.json registry
- * with disk scan of .aiwcli/_* directories.
- *
- * @param targetDir - Directory containing the .aiwcli container
- * @returns Set of method names (e.g., 'cc-native', 'bmad')
- */
- 
-async function getInstalledMethodNames(targetDir: string): Promise<Set<string>> {
-  const methods = new Set<string>()
-
-  // Source 0: install-state registry (authoritative when present)
-  const fromState = await getInstalledMethodsFromState(targetDir)
-  for (const method of fromState) {
-    methods.add(method)
-  }
-
-  // Source 1: settings.json methods registry
-  for (const ide of Object.values(IDE_FOLDERS)) {
-    if (!ide.settingsFile) continue
-    const settingsPath = join(targetDir, ide.root, ide.settingsFile)
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      const content = await fs.readFile(settingsPath, 'utf8')
-      const settings = JSON.parse(content)
-      if (settings.methods && typeof settings.methods === 'object') {
-        for (const method of Object.keys(settings.methods)) {
-          methods.add(method)
-        }
-      }
-    } catch {
-      // Settings file doesn't exist or can't be parsed
-    }
-  }
-
-  // Source 2: disk scan of .aiwcli/_* directories
-  const containerDir = join(targetDir, AIWCLI_CONTAINER)
-  try {
-    const entries = await fs.readdir(containerDir, {withFileTypes: true})
-    for (const entry of entries) {
-      if (
-        entry.isDirectory() &&
-        entry.name.startsWith('_') &&
-        entry.name !== OUTPUT_FOLDER_NAME &&
-        entry.name !== '_core' &&
-        entry.name !== '_shared'
-      ) {
-        methods.add(entry.name.slice(1)) // strip leading underscore
-      }
-    }
-  } catch {
-    // Container doesn't exist
-  }
-
-  return methods
 }
 
 /**
@@ -267,14 +210,12 @@ async function tryRemoveEmptyDir(dir: string): Promise<boolean> {
  * @param ideFolder.root - Root folder name (e.g., '.claude')
  * @param ideFolder.settingsFile - Settings file name (e.g., 'settings.json')
  * @param ideMethodFolders - IDE method folders being deleted
- * @param methodsToRemove - Method names being removed
  * @returns True if the IDE folder will be empty after removal
  */
 async function checkIdeRemovalEligibility(
   targetDir: string,
   ideFolder: IdeFolderConfig,
   ideMethodFolders: string[],
-  methodsToRemove: string[],
 ): Promise<boolean> {
   const idePath = join(targetDir, ideFolder.root)
   try {
@@ -291,8 +232,8 @@ async function checkIdeRemovalEligibility(
   // IDEs without a settings file are eligible based on folder counts alone.
   if (!ideFolder.settingsFile) return true
 
-  // Check if settings file would become empty after removing methods
-  return wouldSettingsBeEmpty(idePath, ideFolder.settingsFile, methodsToRemove)
+  // Check if settings file would become empty after removing AIW-managed hooks.
+  return wouldSettingsBeEmpty(idePath, ideFolder.settingsFile)
 }
 
 /**
@@ -341,32 +282,20 @@ async function countMethodFolderDeletions(
 }
 
 /**
- * Check if a settings file would be empty after removing specified methods and hooks.
+ * Check if a settings file would be empty after removing AIW-managed hooks.
  *
  * @param idePath - Path to IDE root folder
  * @param settingsFile - Settings file name
- * @param methodsToRemove - Method names being removed
  * @returns True if settings would be empty
  */
 async function wouldSettingsBeEmpty(
   idePath: string,
   settingsFile: string,
-  methodsToRemove: string[],
 ): Promise<boolean> {
   const settingsPath = join(idePath, settingsFile)
   try {
     const content = await fs.readFile(settingsPath, 'utf8')
     const settings = JSON.parse(content)
-
-    if (settings.methods && typeof settings.methods === 'object') {
-      for (const method of methodsToRemove) {
-        delete settings.methods[method]
-      }
-
-      if (Object.keys(settings.methods).length === 0) {
-        delete settings.methods
-      }
-    }
 
     if (settings.hooks && typeof settings.hooks === 'object') {
       delete settings.hooks
@@ -930,22 +859,22 @@ export default class ClearCommand extends BaseCommand {
     }
 
     if (methodsToRemove.length > 0) {
-      this.logInfo(`Will update settings files to remove method entries: ${methodsToRemove.join(', ')}`)
+      this.logInfo(`Will reconstruct shared IDE settings after removing: ${methodsToRemove.join(', ')}`)
       this.log('')
     }
 
     // Check if _output will be empty after clearing
     const allMethodFolders = await this.findOutputFolders(targetDir)
     if (allMethodFolders.length > 0 && allMethodFolders.length === outputMethodFolders.length) {
-      this.logInfo(`${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder will be removed (will be empty)`)
+      this.logInfo(`${OUTPUT_FOLDER_NAME}/ folder will be removed (will be empty)`)
       this.log('')
     }
 
     // Check if IDE folders might be removed after clearing
     const [willClaudeFolderBeEmpty, willCodexFolderBeEmpty, willWindsurfFolderBeEmpty] = await Promise.all([
-      checkIdeRemovalEligibility(targetDir, IDE_FOLDERS.claude, ideMethodFolders, methodsToRemove),
-      checkIdeRemovalEligibility(targetDir, IDE_FOLDERS.codex, ideMethodFolders, methodsToRemove),
-      checkIdeRemovalEligibility(targetDir, IDE_FOLDERS.windsurf, ideMethodFolders, methodsToRemove),
+      checkIdeRemovalEligibility(targetDir, IDE_FOLDERS.claude, ideMethodFolders),
+      checkIdeRemovalEligibility(targetDir, IDE_FOLDERS.codex, ideMethodFolders),
+      checkIdeRemovalEligibility(targetDir, IDE_FOLDERS.windsurf, ideMethodFolders),
     ])
 
     if (willClaudeFolderBeEmpty) {
@@ -1062,7 +991,7 @@ export default class ClearCommand extends BaseCommand {
    */
   private async findIdeMethodFolders(targetDir: string, template?: string): Promise<string[]> {
     // Build method set: from --template flag, or from installed methods
-    const methodNames = template ? new Set([template]) : await getInstalledMethodNames(targetDir)
+    const methodNames = new Set(template ? [template] : await getInstalledMethods(targetDir))
 
     if (methodNames.size === 0) {
       return []
@@ -1103,16 +1032,15 @@ export default class ClearCommand extends BaseCommand {
   }
 
   /**
-   * Find all output folders in the target directory.
-   * Looks for .aiwcli/_output/{method}/ structure.
+   * Find all method output folders in the target directory.
+   * Looks for _output/{method}/ structure at project root.
    *
    * @param targetDir - Directory to search in
    * @param template - Optional template/method name to filter by (e.g., 'bmad', 'gsd')
    * @returns Array of output folder paths
    */
   private async findOutputFolders(targetDir: string, template?: string): Promise<string[]> {
-    const containerDir = join(targetDir, AIWCLI_CONTAINER)
-    const outputDir = join(containerDir, OUTPUT_FOLDER_NAME)
+    const outputDir = join(targetDir, OUTPUT_FOLDER_NAME)
 
     // Check if _output folder exists
     try {
@@ -1228,38 +1156,34 @@ export default class ClearCommand extends BaseCommand {
     updatedWindsurfSettings: boolean
   }> {
     const containerDir = join(targetDir, AIWCLI_CONTAINER)
-    const outputDir = join(containerDir, OUTPUT_FOLDER_NAME)
+    const outputDir = join(targetDir, OUTPUT_FOLDER_NAME)
     let removedSharedIdeFiles = 0
 
     let removedOutputDir = false
     let removedAiwcliContainer = false
 
     if (isFullClear) {
-      // Force-delete .aiwcli/ entirely on full clear (including _output/ and any remaining content)
+      // Force-delete .aiwcli/ entirely on full clear.
       try {
         await fs.rm(containerDir, {recursive: true, force: true})
         removedAiwcliContainer = true
-        removedOutputDir = true
         this.logDebug(`Force-deleted ${AIWCLI_CONTAINER}/ folder`)
       } catch {
         // Directory may not exist
       }
     } else {
-      // Check if _output folder is now empty and remove it
-      removedOutputDir = await tryRemoveEmptyDir(outputDir)
-      if (removedOutputDir) {
-        this.logDebug(`Removed empty ${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder`)
-      }
-
-      // Check if .aiwcli container is now empty and remove it
+      // Check if .aiwcli container is now empty and remove it.
       removedAiwcliContainer = await tryRemoveEmptyDir(containerDir)
       if (removedAiwcliContainer) {
         this.logDebug(`Removed empty ${AIWCLI_CONTAINER}/ folder`)
       }
     }
 
-    // Smart git exclude removal
-    const gitExcludeUpdated = await this.cleanupGitExclude(targetDir, isFullClear)
+    // Check if the root _output folder is now empty and remove it.
+    removedOutputDir = await tryRemoveEmptyDir(outputDir)
+    if (removedOutputDir) {
+      this.logDebug(`Removed empty ${OUTPUT_FOLDER_NAME}/ folder`)
+    }
 
     if (isFullClear) {
       removedSharedIdeFiles = await this.removeSharedIdeContent(targetDir)
@@ -1280,6 +1204,9 @@ export default class ClearCommand extends BaseCommand {
 
     const removedWindsurfDir = await this.tryRemoveIdeFolder(targetDir, IDE_FOLDERS.windsurf)
     if (removedWindsurfDir) updatedWindsurfSettings = false
+
+    // Smart git exclude removal must happen after any now-empty IDE folders are deleted.
+    const gitExcludeUpdated = await this.cleanupGitExclude(targetDir, isFullClear)
 
     return {
       removedSharedIdeFiles,
@@ -1303,8 +1230,6 @@ export default class ClearCommand extends BaseCommand {
     let updatedClaudeSettings = false
     let updatedWindsurfSettings = false
 
-    await this.removeMethodEntries(targetDir, methodsToRemove)
-
     if (methodsToRemove.length > 0) {
       for (const method of methodsToRemove) {
         await markMethodRemoved(targetDir, method) // eslint-disable-line no-await-in-loop
@@ -1312,11 +1237,10 @@ export default class ClearCommand extends BaseCommand {
     }
 
     if (isFullClear) {
-      await markCoreRemoved(targetDir)
+      await deleteInstallStateIfPresent(targetDir)
       await this.stripAiwSettingsForFullClear(targetDir)
     } else if (methodsToRemove.length > 0) {
-      const allMethods = await getInstalledMethodNames(targetDir)
-      const remainingTemplates = [...allMethods].filter(m => !methodsToRemove.includes(m))
+      const remainingTemplates = (await getInstalledMethods(targetDir)).filter((method) => !methodsToRemove.includes(method))
 
       const ides: string[] = []
       if (await pathExists(join(targetDir, IDE_FOLDERS.claude.root))) ides.push('claude')
@@ -1342,39 +1266,6 @@ export default class ClearCommand extends BaseCommand {
     }
 
     return {updatedClaudeSettings, updatedWindsurfSettings}
-  }
-
-  /**
-   * Remove method entries from IDE settings files (methods tracking only).
-   * Settings reconstruction handles hooks/permissions; this only strips the methods object.
-   */
-  private async removeMethodEntries(targetDir: string, methodsToRemove: string[]): Promise<void> {
-    const ops = Object.values(IDE_FOLDERS).map(async (ide) => {
-      if (!ide.settingsFile) return
-      const settingsPath = join(targetDir, ide.root, ide.settingsFile)
-      try {
-        const content = await fs.readFile(settingsPath, 'utf8')
-        const settings = JSON.parse(content)
-
-        if (settings.methods && typeof settings.methods === 'object') {
-          for (const method of methodsToRemove) {
-            if (method in settings.methods) {
-              delete settings.methods[method]
-            }
-          }
-
-          if (Object.keys(settings.methods).length === 0) {
-            delete settings.methods
-          }
-
-          // Write back with methods removed (backup created by reconstructor)
-          await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf8')
-        }
-      } catch {
-        // Settings file doesn't exist or can't be read
-      }
-    })
-    await Promise.all(ops)
   }
 
   private async removeSharedIdeContent(targetDir: string): Promise<number> {
@@ -1434,7 +1325,7 @@ export default class ClearCommand extends BaseCommand {
     if (deleteCounts.deletedIde > 0) parts.push(`${deleteCounts.deletedIde} IDE method folder(s)`)
     if (deleteCounts.deletedCoreRuntime > 0) parts.push(`${deleteCounts.deletedCoreRuntime} core/shared runtime folder(s)`)
     if (cleanup.removedSharedIdeFiles > 0) parts.push(`${cleanup.removedSharedIdeFiles} shared IDE file(s)`)
-    if (cleanup.removedOutputDir) parts.push(`${AIWCLI_CONTAINER}/${OUTPUT_FOLDER_NAME}/ folder`)
+    if (cleanup.removedOutputDir) parts.push(`${OUTPUT_FOLDER_NAME}/ folder`)
     if (cleanup.removedAiwcliContainer) parts.push(`${AIWCLI_CONTAINER}/ folder`)
     if (cleanup.removedClaudeDir) parts.push(`${IDE_FOLDERS.claude.root}/ folder`)
     if (cleanup.removedCodexDir) parts.push(`${IDE_FOLDERS.codex.root}/ folder`)
@@ -1461,7 +1352,7 @@ export default class ClearCommand extends BaseCommand {
     workflowFolders: string[],
   ): Promise<string[]> {
     if (template) return [template]
-    const installedMethods = await getInstalledMethodNames(targetDir)
+    const installedMethods = new Set(await getInstalledMethods(targetDir))
     const discoveredFromFolders = this.extractMethodNames(workflowFolders)
     for (const method of discoveredFromFolders) {
       installedMethods.add(method)
@@ -1479,10 +1370,25 @@ export default class ClearCommand extends BaseCommand {
         const parsed = JSON.parse(raw)
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return
 
-        delete parsed.methods
         delete parsed.hooks
         delete parsed.statusLine
         delete parsed.fileSuggestion
+        delete parsed.methods
+
+        if (ide.root === IDE_FOLDERS.claude.root) {
+          if (parsed.env && typeof parsed.env === 'object' && !Array.isArray(parsed.env)) {
+            delete parsed.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+            if (Object.keys(parsed.env).length === 0) delete parsed.env
+          }
+
+          if (parsed.permissions && typeof parsed.permissions === 'object' && !Array.isArray(parsed.permissions)) {
+            const permissionKeys = Object.keys(parsed.permissions)
+            const hasOnlyAllowDeny = permissionKeys.every((key) => key === 'allow' || key === 'deny')
+            const allow = Array.isArray(parsed.permissions.allow) ? parsed.permissions.allow : []
+            const deny = Array.isArray(parsed.permissions.deny) ? parsed.permissions.deny : []
+            if (hasOnlyAllowDeny && allow.length === 0 && deny.length === 0) delete parsed.permissions
+          }
+        }
 
         await fs.writeFile(settingsPath, JSON.stringify(parsed, null, 2) + '\n', 'utf8')
       } catch {

@@ -146,7 +146,7 @@ async function runBatch(): Promise<void> {
         const indexPath = join(projectDir, indexFile);
 
         try {
-          const rawJson = JSON.parse(readFileSync(indexPath, "utf8"));
+          const rawJson = JSON.parse(readFileSync(indexPath, "utf-8"));
           const parseResult = SessionIndexSchema.safeParse(rawJson);
           if (!parseResult.success) {
             errors++;
@@ -163,7 +163,7 @@ async function runBatch(): Promise<void> {
             continue;
           }
 
-          // Re-index: delete old chunks if unknown
+          // Re-index: delete old chunks if any
           deleteSessionChunks(db, indexData.session_id, project);
 
           // Build embedding texts for each segment
@@ -289,5 +289,3 @@ function getSourcePath(index: ValidatedSessionIndex, _project: string): string {
   // Fallback: best guess
   return join(claudeProjectsDir, _project, `${index.session_id}.jsonl`);
 }
-
-

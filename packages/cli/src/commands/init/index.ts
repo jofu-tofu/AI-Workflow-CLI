@@ -11,8 +11,7 @@ import {Flags} from '@oclif/core'
 import BaseCommand from '../../lib/base-command.js'
 import {getCoreResolverSourcePath, installCoreAssets} from '../../lib/core-installer.js'
 import {AIW_EXCLUDE_ENTRIES, resolveGitDir, updateGitExclude} from '../../lib/git-exclude-manager.js'
-import {markCoreInstalled, markMethodInstalled} from '../../lib/install-state.js'
-import {getTargetSettingsFile, readClaudeSettings, writeClaudeSettings} from '../../lib/settings-hierarchy.js'
+import {getInstalledMethods, markCoreInstalled, markMethodInstalled} from '../../lib/install-state.js'
 import {checkTemplateStatus, installTemplate} from '../../lib/template-installer.js'
 import {getAvailableTemplates, getTemplateIdeNamesByPath, getTemplatePath} from '../../lib/template-resolver.js'
 import {reconstructIdeSettings} from '../../lib/template-settings-reconstructor.js'
@@ -114,8 +113,9 @@ export default class Init extends BaseCommand {
       // Resolve installation configuration from flags or interactive wizard
       const config = await this.resolveInstallationConfig(flags, targetDir, availableTemplates)
 
-      // If config is null, perform minimal install (shared folder only)
-      if (!config) {
+      // Interactive cancellation returns null; undefined means minimal install.
+      if (config === null) return
+      if (config === undefined) {
         await this.performMinimalInstall(targetDir, gitDir)
         return
       }
@@ -226,11 +226,10 @@ export default class Init extends BaseCommand {
       await this.performPostInstallActions({
         targetDir,
         method,
-        ides: methodIdesToInstall,
+        ides: [...new Set([...coreIdesToInstall, ...methodIdesToInstall])],
         gitDir,
         foldersForExclude,
       })
-      await markMethodInstalled(targetDir, method, methodIdesToInstall)
 
       this.log('')
       this.logSuccess(`✓ ${method} initialized successfully`)
@@ -320,8 +319,8 @@ export default class Init extends BaseCommand {
     // Install global resolver for cwd-drift-proof hook/status line commands
     await this.installGlobalResolver()
 
-    // Reconstruct settings from core base
-    await reconstructIdeSettings(targetDir, [], discoveredCoreIdes)
+    // Reconstruct settings from core base plus any existing method templates.
+    await reconstructIdeSettings(targetDir, await getInstalledMethods(targetDir), discoveredCoreIdes)
 
     // Update git exclude if git repository exists
     if (gitDir) {
@@ -342,7 +341,7 @@ export default class Init extends BaseCommand {
    * Perform post-installation actions.
    *
    * Handles:
-   * - Method tracking in settings.json
+   * - Method tracking in install-state.json
    * - Settings reconstruction from all active templates
    * - .gitignore updates
    *
@@ -362,16 +361,14 @@ export default class Init extends BaseCommand {
   }): Promise<void> {
     const {targetDir, method, ides, gitDir, foldersForExclude} = config
 
-    // Track method installation in settings.json first (so reconstructor can read methods list)
-    await this.trackMethodInstallation(targetDir, method, ides)
+    // Record installation before reconstruction so install-state can drive active templates.
+    await markMethodInstalled(targetDir, method, ides)
 
-    // Read installed methods to build active templates list
-    const settingsPath = getTargetSettingsFile(targetDir)
-    const settings = await readClaudeSettings(settingsPath)
-    const activeTemplates = settings?.methods ? Object.keys(settings.methods) : [method]
+    // Read installed methods to build the active templates list.
+    const activeTemplates = await getInstalledMethods(targetDir)
 
-    // Reconstruct IDE settings from all active templates
-    await reconstructIdeSettings(targetDir, activeTemplates, ides)
+    // Reconstruct IDE settings from all active templates.
+    await reconstructIdeSettings(targetDir, activeTemplates.length > 0 ? activeTemplates : [method], ides)
     this.logSuccess('✓ Reconstructed IDE settings from active templates')
 
     // Update git exclude if git repository exists
@@ -395,13 +392,13 @@ export default class Init extends BaseCommand {
    * @param flags.ide - IDEs to configure
    * @param targetDir - Target directory for installation
    * @param availableTemplates - List of available template names
-   * @returns Installation configuration or null for minimal install
+   * @returns Installation configuration, undefined for minimal install, or null if interactive setup was cancelled
    */
   private async resolveInstallationConfig(
     flags: {ide: string[] | undefined; interactive: boolean; method?: string | undefined},
     targetDir: string,
     availableTemplates: string[],
-  ): Promise<null | {ides: string[]; method: string; projectName: string; username: string}> {
+  ): Promise<null | undefined | {ides: string[]; method: string; projectName: string; username: string}> {
     if (flags.interactive) {
       // Run interactive wizard
       const wizardResult = await this.runInteractiveWizard(targetDir, availableTemplates)
@@ -436,8 +433,8 @@ export default class Init extends BaseCommand {
       }
     }
 
-    // Minimal install mode - install only _shared folder
-    return null
+    // Minimal install mode - install only _shared folder.
+    return undefined
   }
 
   /**
@@ -539,37 +536,4 @@ export default class Init extends BaseCommand {
     }
   }
 
-  /**
-   * Track method installation in settings.json
-   *
-   * Adds method entry to the methods object with installation metadata.
-   *
-   * @param targetDir - Project directory
-   * @param method - Method name being installed
-   * @param ides - IDEs configured for this method
-   */
-  private async trackMethodInstallation(targetDir: string, method: string, ides: string[]): Promise<void> {
-    try {
-      const settingsPath = getTargetSettingsFile(targetDir)
-      const existingSettings = (await readClaudeSettings(settingsPath)) || {}
-
-      // Add method tracking
-      const updatedSettings = {
-        ...existingSettings,
-        methods: {
-          ...existingSettings.methods,
-          [method]: {
-            ides,
-            installedAt: new Date().toISOString(),
-          },
-        },
-      }
-
-      await writeClaudeSettings(settingsPath, updatedSettings)
-      this.logSuccess(`✓ Method '${method}' tracked in settings.json`)
-    } catch (error) {
-      const err = error as Error
-      this.warn(`Failed to track method installation: ${err.message}`)
-    }
-  }
 }

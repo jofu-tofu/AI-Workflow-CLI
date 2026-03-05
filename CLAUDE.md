@@ -13,6 +13,7 @@ Runtime files execute from `.aiwcli/_core/` in this repo. Template source lives 
 **Files that need synchronization:**
 - `.aiwcli/_core/hooks-ts/*.ts` → `packages/cli/src/templates/_shared/hooks-ts/`
 - `.aiwcli/_core/lib-ts/**/*.ts` → `packages/cli/src/templates/_shared/lib-ts/`
+- `.aiwcli/_cc-native/**` → `packages/cli/src/templates/cc-native/_cc-native/`
 - `.aiwcli/_core/skills/handoff-system/**` → `packages/cli/src/templates/_shared/skills/handoff-system/`
 - `.aiwcli/_core/skills/meta-plan/**` → `packages/cli/src/templates/_shared/skills/meta-plan/`
 - `.aiwcli/_core/skills/codex/**` → `packages/cli/src/templates/_shared/skills/codex/`
@@ -37,6 +38,7 @@ Runtime files execute from `.aiwcli/_core/` in this repo. Template source lives 
 - Adding/changing library functions used by hooks
 - Updating settings.json hook configurations
 - Moving runtime files inside `.aiwcli/_core/`
+- Updating `.aiwcli/_cc-native/` runtime files that are mirrored into the cc-native template
 
 **Note:** The `dist/` directory is auto-generated during build - only update `src/templates/`.
 
@@ -68,6 +70,10 @@ See `.aiwcli/_core/lib-ts/CLAUDE.md` for hook entry points, logging standard, im
 - OpenCode: uses `opencode.json` configuration, permission rules, and plugin events (for example `tool.execute.before`, `tool.execute.after`, `permission.asked`)
 
 When behavior differs between runtimes, verify the runtime's native config surface first before assuming a hook regression.
+
+## JSONC Parsing
+
+Be careful when editing JSON/JSONC config files on Windows: bare backslashes inside string values create invalid escape sequences. Prefer forward slashes in paths when accepted, or escape backslashes as `\\`.
 
 ## Plan & Handoff Lifecycle (Unified System - v0.13.0+)
 

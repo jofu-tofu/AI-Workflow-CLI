@@ -3,6 +3,9 @@ import {promises as fs} from 'node:fs'
 import {IdePathResolver} from './ide-path-resolver.js'
 import {pathExists} from './paths.js'
 
+const CORE_RUNTIME_FOLDERS = new Set(['_core', '_shared'])
+const RESERVED_AIWCLI_FOLDERS = new Set(['_output', 'state', ...CORE_RUNTIME_FOLDERS])
+
 interface CoreState {
   assetVersion: string
   installed: boolean
@@ -61,11 +64,11 @@ export async function ensureInstallState(targetDir: string): Promise<InstallStat
     initializedAt: now,
     updatedAt: now,
     core: {
-      installed: false,
+      installed: await hasLegacyCoreRuntime(targetDir),
       assetVersion: 'v1',
       installedAt: now,
     },
-    methods: {},
+    methods: await discoverLegacyMethods(targetDir, now),
     ides: {},
   }
   return initial
@@ -74,6 +77,7 @@ export async function ensureInstallState(targetDir: string): Promise<InstallStat
 export async function markCoreInstalled(targetDir: string, ides: string[]): Promise<void> {
   const state = await ensureInstallState(targetDir)
   const now = new Date().toISOString()
+  await backfillMissingMethodsFromDisk(targetDir, state, now)
   state.core = {installed: true, assetVersion: 'v1', installedAt: now}
   for (const ide of ides) {
     state.ides[ide] = {managed: true}
@@ -84,7 +88,8 @@ export async function markCoreInstalled(targetDir: string, ides: string[]): Prom
 }
 
 export async function markCoreRemoved(targetDir: string): Promise<void> {
-  const state = await ensureInstallState(targetDir)
+  const state = await readInstallState(targetDir)
+  if (!state) return
   state.core.installed = false
   state.updatedAt = new Date().toISOString()
   await writeInstallState(targetDir, state)
@@ -93,6 +98,7 @@ export async function markCoreRemoved(targetDir: string): Promise<void> {
 export async function markMethodInstalled(targetDir: string, method: string, ides: string[]): Promise<void> {
   const state = await ensureInstallState(targetDir)
   const now = new Date().toISOString()
+  await backfillMissingMethodsFromDisk(targetDir, state, now)
 
   state.methods[method] = {
     installed: true,
@@ -111,9 +117,11 @@ export async function markMethodInstalled(targetDir: string, method: string, ide
 
 export async function markMethodRemoved(targetDir: string, method: string): Promise<void> {
   const state = await ensureInstallState(targetDir)
+  const now = new Date().toISOString()
+  await backfillMissingMethodsFromDisk(targetDir, state, now)
   if (method in state.methods) {
     delete state.methods[method]
-    state.updatedAt = new Date().toISOString()
+    state.updatedAt = now
     await writeInstallState(targetDir, state)
   }
 }
@@ -126,11 +134,66 @@ export async function getInstalledMethodsFromState(targetDir: string): Promise<s
     .map(([name]) => name)
 }
 
+export async function getInstalledMethods(targetDir: string): Promise<string[]> {
+  const installed = await getInstalledMethodsFromState(targetDir)
+  if (installed.length > 0) return installed
+  return discoverLegacyMethodNames(targetDir)
+}
+
 export async function deleteInstallStateIfPresent(targetDir: string): Promise<void> {
   const resolver = new IdePathResolver(targetDir)
+  const stateDir = resolver.getAiwcliStateDir()
   const statePath = resolver.getInstallStatePath()
   if (!(await pathExists(statePath))) return
   await fs.rm(statePath, {force: true})
+
+  try {
+    if ((await fs.readdir(stateDir)).length === 0) await fs.rmdir(stateDir)
+  } catch {
+    // Ignore cleanup errors for missing/non-empty state directories.
+  }
+}
+
+async function backfillMissingMethodsFromDisk(targetDir: string, state: InstallState, installedAt: string): Promise<void> {
+  const discoveredMethods = await discoverLegacyMethods(targetDir, installedAt)
+  for (const [method, methodState] of Object.entries(discoveredMethods)) {
+    state.methods[method] ??= methodState
+  }
+}
+
+async function discoverLegacyMethods(targetDir: string, installedAt: string): Promise<Record<string, MethodState>> {
+  const methodNames = await discoverLegacyMethodNames(targetDir)
+  return Object.fromEntries(
+    methodNames.map((method) => [method, {
+      installed: true,
+      installedAt,
+      ides: [],
+      runtimePaths: [`.aiwcli/_${method}`],
+      idePaths: [],
+    }]),
+  )
+}
+
+async function discoverLegacyMethodNames(targetDir: string): Promise<string[]> {
+  const containerDir = new IdePathResolver(targetDir).getAiwcliContainer()
+  try {
+    const entries = await fs.readdir(containerDir, {withFileTypes: true})
+    return entries
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith('_') && !RESERVED_AIWCLI_FOLDERS.has(entry.name))
+      .map((entry) => entry.name.slice(1))
+      .sort((left, right) => left.localeCompare(right))
+  } catch {
+    return []
+  }
+}
+
+async function hasLegacyCoreRuntime(targetDir: string): Promise<boolean> {
+  const resolver = new IdePathResolver(targetDir)
+  const [hasCore, hasShared] = await Promise.all([
+    pathExists(resolver.getCoreFolder()),
+    pathExists(resolver.getSharedFolder()),
+  ])
+  return hasCore || hasShared
 }
 
 function ideRootPaths(ide: string, method: string): string[] {

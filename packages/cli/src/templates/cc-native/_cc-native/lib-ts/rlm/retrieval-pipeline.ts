@@ -36,10 +36,10 @@ import { openVectorDb, searchKnn } from "./vector-store.js";
 const HOOK_NAME = "rlm_retrieve";
 
 // Dynamic import for inference (crosses package boundary)
-let inferenceAsync: typeof import("../../../../_core/lib-ts/runtime/inference.js").inferenceAsync;
+let inferenceAsync: typeof import("../../../../_shared/lib-ts/base/inference.js").inferenceAsync;
 
 try {
-  const mod = await import("../../../../_core/lib-ts/runtime/inference.js");
+  const mod = await import("../../../../_shared/lib-ts/base/inference.js");
   inferenceAsync = mod.inferenceAsync;
 } catch {
   // Fallback: warn and provide a stub that always fails
@@ -140,7 +140,7 @@ async function runPipeline(
 
   timings.embed_query_ms = Date.now() - t;
   if (hydeTiming > 0) {
-    (timings as unknown).hyde_ms = hydeTiming;
+    (timings as any).hyde_ms = hydeTiming;
   }
 
   t = Date.now();
@@ -442,7 +442,7 @@ async function synthesize(
     "You are a knowledge synthesizer. Given a query and relevant session findings, " +
     "produce a coherent markdown answer. Include session citations inline as " +
     '"(session: {date}, {project})". Highlight the most recent and relevant information. ' +
-    "Note unknown contradictions or evolution across sessions. Be concise but thorough.";
+    "Note any contradictions or evolution across sessions. Be concise but thorough.";
 
   const userPrompt = `Query: ${query}\n\nRelevant Sessions:\n${context}`;
 
@@ -461,4 +461,3 @@ async function synthesize(
 
   return result.output.trim();
 }
-

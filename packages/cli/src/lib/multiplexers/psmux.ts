@@ -173,8 +173,7 @@ export class PsmuxMultiplexer implements Multiplexer {
       }
     }
 
-    // Run bootstrap commands (mouse, scrollback) — best effort, sequentially.
-    await runBootstrapCommands(this.psmuxPath, buildPsmuxBootstrapCommands(enableMouse))
+    await this.applyBootstrapDefaults(enableMouse)
 
     const attachArgs = ['attach', '-t', sessionName]
     const env = cleanClaudeEnv()
@@ -256,6 +255,8 @@ export class PsmuxMultiplexer implements Multiplexer {
         splitFlag = splitDirection === 'v' ? '-v' : '-h'
       }
 
+      await this.applyBootstrapDefaults()
+
       // Build psmux split-window command
       const psmuxArgs = ['split-window', splitFlag, '-P', '-F', '#{pane_id}']
       if (cwd) {
@@ -294,6 +295,10 @@ export class PsmuxMultiplexer implements Multiplexer {
         reason: `pane launch failed: ${String(error)}`,
       }
     }
+  }
+
+  private async applyBootstrapDefaults(enableMouse = true): Promise<void> {
+    await runBootstrapCommands(this.psmuxPath, buildPsmuxBootstrapCommands(enableMouse))
   }
 
   private async hasSession(sessionName: string): Promise<boolean> {

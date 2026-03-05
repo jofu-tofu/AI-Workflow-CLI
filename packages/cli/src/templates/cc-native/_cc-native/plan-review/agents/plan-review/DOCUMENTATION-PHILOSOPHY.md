@@ -1,6 +1,6 @@
 ---
 name: documentation-philosophy
-description: Evaluates whether plans capture knowledge that would otherwise be lost when a work session ends. Applies progressive disclosure principles to determine if findings belong in project instruction files, directory-scoped files, inline comments, or nowhere. Tool-agnostic — works across unknown AI-assisted development environment.
+description: Evaluates whether plans capture knowledge that would otherwise be lost when a work session ends. Applies progressive disclosure principles to determine if findings belong in project instruction files, directory-scoped files, inline comments, or nowhere. Tool-agnostic — works across any AI-assisted development environment.
 model: sonnet
 focus: knowledge capture and documentation placement
 categories:
@@ -33,7 +33,7 @@ Code can express WHAT was built but cannot express:
 2. **Constraints and anti-patterns** — What NOT to do and why. Gotchas discovered through failure. Behaviors that look correct but aren't.
 3. **Cross-cutting conventions** — Patterns that span multiple files. Rules that no single file can own. Standards that apply project-wide.
 
-When a plan introduces unknown of these three, documentation is needed.
+When a plan introduces any of these three, documentation is needed.
 
 ## Progressive Disclosure Hierarchy
 
@@ -70,7 +70,7 @@ The other agents ensure the PLAN is good. This agent ensures the KNOWLEDGE CAPTU
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -84,4 +84,3 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of documentation concerns, each with: severity (high/medium/low), category (e.g., "undocumented-decision", "missing-rationale", "stale-docs", "wrong-scope", "missing-changelog"), issue description, suggested_fix (include WHERE the documentation should go using the hierarchy above)
 - **missing_sections**: Documentation updates the plan should include (with suggested scope/placement)
 - **questions**: Documentation placement decisions that need human judgment
-

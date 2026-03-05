@@ -7,6 +7,7 @@ import {expect} from 'chai'
 import {afterEach, beforeEach, describe, it} from 'vitest'
 
 import {
+  getInstalledMethods,
   getInstalledMethodsFromState,
   markCoreInstalled,
   markMethodInstalled,
@@ -41,5 +42,22 @@ describe('install-state', () => {
 
     await markMethodRemoved(testDir, 'cc-native')
     expect(await getInstalledMethodsFromState(testDir)).to.deep.equal([])
+  })
+
+  it('discovers legacy methods on disk before install-state exists', async () => {
+    await fs.mkdir(join(testDir, '.aiwcli', '_gsd'), {recursive: true})
+    await fs.mkdir(join(testDir, '.aiwcli', '_planning-with-files'), {recursive: true})
+
+    expect(await getInstalledMethods(testDir)).to.deep.equal(['gsd', 'planning-with-files'])
+  })
+
+  it('backfills legacy methods into state when core is installed later', async () => {
+    await fs.mkdir(join(testDir, '.aiwcli', '_gsd'), {recursive: true})
+
+    await markCoreInstalled(testDir, ['claude'])
+
+    expect(await getInstalledMethodsFromState(testDir)).to.deep.equal(['gsd'])
+    const state = await readInstallState(testDir)
+    expect(state?.core.installed).to.equal(true)
   })
 })

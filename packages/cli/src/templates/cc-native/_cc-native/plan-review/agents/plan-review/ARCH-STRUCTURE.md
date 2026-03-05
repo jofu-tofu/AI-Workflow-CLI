@@ -46,7 +46,7 @@ Evaluate the plan's structural decisions:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -60,4 +60,3 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of structural concerns, each with: severity (high/medium/low), category (e.g., "boundary-placement", "coupling-direction", "cohesion-violation", "responsibility-scatter", "interface-instability"), issue description, suggested_fix (move boundary, reverse dependency, consolidate responsibility)
 - **missing_sections**: Structural considerations the plan should address (boundary rationale, dependency direction, interface contracts)
 - **questions**: Structural decisions that need clarification
-

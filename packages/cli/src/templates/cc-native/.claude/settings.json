@@ -194,13 +194,5 @@
   },
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  },
-  "methods": {
-    "cc-native": {
-      "ides": [
-        "claude"
-      ],
-      "installedAt": "2026-02-21T16:59:33.520Z"
-    }
   }
 }

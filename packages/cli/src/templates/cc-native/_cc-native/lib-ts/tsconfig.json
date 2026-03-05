@@ -13,6 +13,6 @@
     "types": ["bun-types"],
     "skipLibCheck": true
   },
-  "include": ["./**/*.ts", "../../_core/lib-ts/**/*.ts"],
-  "exclude": ["../../_core/lib-ts/__tests__/**"]
+  "include": ["./**/*.ts", "../../_shared/lib-ts/**/*.ts"],
+  "exclude": ["../../_shared/lib-ts/__tests__/**"]
 }

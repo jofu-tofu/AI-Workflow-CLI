@@ -2,7 +2,7 @@
 
 **Location:** `_cc-native/lib-ts/` — TypeScript modules for plan review, state, and agent orchestration.
 
-**Import direction:** `hooks/` → `lib-ts/` → `_core/lib-ts/`. Never the reverse.
+**Import direction:** `hooks/` → `lib-ts/` → `_shared/lib-ts/`. Never the reverse.
 
 ---
 
@@ -32,7 +32,7 @@ The barrel `index.ts` re-exports most modules. Three files are **not** re-export
 
 ## Shared Dependencies
 
-These `_core/lib-ts` modules are used across cc-native lib-ts:
+These `_shared/lib-ts` modules are used across cc-native lib-ts:
 
 | Shared Module | Used By |
 |--------------|---------|
@@ -48,11 +48,11 @@ These `_core/lib-ts` modules are used across cc-native lib-ts:
 ## Import Direction
 
 ```
-hooks/                    (entry points — import from lib-ts/ and _core/)
+hooks/                    (entry points — import from lib-ts/ and _shared/)
   ↓
-lib-ts/                   (this directory — import from _core/ only)
+lib-ts/                   (this directory — import from _shared/ only)
   ↓
-_core/lib-ts/           (cross-method infrastructure — no reverse imports)
+_shared/lib-ts/           (cross-method infrastructure — no reverse imports)
 ```
 
 Never import from `hooks/` or `plan-review/` into `lib-ts/`. The one exception noted in `aggregate-agents.ts`: it stays in `lib-ts/` because both `settings.ts` and `plan-review/` depend on it.
@@ -61,11 +61,10 @@ Never import from `hooks/` or `plan-review/` into `lib-ts/`. The one exception n
 
 ## Context Maintenance
 
-**After modifying files in this directory:** scan the entries above — if unknown claim is now
+**After modifying files in this directory:** scan the entries above — if any claim is now
 false or incomplete, update this file before ending the task. Do not defer.
 
 **Staleness anchor:** This file assumes `index.ts` exists with 13 sibling `.ts` files. If the
 count changes, update the Module Reference table.
 
 <!-- context-layer: generated=2026-03-01 | last-audited=2026-03-01 | version=1 | dir-commits-at-audit=15 -->
-

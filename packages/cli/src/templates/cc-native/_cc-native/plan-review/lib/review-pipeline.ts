@@ -5,7 +5,7 @@
  */
 
 import * as fs from "node:fs";
-import path from "node:path";
+import * as path from "node:path";
 
 import { resolveMandatoryAgents, assignModelsToAgents, selectAgents } from "./agent-selection.js";
 import { computeCorroboratedDecision } from "./corroboration.js";
@@ -15,17 +15,17 @@ import { truncateAgentIssues, overrideVerdictsByThreshold, buildReviewOutput } f
 import { runPlanQuestions } from "./plan-questions.js";
 import { runPreflight } from "./preflight.js";
 import { runAgentReview } from "./reviewers/index.js";
-import { getContextBySessionId, getAllContexts } from "../../../_core/lib-ts/context/context-store.js";
-import { logDiagnostic } from "../../../_core/lib-ts/hooks/hook-utils.js";
-import { getContextReviewsDir, getContextDir, getReviewFolderPath } from "../../../_core/lib-ts/runtime/constants.js";
+import { getContextReviewsDir, getContextDir, getReviewFolderPath } from "../../../_shared/lib-ts/base/constants.js";
+import { logDiagnostic } from "../../../_shared/lib-ts/base/hook-utils.js";
 import {
   logDebug,
   logInfo,
   logWarn,
   logError,
-} from "../../../_core/lib-ts/runtime/logger.js";
-import { eprint } from "../../../_core/lib-ts/runtime/utils.js";
-import type { ContextState } from "../../../_core/lib-ts/types.js";
+} from "../../../_shared/lib-ts/base/logger.js";
+import { eprint } from "../../../_shared/lib-ts/base/utils.js";
+import { getContextBySessionId, getAllContexts } from "../../../_shared/lib-ts/context/context-store.js";
+import type { ContextState } from "../../../_shared/lib-ts/types.js";
 import { writeCombinedArtifacts, buildCorroborationReport, buildHighIssuesDocument, writeReviewTracker } from "../../artifacts/lib/index.js";
 import type { ReviewTrackerEntry } from "../../artifacts/lib/index.js";
 import {
@@ -453,11 +453,11 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
 
   const corroborationReport = buildCorroborationReport(corroborationResult);
   const corroborationPath = path.join(reviewFolder, "corroboration.md");
-  fs.writeFileSync(corroborationPath, corroborationReport, "utf8");
+  fs.writeFileSync(corroborationPath, corroborationReport, "utf-8");
   logInfo(HOOK, `Saved corroboration report: ${corroborationPath}`);
 
   try {
-    fs.writeFileSync(path.join(reviewFolder, "plan.md"), plan, "utf8");
+    fs.writeFileSync(path.join(reviewFolder, "plan.md"), plan, "utf-8");
     logDebug(HOOK, `Saved plan snapshot: ${path.join(reviewFolder, "plan.md")}`);
   } catch (error) {
     logWarn(HOOK, `Failed to save plan snapshot: ${error}`);
@@ -466,7 +466,7 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
   // Build high-issues document
   const highIssuesDoc = buildHighIssuesDocument(combinedResult, corroborationResult);
   const highIssuesPath = path.join(reviewFolder, "high-issues.md");
-  fs.writeFileSync(highIssuesPath, highIssuesDoc, "utf8");
+  fs.writeFileSync(highIssuesPath, highIssuesDoc, "utf-8");
 
   // 15. Build output
   const shouldDeny = corroborationResult.blocking.length > 0;
@@ -541,5 +541,3 @@ export async function runReviewPipeline(input: PipelineInput): Promise<PipelineR
     blockReason: output.blockReason,
   };
 }
-
-

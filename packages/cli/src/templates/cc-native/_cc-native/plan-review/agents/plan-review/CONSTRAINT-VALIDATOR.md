@@ -41,8 +41,8 @@ Perform constraint analysis in two passes:
 
 **Pass 2 — Verify satisfaction**:
 1. For each constraint, verify the plan respects it
-2. Flag unknown step that violates a hard constraint
-3. Flag unknown step that violates a soft constraint without acknowledgment
+2. Flag any step that violates a hard constraint
+3. Flag any step that violates a soft constraint without acknowledgment
 4. Identify self-contradictions within the plan
 
 ## Key Distinction
@@ -56,7 +56,7 @@ Perform constraint analysis in two passes:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -70,4 +70,3 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of constraint concerns, each with: severity (high/medium/low), category (e.g., "hard-constraint-violation", "soft-constraint-risk", "self-contradiction", "implicit-constraint", "missing-constraint"), issue description, suggested_fix (respect constraint, negotiate soft constraint, or resolve contradiction)
 - **missing_sections**: Constraint considerations the plan should address (constraint inventory, satisfaction verification, contradiction resolution)
 - **questions**: Constraints that need identification or clarification
-

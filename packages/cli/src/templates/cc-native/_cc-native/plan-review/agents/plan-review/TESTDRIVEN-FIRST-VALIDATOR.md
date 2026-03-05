@@ -45,7 +45,7 @@ Evaluate the plan's test strategy against each FIRST principle:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -59,4 +59,3 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of FIRST violations, each with: severity (high/medium/low), category (one of "fast", "independent", "repeatable", "self-validating", "thorough"), issue description, suggested_fix (specific change to satisfy the violated principle)
 - **missing_sections**: FIRST-related gaps in the test strategy (missing principles, unaddressed test concerns)
 - **questions**: Test strategy aspects that need clarification
-

@@ -108,12 +108,6 @@ export function mergeClaudeSettings(
   // Merge hooks using dedicated function
   const mergedHooks = mergeHooks(existing.hooks, template.hooks)
 
-  // Merge methods tracking (existing takes precedence, template adds new)
-  const mergedMethods = {
-    ...template.methods,
-    ...existing.methods,
-  }
-
   // Create merged settings
   const merged: ClaudeSettings = {
     ...existing,
@@ -128,10 +122,8 @@ export function mergeClaudeSettings(
     merged.enabledPlugins = mergedEnabledPlugins
   }
 
-  // Only add methods if there are unknown (avoid setting to undefined)
-  if (Object.keys(mergedMethods).length > 0) {
-    merged.methods = mergedMethods
-  }
+  // Drop legacy install metadata from prior settings files.
+  delete (merged as ClaudeSettings & {methods?: unknown}).methods
 
   return merged
 }

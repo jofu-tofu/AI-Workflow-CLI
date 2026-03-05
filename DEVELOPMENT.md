@@ -63,6 +63,7 @@ This section explains the template system architecture. Understanding this preve
 |--------|--------|
 | `.aiwcli/_shared/hooks-ts/*.ts` | `packages/cli/src/templates/_shared/hooks-ts/` |
 | `.aiwcli/_shared/lib-ts/**/*.ts` | `packages/cli/src/templates/_shared/lib-ts/` |
+| `.aiwcli/_cc-native/**` | `packages/cli/src/templates/cc-native/_cc-native/` |
 | `.aiwcli/_cc-native/hooks/*.ts` | `packages/cli/src/templates/cc-native/_cc-native/hooks/` |
 | `.aiwcli/_cc-native/lib-ts/**/*.ts` | `packages/cli/src/templates/cc-native/_cc-native/lib-ts/` |
 | `.claude/settings.json` | `packages/cli/src/templates/cc-native/.claude/settings.json` |
@@ -83,6 +84,13 @@ To sync extracted shared library modules into CLI and template wrappers:
 ```bash
 cd packages/cli
 npm run sync:shared-lib
+```
+
+To sync the cc-native runtime tree into its template mirror:
+
+```bash
+cd packages/cli
+npm run sync:cc-native
 ```
 
 ### Directory Structure

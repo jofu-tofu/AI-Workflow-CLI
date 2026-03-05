@@ -9,8 +9,8 @@
  * Skips if questions were already asked this session.
  */
 
-import { loadHookInput, runHook, logDebug, logInfo, emitContext } from "../../_core/lib-ts/hooks/hook-utils.js";
-import { getProjectRoot } from "../../_core/lib-ts/runtime/constants.js";
+import { getProjectRoot } from "../../_shared/lib-ts/base/constants.js";
+import { loadHookInput, runHook, logDebug, logInfo, emitContext } from "../../_shared/lib-ts/base/hook-utils.js";
 import { wasEarlyQuestionsAsked } from "../lib-ts/cc-native-state.js";
 
 // Unconditional injection by design — no code-detection gate.

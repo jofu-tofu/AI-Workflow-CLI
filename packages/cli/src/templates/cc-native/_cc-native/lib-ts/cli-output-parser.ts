@@ -3,7 +3,7 @@
  * Keeps existing import surface stable for provider implementations.
  */
 
-import { parseStructuredOutput } from "../../_core/lib-ts/agent-exec/structured-output.js";
+import { parseStructuredOutput } from "../../_shared/lib-ts/agent-exec/structured-output.js";
 
 /**
  * Parse CLI JSON output into a structured object.

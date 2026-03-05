@@ -48,7 +48,7 @@ Assess design depth against problem scale:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -62,4 +62,3 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of scale mismatch concerns, each with: severity (high/medium/low), category (e.g., "over-design", "under-design", "missing-rollback", "missing-migration", "missing-alternatives"), issue description, suggested_fix (adjust depth up or down with specific sections to add or remove)
 - **missing_sections**: Sections that the plan's scale demands but doesn't include (e.g., "migration strategy needed for data model change")
 - **questions**: Scale-related aspects that need clarification
-

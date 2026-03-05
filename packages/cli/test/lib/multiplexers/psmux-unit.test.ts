@@ -199,6 +199,12 @@ describe('psmux multiplexer unit', () => {
     const mux = await PsmuxMultiplexer.create()
     mocks.execFileAsync
       .mockResolvedValueOnce(okExec('220 90\n'))
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
       .mockResolvedValueOnce(okExec('%22\n'))
     mocks.splitFlagFromDimensions.mockReturnValueOnce('-h')
 
@@ -215,11 +221,54 @@ describe('psmux multiplexer unit', () => {
     expect(result.launched).toBe(true)
   })
 
+  it('splitPane runs bootstrap set-option commands before split-window', async () => {
+    platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const mux = await PsmuxMultiplexer.create()
+    mocks.execFileAsync
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec('%44\n'))
+
+    const result = await mux!.splitPane({
+      toolName: 'claude',
+      args: [],
+      split: 'h',
+      cwd: 'C:\\repo',
+    })
+
+    const callArgs = mocks.execFileAsync.mock.calls.map((call) => call[1] as string[])
+    const mouseIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g mouse on')
+    const historyIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g history-limit 50000')
+    const cursorBlinkIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g cursor-blink off')
+    const cursorStyleIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g cursor-style block')
+    const statusIntervalIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g status-interval 0')
+    const terminalOverridesIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g terminal-overrides ,*:Ss@:Se@:Cs@:Cr@')
+    const splitIndex = callArgs.findIndex((args) => args[0] === 'split-window')
+    expect(mouseIndex).toBeGreaterThanOrEqual(0)
+    expect(historyIndex).toBeGreaterThan(mouseIndex)
+    expect(cursorBlinkIndex).toBeGreaterThan(historyIndex)
+    expect(cursorStyleIndex).toBeGreaterThan(cursorBlinkIndex)
+    expect(statusIntervalIndex).toBeGreaterThan(cursorStyleIndex)
+    expect(terminalOverridesIndex).toBeGreaterThan(statusIntervalIndex)
+    expect(splitIndex).toBeGreaterThan(terminalOverridesIndex)
+    expect(result.launched).toBe(true)
+  })
+
   it('splitPane repl mode with promptPath injects startup bootstrap argument', async () => {
     platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const mux = await PsmuxMultiplexer.create()
     mocks.execFileAsync
       .mockResolvedValueOnce(okExec('220 90\n'))
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
+      .mockResolvedValueOnce(okExec())
       .mockResolvedValueOnce(okExec('%31\n'))
 
     await mux!.splitPane({

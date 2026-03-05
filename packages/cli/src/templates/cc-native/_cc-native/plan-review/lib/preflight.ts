@@ -3,14 +3,14 @@
  * Validates provider+model combos work before committing agents to them.
  * Runs minimal "ping" requests in parallel per unique provider:model combo.
  *
- * Uses shared checkProviderModel() from _core/lib-ts/runtime/preflight.ts.
+ * Uses shared checkProviderModel() from _shared/lib-ts/base/preflight.ts.
  * This module provides the batch orchestrator and provider registry specific
  * to the plan review pipeline.
  */
 
-import { preflightCommandConfig } from "../../../_core/lib-ts/runtime/cli-args.js";
-import { logInfo, logWarn } from "../../../_core/lib-ts/runtime/logger.js";
-import { checkProviderModel, type PreflightCommandConfig } from "../../../_core/lib-ts/runtime/preflight.js";
+import { preflightCommandConfig } from "../../../_shared/lib-ts/base/cli-args.js";
+import { logInfo, logWarn } from "../../../_shared/lib-ts/base/logger.js";
+import { checkProviderModel, type PreflightCommandConfig } from "../../../_shared/lib-ts/base/preflight.js";
 import type { ModelsConfig, PreflightReport } from "../../lib-ts/types.js";
 
 const HOOK = "preflight";

@@ -27,7 +27,7 @@
  * produce contradictory high-severity issues. Because the old system treated
  * every agent's finding as independently authoritative, plans oscillated —
  * addressing one agent's feedback triggered the opposing agent. The minAgreement
- * floor prevents unknown single agent's philosophy from blocking alone.
+ * floor prevents any single agent's philosophy from blocking alone.
  *
  * **Revert path:** Change one line in review-pipeline.ts back to
  * `computeReviewDecision(allVerdicts)`. Old function kept in verdict.ts.
@@ -170,4 +170,3 @@ export function computeCorroboratedDecision(
         : "pass",
   };
 }
-
