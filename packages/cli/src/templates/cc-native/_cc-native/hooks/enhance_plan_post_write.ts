@@ -13,15 +13,15 @@
  */
 
 import * as os from "node:os";
-import * as path from "node:path";
+import path from "node:path";
 
 import {
   loadHookInput,
   runHook,
   logInfo,
   emitContext,
-} from "../../_shared/lib-ts/base/hook-utils.js";
-import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
+} from "../../_core/lib-ts/hooks/hook-utils.js";
+import { isInternalCall } from "../../_core/lib-ts/runtime/subprocess-utils.js";
 import { getPlanQualityReviewContext } from "../lib-ts/plan-enhancement.js";
 
 function main(): void {
@@ -50,3 +50,4 @@ function main(): void {
 }
 
 runHook(main, "enhance_plan_post_write");
+

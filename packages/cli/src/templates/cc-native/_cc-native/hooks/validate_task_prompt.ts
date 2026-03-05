@@ -19,13 +19,13 @@ import {
   logWarn,
   emitContextAndBlock,
   getToolInput,
-} from "../../_shared/lib-ts/base/hook-utils.js";
-import { inference } from "../../_shared/lib-ts/base/inference.js";
-import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
+} from "../../_core/lib-ts/hooks/hook-utils.js";
+import { inference } from "../../_core/lib-ts/runtime/inference.js";
+import { isInternalCall } from "../../_core/lib-ts/runtime/subprocess-utils.js";
 
 const VALIDATION_SYSTEM_PROMPT = `The sub-agent receives ONLY the prompt text — no conversation history, no prior context.
 
-Check 1 — Dangling References: Does the prompt use pronouns or demonstratives that ONLY make sense with prior conversation? Violations: 'the file we looked at', 'as discussed above', 'that approach we chose', 'the error from earlier', 'fix the issue mentioned above'. NOT violations: relative paths ('_output/', 'src/lib/'), search terms ('context-manager', 'auth module'), directory exploration ('find files matching X'), tool names, or any concrete noun — even if imprecise. Only flag references that are truly UNRESOLVABLE without conversation history.
+Check 1 — Dangling References: Does the prompt use pronouns or demonstratives that ONLY make sense with prior conversation? Violations: 'the file we looked at', 'as discussed above', 'that approach we chose', 'the error from earlier', 'fix the issue mentioned above'. NOT violations: relative paths ('_output/', 'src/lib/'), search terms ('context-manager', 'auth module'), directory exploration ('find files matching X'), tool names, or unknown concrete noun — even if imprecise. Only flag references that are truly UNRESOLVABLE without conversation history.
 
 Check 2 — Implicit Contract: Does the prompt have ANY discernible goal? 'Explore the _output directory and find context files' IS a clear goal. 'Search for hooks that handle Task events' IS a clear goal. 'Read and summarize all files in X' IS a clear goal. Only flag if the prompt is truly goalless — e.g., a sentence fragment with no verb, or pure context with no request.
 
@@ -74,3 +74,4 @@ function main(): void {
 }
 
 runHook(main, "validate_task_prompt");
+

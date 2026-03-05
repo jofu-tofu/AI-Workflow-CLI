@@ -3,8 +3,8 @@
  * Uses claude CLI with --json-schema and --system-prompt flags.
  */
 
-import type { ExecutionResult } from "../../../../../_shared/lib-ts/agent-exec/execution-backend.js";
-import { buildCliInvocation, reviewSpec } from "../../../../../_shared/lib-ts/base/cli-args.js";
+import type { ExecutionResult } from "../../../../../_core/lib-ts/agent-exec/execution-backend.js";
+import { buildCliInvocation, reviewSpec } from "../../../../../_core/lib-ts/runtime/cli-args.js";
 import { parseCliOutput } from "../../../../lib-ts/cli-output-parser.js";
 import { coerceToReview } from "../../../../lib-ts/json-parser.js";
 import type { ReviewerResult } from "../../../../lib-ts/types.js";
@@ -29,7 +29,7 @@ export class ClaudeAgent extends BaseCliAgent<ReviewerResult> {
 
   protected buildPrompt(plan: string): string {
     return `IMMEDIATELY call StructuredOutput with your review of the plan below.
-Do NOT output any text before calling StructuredOutput.
+Do NOT output unknown text before calling StructuredOutput.
 
 PLAN:
 <<<
@@ -55,3 +55,4 @@ ${plan}
     return parseCliOutput(raw, ["verdict", "summary"]);
   }
 }
+

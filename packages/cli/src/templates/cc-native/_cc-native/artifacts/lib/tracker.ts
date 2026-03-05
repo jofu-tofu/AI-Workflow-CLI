@@ -4,9 +4,9 @@
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
+import path from "node:path";
 
-import { logWarn } from "../../../_shared/lib-ts/base/logger.js";
+import { logWarn } from "../../../_core/lib-ts/runtime/logger.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,7 +39,7 @@ export function writeReviewTracker(
   let existingContent = "";
   try {
     if (fs.existsSync(trackerPath)) {
-      existingContent = fs.readFileSync(trackerPath, "utf-8");
+      existingContent = fs.readFileSync(trackerPath, "utf8");
     }
   } catch {
     // Fresh start
@@ -87,7 +87,7 @@ export function writeReviewTracker(
   }
 
   try {
-    fs.writeFileSync(trackerPath, output, "utf-8");
+    fs.writeFileSync(trackerPath, output, "utf8");
   } catch (error) {
     logWarn("artifacts", `Failed to write review tracker: ${error}`);
   }
@@ -106,3 +106,5 @@ export function extractPreviousHashes(content: string): string[] {
   }
   return hashes;
 }
+
+

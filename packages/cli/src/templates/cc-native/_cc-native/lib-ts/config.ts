@@ -4,11 +4,11 @@
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
+import path from "node:path";
 
 import type { DisplaySettings, PlanReviewConfig } from "./types.js";
 import { DEFAULT_DISPLAY } from "./types.js";
-import { logWarn } from "../../_shared/lib-ts/base/logger.js";
+import { logWarn } from "../../_core/lib-ts/runtime/logger.js";
 
 /**
  * Load full CC-Native config from _cc-native/cc-native.config.json.
@@ -55,3 +55,4 @@ export function getDisplaySettings(
     ...sectionDisplay,
   };
 }
+

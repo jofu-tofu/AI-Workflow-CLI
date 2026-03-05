@@ -7,7 +7,7 @@ Agent persona definitions for single-turn plan review. 31 review agents + 1 ques
 ```
 agents/
 ├── CLAUDE.md              # This file
-├── PLAN-ORCHESTRATOR.md   # Authoritative orchestrator system prompt
+├── PLAN-ORCHESTRATOR.md   # Complexity/agent selection orchestrator
 ├── plan-review/           # Review agents (31 files)
 │   ├── HANDOFF-READINESS.md
 │   ├── CLARITY-AUDITOR.md
@@ -18,7 +18,7 @@ agents/
     └── PLAN-QUESTIONER.md # Fresh-context question generator
 ```
 
-**Important:** This `plan-review/agents/` tree is the only authoritative agent location. Reviewers load from `plan-review/agents/plan-review/`, the questions gate loads from `plan-review/agents/plan-questions/`, and `PLAN-ORCHESTRATOR.md` in this directory is the single source of truth for the orchestrator system prompt.
+**Important:** Review agents MUST be in `plan-review/`. The hook loads from `agents/plan-review/` — files in the root `agents/` directory (other than CLAUDE.md and PLAN-ORCHESTRATOR.md) are ignored.
 
 ## Review Agents (31 total)
 
@@ -138,6 +138,7 @@ Each agent file has:
 - `--max-turns 3` gives safety margin while still preventing runaway multi-turn behavior
 - With these settings, reviews complete in ~5-10 seconds
 
-**Constraint:** The agent markdown files MUST contain clear instructions to "call StructuredOutput IMMEDIATELY" and "do NOT use any other tools". Without these instructions, the model will try to use its turns for file operations instead of outputting the review.
+**Constraint:** The agent markdown files MUST contain clear instructions to "call StructuredOutput IMMEDIATELY" and "do NOT use unknown other tools". Without these instructions, the model will try to use its turns for file operations instead of outputting the review.
+
 
 

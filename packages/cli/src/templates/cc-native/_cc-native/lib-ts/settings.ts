@@ -3,7 +3,7 @@
  * Extracted from cc-native-plan-review.ts.
  */
 
-import * as path from "node:path";
+import path from "node:path";
 
 
 import { aggregateAgents } from "./aggregate-agents.js";
@@ -19,8 +19,8 @@ import type {
   ProviderConfig,
 } from "./types.js";
 import { DEFAULT_DISPLAY, DEFAULT_SANITIZATION } from "./types.js";
-import { logInfo } from "../../_shared/lib-ts/base/logger.js";
-import { CODEX_MODELS } from "../../_shared/lib-ts/base/models.js";
+import { logInfo } from "../../_core/lib-ts/runtime/logger.js";
+import { CODEX_MODELS } from "../../_core/lib-ts/runtime/models.js";
 
 const HOOK = "settings";
 
@@ -68,7 +68,7 @@ export const DEFAULT_AGENT_SELECTION: AgentSelectionConfig = {
   simple: { min: 3, max: 3 },
   medium: { min: 5, max: 5 },
   high: { min: 7, max: 7 },
-  fallbackCount: 3,
+  fallbackCount: 2,
 };
 
 export const DEFAULT_COMPLEXITY_CATEGORIES = ["code", "infrastructure", "documentation", "life", "business", "design", "research"];
@@ -259,3 +259,4 @@ export function loadAgentLibrary(
 
   return agentsData.filter(a => a.name !== "plan-orchestrator");
 }
+

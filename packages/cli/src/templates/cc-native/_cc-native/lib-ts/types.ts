@@ -5,10 +5,10 @@
  */
 
 // Re-export shared types used by cc-native consumers
-export type { ContextState, HookInput, HookOutput } from "../../_shared/lib-ts/types.js";
+export type { ContextState, HookInput, HookOutput } from "../../_core/lib-ts/types.js";
 
 // Import AgentConfig for local use and re-export
-import type { AgentConfig as _AgentConfig } from "../../_shared/lib-ts/types.js";
+import type { AgentConfig as _AgentConfig } from "../../_core/lib-ts/types.js";
 export type AgentConfig = _AgentConfig;
 
 // ---------------------------------------------------------------------------
@@ -72,7 +72,7 @@ export interface CorroborationResult {
   verdict: "pass" | "warn" | "fail";
 }
 
-/** Normalized review data from any reviewer */
+/** Normalized review data from unknown reviewer */
 export interface ReviewData {
   verdict: Verdict;
   summary: string;
@@ -122,7 +122,7 @@ export interface ReviewDecisionResult {
 // Agent & Orchestrator Configuration
 // ---------------------------------------------------------------------------
 
-// AgentConfig re-exported from _shared/lib-ts/types.ts above
+// AgentConfig re-exported from _core/lib-ts/types.ts above
 
 /** Configuration for the plan orchestrator */
 export interface OrchestratorConfig {
@@ -404,3 +404,4 @@ export interface PreflightReport {
   allFailed: boolean;
   totalMs: number;
 }
+

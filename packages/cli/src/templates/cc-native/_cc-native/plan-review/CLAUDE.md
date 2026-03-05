@@ -16,7 +16,7 @@ plan-review/
 ├── CODING-STANDARDS-CHECKLIST.md ← Standards injected during plan mode via plan_questions_early.ts
 ├── agents/
 │   ├── CLAUDE.md        ← Agent file format, frontmatter fields, selection rules
-│   ├── PLAN-ORCHESTRATOR.md   ← Authoritative orchestrator system prompt
+│   ├── PLAN-ORCHESTRATOR.md   ← Orchestrator agent (complexity analysis)
 │   ├── plan-questions/
 │   │   └── PLAN-QUESTIONER.md ← Questions gate agent
 │   └── plan-review/     ← 31 reviewer agent spec files (*.md)
@@ -127,7 +127,7 @@ runReviewPipeline()
 
 ## Agent Files
 
-Agent spec files live in `plan-review/agents/plan-review/` (31 files) and `plan-review/agents/plan-questions/` (1 file). Each is a markdown file with YAML frontmatter:
+Agent spec files live in `agents/plan-review/` (31 files) and `agents/plan-questions/` (1 file). Each is a markdown file with YAML frontmatter:
 
 ```markdown
 ---
@@ -141,8 +141,6 @@ weight: 1.0
 ```
 
 `mandatory: true` agents always run. `mandatory: false` agents are selected by the orchestrator based on plan complexity.
-
-`PLAN-ORCHESTRATOR.md` is the single source of truth for the orchestrator system prompt. `lib/orchestrator.ts` loads that markdown body at runtime, and the provider code only adds dynamic execution context such as the live reviewer roster and selection counts.
 
 ## Design Decisions
 
