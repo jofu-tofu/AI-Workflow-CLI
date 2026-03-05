@@ -3,6 +3,7 @@ node_modules/
 dist-test/
 _output/
 .aiwcli/
+.codex/
 bin/aiw
 
 # Socket artifacts
