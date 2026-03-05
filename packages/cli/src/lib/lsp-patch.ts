@@ -7,13 +7,18 @@ import path from 'node:path'
 // Tracks: https://github.com/anthropics/claude-code/issues/17136
 //         https://github.com/anthropics/claude-code/issues/19658
 
-/** The spawn options pattern in Claude Code's bundled cli.js (v2.1.63). */
-const SPAWN_FIND =
-  '{stdio:["pipe","pipe","pipe"],env:X?.env?{...globalThis.process.env,...X.env}:void 0,cwd:X?.cwd,windowsHide:!0}'
+/**
+ * Regex matching the LSP spawn options in Claude Code's bundled cli.js.
+ * The single-letter variable name changes across versions (X in v2.1.63, D in v2.1.69),
+ * so we capture the variable name dynamically.
+ */
+const SPAWN_PATTERN =
+  /\{stdio:\["pipe","pipe","pipe"\],env:([A-Za-z_$][\w$]*)\?\.env\?\{\.\.\.globalThis\.process\.env,\.\.\.\1\.env\}:void 0,cwd:\1\?\.cwd,windowsHide:!0\}/
 
-/** Replacement: same options + shell:true on Windows. */
-const SPAWN_REPLACE =
-  '{stdio:["pipe","pipe","pipe"],env:X?.env?{...globalThis.process.env,...X.env}:void 0,cwd:X?.cwd,windowsHide:!0,shell:process.platform==="win32"}'
+/** Build the replacement string with the captured variable name and shell:true. */
+function buildReplacement(varName: string): string {
+  return `{stdio:["pipe","pipe","pipe"],env:${varName}?.env?{...globalThis.process.env,...${varName}.env}:void 0,cwd:${varName}?.cwd,windowsHide:!0,shell:process.platform==="win32"}`
+}
 
 /**
  * Patches the npm-installed Claude Code cli.js to add `shell: true` on Windows
@@ -72,14 +77,28 @@ export async function ensureLspPatch(options: {
       return
     }
 
-    // Step 5 — Patch cli.js
-    const parts = content.split(SPAWN_FIND)
-    if (parts.length !== 2) {
-      warn('LSP patch: spawn pattern changed upstream — patch skipped, LSP may not work')
+    // Step 5 — Patch cli.js (with diagnostic detection)
+    const match = SPAWN_PATTERN.exec(content)
+    if (!match) {
+      // Distinguish: upstream fixed vs pattern restructured
+      if (content.includes('shell:process.platform==="win32"') || content.includes("shell:process.platform==='win32'")) {
+        // Upstream added shell:true natively — patch is obsolete
+        debugLog('LSP patch: upstream now includes shell:true — patch no longer needed!')
+        renamNativeBinary(debugLog, warn)
+        return
+      }
+
+      // Pattern restructured — needs manual update
+      const spawnSnippet = content.match(/\{stdio:\["pipe","pipe","pipe"\][^}]{0,200}\}/)?.[0] ?? '(spawn pattern not found)'
+      warn(
+        `LSP patch: spawn pattern changed in new Claude Code version — manual update needed.\n` +
+        `  Current pattern: ${spawnSnippet}\n` +
+        `  Update SPAWN_PATTERN in: packages/cli/src/lib/lsp-patch.ts`,
+      )
       return
     }
 
-    const patched = parts.join(SPAWN_REPLACE)
+    const patched = content.replace(SPAWN_PATTERN, buildReplacement(match[1]!))
 
     // Backup original (only if .bak doesn't already exist)
     const bakPath = cliJsPath + '.bak'
