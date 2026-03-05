@@ -7,10 +7,11 @@ import {
   emitContext, loadHookInput, logDebug, logInfo, logWarn, runHookAsync,
 } from "../lib-ts/hooks/hook-utils.js";
 import { getProjectRoot } from "../lib-ts/runtime/constants.js";
-import { codexInferAsync, inferWithFallbackAsync } from "../lib-ts/runtime/inference.js";
+import { codexInferAsync } from "../lib-ts/runtime/inference.js";
 import { CODEX_MODELS } from "../lib-ts/runtime/models.js";
 
-const MAX_PROMPT_CHARS = 8_000;
+const MAX_PROMPT_CHARS = 8000;
+const SPARK_TIMEOUT_SECONDS = 50;
 
 function buildExplorerPrompt(userPrompt: string): string {
   const trimmed = userPrompt.trim();
@@ -74,10 +75,10 @@ async function main(): Promise<void> {
 
   const startedAt = Date.now();
   const explorerPrompt = buildExplorerPrompt(prompt);
-  const result = await inferWithFallbackAsync(
-    () => codexInferAsync(explorerPrompt, CODEX_MODELS.spark, { sandbox: "read-only", timeout: 30 }),
-    () => codexInferAsync(explorerPrompt, CODEX_MODELS.codex, { sandbox: "read-only", timeout: 45 }),
-    "codex_explorer",
+  const result = await codexInferAsync(
+    explorerPrompt,
+    CODEX_MODELS.spark,
+    { sandbox: "read-only", timeout: SPARK_TIMEOUT_SECONDS },
   );
   const elapsedMs = Date.now() - startedAt;
 

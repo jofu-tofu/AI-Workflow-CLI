@@ -2,7 +2,7 @@
 
 **Location:** `_cc-native/lib-ts/` — TypeScript modules for plan review, state, and agent orchestration.
 
-**Import direction:** `hooks/` → `lib-ts/` → `_shared/lib-ts/`. Never the reverse.
+**Import direction:** `hooks/` → `lib-ts/` → `_core/lib-ts/`. Never the reverse.
 
 ---
 
@@ -32,7 +32,7 @@ The barrel `index.ts` re-exports most modules. Three files are **not** re-export
 
 ## Shared Dependencies
 
-These `_shared/lib-ts` modules are used across cc-native lib-ts:
+These `_core/lib-ts` modules are used across cc-native lib-ts:
 
 | Shared Module | Used By |
 |--------------|---------|
@@ -48,11 +48,11 @@ These `_shared/lib-ts` modules are used across cc-native lib-ts:
 ## Import Direction
 
 ```
-hooks/                    (entry points — import from lib-ts/ and _shared/)
+hooks/                    (entry points — import from lib-ts/ and _core/)
   ↓
-lib-ts/                   (this directory — import from _shared/ only)
+lib-ts/                   (this directory — import from _core/ only)
   ↓
-_shared/lib-ts/           (cross-method infrastructure — no reverse imports)
+_core/lib-ts/           (cross-method infrastructure — no reverse imports)
 ```
 
 Never import from `hooks/` or `plan-review/` into `lib-ts/`. The one exception noted in `aggregate-agents.ts`: it stays in `lib-ts/` because both `settings.ts` and `plan-review/` depend on it.

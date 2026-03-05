@@ -16,9 +16,9 @@ import {
   runHook,
   logInfo,
   logDiagnostic,
-} from "../../_shared/lib-ts/hooks/hook-utils.js";
-import { getProjectRoot } from "../../_shared/lib-ts/runtime/constants.js";
-import { isInternalCall } from "../../_shared/lib-ts/runtime/subprocess-utils.js";
+} from "../../_core/lib-ts/hooks/hook-utils.js";
+import { getProjectRoot } from "../../_core/lib-ts/runtime/constants.js";
+import { isInternalCall } from "../../_core/lib-ts/runtime/subprocess-utils.js";
 import { markQuestionsAsked } from "../lib-ts/cc-native-state.js";
 
 function main(): void {

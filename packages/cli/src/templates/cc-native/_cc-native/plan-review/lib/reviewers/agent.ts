@@ -9,8 +9,8 @@ import { CodexAgent } from "./providers/codex-agent.js";
 import { GeminiAgent } from "./providers/gemini-agent.js";
 import type { Reviewer } from "./types.js";
 import { makeResult } from "./types.js";
-import type { ExecutionBackend } from "../../../../_shared/lib-ts/agent-exec/execution-backend.js";
-import { logWarn } from "../../../../_shared/lib-ts/runtime/logger.js";
+import type { ExecutionBackend } from "../../../../_core/lib-ts/agent-exec/execution-backend.js";
+import { logWarn } from "../../../../_core/lib-ts/runtime/logger.js";
 import { debugLog, debugRaw } from "../../../lib-ts/debug.js";
 import type { AgentConfig, ReviewerResult, ReviewOptions } from "../../../lib-ts/types.js";
 

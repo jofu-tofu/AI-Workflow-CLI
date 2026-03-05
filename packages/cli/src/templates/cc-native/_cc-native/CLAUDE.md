@@ -17,9 +17,9 @@
 
 ---
 
-## Shared Infrastructure (`_shared/lib-ts/`)
+## Shared Infrastructure (`_core/lib-ts/`)
 
-CC-native code depends heavily on shared infrastructure. Full API details: `_shared/lib-ts/CLAUDE.md`.
+CC-native code depends heavily on shared infrastructure. Full API details: `_core/lib-ts/CLAUDE.md`.
 
 | Module | Capability | Use When |
 |--------|-----------|----------|
@@ -39,19 +39,19 @@ CC-native code depends heavily on shared infrastructure. Full API details: `_sha
 
 ## Import Patterns
 
-**Import direction:** `hooks/` → `lib-ts/` → `_shared/lib-ts/`. Never the reverse.
+**Import direction:** `hooks/` → `lib-ts/` → `_core/lib-ts/`. Never the reverse.
 
 ```typescript
-// From hooks/ (2 levels up to _shared):
-import { runHook, logInfo } from "../../_shared/lib-ts/base/hook-utils.js";
+// From hooks/ (2 levels up to _core):
+import { runHook, logInfo } from "../../_core/lib-ts/base/hook-utils.js";
 import { loadConfig } from "../lib-ts/config.js";
 
-// From lib-ts/ (2 levels up to _shared):
-import { logDebug } from "../../_shared/lib-ts/base/logger.js";
-import { atomicWrite } from "../../_shared/lib-ts/base/atomic-write.js";
+// From lib-ts/ (2 levels up to _core):
+import { logDebug } from "../../_core/lib-ts/base/logger.js";
+import { atomicWrite } from "../../_core/lib-ts/base/atomic-write.js";
 
-// From plan-review/lib/ (3 levels up to _shared):
-import { logInfo } from "../../../_shared/lib-ts/base/logger.js";
+// From plan-review/lib/ (3 levels up to _core):
+import { logInfo } from "../../../_core/lib-ts/base/logger.js";
 ```
 
 ---

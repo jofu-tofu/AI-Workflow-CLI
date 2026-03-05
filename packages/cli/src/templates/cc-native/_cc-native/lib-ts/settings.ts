@@ -19,8 +19,8 @@ import type {
   ProviderConfig,
 } from "./types.js";
 import { DEFAULT_DISPLAY, DEFAULT_SANITIZATION } from "./types.js";
-import { logInfo } from "../../_shared/lib-ts/runtime/logger.js";
-import { CODEX_MODELS } from "../../_shared/lib-ts/runtime/models.js";
+import { logInfo } from "../../_core/lib-ts/runtime/logger.js";
+import { CODEX_MODELS } from "../../_core/lib-ts/runtime/models.js";
 
 const HOOK = "settings";
 

@@ -8,7 +8,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { getProjectRoot } from "../../../_shared/lib-ts/runtime/constants.js";
+import { getProjectRoot } from "../../../_core/lib-ts/runtime/constants.js";
 import { loadConfig } from "../config.js";
 
 // ---------------------------------------------------------------------------

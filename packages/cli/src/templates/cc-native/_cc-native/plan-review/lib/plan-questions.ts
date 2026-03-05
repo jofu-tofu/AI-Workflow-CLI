@@ -8,8 +8,8 @@ import path from "node:path";
 
 import { runAgentReview } from "./reviewers/index.js";
 import { QUESTIONS_SCHEMA } from "./reviewers/schemas.js";
-import { logInfo, logWarn, logError } from "../../../_shared/lib-ts/runtime/logger.js";
-import { findExecutable } from "../../../_shared/lib-ts/runtime/subprocess-utils.js";
+import { logInfo, logWarn, logError } from "../../../_core/lib-ts/runtime/logger.js";
+import { findExecutable } from "../../../_core/lib-ts/runtime/subprocess-utils.js";
 import { aggregateAgents } from "../../lib-ts/aggregate-agents.js";
 import type { AgentConfig } from "../../lib-ts/types.js";
 

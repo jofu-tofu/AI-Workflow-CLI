@@ -10,10 +10,10 @@ import type {
   IterationState,
   StuckDetectionState,
 } from "./types.js";
-import { getContextBySessionId, saveState } from "../../_shared/lib-ts/context/context-store.js";
-import { logInfo, logWarn } from "../../_shared/lib-ts/runtime/logger.js";
-import { nowIso } from "../../_shared/lib-ts/runtime/utils.js";
-import type { ContextState } from "../../_shared/lib-ts/types.js";
+import { getContextBySessionId, saveState } from "../../_core/lib-ts/context/context-store.js";
+import { logInfo, logWarn } from "../../_core/lib-ts/runtime/logger.js";
+import { nowIso } from "../../_core/lib-ts/runtime/utils.js";
+import type { ContextState } from "../../_core/lib-ts/types.js";
 
 /**
  * ContextState extended with the cc_native method-specific data.

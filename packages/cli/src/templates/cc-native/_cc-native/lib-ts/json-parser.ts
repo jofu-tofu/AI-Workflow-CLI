@@ -4,7 +4,7 @@
  */
 
 import type { ReviewData, Verdict } from "./types.js";
-import { logDebug, logWarn } from "../../_shared/lib-ts/runtime/logger.js";
+import { logDebug, logWarn } from "../../_core/lib-ts/runtime/logger.js";
 
 /**
  * Try strict JSON parse. If that fails, attempt to extract the first {...} block.

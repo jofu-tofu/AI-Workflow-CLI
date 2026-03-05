@@ -6,7 +6,7 @@
 import * as fs from "node:fs";
 import path from "node:path";
 
-import { logWarn } from "../../../_shared/lib-ts/runtime/logger.js";
+import { logWarn } from "../../../_core/lib-ts/runtime/logger.js";
 
 // ---------------------------------------------------------------------------
 // Types

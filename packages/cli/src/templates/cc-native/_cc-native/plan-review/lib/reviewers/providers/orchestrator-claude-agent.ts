@@ -3,10 +3,10 @@
  * Analyzes plan complexity and selects reviewer agents via Claude CLI.
  */
 
-import type { ExecutionBackend , ExecutionResult } from "../../../../../_shared/lib-ts/agent-exec/execution-backend.js";
-import { parseStructuredOutput } from "../../../../../_shared/lib-ts/agent-exec/structured-output.js";
-import { buildCliInvocation, reviewSpec, type CliProvider } from "../../../../../_shared/lib-ts/runtime/cli-args.js";
-import { logDebug } from "../../../../../_shared/lib-ts/runtime/logger.js";
+import type { ExecutionBackend , ExecutionResult } from "../../../../../_core/lib-ts/agent-exec/execution-backend.js";
+import { parseStructuredOutput } from "../../../../../_core/lib-ts/agent-exec/structured-output.js";
+import { buildCliInvocation, reviewSpec, type CliProvider } from "../../../../../_core/lib-ts/runtime/cli-args.js";
+import { logDebug } from "../../../../../_core/lib-ts/runtime/logger.js";
 import { debugLog, debugRaw } from "../../../../lib-ts/debug.js";
 import type { AgentConfig, AgentReviewSettings, AgentSelectionConfig, OrchestratorResult, ComplexityCategory } from "../../../../lib-ts/types.js";
 import { BaseCliAgent } from "../base/base-agent.js";

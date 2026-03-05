@@ -12,7 +12,7 @@ import * as fs from "node:fs";
 import path from "node:path";
 
 import type { AgentConfig } from "./types.js";
-import { logDebug, logInfo, logWarn } from "../../_shared/lib-ts/runtime/logger.js";
+import { logDebug, logInfo, logWarn } from "../../_core/lib-ts/runtime/logger.js";
 
 /**
  * Extract simple YAML frontmatter from markdown content.

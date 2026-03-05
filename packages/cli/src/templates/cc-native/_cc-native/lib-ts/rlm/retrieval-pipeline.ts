@@ -36,10 +36,10 @@ import { openVectorDb, searchKnn } from "./vector-store.js";
 const HOOK_NAME = "rlm_retrieve";
 
 // Dynamic import for inference (crosses package boundary)
-let inferenceAsync: typeof import("../../../../_shared/lib-ts/runtime/inference.js").inferenceAsync;
+let inferenceAsync: typeof import("../../../../_core/lib-ts/runtime/inference.js").inferenceAsync;
 
 try {
-  const mod = await import("../../../../_shared/lib-ts/runtime/inference.js");
+  const mod = await import("../../../../_core/lib-ts/runtime/inference.js");
   inferenceAsync = mod.inferenceAsync;
 } catch {
   // Fallback: warn and provide a stub that always fails

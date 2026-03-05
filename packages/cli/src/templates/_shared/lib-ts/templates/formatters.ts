@@ -36,9 +36,10 @@ export function renderTaskItem(
   showDescription = true,
   maxDescriptionLength = 100,
 ): string {
-  const status = (task as unknown).status ?? "pending";
-  const subject = (task as unknown).subject ?? "";
-  const description = (task as unknown).description ?? "";
+  const taskData = task as Partial<Task> & Record<string, unknown>;
+  const status = typeof taskData.status === "string" ? taskData.status : "pending";
+  const subject = typeof taskData.subject === "string" ? taskData.subject : "";
+  const description = typeof taskData.description === "string" ? taskData.description : "";
 
   const icon = getStatusIcon(status);
   const statusText = `[${status.toUpperCase()}]`;

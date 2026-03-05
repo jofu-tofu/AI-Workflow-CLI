@@ -36,7 +36,6 @@ import {
 } from "./context-store.js";
 import { normalizePlanContent } from "./plan-manager.js";
 import { logDebug, logInfo, logError } from "../runtime/logger.js";
-import { isInternalCall } from "../runtime/subprocess-utils.js";
 import type { ContextState, CaretCommand } from "../types.js";
 
 /** Minimum characters required for new context description. */
@@ -436,11 +435,6 @@ export function determineContext(
   sessionId?: string,
   projectRoot?: string,
 ): [string | null, string, string | null] {
-  if (isInternalCall()) {
-    logDebug("context_selector", "Skipping: internal subprocess call");
-    return [null, "skip_internal", null];
-  }
-
   // --- Case 1: session_match ---
   if (sessionId) {
     const sessionContext = getContextBySessionId(sessionId, projectRoot);

@@ -3,8 +3,8 @@
  * Extracted from cc-native-plan-review.ts.
  */
 
-import { logDebug, logInfo, logWarn } from "../../../_shared/lib-ts/runtime/logger.js";
-import { findExecutable } from "../../../_shared/lib-ts/runtime/subprocess-utils.js";
+import { logDebug, logInfo, logWarn } from "../../../_core/lib-ts/runtime/logger.js";
+import { findExecutable } from "../../../_core/lib-ts/runtime/subprocess-utils.js";
 import type {
   AgentConfig,
   AgentReviewSettings,
