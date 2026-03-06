@@ -297,11 +297,19 @@ Transitions: `idle`/`has_staged_work` --> `active` (via `maybeActivate`). `activ
 
 Use this table to find the right file. Read the source for full API details.
 
-### `base/` — Core Infrastructure
+### `hooks/` — Hook Lifecycle
 
 | File | Purpose | Key Exports |
 |------|---------|-------------|
 | `hook-utils.ts` | Hook lifecycle, stdin parsing, output emit, re-exports | `runHook`, `runHookAsync`, `loadHookInput`, `emitContext`, `emitContextAndBlock`, `emitBlock`, `emitBlockPrompt`, `emitBlockViaExit`, `emitBlockTopLevel`, `emitPermissionDecision`, `logDebug`...`logBlocking` |
+| `context-monitor-logic.ts` | Context monitor extracted logic | Context window tracking helpers |
+| `prompt-binding-logic.ts` | Prompt binding extracted logic | Prompt-to-context binding helpers |
+| `session-end-logic.ts` | Session end extracted logic | Session end state management helpers |
+
+### `runtime/` — Core Infrastructure
+
+| File | Purpose | Key Exports |
+|------|---------|-------------|
 | `logger.ts` | JSONL logging engine | `hookLog`, `logDebug`, `logInfo`, `logWarn`, `logError`, `logBlocking`, `logHookError`, `logDiagnostic` |
 | `constants.ts` | Path resolution, limits | `getProjectRoot()`, `getContextDir()`, `MAX_FILE_SIZE` |
 | `atomic-write.ts` | Crash-safe file writes | `atomicWriteFileSync()` |
@@ -353,6 +361,8 @@ These run for ALL templates. Method-specific hooks live in `_{method}/hooks/`.
 | `task_create_capture.ts` | PostToolUse:TaskCreate | Persists task creation to context state |
 | `task_update_capture.ts` | PostToolUse:TaskUpdate | Persists task updates to context state |
 | `file-suggestion.ts` | PostToolUse:Write | Suggests file organization improvements |
+| `codex_explorer.ts` | PostToolUse:Agent | Codex explorer agent integration |
+| `lint_after_edit.ts` | PostToolUse:Write | Post-edit lint dispatching |
 
 ---
 
@@ -380,7 +390,7 @@ the code, and it belongs at this scope (project-wide rule → root CLAUDE.md; WH
 how an agent acts here, remove it. If a convention here conflicts with the codebase,
 the codebase wins — update this file, do not work around it. Prune aggressively.
 
-**Staleness anchor:** This file assumes `base/hook-utils.ts` exists. If it doesn't, this file
+**Staleness anchor:** This file assumes `hooks/hook-utils.ts` exists. If it doesn't, this file
 is stale — update or regenerate before relying on it.
 
 **Trigger Audit or Generate:**
@@ -389,5 +399,5 @@ is stale — update or regenerate before relying on it.
 - 30+ days without touching this file → Audit
 - Agent mistake caused by this file → fix immediately, then Audit
 
-<!-- context-layer: generated=2026-02-14 | last-audited=2026-02-21 | version=2 | dir-commits-at-audit=29 -->
+<!-- context-layer: generated=2026-02-14 | last-audited=2026-03-05 | version=3 | dir-commits-at-audit=29 -->
 

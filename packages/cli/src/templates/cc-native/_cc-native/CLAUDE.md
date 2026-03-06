@@ -23,14 +23,14 @@ CC-native code depends heavily on shared infrastructure. Full API details: `_cor
 
 | Module | Capability | Use When |
 |--------|-----------|----------|
-| `base/hook-utils` | Hook lifecycle (load input, run, emit context) | Writing hooks |
-| `base/logger` | Structured logging (debug/info/warn/error) | Any hook or lib module |
-| `base/constants` | Project paths, context dirs, sanitization | Resolving file locations |
-| `base/subprocess-utils` | Find executables, exec with env, shell quoting | Spawning agent CLIs |
-| `base/cli-args` | CLI invocation builder, review spec construction | Launching review agents |
-| `base/atomic-write` | Crash-safe file writes | Writing state or artifacts |
-| `base/state-io` | State read/write helpers | Context state persistence |
-| `base/inference` | Claude CLI subprocess calls | AI inference from hooks |
+| `hooks/hook-utils` | Hook lifecycle (load input, run, emit context) | Writing hooks |
+| `runtime/logger` | Structured logging (debug/info/warn/error) | Any hook or lib module |
+| `runtime/constants` | Project paths, context dirs, sanitization | Resolving file locations |
+| `runtime/subprocess-utils` | Find executables, exec with env, shell quoting | Spawning agent CLIs |
+| `runtime/cli-args` | CLI invocation builder, review spec construction | Launching review agents |
+| `runtime/atomic-write` | Crash-safe file writes | Writing state or artifacts |
+| `runtime/state-io` | State read/write helpers | Context state persistence |
+| `runtime/inference` | Claude CLI subprocess calls | AI inference from hooks |
 | `context/context-store` | Context CRUD (get by session, list all) | Session/context binding |
 | `context/plan-manager` | Plan lifecycle (archive, hash, sign) | Plan discovery and hashing |
 | `types` | Shared type definitions (`ContextState`, etc.) | Type imports |
@@ -43,15 +43,15 @@ CC-native code depends heavily on shared infrastructure. Full API details: `_cor
 
 ```typescript
 // From hooks/ (2 levels up to _core):
-import { runHook, logInfo } from "../../_core/lib-ts/base/hook-utils.js";
+import { runHook, logInfo } from "../../_core/lib-ts/hooks/hook-utils.js";
 import { loadConfig } from "../lib-ts/config.js";
 
 // From lib-ts/ (2 levels up to _core):
-import { logDebug } from "../../_core/lib-ts/base/logger.js";
-import { atomicWrite } from "../../_core/lib-ts/base/atomic-write.js";
+import { logDebug } from "../../_core/lib-ts/runtime/logger.js";
+import { atomicWrite } from "../../_core/lib-ts/runtime/atomic-write.js";
 
 // From plan-review/lib/ (3 levels up to _core):
-import { logInfo } from "../../../_core/lib-ts/base/logger.js";
+import { logInfo } from "../../../_core/lib-ts/runtime/logger.js";
 ```
 
 ---
@@ -70,5 +70,5 @@ how an agent acts here, remove it.
 **Staleness anchor:** This file assumes `lib-ts/index.ts` exists. If it doesn't, this file
 is stale — update or regenerate before relying on it.
 
-<!-- context-layer: generated=2026-03-01 | last-audited=2026-03-01 | version=1 | dir-commits-at-audit=15 -->
+<!-- context-layer: generated=2026-03-01 | last-audited=2026-03-05 | version=2 | dir-commits-at-audit=15 -->
 

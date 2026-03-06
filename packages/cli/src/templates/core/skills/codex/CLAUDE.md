@@ -39,8 +39,8 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/codex/scripts/launch-codex
 2. Fallback: scan `_output/contexts/*/plans/*.md` by mtime
 
 **Dependencies:**
-- `base/aiw-cli.ts` — shells out to `aiw launch` for pane management (no direct tmux imports)
-- `base/cli-args.ts` — model/sandbox/yolo CLI arg generation
+- `runtime/aiw-cli.ts` — shells out to `aiw launch` for pane management (no direct tmux imports)
+- `runtime/cli-args.ts` — model/sandbox/yolo CLI arg generation
 - `context/*` — context lookup, formatting, plan discovery
 
 **Watch behavior (single entry point):**

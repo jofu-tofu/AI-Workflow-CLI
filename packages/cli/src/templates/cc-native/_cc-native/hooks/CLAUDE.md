@@ -43,9 +43,9 @@ CC-native hooks are TypeScript, run via `bun`. Use relative imports from the hoo
 
 ```typescript
 // Shared library imports (via _core/lib-ts/)
-import { loadHookInput, runHook, logInfo, emitContext } from "../../_core/lib-ts/base/hook-utils.js";
-import { isInternalCall } from "../../_core/lib-ts/base/subprocess-utils.js";
-import { getProjectRoot } from "../../_core/lib-ts/base/constants.js";
+import { loadHookInput, runHook, logInfo, emitContext } from "../../_core/lib-ts/hooks/hook-utils.js";
+import { isInternalCall } from "../../_core/lib-ts/runtime/subprocess-utils.js";
+import { getProjectRoot } from "../../_core/lib-ts/runtime/constants.js";
 
 // CC-native library imports (via ../lib-ts/)
 import { wasQuestionsAsked, markQuestionsAsked } from "../lib-ts/cc-native-state.js";
@@ -64,7 +64,7 @@ import type { AgentConfig } from "../lib-ts/types.js";
 Hooks can be invoked recursively when spawning subprocesses (agents, orchestrator). Always check and skip:
 
 ```typescript
-import { isInternalCall } from "../../_core/lib-ts/base/subprocess-utils.js";
+import { isInternalCall } from "../../_core/lib-ts/runtime/subprocess-utils.js";
 
 function main(): void {
   // FIRST LINE of main - before unknown other logic
@@ -87,7 +87,7 @@ Claude Code hooks return JSON to stdout. The format is specific to each hook typ
 Use the shared hook utilities — never construct JSON manually:
 
 ```typescript
-import { emitContext, emitContextAndBlock } from "../../_core/lib-ts/base/hook-utils.js";
+import { emitContext, emitContextAndBlock } from "../../_core/lib-ts/hooks/hook-utils.js";
 
 // Inject context without blocking:
 emitContext("Information for Claude to see...");
@@ -115,7 +115,7 @@ For logging tiers, visibility rules, and stderr behavior, see **`_core/lib-ts/CL
 TypeScript hooks use re-exported logger functions from `hook-utils.ts`:
 
 ```typescript
-import { logDebug, logInfo, logWarn, logError } from "../../_core/lib-ts/base/hook-utils.js";
+import { logDebug, logInfo, logWarn, logError } from "../../_core/lib-ts/hooks/hook-utils.js";
 
 logDebug("hook-name", `Found ${items.length} items`);  // file only
 logInfo("hook-name", "Starting hook...");                // file only
@@ -130,7 +130,7 @@ Plan review hooks integrate with the shared context system for state management:
 
 ```typescript
 import { getContextBySessionId, getAllContexts } from "../../_core/lib-ts/context/context-store.js";
-import { getContextReviewsDir } from "../../_core/lib-ts/base/constants.js";
+import { getContextReviewsDir } from "../../_core/lib-ts/runtime/constants.js";
 
 // Find active context
 const context = getContextBySessionId(sessionId, projectRoot);
@@ -160,7 +160,7 @@ import { isPlanAlreadyReviewed, markPlanReviewed, wasQuestionsAsked } from "../l
 Hooks should fail gracefully — a broken hook shouldn't break the user's workflow. `runHook()` and `runHookAsync()` handle this automatically: uncaught errors log to file and exit 0 (non-blocking).
 
 ```typescript
-import { runHook, logInfo } from "../../_core/lib-ts/base/hook-utils.js";
+import { runHook, logInfo } from "../../_core/lib-ts/hooks/hook-utils.js";
 
 function main(): void {
   // Hook logic — uncaught errors are handled by runHook
@@ -173,7 +173,7 @@ runHook(main, "hook_name");
 For async hooks (plan review with parallel agents):
 
 ```typescript
-import { runHookAsync } from "../../_core/lib-ts/base/hook-utils.js";
+import { runHookAsync } from "../../_core/lib-ts/hooks/hook-utils.js";
 
 async function main(): Promise<void> {
   // Async hook logic with Promise.all() etc.
@@ -264,5 +264,5 @@ is stale — update or regenerate before relying on it.
 - 30+ days without touching this file → Audit
 - Agent mistake caused by this file → fix immediately, then Audit
 
-<!-- context-layer: generated=2026-02-10 | last-audited=2026-02-21 | version=2 | dir-commits-at-audit=58 -->
+<!-- context-layer: generated=2026-02-10 | last-audited=2026-03-05 | version=3 | dir-commits-at-audit=58 -->
 

@@ -412,7 +412,7 @@ Both `.aiwcli/_core/skills/handoff-system/` (working copy) and `packages/cli/src
 
 **Import paths after move:**
 - From `scripts/resume_handoff.ts` → `lib/handoff-reader.ts`: `../lib/handoff-reader.js`
-- From `lib/handoff-reader.ts` → `lib-ts/base/constants.ts`: `../../../lib-ts/base/constants.js`
+- From `lib/handoff-reader.ts` → `lib-ts/runtime/constants.ts`: `../../../lib-ts/runtime/constants.js`
 
 **Hooks don't import handoff-reader:**
 - `session_start.ts` uses `formatHandoffContinuation()` from `context-formatter.ts`

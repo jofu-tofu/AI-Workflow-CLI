@@ -36,9 +36,9 @@ These `_core/lib-ts` modules are used across cc-native lib-ts:
 
 | Shared Module | Used By |
 |--------------|---------|
-| `base/logger` | All modules (logging) |
-| `base/atomic-write` | `state.ts` (crash-safe writes) |
-| `base/utils` | `cc-native-state.ts` (`nowIso`) |
+| `runtime/logger` | All modules (logging) |
+| `runtime/atomic-write` | `state.ts` (crash-safe writes) |
+| `runtime/utils` | `cc-native-state.ts` (`nowIso`) |
 | `context/context-store` | `cc-native-state.ts` (state access) |
 | `context/plan-manager` | `plan-discovery.ts` (plan path lookup) |
 | `types` | `types.ts` (re-exports `ContextState`, `HookInput`, `HookOutput`) |
@@ -67,5 +67,5 @@ false or incomplete, update this file before ending the task. Do not defer.
 **Staleness anchor:** This file assumes `index.ts` exists with 13 sibling `.ts` files. If the
 count changes, update the Module Reference table.
 
-<!-- context-layer: generated=2026-03-01 | last-audited=2026-03-01 | version=1 | dir-commits-at-audit=15 -->
+<!-- context-layer: generated=2026-03-01 | last-audited=2026-03-05 | version=2 | dir-commits-at-audit=15 -->
 
