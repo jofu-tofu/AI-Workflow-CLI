@@ -17,7 +17,6 @@ import {cleanClaudeEnv, getLastLine, spawnAttached, splitFlagFromDimensions} fro
 import {isNonWindowsPlatform, isWindowsPlatform} from '../runtime/platform-adapter.js'
 import {cleanupSentinelIpc, createSentinelIpcPaths} from '../runtime/sentinel-ipc.js'
 import {execFileAsync, findExecutable} from '../runtime/subprocess-utils.js'
-import {isNativeTmuxAvailable} from '../runtime/tmux-preflight.js'
 import {wrapSentinelSh} from '../sentinel-wrapper.js'
 import {findBestSplit, listPanes} from '../tmux-pane-placement.js'
 import {quoteForSh, toMsysPosixPath} from '../tmux-primitives.js'
@@ -134,19 +133,24 @@ export class TmuxMultiplexer implements Multiplexer {
   async createSession(options: CreateSessionOptions): Promise<CreateSessionResult> {
     const {sessionName, reattach} = options
 
-    if (!isNonWindowsPlatform() || !isNativeTmuxAvailable()) {
-      return {exitCode: -1, usedMux: false, reason: 'tmux not available'}
+    if (!isNonWindowsPlatform()) {
+      return {exitCode: -1, usedMux: false, reason: 'tmux not available on this platform'}
     }
 
-    // Set default-terminal BEFORE session creation
+    // Set default-terminal BEFORE session creation (batched into single invocation)
     try {
-      execSync('tmux start-server', {stdio: 'ignore', timeout: 3000})
+      execSync(
+        'tmux start-server \\; set -g default-terminal "tmux-256color"',
+        {stdio: 'ignore', timeout: 3000},
+      )
+    } catch {
       try {
-        execSync('tmux set -g default-terminal "tmux-256color"', {stdio: 'ignore', timeout: 3000})
-      } catch {
-        execSync('tmux set -g default-terminal "screen-256color"', {stdio: 'ignore', timeout: 3000})
-      }
-    } catch { /* best-effort */ }
+        execSync(
+          'tmux start-server \\; set -g default-terminal "screen-256color"',
+          {stdio: 'ignore', timeout: 3000},
+        )
+      } catch { /* best-effort */ }
+    }
 
     const shellCommand = buildShellCommand({
       sessionName,

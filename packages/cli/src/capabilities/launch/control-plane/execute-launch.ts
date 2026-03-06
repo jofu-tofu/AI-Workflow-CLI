@@ -2,9 +2,8 @@ import path from 'node:path'
 
 import {
   checkVersionCompatibility,
+  configureTmuxSession,
   detectMultiplexer,
-  enableTmuxColors,
-  enableTmuxMouse,
   ensureLspPatch,
   findExecutable,
   findToolPath,
@@ -132,17 +131,22 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
     host.debug('Launching Codex with --yolo flag')
   } else if (useDevin) {
     host.debug('Launching Devin with --permission-mode dangerous')
-  } else {
-    const version = await getClaudeCodeVersion()
-    const versionCheck = checkVersionCompatibility(version)
+  }
+
+  const [versionCheck, mux] = await Promise.all([
+    useCodex || useDevin
+      ? null
+      : getClaudeCodeVersion().then((v) => checkVersionCompatibility(v)),
+    disableTmux ? null : detectMultiplexer(platform),
+  ])
+
+  if (versionCheck) {
     host.debug(`Claude Code version: ${versionCheck.version ?? 'unknown'}`)
     host.debug(`Compatibility status: ${versionCheck.compatible ? 'compatible' : 'incompatible'}`)
     if (versionCheck.warning) {
       host.warn(versionCheck.warning)
     }
   }
-
-  const mux = disableTmux ? null : await detectMultiplexer(platform)
   let exitCode = 0
 
   try {
@@ -161,8 +165,7 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
     } else if (mux.isInsideSession()) {
       host.logInfo(`Inside ${mux.backend} session — splitting new pane`)
       if (mux.backend === 'tmux') {
-        enableTmuxMouse()
-        enableTmuxColors()
+        configureTmuxSession()
       }
 
       let effectivePromptPath = promptPath

@@ -58,17 +58,16 @@ import { logInfo } from "../../../_core/lib-ts/runtime/logger.js";
 
 ## Context Maintenance
 
-**After modifying files in this directory:** scan the entries above — if unknown claim is now
+**After modifying files in this directory:** scan the entries above — if any claim is now
 false or incomplete, update this file before ending the task. Do not defer.
 
 **Add** an entry only if an agent would fail without knowing it, it is not obvious from
 the code, and it belongs at this scope.
 
-**Remove** unknown entry that fails the falsifiability test: if removing it would not change
+**Remove** any entry that fails the falsifiability test: if removing it would not change
 how an agent acts here, remove it.
 
 **Staleness anchor:** This file assumes `lib-ts/index.ts` exists. If it doesn't, this file
 is stale — update or regenerate before relying on it.
 
-<!-- context-layer: generated=2026-03-01 | last-audited=2026-03-05 | version=2 | dir-commits-at-audit=15 -->
-
+<!-- context-layer: generated=2026-03-01 | last-audited=2026-03-01 | version=1 | dir-commits-at-audit=15 -->

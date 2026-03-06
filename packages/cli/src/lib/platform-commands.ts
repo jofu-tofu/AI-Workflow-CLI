@@ -16,24 +16,23 @@ import {homedir} from 'node:os'
  * Shared between templates and adapter — changing this requires updating
  * all template settings.json files AND tests.
  */
-export const RESOLVER_TOKEN = '~/.aiwcli/bin/resolve-run.ts'
+export const RESOLVER_TOKEN = '.aiwcli/_core/scripts/resolve-run.ts'
 
 /** Matches leading bash-style env-var prefixes: KEY=VALUE KEY2= ... */
 const BASH_ENV_PREFIX_RE = /^(?:[A-Z_]+=\S*\s+)+/
 
 /**
  * Adapt a hook command for the current platform.
- * On Windows: strips bash env prefixes, expands ~ to quoted absolute home path.
+ * On Windows: strips bash env prefixes, quotes the resolver path.
  * On Unix: no-op (returns input unchanged).
  */
 export function adaptHookCommand(command: string): string {
   if (process.platform !== 'win32') return command
 
-  const home = homedir().replaceAll('\\', '/')
-  const absoluteResolver = `"${home}/.aiwcli/bin/resolve-run.ts"`
+  const quotedResolver = `"${RESOLVER_TOKEN}"`
 
   let result = command.replace(BASH_ENV_PREFIX_RE, '')
-  result = result.replace(RESOLVER_TOKEN, absoluteResolver)
+  result = result.replace(RESOLVER_TOKEN, quotedResolver)
   return result
 }
 

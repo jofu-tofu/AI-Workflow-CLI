@@ -50,7 +50,7 @@ Focus on the 5-8 highest-risk failure modes rather than exhaustively cataloging 
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -64,4 +64,3 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of failure modes identified, each with: severity (high/medium/low), category (e.g., "failure-mode", "severity-rating", "detectability-gap", "risk-priority"), issue description, suggested_fix (specific mitigation or detection improvement)
 - **missing_sections**: FMEA considerations the plan should address (failure enumeration, detection mechanisms, severity assessment)
 - **questions**: Failure modes that need probability or severity clarification
-

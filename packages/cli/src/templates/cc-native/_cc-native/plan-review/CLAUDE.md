@@ -79,6 +79,7 @@ Hooks that invoke this system (all in `../_cc-native/hooks/`):
 ## Dependencies
 
 **Reads from shared lib-ts (stays in lib-ts, not part of plan-review):**
+- `_core/lib-ts/runtime/cli-args.ts` — centralized CLI arg construction (`buildCliInvocation`, `reviewSpec`, `preflightCommandConfig`). All provider agents and preflight delegate flag construction here.
 - `../../lib-ts/types.ts` — all shared types (AgentConfig, ReviewerResult, etc.)
 - `../../lib-ts/settings.ts` — config loading
 - `../../lib-ts/plan-discovery.ts` — plan file discovery

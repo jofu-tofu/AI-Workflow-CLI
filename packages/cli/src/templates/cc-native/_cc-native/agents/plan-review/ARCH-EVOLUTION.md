@@ -46,7 +46,7 @@ Evaluate the plan's evolutionary fitness:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -60,4 +60,3 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of evolution concerns, each with: severity (high/medium/low), category (e.g., "change-amplification", "missing-extension-point", "volatility-exposure", "brittle-coupling", "fitness-gap"), issue description, suggested_fix (add extension point, isolate volatile decision, reduce change amplification)
 - **missing_sections**: Evolution considerations the plan should address (likely change vectors, extension points, volatility isolation)
 - **questions**: Evolution aspects that need investigation
-

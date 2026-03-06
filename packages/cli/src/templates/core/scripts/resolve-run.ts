@@ -6,11 +6,11 @@
  * Finds the project root (via git or .aiwcli/ anchor walk-up), then spawns
  * the target script with cwd set to the root. stdin/stdout/stderr pass through.
  *
- * Install:  ~/.aiwcli/bin/resolve-run.ts  (global, always findable via ~)
- * Usage:    bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/scripts/status_line.ts
+ * Location: .aiwcli/_core/scripts/resolve-run.ts  (project-relative)
+ * Usage:    bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/scripts/status_line.ts
  *
- * On Windows, settings.json commands use absolute paths (expanded at init time
- * by platform-commands.ts) so cmd.exe can execute them without ~ expansion.
+ * On Windows, settings.json commands quote the resolver path (handled at
+ * reconstruction time by platform-commands.ts).
  */
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";

@@ -46,7 +46,7 @@ Ask for each component:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -60,4 +60,3 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of complexity concerns, each with: severity (high/medium/low), category (e.g., "over-engineering", "scope-creep", "premature-abstraction", "yagni"), issue description, suggested_fix (simpler alternative)
 - **missing_sections**: Simplification opportunities the plan should consider
 - **questions**: Complexity that needs justification
-

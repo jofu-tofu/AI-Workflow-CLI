@@ -3,9 +3,10 @@
  * Analyzes plan complexity and selects reviewer agents via Claude CLI.
  */
 
-import type { ExecutionBackend , ExecutionResult } from "../../../../../_core/lib-ts/agent-exec/execution-backend.js";
-import { parseStructuredOutput } from "../../../../../_core/lib-ts/agent-exec/structured-output.js";
 import { buildCliInvocation, reviewSpec, type CliProvider } from "../../../../../_core/lib-ts/runtime/cli-args.js";
+import type { ExecutionBackend } from "../../../../../_core/lib-ts/agent-exec/execution-backend.js";
+import type { ExecutionResult } from "../../../../../_core/lib-ts/agent-exec/execution-backend.js";
+import { parseStructuredOutput } from "../../../../../_core/lib-ts/agent-exec/structured-output.js";
 import { logDebug } from "../../../../../_core/lib-ts/runtime/logger.js";
 import { debugLog, debugRaw } from "../../../../lib-ts/debug.js";
 import type { AgentConfig, AgentReviewSettings, AgentSelectionConfig, OrchestratorResult, ComplexityCategory } from "../../../../lib-ts/types.js";
@@ -28,9 +29,9 @@ const DEFAULT_COMPLEXITY_CATEGORIES = [
 
 const DEFAULT_AGENT_SELECTION: AgentSelectionConfig = {
   simple: { min: 3, max: 3 },
-  medium: { min: 5, max: 5 },
-  high: { min: 7, max: 7 },
-  fallbackCount: 2,
+  medium: { min: 8, max: 8 },
+  high: { min: 12, max: 12 },
+  fallbackCount: 3,
 };
 
 /**
@@ -77,7 +78,7 @@ export class OrchestratorClaudeAgent extends BaseCliAgent<OrchestratorResult> {
     this.settings = settings;
 
     const selection = settings.agentSelection ?? DEFAULT_AGENT_SELECTION;
-    this.fallbackCount = selection.fallbackCount ?? DEFAULT_AGENT_SELECTION.fallbackCount;
+    this.fallbackCount = selection.fallbackCount ?? 2;
     this.mandatoryCount = agentLibrary.filter((a) => mandatoryNames.has(a.name)).length;
 
     logDebug("orchestrator", `Mandatory agents (always run): ${[...mandatoryNames].sort().join(", ")}`);
@@ -87,7 +88,7 @@ export class OrchestratorClaudeAgent extends BaseCliAgent<OrchestratorResult> {
   protected buildCliArgs(): string[] {
     const systemPrompt = `You are a plan orchestrator for code review. Your job is to analyze plans and select appropriate reviewer agents.
 
-You MUST call StructuredOutput immediately with your analysis. Do NOT ask questions or use unknown other tools.
+You MUST call StructuredOutput immediately with your analysis. Do NOT ask questions or use any other tools.
 
 When selecting agents:
 - Match agent expertise to plan requirements
@@ -112,8 +113,8 @@ When selecting agents:
     const categoryList = this.categories.join("/");
 
     const simpleAdditional = Math.max(0, (selection.simple?.max ?? 3) - this.mandatoryCount);
-    const mediumAdditional = Math.max(0, (selection.medium?.max ?? 5) - this.mandatoryCount);
-    const highAdditional = Math.max(0, (selection.high?.max ?? 7) - this.mandatoryCount);
+    const mediumAdditional = Math.max(0, (selection.medium?.max ?? 8) - this.mandatoryCount);
+    const highAdditional = Math.max(0, (selection.high?.max ?? 12) - this.mandatoryCount);
 
     return `Analyze this plan and select appropriate reviewer agents.
 
@@ -222,4 +223,3 @@ Call StructuredOutput now with: complexity, category, selectedAgents, reasoning`
     };
   }
 }
-

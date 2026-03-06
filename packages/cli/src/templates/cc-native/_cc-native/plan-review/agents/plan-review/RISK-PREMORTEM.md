@@ -55,7 +55,7 @@ Conduct the pre-mortem in two passes:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -69,4 +69,3 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of risks identified, each with: severity (high/medium/low), category (e.g., "silent-failure", "blast-radius", "cascading-effect", "detection-gap"), issue description, suggested_fix (specific mitigation or detection mechanism)
 - **missing_sections**: Risk considerations the plan should address (failure detection, monitoring, blast radius analysis)
 - **questions**: Risks that need clarification before implementation
-

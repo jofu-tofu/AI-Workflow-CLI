@@ -46,7 +46,7 @@ Map the dependency graph described or implied by the plan:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -60,4 +60,3 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of dependency concerns, each with: severity (high/medium/low), category (e.g., "single-point-of-failure", "fan-out-risk", "cascading-dependency", "implicit-coupling", "external-fragility"), issue description, suggested_fix (add fallback, decouple, or acknowledge dependency)
 - **missing_sections**: Dependency considerations the plan should address (dependency inventory, failure isolation, fallback strategies)
 - **questions**: Dependencies that need explicit acknowledgment or mitigation planning
-

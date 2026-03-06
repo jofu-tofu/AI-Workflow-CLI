@@ -20,35 +20,36 @@ function resolveAiwBin(cwd?: string): string {
   } catch {
     // Fall through to PATH lookup
   }
+
   return "aiw";
 }
 
 export interface AiwLaunchOptions {
   /** Launch codex instead of claude. */
   codex?: boolean;
-  /** Block until pane exits. */
-  wait?: boolean;
-  /** Return JSON output. */
-  json?: boolean;
-  /** Split direction: auto, h, or v. */
-  split?: "auto" | "h" | "v";
-  /** Extra env vars to inject. */
-  env?: Record<string, string>;
-  /** Path to prompt file. */
-  promptPath?: string;
   /** Working directory. */
   cwd?: string;
+  /** Extra env vars to inject. */
+  env?: Record<string, string>;
+  /** Return JSON output. */
+  json?: boolean;
+  /** Path to prompt file. */
+  promptPath?: string;
+  /** Split direction: auto, h, or v. */
+  split?: "auto" | "h" | "v";
   /** Timeout in ms (only relevant with --wait). */
   timeoutMs?: number;
+  /** Block until pane exits. */
+  wait?: boolean;
 }
 
 export interface AiwLaunchResult {
-  launched: boolean;
   backend: string;
-  paneId: string | null;
-  sentinelPath: string | null;
-  exitCode: number | null;
-  reason: string | null;
+  exitCode: null | number;
+  launched: boolean;
+  paneId: null | string;
+  reason: null | string;
+  sentinelPath: null | string;
 }
 
 /**
@@ -66,6 +67,7 @@ export async function aiwLaunch(options: AiwLaunchOptions): Promise<AiwLaunchRes
   if (options.env && Object.keys(options.env).length > 0) {
     args.push("--env", JSON.stringify(options.env));
   }
+
   if (options.promptPath) args.push("--prompt-path", options.promptPath);
 
   const result = await execFileAsync(bin, args, {
@@ -101,5 +103,4 @@ function parseJsonResult(result: ExecResult): AiwLaunchResult {
     };
   }
 }
-
 

@@ -4,7 +4,7 @@
  * See cc-native-plan-review.ts for integration point (questions gate).
  */
 
-import path from "node:path";
+import * as path from "node:path";
 
 import { runAgentReview } from "./reviewers/index.js";
 import { QUESTIONS_SCHEMA } from "./reviewers/schemas.js";
@@ -99,4 +99,3 @@ export async function runPlanQuestions(
 
   return { questions, assumptions, ambiguities };
 }
-

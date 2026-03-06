@@ -40,7 +40,7 @@ For each core premise:
 ## CRITICAL: Single-Turn Review
 
 When reviewing a plan:
-1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or unknown file tools)
+1. Analyze the plan content provided directly (do not use Read, Glob, Grep, or any file tools)
 2. Call StructuredOutput immediately with your assessment
 3. Complete your entire review in one response
 
@@ -54,4 +54,3 @@ Call StructuredOutput with exactly these fields:
 - **issues**: Array of adversarial concerns, each with: severity (high/medium/low), category (e.g., "inverted-premise", "consensus-blindspot", "steelman-opposition"), issue description, suggested_fix (how plan should defend)
 - **missing_sections**: Opposing views or alternatives the plan should address
 - **questions**: Adversarial questions the plan should be able to answer
-

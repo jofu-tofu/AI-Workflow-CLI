@@ -1,7 +1,7 @@
 import type {ClaudeSettings} from './claude-settings-types.js'
 import type {WindsurfHooks} from './windsurf-hooks-types.js'
 
-const RESOLVER = 'bun ~/.aiwcli/bin/resolve-run.ts'
+const RESOLVER = 'bun .aiwcli/_core/scripts/resolve-run.ts'
 const CORE_ROOT = '.aiwcli/_core'
 
 function cmd(relativePath: string): string {
@@ -23,6 +23,9 @@ export function getCoreClaudeSettingsBase(): ClaudeSettings {
         {
           matcher: '*',
           hooks: [{type: 'command', command: cmd('hooks-ts/user_prompt_submit.ts'), timeout: 10 * 1000}],
+        },
+        {
+          hooks: [{type: 'command', command: cmd('hooks-ts/codex_explorer.ts'), timeout: 55 * 1000}],
         },
       ],
       PostToolUse: [

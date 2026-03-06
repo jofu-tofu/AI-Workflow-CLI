@@ -13,24 +13,23 @@ describe('platform-commands', () => {
 
     it('is a no-op on non-Windows', () => {
       platformStub = stub(process, 'platform').value('linux')
-      const cmd = 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts'
+      const cmd = 'bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts'
       expect(adaptHookCommand(cmd)).to.equal(cmd)
     })
 
-    it('expands ~ to absolute home path on Windows', () => {
+    it('quotes resolver path on Windows', () => {
       platformStub = stub(process, 'platform').value('win32')
-      const cmd = 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts'
+      const cmd = 'bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts'
       const result = adaptHookCommand(cmd)
-      expect(result).to.not.include('~/')
-      expect(result).to.include('.aiwcli/bin/resolve-run.ts')
+      expect(result).to.include('.aiwcli/_core/scripts/resolve-run.ts')
       expect(result).to.include('.aiwcli/_core/hooks-ts/session_start.ts')
       // Should be quoted for paths with spaces
-      expect(result).to.match(/bun ".*\.aiwcli\/bin\/resolve-run\.ts"/)
+      expect(result).to.match(/bun "\.aiwcli\/_core\/scripts\/resolve-run\.ts"/)
     })
 
     it('strips bash env-var prefix on Windows', () => {
       platformStub = stub(process, 'platform').value('win32')
-      const cmd = 'NO_COLOR= FORCE_COLOR=2 bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/scripts/status_line.ts'
+      const cmd = 'NO_COLOR= FORCE_COLOR=2 bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/scripts/status_line.ts'
       const result = adaptHookCommand(cmd)
       expect(result).to.not.include('NO_COLOR=')
       expect(result).to.not.include('FORCE_COLOR=2')
@@ -39,7 +38,7 @@ describe('platform-commands', () => {
 
     it('preserves bash env-var prefix on Unix', () => {
       platformStub = stub(process, 'platform').value('darwin')
-      const cmd = 'NO_COLOR= FORCE_COLOR=2 bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/scripts/status_line.ts'
+      const cmd = 'NO_COLOR= FORCE_COLOR=2 bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/scripts/status_line.ts'
       expect(adaptHookCommand(cmd)).to.equal(cmd)
     })
 
@@ -59,12 +58,12 @@ describe('platform-commands', () => {
 
     it('is a no-op on Unix', () => {
       platformStub = stub(process, 'platform').value('linux')
-      expect(() => validateCommandsForPlatform(['bun ~/.aiwcli/bin/resolve-run.ts foo'])).to.not.throw()
+      expect(() => validateCommandsForPlatform(['bun ~/some/path foo'])).to.not.throw()
     })
 
     it('throws on unexpanded ~/ on Windows', () => {
       platformStub = stub(process, 'platform').value('win32')
-      expect(() => validateCommandsForPlatform(['bun ~/.aiwcli/bin/resolve-run.ts foo'])).to.throw(/unexpanded ~\//)
+      expect(() => validateCommandsForPlatform(['bun ~/some/path foo'])).to.throw(/unexpanded ~\//)
     })
 
     it('throws on bash env prefix on Windows', () => {
@@ -74,7 +73,7 @@ describe('platform-commands', () => {
 
     it('passes for adapted commands on Windows', () => {
       platformStub = stub(process, 'platform').value('win32')
-      const adapted = ['bun "C:/Users/test/.aiwcli/bin/resolve-run.ts" .aiwcli/foo.ts']
+      const adapted = ['bun ".aiwcli/_core/scripts/resolve-run.ts" .aiwcli/foo.ts']
       expect(() => validateCommandsForPlatform(adapted)).to.not.throw()
     })
   })

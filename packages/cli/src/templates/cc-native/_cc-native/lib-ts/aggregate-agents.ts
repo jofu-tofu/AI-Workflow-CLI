@@ -9,7 +9,7 @@
  */
 
 import * as fs from "node:fs";
-import path from "node:path";
+import * as path from "node:path";
 
 import type { AgentConfig } from "./types.js";
 import { logDebug, logInfo, logWarn } from "../../_core/lib-ts/runtime/logger.js";
@@ -121,7 +121,7 @@ export function aggregateAgents(agentsDir?: string): AgentConfig[] {
     const filePath = path.join(dir, file);
     let content: string;
     try {
-      content = fs.readFileSync(filePath, "utf8");
+      content = fs.readFileSync(filePath, "utf-8");
     } catch (error: unknown) {
       logWarn("aggregate", `Failed to read ${file}: ${error}`);
       continue;
@@ -160,6 +160,4 @@ export function aggregateAgents(agentsDir?: string): AgentConfig[] {
   logInfo("aggregate", `Loaded ${agents.length} agents from ${dir}`);
   return agents;
 }
-
-
 

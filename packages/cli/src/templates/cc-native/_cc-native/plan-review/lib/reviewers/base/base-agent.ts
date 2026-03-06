@@ -3,5 +3,5 @@
  * This file preserves all existing import paths for provider implementations.
  */
 
-export { type AgentDebugLogger, type AgentExecutionConfig, BaseCliAgent } from "../../../../../_core/lib-ts/agent-exec/base-agent.js";
+export { BaseCliAgent, type AgentExecutionConfig, type AgentDebugLogger } from "../../../../../_core/lib-ts/agent-exec/base-agent.js";
 export type { ExecutionResult as ExecResult } from "../../../../../_core/lib-ts/agent-exec/execution-backend.js";

@@ -24,6 +24,7 @@ import {EXIT_CODES} from '../../../types/exit-codes.js'
 const KNOWN_IDES = [
   {value: 'claude', name: 'Claude Code', description: 'Anthropic Claude Code CLI'},
   {value: 'codex', name: 'Codex CLI', description: 'OpenAI Codex CLI skills'},
+  {value: 'cognition', name: 'Cognition', description: 'Cognition (Devin) IDE'},
   {value: 'windsurf', name: 'Windsurf', description: 'Codeium Windsurf IDE'},
 ]
 

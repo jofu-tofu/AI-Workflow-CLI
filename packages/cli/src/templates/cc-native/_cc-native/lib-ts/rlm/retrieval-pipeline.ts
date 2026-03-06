@@ -140,7 +140,7 @@ async function runPipeline(
 
   timings.embed_query_ms = Date.now() - t;
   if (hydeTiming > 0) {
-    (timings as unknown).hyde_ms = hydeTiming;
+    (timings as any).hyde_ms = hydeTiming;
   }
 
   t = Date.now();
@@ -442,7 +442,7 @@ async function synthesize(
     "You are a knowledge synthesizer. Given a query and relevant session findings, " +
     "produce a coherent markdown answer. Include session citations inline as " +
     '"(session: {date}, {project})". Highlight the most recent and relevant information. ' +
-    "Note unknown contradictions or evolution across sessions. Be concise but thorough.";
+    "Note any contradictions or evolution across sessions. Be concise but thorough.";
 
   const userPrompt = `Query: ${query}\n\nRelevant Sessions:\n${context}`;
 
@@ -461,4 +461,3 @@ async function synthesize(
 
   return result.output.trim();
 }
-

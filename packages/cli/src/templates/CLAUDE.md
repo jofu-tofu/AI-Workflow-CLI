@@ -81,7 +81,7 @@ When multiple templates install, settings.json files merge:
   "hooks": {
     "PostToolUse": [{
       "matcher": "Write",
-      "hooks": [{ "type": "command", "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/lint_after_edit.ts", "timeout": 10000 }]
+      "hooks": [{ "type": "command", "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/lint_after_edit.ts", "timeout": 10000 }]
     }]
   }
 }

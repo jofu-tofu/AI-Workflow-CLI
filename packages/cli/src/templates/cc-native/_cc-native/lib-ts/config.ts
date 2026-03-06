@@ -4,7 +4,7 @@
  */
 
 import * as fs from "node:fs";
-import path from "node:path";
+import * as path from "node:path";
 
 import type { DisplaySettings, PlanReviewConfig } from "./types.js";
 import { DEFAULT_DISPLAY } from "./types.js";
@@ -55,4 +55,3 @@ export function getDisplaySettings(
     ...sectionDisplay,
   };
 }
-

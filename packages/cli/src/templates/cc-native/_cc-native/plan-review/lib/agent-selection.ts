@@ -62,7 +62,7 @@ export function assignModelsToAgents(
   modelsConfig: ModelsConfig,
   preflightAvailable?: Map<string, Set<string>>,
 ): AgentConfig[] {
-  const enabledProviders = Object.entries(modelsConfig.providers)
+  let enabledProviders = Object.entries(modelsConfig.providers)
     .filter(([name, config]) => {
       if (!config.enabled || config.models.length === 0) return false;
       const cliName = name === "claude" ? "claude" : name;

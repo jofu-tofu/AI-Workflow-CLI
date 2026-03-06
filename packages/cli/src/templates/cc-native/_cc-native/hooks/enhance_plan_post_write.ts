@@ -13,7 +13,7 @@
  */
 
 import * as os from "node:os";
-import path from "node:path";
+import * as path from "node:path";
 
 import {
   loadHookInput,
@@ -50,4 +50,3 @@ function main(): void {
 }
 
 runHook(main, "enhance_plan_post_write");
-

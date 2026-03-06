@@ -1,11 +1,11 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/scripts/status_line.ts"
+    "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/scripts/status_line.ts"
   },
   "fileSuggestion": {
     "type": "command",
-    "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/file-suggestion.ts"
+    "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/file-suggestion.ts"
   },
   "hooks": {
     "UserPromptSubmit": [
@@ -13,7 +13,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/user_prompt_submit.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/user_prompt_submit.ts",
             "timeout": 10000
           }
         ]
@@ -22,8 +22,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_cc-native/hooks/plan_questions_early.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_cc-native/hooks/plan_questions_early.ts",
             "timeout": 3000
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/codex_explorer.ts",
+            "timeout": 55000
           }
         ]
       }
@@ -34,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/context_monitor.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/context_monitor.ts",
             "timeout": 5000
           }
         ]
@@ -44,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/task_create_capture.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/task_create_capture.ts",
             "timeout": 3000
           }
         ]
@@ -54,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/task_update_capture.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/task_update_capture.ts",
             "timeout": 3000
           }
         ]
@@ -64,7 +73,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/archive_plan.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/archive_plan.ts",
             "timeout": 5000
           }
         ]
@@ -74,7 +83,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/lint_after_edit.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/lint_after_edit.ts",
             "timeout": 10000
           }
         ]
@@ -84,7 +93,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_cc-native/hooks/mark_questions_asked.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_cc-native/hooks/mark_questions_asked.ts",
             "timeout": 3000
           }
         ]
@@ -94,7 +103,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_cc-native/hooks/enhance_plan_post_write.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_cc-native/hooks/enhance_plan_post_write.ts",
             "timeout": 5000
           }
         ]
@@ -104,7 +113,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_cc-native/hooks/enhance_plan_post_subagent.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_cc-native/hooks/enhance_plan_post_subagent.ts",
             "timeout": 10000,
             "blockOnFail": false
           }
@@ -116,7 +125,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts",
             "timeout": 5000
           }
         ]
@@ -127,7 +136,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/session_end.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/session_end.ts",
             "timeout": 5000
           }
         ]
@@ -138,7 +147,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/pre_compact.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/pre_compact.ts",
             "timeout": 5000
           }
         ]
@@ -150,7 +159,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/archive_plan.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/archive_plan.ts",
             "timeout": 5000
           }
         ]
@@ -171,7 +180,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_cc-native/hooks/validate_task_prompt.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_cc-native/hooks/validate_task_prompt.ts",
             "timeout": 20000
           }
         ]
@@ -181,7 +190,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_cc-native/hooks/cc-native-plan-review.ts",
+            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_cc-native/hooks/cc-native-plan-review.ts",
             "timeout": 5000
           }
         ]

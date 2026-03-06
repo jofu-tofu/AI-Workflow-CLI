@@ -97,37 +97,32 @@ export function buildShellCommand(opts: TmuxSessionOptions): string {
   return parts.join('; ')
 }
 
-/** Best-effort enable tmux mouse support in the current session (Unix only). */
-export function enableTmuxMouse(): void {
-  try {
-    if (isNonWindowsPlatform()) {
-      execSync('tmux set-option -g mouse on', {stdio: 'ignore', timeout: 3000})
-      execSync('tmux set-option -g history-limit 50000', {stdio: 'ignore', timeout: 3000})
-    }
-    // Windows uses psmux — mouse/scrollback handled natively by ConPTY.
-  } catch {
-    // Best-effort — ignore failures
-  }
-}
-
 /**
- * Best-effort enable 256-color and truecolor support in the current tmux session (Unix only).
- * Windows uses psmux — color handled natively by ConPTY.
+ * Best-effort configure tmux session: mouse, scrollback, 256-color, and truecolor.
+ * Batches all settings into a single tmux invocation using \; command separator.
+ * Unix only — Windows uses psmux (native ConPTY handles mouse/color natively).
  */
-export function enableTmuxColors(): void {
-  const baseOpts = {stdio: 'ignore' as const, timeout: 3000}
+export function configureTmuxSession(): void {
+  if (!isNonWindowsPlatform()) return
   try {
-    if (isNonWindowsPlatform()) {
-      try {
-        execSync('tmux set default-terminal "tmux-256color"', baseOpts)
-      } catch {
-        execSync('tmux set default-terminal "screen-256color"', baseOpts)
-      }
-
-      execSync('tmux set -a terminal-overrides ",xterm*:Tc,alacritty:Tc"', baseOpts)
-    }
+    execSync(
+      'tmux set-option -g mouse on \\; ' +
+      'set-option -g history-limit 50000 \\; ' +
+      'set -g default-terminal "tmux-256color" \\; ' +
+      'set -a terminal-overrides ",xterm*:Tc,alacritty:Tc"',
+      {stdio: 'ignore', timeout: 3000},
+    )
   } catch {
-    // Best-effort — ignore failures
+    // Fallback: tmux-256color may not be in terminfo — try screen-256color
+    try {
+      execSync(
+        'tmux set-option -g mouse on \\; ' +
+        'set-option -g history-limit 50000 \\; ' +
+        'set -g default-terminal "screen-256color" \\; ' +
+        'set -a terminal-overrides ",xterm*:Tc,alacritty:Tc"',
+        {stdio: 'ignore', timeout: 3000},
+      )
+    } catch { /* best-effort */ }
   }
 }
 

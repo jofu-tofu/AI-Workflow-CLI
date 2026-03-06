@@ -48,7 +48,7 @@ describe('Template Settings Reconstructor', () => {
                 },
                 {
                   type: 'command',
-                  command: 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts',
+                  command: 'bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts',
                   timeout: 5000,
                 },
               ],
@@ -62,7 +62,7 @@ describe('Template Settings Reconstructor', () => {
       expect(
         normalized.hooks?.PreToolUse?.[0]?.hooks.find((hook) => hook.type === 'command'),
       ).to.deep.include({
-        command: 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts',
+        command: 'bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts',
       })
 
       const promptHook = normalized.hooks?.PreToolUse?.[0]?.hooks.find((hook) => hook.type === 'prompt')
@@ -76,7 +76,7 @@ describe('Template Settings Reconstructor', () => {
       expect(
         source.hooks.PreToolUse[0].hooks.find((hook) => hook.type === 'command'),
       ).to.deep.include({
-        command: 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts',
+        command: 'bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts',
       })
     })
   })
@@ -149,8 +149,8 @@ describe('Template Settings Reconstructor', () => {
         const content = await fs.readFile(join(testDir, '.claude', 'settings.json'), 'utf8')
         const settings = JSON.parse(content)
 
-        expect(settings.statusLine.command).to.match(/bun ".*\.aiwcli\/bin\/resolve-run\.ts"/)
-        expect(settings.fileSuggestion.command).to.match(/bun ".*\.aiwcli\/bin\/resolve-run\.ts"/)
+        expect(settings.statusLine.command).to.match(/bun "\.aiwcli\/_core\/scripts\/resolve-run\.ts"/)
+        expect(settings.fileSuggestion.command).to.match(/bun "\.aiwcli\/_core\/scripts\/resolve-run\.ts"/)
 
         const promptHook = settings.hooks.PreToolUse
           .flatMap((matcher: {hooks: unknown[]}) => matcher.hooks)

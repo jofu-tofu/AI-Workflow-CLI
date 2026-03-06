@@ -4,7 +4,7 @@
  */
 
 import * as fs from "node:fs";
-import path from "node:path";
+import * as path from "node:path";
 
 import {
   formatCombinedMarkdown,
@@ -96,7 +96,7 @@ export function writeFile(filePath: string, content: string): void {
       const [success, error] = atomicWrite(filePath, content);
       if (!success) throw new Error(`Atomic write failed: ${error}`);
     } else {
-      fs.writeFileSync(filePath, content, "utf8");
+      fs.writeFileSync(filePath, content, "utf-8");
     }
   } catch (error: unknown) {
     logError("utils", `Failed to write ${path.basename(filePath)}: ${error}`);
@@ -112,11 +112,9 @@ export function writeFileNonCritical(filePath: string, content: string): void {
         logWarn("utils", `Failed to write ${path.basename(filePath)}: ${error}`);
       }
     } else {
-      fs.writeFileSync(filePath, content, "utf8");
+      fs.writeFileSync(filePath, content, "utf-8");
     }
   } catch (error: unknown) {
     logWarn("utils", `Failed to write ${path.basename(filePath)}: ${error}`);
   }
 }
-
-

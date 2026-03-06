@@ -4,7 +4,7 @@
  */
 
 export { AgentReviewer, runAgentReview } from "./agent.js";
-export { type AgentDebugLogger, type AgentExecutionConfig, BaseCliAgent } from "./base/base-agent.js";
+export { BaseCliAgent, type AgentExecutionConfig, type AgentDebugLogger } from "./base/base-agent.js";
 export { ClaudeAgent } from "./providers/claude-agent.js";
 export { CodexAgent } from "./providers/codex-agent.js";
 export { GeminiAgent } from "./providers/gemini-agent.js";

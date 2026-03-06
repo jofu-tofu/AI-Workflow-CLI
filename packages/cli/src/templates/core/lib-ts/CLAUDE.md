@@ -361,7 +361,7 @@ These run for ALL templates. Method-specific hooks live in `_{method}/hooks/`.
 | `task_create_capture.ts` | PostToolUse:TaskCreate | Persists task creation to context state |
 | `task_update_capture.ts` | PostToolUse:TaskUpdate | Persists task updates to context state |
 | `file-suggestion.ts` | PostToolUse:Write | Suggests file organization improvements |
-| `codex_explorer.ts` | PostToolUse:Agent | Codex explorer agent integration |
+| `codex_explorer.ts` | UserPromptSubmit | Codex Spark codebase exploration (plan mode, once per session) |
 | `lint_after_edit.ts` | PostToolUse:Write | Post-edit lint dispatching |
 
 ---

@@ -7,7 +7,7 @@
  */
 
 import * as fs from "node:fs";
-import path from "node:path";
+import * as path from "node:path";
 
 import { hookLog } from "../../_core/lib-ts/runtime/logger.js";
 
@@ -78,4 +78,3 @@ export function cleanupDebugFolder(contextPath: string): void {
     // Best effort cleanup
   }
 }
-
