@@ -82,7 +82,7 @@
   },
   "scripts": {
     "build": "shx rm -rf dist && tsc -b && npm run build:templates",
-    "build:templates": "npm run sync:shared-lib && npm run sync:cc-native && shx mkdir -p dist/templates && shx cp -r src/templates/_shared dist/templates/ && shx cp -r src/templates/cc-native dist/templates/ && shx cp src/templates/CLAUDE.md dist/templates/",
+    "build:templates": "npm run sync:shared-lib && npm run sync:cc-native && shx mkdir -p dist/templates && shx cp -r src/templates/core dist/templates/ && shx cp -r src/templates/cc-native dist/templates/ && shx cp src/templates/CLAUDE.md dist/templates/",
     "build:watch": "tsc -b --watch",
     "check": "npm run lint && npm run build",
     "clean": "shx rm -rf dist",

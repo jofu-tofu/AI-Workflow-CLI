@@ -58,7 +58,7 @@ export async function getAvailableTemplates(): Promise<string[]> {
   try {
     const entries = await fs.readdir(templatesDir, {withFileTypes: true})
     return entries
-      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('_'))
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('_') && !RESERVED_TEMPLATE_NAMES.has(entry.name))
       .map((entry) => entry.name)
   } catch (error) {
     const err = error as NodeJS.ErrnoException
@@ -82,3 +82,4 @@ export async function getTemplateIdeNamesByPath(templatePath: string): Promise<s
     .sort((a, b) => a.localeCompare(b))
 }
 
+const RESERVED_TEMPLATE_NAMES = new Set(['core'])

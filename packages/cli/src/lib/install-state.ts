@@ -3,7 +3,7 @@ import {promises as fs} from 'node:fs'
 import {IdePathResolver} from './ide-path-resolver.js'
 import {pathExists} from './paths.js'
 
-const CORE_RUNTIME_FOLDERS = new Set(['_core', '_shared'])
+const CORE_RUNTIME_FOLDERS = new Set(['_core'])
 const RESERVED_AIWCLI_FOLDERS = new Set(['_output', 'state', ...CORE_RUNTIME_FOLDERS])
 
 interface CoreState {
@@ -189,16 +189,12 @@ async function discoverLegacyMethodNames(targetDir: string): Promise<string[]> {
 
 async function hasLegacyCoreRuntime(targetDir: string): Promise<boolean> {
   const resolver = new IdePathResolver(targetDir)
-  const [hasCore, hasShared] = await Promise.all([
-    pathExists(resolver.getCoreFolder()),
-    pathExists(resolver.getSharedFolder()),
-  ])
-  return hasCore || hasShared
+  return pathExists(resolver.getCoreFolder())
 }
 
 function ideRootPaths(ide: string, method: string): string[] {
   if (ide === 'claude') return [`.claude/commands/${method}`, `.claude/agents/${method}`]
-  if (ide === 'codex') return [`.codex/workflows/${method}`]
+  if (ide === 'codex') return []
   if (ide === 'windsurf') return [`.windsurf/workflows/${method}`]
   return [`.${ide}/${method}`]
 }

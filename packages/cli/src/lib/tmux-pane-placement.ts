@@ -1,6 +1,6 @@
 /**
  * BSP split algorithm for tmux pane placement.
- * Extracted from template _shared/lib-ts/base/tmux-pane-placement.ts.
+ * Extracted from template core/lib-ts/base/tmux-pane-placement.ts.
  */
 
 import {execFileAsync} from './runtime/subprocess-utils.js'

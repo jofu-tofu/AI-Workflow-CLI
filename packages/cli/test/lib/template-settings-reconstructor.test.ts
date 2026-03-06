@@ -48,7 +48,7 @@ describe('Template Settings Reconstructor', () => {
                 },
                 {
                   type: 'command',
-                  command: 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/session_start.ts',
+                  command: 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts',
                   timeout: 5000,
                 },
               ],
@@ -76,7 +76,7 @@ describe('Template Settings Reconstructor', () => {
       expect(
         source.hooks.PreToolUse[0].hooks.find((hook) => hook.type === 'command'),
       ).to.deep.include({
-        command: 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/session_start.ts',
+        command: 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts',
       })
     })
   })

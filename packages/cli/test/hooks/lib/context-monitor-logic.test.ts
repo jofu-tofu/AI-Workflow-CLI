@@ -4,7 +4,7 @@ import {
   CONTEXT_WARNING_15,
   CONTEXT_WARNING_30,
   selectWarningMessage,
-} from '../../../src/templates/_shared/lib-ts/hooks/context-monitor-logic.js'
+} from '../../../src/templates/core/lib-ts/hooks/context-monitor-logic.js'
 
 describe('context-monitor-logic', () => {
   it('returns null when context remaining is above all warning thresholds', () => {

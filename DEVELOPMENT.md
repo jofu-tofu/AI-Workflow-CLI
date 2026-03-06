@@ -61,8 +61,8 @@ This section explains the template system architecture. Understanding this preve
 
 | Source | Target |
 |--------|--------|
-| `.aiwcli/_shared/hooks-ts/*.ts` | `packages/cli/src/templates/_shared/hooks-ts/` |
-| `.aiwcli/_shared/lib-ts/**/*.ts` | `packages/cli/src/templates/_shared/lib-ts/` |
+| `.aiwcli/_core/hooks-ts/*.ts` | `packages/cli/src/templates/core/hooks-ts/` |
+| `.aiwcli/_core/lib-ts/**/*.ts` | `packages/cli/src/templates/core/lib-ts/` |
 | `.aiwcli/_cc-native/**` | `packages/cli/src/templates/cc-native/_cc-native/` |
 | `.aiwcli/_cc-native/hooks/*.ts` | `packages/cli/src/templates/cc-native/_cc-native/hooks/` |
 | `.aiwcli/_cc-native/lib-ts/**/*.ts` | `packages/cli/src/templates/cc-native/_cc-native/lib-ts/` |
@@ -97,7 +97,7 @@ npm run sync:cc-native
 
 ```
 .aiwcli/
-├── _shared/                    # Cross-method infrastructure
+├── core/                    # Cross-method infrastructure
 │   ├── hooks-ts/               # Shared TypeScript hook scripts (run via bun)
 │   │   ├── user_prompt_submit.ts    # Context binding
 │   │   ├── context_monitor.ts       # Context usage monitoring
@@ -162,7 +162,7 @@ Hooks are TypeScript scripts run via Bun, triggered by Claude Code lifecycle eve
 | `PreToolUse` | Before tool executes | `cc-native-plan-review.ts` (plan validation) |
 | `PostToolUse` | After tool completes | `context_monitor.ts` (context tracking) |
 
-**Shared Hooks** (`.aiwcli/_shared/hooks-ts/`):
+**Shared Hooks** (`.aiwcli/_core/hooks-ts/`):
 - `user_prompt_submit.ts` - Context enforcement, session binding
 - `context_monitor.ts` - Context usage monitoring (30%/20%/10% warnings)
 - `session_start.ts` - Context restoration on session start
@@ -226,21 +226,21 @@ Tracks work status via `InFlightState` dataclass:
 
 ### Modifying Hooks
 
-1. Edit the hook in `.aiwcli/_shared/hooks/` or `.aiwcli/_cc-native/hooks/`
+1. Edit the hook in `.aiwcli/_core/hooks/` or `.aiwcli/_cc-native/hooks/`
 2. Test by running Claude Code with the modified hook
 3. Synchronize to `packages/cli/src/templates/cc-native/`
 4. Run tests: `cd packages/cli && npm test`
 
 ### Modifying Libraries
 
-1. Edit the library in `.aiwcli/_shared/lib-ts/` or `.aiwcli/_cc-native/lib-ts/`
+1. Edit the library in `.aiwcli/_core/lib-ts/` or `.aiwcli/_cc-native/lib-ts/`
 2. Test dependent hooks manually
 3. Synchronize to `packages/cli/src/templates/`
 4. Run tests: `cd packages/cli && npm test`
 
 ### Adding New Hooks
 
-1. Create the hook script in the appropriate directory (`.aiwcli/_shared/hooks-ts/` or `.aiwcli/_cc-native/hooks/`)
+1. Create the hook script in the appropriate directory (`.aiwcli/_core/hooks-ts/` or `.aiwcli/_cc-native/hooks/`)
 2. Use `runHook()` or `runHookAsync()` as entry point
 3. Add hook wiring to `.claude/settings.json`:
    ```json
@@ -250,7 +250,7 @@ Tracks work status via `InFlightState` dataclass:
          "matcher": "ToolName",
          "hooks": [{
            "type": "command",
-           "command": "bun run .aiwcli/_shared/hooks-ts/your-hook.ts",
+           "command": "bun run .aiwcli/_core/hooks-ts/your-hook.ts",
            "timeout": 5000
          }]
        }]

@@ -11,8 +11,8 @@ import {
   getToolInput,
   parseContextWindow,
   validateHookEvent,
-} from '../../../src/templates/_shared/lib-ts/hooks/hook-utils.js'
-import type {HookInput} from '../../../src/templates/_shared/lib-ts/types.js'
+} from '../../../src/templates/core/lib-ts/hooks/hook-utils.js'
+import type {HookInput} from '../../../src/templates/core/lib-ts/types.js'
 import {createContextFixture, type ContextFixture} from '../fixtures/context-fixture.js'
 
 describe('hook-utils', () => {

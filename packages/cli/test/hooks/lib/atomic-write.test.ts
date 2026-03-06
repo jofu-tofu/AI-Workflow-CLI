@@ -4,7 +4,7 @@ import {join} from 'node:path'
 
 import {afterEach, describe, expect, it} from 'vitest'
 
-import {atomicAppend, atomicWrite} from '../../../src/templates/_shared/lib-ts/runtime/atomic-write.js'
+import {atomicAppend, atomicWrite} from '../../../src/templates/core/lib-ts/runtime/atomic-write.js'
 
 describe('atomic-write', () => {
   const dirs: string[] = []

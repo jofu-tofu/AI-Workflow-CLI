@@ -17,11 +17,11 @@ Include `_output/{method}/` in template `.gitignore`.
 
 ## Directory Structure
 
-Template source lives under `src/templates/`. At install time, `_shared/` is copied into `.aiwcli/_core/` and used as the runtime base. Method templates add method-owned files (for example `.aiwcli/_cc-native/*`) and IDE-specific stubs.
+Template source lives under `src/templates/`. At install time, `core/` is copied into `.aiwcli/_core/` and used as the runtime base. Method templates add method-owned files (for example `.aiwcli/_cc-native/*`) and IDE-specific stubs.
 
 ```
 packages/cli/src/templates/
-├── _shared/                          # Core runtime source (installed as .aiwcli/_core)
+├── core/                          # Core runtime source (installed as .aiwcli/_core)
 │   ├── hooks-ts/                     # Shared TypeScript hook scripts (context, tasks, sessions)
 │   └── lib-ts/                       # Shared TypeScript libraries
 │       ├── runtime/                  #   Core runtime helpers
@@ -61,7 +61,7 @@ packages/cli/src/templates/
 
 | Tier | Location | Purpose |
 |------|----------|---------|
-| Core Source | `_shared/` | Source for runtime payload copied into `.aiwcli/_core/` |
+| Core Source | `core/` | Source for runtime payload copied into `.aiwcli/_core/` |
 | Method | `_{method}/` or `.aiwcli/_{method}/` | Method-specific templates, workflows, hooks, config |
 | IDE | `.{ide}/` | IDE-specific command stubs, settings, workflow definitions |
 | Config | `.{ide}/settings.json` | Hooks, model prefs, method settings (merged on install) |
@@ -86,7 +86,7 @@ When multiple templates install, settings.json files merge:
 
 ## Hooks
 
-**Location:** Runtime hooks live in `.aiwcli/_core/hooks-ts/` (cross-method, TypeScript) and optional method hooks in `.aiwcli/_{method}/hooks/`. Template source paths remain under `_shared/` and `_{method}/` and are wired via reconstructed `.{ide}/settings.json`.
+**Location:** Runtime hooks live in `.aiwcli/_core/hooks-ts/` (cross-method, TypeScript) and optional method hooks in `.aiwcli/_{method}/hooks/`. Template source paths remain under `core/` and `_{method}/` and are wired via reconstructed `.{ide}/settings.json`.
 
 **Configuration:**
 ```json
@@ -203,13 +203,13 @@ Load and execute `_{method}/workflows/{name}.md`.
 - Full workflows in IDE command files
 - Hardcoded paths without method namespace
 - Putting hook scripts directly in IDE directories (`.claude/hooks/`)
-- Creating `_shared/` directories inside method templates (e.g., `cc-native/_shared/`). All shared code lives in `packages/cli/src/templates/_shared/`. Method templates reference shared code via imports at runtime, not by copying.
+- Creating `core/` directories inside method templates (e.g., `cc-native/core/`). All shared code lives in `packages/cli/src/templates/core/`. Method templates reference shared code via imports at runtime, not by copying.
 
 ---
 
 ## System Co-location Pattern
 
-Cohesive subsystems are organized as self-contained folders. In source they live under `_shared/` or method folders; at runtime, `_shared` subsystems execute from `.aiwcli/_core/*`.
+Cohesive subsystems are organized as self-contained folders. In source they live under `core/` or method folders; at runtime, `core` subsystems execute from `.aiwcli/_core/*`.
 
 ```
 {system-name}/
@@ -221,9 +221,9 @@ Cohesive subsystems are organized as self-contained folders. In source they live
 ```
 
 **Existing systems following this pattern:**
-- `_shared/skills/handoff-system/` — handoff creation and restoration
-- `_shared/skills/codex/` — Codex launch + watch integration
-- `_shared/skills/meta-plan/` — prompt amplification workflow
+- `core/skills/handoff-system/` — handoff creation and restoration
+- `core/skills/codex/` — Codex launch + watch integration
+- `core/skills/meta-plan/` — prompt amplification workflow
 - `cc-native/_cc-native/plan-review/` — method-specific plan review pipeline
 - `cc-native/_cc-native/artifacts/` — method-specific review artifacts
 - `cc-native/_cc-native/lib-ts/rlm/` — method-specific retrieval memory
@@ -231,6 +231,6 @@ Cohesive subsystems are organized as self-contained folders. In source they live
 **Hooks are NOT co-located with their owning system.**
 Claude Code hooks are path-referenced in `.claude/settings.json` at install time.
 Moving a hook file requires settings.json updates — high blast-radius, fragile.
-Core hooks live in `_shared/hooks-ts/` source (installed to `.aiwcli/_core/hooks-ts/`), and method hooks live in method folders (for example `cc-native/_cc-native/hooks/`). Each system's CLAUDE.md
+Core hooks live in `core/hooks-ts/` source (installed to `.aiwcli/_core/hooks-ts/`), and method hooks live in method folders (for example `cc-native/_cc-native/hooks/`). Each system's CLAUDE.md
 lists the hooks that invoke it under a "Hooks" section.
 

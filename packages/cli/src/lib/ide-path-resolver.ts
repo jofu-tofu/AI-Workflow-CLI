@@ -39,7 +39,7 @@ export class IdePathResolver {
   /**
    * Get path to a folder within the .aiwcli container
    *
-   * @param folderName - Folder name within .aiwcli (e.g., '_shared', '_bmad')
+   * @param folderName - Folder name within .aiwcli (e.g., '_core', '_bmad')
    * @returns Absolute path to the folder
    */
   getAiwcliFolder(folderName: string): string {
@@ -129,15 +129,6 @@ export class IdePathResolver {
    */
   getProjectRoot(): string {
     return this.projectRoot
-  }
-
-  /**
-   * Get the shared folder path within .aiwcli
-   *
-   * @returns Absolute path to _shared directory
-   */
-  getSharedFolder(): string {
-    return this.getAiwcliFolder('_shared')
   }
 
   /**

@@ -10,7 +10,7 @@ import {
   determineContext,
   parseChainedCaret,
   resolveContextByPrefix,
-} from '../../../src/templates/_shared/lib-ts/context/context-selector.js'
+} from '../../../src/templates/core/lib-ts/context/context-selector.js'
 import {
   bindSession,
   createContext,
@@ -18,10 +18,10 @@ import {
   loadState,
   saveState,
   updateMode,
-} from '../../../src/templates/_shared/lib-ts/context/context-store.js'
-import {normalizePlanContent} from '../../../src/templates/_shared/lib-ts/context/plan-manager.js'
-import {getContextDir} from '../../../src/templates/_shared/lib-ts/runtime/constants.js'
-import type {ContextState} from '../../../src/templates/_shared/lib-ts/types.js'
+} from '../../../src/templates/core/lib-ts/context/context-store.js'
+import {normalizePlanContent} from '../../../src/templates/core/lib-ts/context/plan-manager.js'
+import {getContextDir} from '../../../src/templates/core/lib-ts/runtime/constants.js'
+import type {ContextState} from '../../../src/templates/core/lib-ts/types.js'
 
 function createProjectRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'aiwcli-phase5-context-selector-'))

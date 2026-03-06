@@ -2,14 +2,14 @@ import {createHash} from 'node:crypto'
 
 import {describe, expect, it} from 'vitest'
 
-import {normalizePlanContent} from '../../../src/templates/_shared/lib-ts/context/plan-manager.js'
+import {normalizePlanContent} from '../../../src/templates/core/lib-ts/context/plan-manager.js'
 import {
   buildSessionMetadata,
   computePlanFallback,
   generateArchiveFilename,
   shouldStage,
-} from '../../../src/templates/_shared/lib-ts/hooks/session-end-logic.js'
-import type {ContextState, GitState} from '../../../src/templates/_shared/lib-ts/types.js'
+} from '../../../src/templates/core/lib-ts/hooks/session-end-logic.js'
+import type {ContextState, GitState} from '../../../src/templates/core/lib-ts/types.js'
 
 function makeState(overrides: Partial<ContextState> = {}): ContextState {
   const now = '2026-03-04T18:30:00.000Z'

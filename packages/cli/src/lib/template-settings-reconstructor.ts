@@ -32,12 +32,12 @@ import type {WindsurfHooks} from './windsurf-hooks-types.js'
  * Reconstruct .claude/settings.json and .windsurf/hooks.json from the union
  * of all specified templates.
  *
- * Note: Codex content is file-based today (`.codex/workflows/*`) and does not
+ * Note: Codex content is file-based today (`.codex/skills/*`) and does not
  * have a merged settings artifact, so it is intentionally ignored here.
  *
  * The function:
  * 1. Starts with empty settings
- * 2. Merges _shared template settings (when active templates exist)
+ * 2. Merges core template settings (when active templates exist)
  * 3. For each active template, merges its template-source settings
  * 4. Writes the result to the IDE settings file
  *
@@ -190,33 +190,6 @@ function reportTemplateMergeFailure(
 }
 
 export function normalizeTemplateSettingsPaths(settings: ClaudeSettings): ClaudeSettings {
-  const normalized: ClaudeSettings = structuredClone(settings)
-
-  if (normalized.statusLine?.command) {
-    normalized.statusLine.command = normalizeTemplateCommandPath(normalized.statusLine.command)
-  }
-
-  if (normalized.fileSuggestion?.command) {
-    normalized.fileSuggestion.command = normalizeTemplateCommandPath(normalized.fileSuggestion.command)
-  }
-
-  if (normalized.hooks) {
-    for (const event of Object.keys(normalized.hooks) as HookEventType[]) {
-      const matchers = normalized.hooks[event]
-      if (!matchers) continue
-      for (const matcher of matchers) {
-        for (const hook of matcher.hooks) {
-          if (hook.type !== 'command') continue
-          hook.command = normalizeTemplateCommandPath(hook.command)
-        }
-      }
-    }
-  }
-
-  return normalized
-}
-
-function normalizeTemplateCommandPath(value: string): string {
-  return value.replaceAll('.aiwcli/_shared/', '.aiwcli/_core/')
+  return structuredClone(settings)
 }
 

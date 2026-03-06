@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const cliRoot = resolve(scriptDir, '..')
 const canonicalLib = join(cliRoot, 'src', 'lib')
-const templateLib = join(cliRoot, 'src', 'templates', '_shared', 'lib-ts')
+const templateLib = join(cliRoot, 'src', 'templates', 'core', 'lib-ts')
 
 const mappings = [
   { source: join(canonicalLib, 'runtime'), destination: join(templateLib, 'runtime') },
@@ -24,7 +24,7 @@ for (const {source, destination} of mappings) {
   }
 }
 
-console.log('Synced shared lib (runtime/context/hooks/types) into templates.')
+console.log('Synced core lib (runtime/context/hooks/types) into templates.')
 
 function copyDirRecursive(sourceDir, destinationDir) {
   mkdirSync(destinationDir, {recursive: true})

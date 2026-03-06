@@ -46,6 +46,36 @@ const paiCliRules = {
   },
 }
 
+const boundaryOverrides = {
+  files: ['src/**/*.ts'],
+  rules: {
+    'import/no-restricted-paths': ['error', {
+      zones: [
+        {
+          target: './src/capabilities/*/runtime-core',
+          from: './src/commands',
+          message: 'Commands must go through capability control-plane modules, not runtime-core.',
+        },
+        {
+          target: './src/capabilities/*/runtime-core',
+          from: './src/cli',
+          message: 'CLI helpers must go through capability control-plane modules, not runtime-core.',
+        },
+        {
+          target: './src/capabilities/*/runtime-core',
+          from: './src/cli',
+          message: 'Runtime-core must not depend on CLI modules.',
+        },
+        {
+          target: './src/capabilities/*/runtime-core',
+          from: './src/platform',
+          message: 'Platform adapters must not depend on capability runtime-core.',
+        },
+      ],
+    }],
+  },
+}
+
 // Template files are runtime code (executed via bun, not compiled by CLI).
 // They have different conventions: snake_case for JSON fields, process.exit()
 // in hooks, explicit any for dynamic hook I/O, and relative imports that
@@ -126,4 +156,13 @@ const binOverrides = {
   },
 }
 
-export default [includeIgnoreFile(gitignorePath), ...oclif, paiCliRules, templateOverrides, sharedLibOverrides, binOverrides, prettier]
+export default [
+  includeIgnoreFile(gitignorePath),
+  ...oclif,
+  paiCliRules,
+  boundaryOverrides,
+  templateOverrides,
+  sharedLibOverrides,
+  binOverrides,
+  prettier,
+]

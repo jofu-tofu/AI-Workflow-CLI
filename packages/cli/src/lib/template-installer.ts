@@ -42,10 +42,10 @@ interface TemplateInstallationStatus {
   existing: TemplateItemStatus[]
   /** Items that are missing from target directory */
   missing: TemplateItemStatus[]
-  /** The method-specific workflow folder name (e.g., '_gsd', '_bmad') */
-  workflowFolder: null | string
-  /** Whether the workflow folder exists */
-  workflowFolderExists: boolean
+  /** The method-specific runtime folder name (e.g., '_gsd', '_bmad') */
+  runtimeFolder: null | string
+  /** Whether the runtime folder exists */
+  runtimeFolderExists: boolean
 }
 
 /**
@@ -82,11 +82,11 @@ export async function checkTemplateStatus(
   // Scan template directory
   const entries = await fs.readdir(templatePath, {withFileTypes: true})
 
-  // Identify workflow folder based on template name
+  // Identify method runtime folder based on template name
   // Convention: _templatename (e.g., _gsd, _bmad)
-  const workflowFolderName = `_${templateName}`
-  let workflowFolder: null | string = null
-  let workflowFolderExists = false
+  const runtimeFolderName = `_${templateName}`
+  let runtimeFolder: null | string = null
+  let runtimeFolderExists = false
 
   // Filter entries to only include relevant items (skip non-selected IDE folders and excluded patterns)
   const relevantEntries = entries.filter((entry) => {
@@ -129,18 +129,18 @@ export async function checkTemplateStatus(
       missing.push(status)
     }
 
-    // Track workflow folder
-    if (status.name === workflowFolderName) {
-      workflowFolder = workflowFolderName
-      workflowFolderExists = status.exists
+    // Track method runtime folder
+    if (status.name === runtimeFolderName) {
+      runtimeFolder = runtimeFolderName
+      runtimeFolderExists = status.exists
     }
   }
 
   return {
     existing,
     missing,
-    workflowFolder,
-    workflowFolderExists,
+    runtimeFolder,
+    runtimeFolderExists,
   }
 }
 
@@ -179,7 +179,7 @@ export async function copyDir(src: string, dest: string, excludeIdeFolders: bool
         return false
       }
 
-      // Exclude IDE config folders if requested (used for _shared folder)
+      // Exclude IDE config folders if requested (used for core folder)
       // These folders are used for settings merging, not direct installation
       if (excludeIdeFolders && entry.isDirectory() && entry.name.startsWith('.')) {
         return false

@@ -57,7 +57,7 @@ describe('Init Command Structure - Integration Tests', () => {
       })
 
       // Should perform minimal install
-      expect(output).to.match(/minimal installation|_shared folder/i)
+      expect(output).to.match(/minimal installation|core template/i)
       expect(output).to.match(/completed successfully/i)
     })
 

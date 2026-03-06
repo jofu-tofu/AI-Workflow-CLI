@@ -28,7 +28,7 @@ aiwcli v0.9.0 includes:
 - **CLI Commands**: `launch`, `init`, `branch`, `clean`, `clear`
 - **Templates**:
   - **cc-native** - Event-sourced context management with plan review, 25+ specialized agents
-  - **_shared** - Common utilities (context manager, event logging, task sync)
+  - **core** - Common utilities (context manager, event logging, task sync)
 - **IDE Support**: Claude Code, Windsurf, Codex
 
 After installation, run `aiw init --method cc-native` to set up the template in your project.

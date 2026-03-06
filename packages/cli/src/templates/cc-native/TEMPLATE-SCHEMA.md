@@ -297,7 +297,7 @@ Each selected agent:
 
 | Version | Changes |
 |---------|---------|
-| 1.4.0 | **Phase 1 Shared Infrastructure**: Event-sourced context management in `_shared/`, contexts in `_output/contexts/`, atomic writes. **BREAKING**: Renamed config.json → cc-native.config.json |
+| 1.4.0 | **Phase 1 Shared Infrastructure**: Event-sourced context management in `core/`, contexts in `_output/contexts/`, atomic writes. **BREAKING**: Renamed config.json → cc-native.config.json |
 | 1.3.0 | Consolidated CLI + agent review into single unified hook with combined output |
 | 1.2.0 | Added multi-agent plan review via Claude Code agents, reordered hooks (archive last) |
 | 1.1.0 | Added plan review via Codex/Gemini with Claude feedback, config.json |

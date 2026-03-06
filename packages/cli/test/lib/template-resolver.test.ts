@@ -28,8 +28,8 @@ describe('Template Resolver', () => {
     expect(existsSync(join(templatePath, '.claude'))).to.be.true
   })
 
-  it('should discover IDE folders for _shared template', async () => {
-    const sharedPath = await getTemplatePath('_shared')
+  it('should discover IDE folders for core template', async () => {
+    const sharedPath = await getTemplatePath('core')
     const ides = await getTemplateIdeNamesByPath(sharedPath)
     expect(ides).to.include('claude')
     expect(ides).to.include('codex')

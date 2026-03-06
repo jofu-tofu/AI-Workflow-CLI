@@ -40,7 +40,7 @@ That's it. The hook system activates automatically. Your sessions now have persi
 
 | Command | Description |
 |---------|-------------|
-| `aiw init` | Install templates into your project. `--method cc-native` for full setup (defaults to all IDEs discovered in core + template), or bare `aiw init` for shared infrastructure only. `--interactive` for guided setup. |
+| `aiw init` | Install templates into your project. `--method cc-native` for full setup (defaults to all IDEs discovered in core + template), or bare `aiw init` for core infrastructure only. `--interactive` for guided setup. |
 | `aiw launch` | Launch Claude Code with hooks enabled. Defaults to tmux-first launch on non-Windows hosts (when outside tmux) and creates a fresh tmux session each run. On Windows, launches in the current terminal by default. Use `--codex` for Codex (AIW forces Codex `shell_type="bash"` on Windows), `--devin` for Devin CLI, `--new` for a new terminal window (`--codex --new` prefers Git Bash and falls back to PowerShell), `--no-tmux` to run directly, or `--tmux-session` to reuse a named tmux session. |
 | `aiw branch <name>` | Create a git worktree + branch in a sibling directory, auto-launch Claude Code in it. |
 | `aiw branch --delete --all` | Safely remove worktrees with no unpushed commits or open PRs. |
@@ -62,7 +62,7 @@ alias devin='aiw launch --devin'
 
 AIW uses a two-layer template architecture:
 
-**Shared infrastructure** (`_shared/`) is installed by every template method. It provides the context management system, session lifecycle hooks, task tracking, and core libraries. This is the foundation.
+**Core infrastructure** (`core/` source, installed as `.aiwcli/_core/`) is installed by every template method. It provides the context management system, session lifecycle hooks, task tracking, and core libraries. This is the foundation.
 
 **Method-specific code** (`_cc-native/`, `_bmad/`, etc.) adds workflows, agents, hooks, and libraries tailored to a specific development philosophy.
 
@@ -93,7 +93,7 @@ aiw init --method cc-native --ide claude --ide codex
 
 ```
 .aiwcli/
-├── _shared/                     # Always installed (context, hooks, libraries)
+├── _core/                    # Always installed (context, hooks, libraries)
 │   ├── hooks-ts/                # TypeScript hooks (session lifecycle, context, tasks)
 │   └── lib-ts/                  # base/, context/, handoff/, templates/
 └── _cc-native/                  # Method-specific (varies by method)
@@ -106,7 +106,7 @@ aiw init --method cc-native --ide claude --ide codex
 └── commands/{method}/           # Slash commands for Claude Code
 
 .codex/
-└── workflows/                   # Codex workflow docs (shared templates)
+└── skills/                      # Codex skill wrappers (core templates)
 ```
 
 ---
@@ -137,7 +137,7 @@ Hooks are TypeScript scripts (run via Bun) that fire on Claude Code lifecycle ev
 | `plan_questions_early.ts` | UserPromptSubmit (plan mode) | Prompts clarification questions before code exploration |
 | `add_plan_context.ts` | PostToolUse:AskUserQuestion | Tracks questions asked, nudges planning agents |
 
-All hooks use `run_hook()` for standardized lifecycle logging and error handling. Diagnostic logs go to `_output/hook-log.jsonl` (JSONL format).
+All hooks use `runHook()` for standardized lifecycle logging and error handling. Diagnostic logs go to `_output/hook-log.jsonl` (JSONL format).
 
 ---
 
@@ -201,10 +201,10 @@ _output/
 
 Templates live in `packages/cli/src/templates/`. At `aiw init`, the CLI:
 
-1. Copies `_shared/` into `.aiwcli/_shared/` (always)
+1. Copies `core/` into `.aiwcli/_core/` (always)
 2. Copies method folder (e.g., `_cc-native/`) into `.aiwcli/` (if method specified)
-3. Deep-merges settings from `_shared/.claude/settings.json` + method settings into `.claude/settings.json`
-4. Copies IDE-specific folders (`.claude/commands/`, `.codex/workflows/`, `.windsurf/workflows/`)
+3. Deep-merges settings from `core/.claude/settings.json` + method settings into `.claude/settings.json`
+4. Copies IDE-specific folders (`.claude/commands/`, `.codex/skills/`, `.windsurf/workflows/`)
 5. Updates `.gitignore`
 
 ### Hook Execution
@@ -220,11 +220,11 @@ Hooks run as Bun subprocesses (TypeScript), triggered by Claude Code's native ho
 
 ```
 Session starts (SessionStart)
-  → session_start.py: bind session, restore context/plan/tasks
+  → session_start.ts: bind session, restore context/plan/tasks
 
 User sends message (UserPromptSubmit)
-  → user_prompt_submit.py: select or create context
-  → file-suggestion.py: suggest relevant files
+  → user_prompt_submit.ts: select or create context
+  → file-suggestion.ts: suggest relevant files
 
 Claude uses tools (PreToolUse / PostToolUse)
   → Hooks fire per tool (plan review, task capture, context monitoring)

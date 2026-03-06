@@ -325,8 +325,13 @@ export function emitBlock(reason: string, context?: string): void {
  */
 function detectTemplate(scriptPath = ""): string {
   const p = (scriptPath || (process.argv[1] ?? "")).replaceAll('\\', "/");
-  if (p.includes("/_shared/hooks/") || p.startsWith("_shared/hooks/")) {
-    return "shared";
+  if (
+    p.includes("/_core/hooks-ts/") ||
+    p.startsWith("_core/hooks-ts/") ||
+    p.includes("/core/hooks-ts/") ||
+    p.startsWith("core/hooks-ts/")
+  ) {
+    return "core";
   }
   const match = p.match(/_([a-z][a-z0-9-]*)\/hooks\//);
   if (match?.[1]) return match[1]; // e.g., "cc-native"

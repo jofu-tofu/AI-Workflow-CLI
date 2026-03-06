@@ -11,14 +11,14 @@ function repoRoot(): string {
   const cwd = resolve(process.cwd())
   if (existsSync(join(cwd, 'packages', 'cli', 'src', 'lib', 'runtime', 'subprocess-utils.ts'))) return cwd
 
-  throw new Error('Unable to resolve repo root for shared lib sync tests')
+  throw new Error('Unable to resolve repo root for core lib sync tests')
 }
 
 function read(pathParts: string[]): string {
   return readFileSync(join(repoRoot(), ...pathParts), 'utf8')
 }
 
-describe('shared lib sync', () => {
+describe('core lib sync', () => {
   const segments = ['runtime', 'context', 'hooks'] as const
 
   for (const segment of segments) {
@@ -30,15 +30,15 @@ describe('shared lib sync', () => {
 
       for (const file of files) {
         const canonical = read(['packages', 'cli', 'src', 'lib', segment, file])
-        const template = read(['packages', 'cli', 'src', 'templates', '_shared', 'lib-ts', segment, file])
+        const template = read(['packages', 'cli', 'src', 'templates', 'core', 'lib-ts', segment, file])
         expect(template).to.equal(canonical)
       }
     })
   }
 
-  it('keeps shared types synced between canonical lib and template copy', () => {
+  it('keeps core types synced between canonical lib and template copy', () => {
     const canonical = read(['packages', 'cli', 'src', 'lib', 'types.ts'])
-    const template = read(['packages', 'cli', 'src', 'templates', '_shared', 'lib-ts', 'types.ts'])
+    const template = read(['packages', 'cli', 'src', 'templates', 'core', 'lib-ts', 'types.ts'])
     expect(template).to.equal(canonical)
   })
 })

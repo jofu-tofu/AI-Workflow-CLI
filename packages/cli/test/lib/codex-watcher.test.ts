@@ -1,6 +1,6 @@
 import {expect} from 'chai'
 
-import {extractResumeSummary} from '../../src/templates/_shared/skills/codex/lib/codex-watcher.js'
+import {extractResumeSummary} from '../../src/templates/core/skills/codex/lib/codex-watcher.js'
 
 describe('codex watcher resume summary parser', () => {
   it('parses bullet summary from codex stderr output with noise', () => {

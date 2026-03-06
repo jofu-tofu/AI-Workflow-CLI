@@ -23,8 +23,8 @@ describe('clear command', () => {
       expect(ClearCommand.description.length).to.be.greaterThan(0)
     })
 
-    it('should reference workflow folders in description', () => {
-      expect(ClearCommand.description.toLowerCase()).to.include('workflow')
+    it('should reference method runtime folders in description', () => {
+      expect(ClearCommand.description.toLowerCase()).to.include('runtime')
     })
 
     it('should reference output folders in description', () => {
@@ -118,8 +118,8 @@ describe('clear command', () => {
       expect(methods.has('findOutputFolders')).to.equal(true)
     })
 
-    it('should find workflow folders', () => {
-      expect(methods.has('findWorkflowFolders')).to.equal(true)
+    it('should find method runtime folders', () => {
+      expect(methods.has('findMethodRuntimeFolders')).to.equal(true)
     })
 
     it('should find IDE method folders', () => {

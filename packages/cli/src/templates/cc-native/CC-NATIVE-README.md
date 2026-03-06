@@ -94,7 +94,7 @@ The brackets indicate optional steps. Research only needs Clarify â†’ Explore â†
 
 ## Context Management (Phase 2 - Shared Infrastructure)
 
-CC-Native uses **direct-state context management** via shared infrastructure in `_shared/`:
+CC-Native uses **direct-state context management** via shared infrastructure in `core/`:
 
 ```
 _output/contexts/

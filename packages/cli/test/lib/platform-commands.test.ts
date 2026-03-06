@@ -13,24 +13,24 @@ describe('platform-commands', () => {
 
     it('is a no-op on non-Windows', () => {
       platformStub = stub(process, 'platform').value('linux')
-      const cmd = 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/session_start.ts'
+      const cmd = 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts'
       expect(adaptHookCommand(cmd)).to.equal(cmd)
     })
 
     it('expands ~ to absolute home path on Windows', () => {
       platformStub = stub(process, 'platform').value('win32')
-      const cmd = 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/hooks-ts/session_start.ts'
+      const cmd = 'bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/hooks-ts/session_start.ts'
       const result = adaptHookCommand(cmd)
       expect(result).to.not.include('~/')
       expect(result).to.include('.aiwcli/bin/resolve-run.ts')
-      expect(result).to.include('.aiwcli/_shared/hooks-ts/session_start.ts')
+      expect(result).to.include('.aiwcli/_core/hooks-ts/session_start.ts')
       // Should be quoted for paths with spaces
       expect(result).to.match(/bun ".*\.aiwcli\/bin\/resolve-run\.ts"/)
     })
 
     it('strips bash env-var prefix on Windows', () => {
       platformStub = stub(process, 'platform').value('win32')
-      const cmd = 'NO_COLOR= FORCE_COLOR=2 bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/scripts/status_line.ts'
+      const cmd = 'NO_COLOR= FORCE_COLOR=2 bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/scripts/status_line.ts'
       const result = adaptHookCommand(cmd)
       expect(result).to.not.include('NO_COLOR=')
       expect(result).to.not.include('FORCE_COLOR=2')
@@ -39,7 +39,7 @@ describe('platform-commands', () => {
 
     it('preserves bash env-var prefix on Unix', () => {
       platformStub = stub(process, 'platform').value('darwin')
-      const cmd = 'NO_COLOR= FORCE_COLOR=2 bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_shared/scripts/status_line.ts'
+      const cmd = 'NO_COLOR= FORCE_COLOR=2 bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/scripts/status_line.ts'
       expect(adaptHookCommand(cmd)).to.equal(cmd)
     })
 

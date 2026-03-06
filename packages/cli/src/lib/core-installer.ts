@@ -7,8 +7,7 @@ import {pathExists} from './paths.js'
 import {copyDir} from './template-installer.js'
 
 /**
- * Install shared/core runtime assets into .aiwcli/_core.
- * Source currently reuses bundled shared assets until runtime-assets are split out.
+ * Install core runtime assets into .aiwcli/_core.
  */
 export async function installCoreAssets(targetDir: string, ides: string[]): Promise<string[]> {
   const resolver = new IdePathResolver(targetDir)
@@ -25,7 +24,7 @@ export async function installCoreAssets(targetDir: string, ides: string[]): Prom
   // Copy runtime payload into .aiwcli/_core
   await copyDir(sourceRoot, coreDir, true)
 
-  // Copy shared IDE content (codex/windsurf workflow stubs, etc) from source dot folders
+  // Copy core IDE content (Codex skills, Windsurf workflows, etc.) from source dot folders.
   for (const ide of ides) {
     const srcIdeDir = join(sourceRoot, `.${ide}`)
     if (!(await pathExists(srcIdeDir))) continue // eslint-disable-line no-await-in-loop
@@ -43,8 +42,7 @@ export function getCoreResolverSourcePath(): string {
 function getCoreAssetSource(): string {
   const currentFilePath = fileURLToPath(import.meta.url)
   const currentDir = dirname(currentFilePath)
-  // Transition source: templates/_shared
-  return join(currentDir, '..', 'templates', '_shared')
+  return join(currentDir, '..', 'templates', 'core')
 }
 
 async function mergeDirectory(src: string, dest: string): Promise<void> {

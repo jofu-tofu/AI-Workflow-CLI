@@ -18,9 +18,9 @@ oclif-based CLI (`aiw`). Installs the core runtime (`.aiwcli/_core`) plus option
 | File | Role |
 |------|------|
 | `src/commands/init/index.ts` | `init` command: template selection, IDE wizard, install flow |
-| `src/lib/core-installer.ts` | Installs core runtime from `src/templates/_shared` into `.aiwcli/_core` |
+| `src/lib/core-installer.ts` | Installs core runtime from `src/templates/core` into `.aiwcli/_core` |
 | `src/lib/core-ide-base.ts` | Base Claude/Windsurf settings commands for `_core` hooks/scripts |
-| `src/lib/template-settings-reconstructor.ts` | Reconstructs IDE settings from active templates and normalizes `_shared` paths to `_core` |
+| `src/lib/template-settings-reconstructor.ts` | Reconstructs IDE settings from active templates and normalizes `core` paths to `_core` |
 | `src/lib/template-installer.ts` | Template installation: status check, file copying, merge logic |
 | `src/lib/ide-path-resolver.ts` | Path resolution for `.aiwcli/` and IDE-specific directories |
 | `src/lib/settings-hierarchy.ts` | Merge settings across all active installed templates |
@@ -42,7 +42,7 @@ oclif-based CLI (`aiw`). Installs the core runtime (`.aiwcli/_core`) plus option
 ## Conventions
 
 - Core runtime path is `.aiwcli/_core`; method paths remain `.aiwcli/_{method}`
-- Template source for core runtime is `src/templates/_shared`
+- Template source for core runtime is `src/templates/core`
 - Installation ownership lives in `.aiwcli/state/install-state.json`; IDE settings are reconstructed outputs, not registries
 - Template-specific IDE dirs use method-namespaced subdirectory layout
 
