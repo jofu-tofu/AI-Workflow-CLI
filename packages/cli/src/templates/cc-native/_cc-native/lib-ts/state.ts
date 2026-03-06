@@ -9,9 +9,9 @@ import * as path from "node:path";
 
 import { validatePlanPath } from "./constants.js";
 import type { IterationState, IterationEntry } from "./types.js";
-import { atomicWrite } from "../../_core/lib-ts/runtime/atomic-write.js";
-import { logInfo, logWarn, logError } from "../../_core/lib-ts/runtime/logger.js";
-import { nowIso } from "../../_core/lib-ts/runtime/utils.js";
+import { atomicWrite } from "../../_shared/lib-ts/base/atomic-write.js";
+import { logInfo, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
+import { nowIso } from "../../_shared/lib-ts/base/utils.js";
 
 // ---------------------------------------------------------------------------
 // Constants

@@ -7,7 +7,7 @@ Agent persona definitions for single-turn plan review. 31 review agents + 1 ques
 ```
 agents/
 ├── CLAUDE.md              # This file
-├── PLAN-ORCHESTRATOR.md   # Complexity/agent selection orchestrator
+├── PLAN-ORCHESTRATOR.md   # Authoritative orchestrator system prompt
 ├── plan-review/           # Review agents (31 files)
 │   ├── HANDOFF-READINESS.md
 │   ├── CLARITY-AUDITOR.md
@@ -18,7 +18,7 @@ agents/
     └── PLAN-QUESTIONER.md # Fresh-context question generator
 ```
 
-**Important:** Review agents MUST be in `plan-review/`. The hook loads from `agents/plan-review/` — files in the root `agents/` directory (other than CLAUDE.md and PLAN-ORCHESTRATOR.md) are ignored.
+**Important:** This `plan-review/agents/` tree is the only authoritative agent location. Reviewers load from `plan-review/agents/plan-review/`, the questions gate loads from `plan-review/agents/plan-questions/`, and `PLAN-ORCHESTRATOR.md` in this directory is the single source of truth for the orchestrator system prompt.
 
 ## Review Agents (31 total)
 

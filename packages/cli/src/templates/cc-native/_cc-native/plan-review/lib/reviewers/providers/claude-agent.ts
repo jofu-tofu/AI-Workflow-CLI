@@ -3,8 +3,8 @@
  * Uses claude CLI with --json-schema and --system-prompt flags.
  */
 
-import { buildCliInvocation, reviewSpec } from "../../../../../_core/lib-ts/runtime/cli-args.js";
-import type { ExecutionResult } from "../../../../../_core/lib-ts/agent-exec/execution-backend.js";
+import type { ExecutionResult } from "../../../../../_shared/lib-ts/agent-exec/execution-backend.js";
+import { buildCliInvocation, reviewSpec } from "../../../../../_shared/lib-ts/base/cli-args.js";
 import { parseCliOutput } from "../../../../lib-ts/cli-output-parser.js";
 import { coerceToReview } from "../../../../lib-ts/json-parser.js";
 import type { ReviewerResult } from "../../../../lib-ts/types.js";

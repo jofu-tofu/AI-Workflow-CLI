@@ -4,12 +4,23 @@
  * See cc-native-plan-review-spec.md §4.8
  */
 
+import { fileURLToPath } from "node:url";
+
 import { OrchestratorClaudeAgent } from "./reviewers/providers/orchestrator-claude-agent.js";
-import { logInfo, logWarn } from "../../../_core/lib-ts/runtime/logger.js";
+import { logInfo, logWarn } from "../../../_shared/lib-ts/base/logger.js";
+import { readMarkdownBody } from "../../lib-ts/aggregate-agents.js";
 import type { AgentConfig, AgentReviewSettings, OrchestratorConfig, OrchestratorResult } from "../../lib-ts/types.js";
 
 // Re-export for backward compatibility (moved to reviewers/schemas.ts)
 export { buildOrchestratorSchema } from "./reviewers/schemas.js";
+
+const ORCHESTRATOR_PROMPT_PATH = fileURLToPath(new URL("../agents/PLAN-ORCHESTRATOR.md", import.meta.url));
+const FALLBACK_ORCHESTRATOR_PROMPT = "You are a plan orchestrator for code review. Call StructuredOutput immediately.";
+
+function loadOrchestratorPrompt(): string {
+  const prompt = readMarkdownBody(ORCHESTRATOR_PROMPT_PATH)?.trim();
+  return prompt && prompt.length > 0 ? prompt : FALLBACK_ORCHESTRATOR_PROMPT;
+}
 
 // ---------------------------------------------------------------------------
 // Orchestrator
@@ -38,7 +49,7 @@ export async function runOrchestrator(
     focus: "plan analysis and agent selection",
     categories: [],
     description: "Plan orchestrator",
-    system_prompt: "",
+    system_prompt: loadOrchestratorPrompt(),
   };
 
   try {

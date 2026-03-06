@@ -12,7 +12,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import type { AgentConfig } from "./types.js";
-import { logDebug, logInfo, logWarn } from "../../_core/lib-ts/runtime/logger.js";
+import { logDebug, logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
 
 /**
  * Extract simple YAML frontmatter from markdown content.
@@ -94,6 +94,20 @@ export function extractBody(content: string): string {
 }
 
 /**
+ * Read a markdown agent file and return the body content after frontmatter.
+ * Returns null when the file cannot be read.
+ */
+export function readMarkdownBody(filePath: string): string | null {
+  try {
+    const content = fs.readFileSync(filePath, "utf-8");
+    return extractBody(content);
+  } catch (error: unknown) {
+    logWarn("aggregate", `Failed to read ${filePath}: ${error}`);
+    return null;
+  }
+}
+
+/**
  * Discover and load all agent configs from a directory of markdown files.
  * Skips the plan-orchestrator agent. Defaults categories to ["code"].
  *
@@ -119,15 +133,15 @@ export function aggregateAgents(agentsDir?: string): AgentConfig[] {
 
   for (const file of files) {
     const filePath = path.join(dir, file);
-    let content: string;
+    let rawContent: string;
     try {
-      content = fs.readFileSync(filePath, "utf-8");
+      rawContent = fs.readFileSync(filePath, "utf-8");
     } catch (error: unknown) {
       logWarn("aggregate", `Failed to read ${file}: ${error}`);
       continue;
     }
 
-    const fm = extractFrontmatter(content);
+    const fm = extractFrontmatter(rawContent);
     if (!fm) {
       logDebug("aggregate", `No frontmatter in ${file}, skipping`);
       continue;
@@ -150,7 +164,7 @@ export function aggregateAgents(agentsDir?: string): AgentConfig[] {
         ? (fm.categories as string[])
         : ["code"],
       description: (fm.description as string) ?? "",
-      system_prompt: extractBody(content),
+      system_prompt: extractBody(rawContent),
     };
 
     agents.push(agent);

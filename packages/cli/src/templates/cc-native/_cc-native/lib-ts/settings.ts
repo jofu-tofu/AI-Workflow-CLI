@@ -19,8 +19,8 @@ import type {
   ProviderConfig,
 } from "./types.js";
 import { DEFAULT_DISPLAY, DEFAULT_SANITIZATION } from "./types.js";
-import { logInfo } from "../../_core/lib-ts/runtime/logger.js";
-import { CODEX_MODELS } from "../../_core/lib-ts/runtime/models.js";
+import { logInfo } from "../../_shared/lib-ts/base/logger.js";
+import { CODEX_MODELS } from "../../_shared/lib-ts/base/models.js";
 
 const HOOK = "settings";
 
@@ -180,8 +180,8 @@ export function loadSettings(projDir: string): LoadedSettings {
   const topLevelFallbackByComplexity = asRecord(raw.fallbackByComplexity) as Record<string, number> | undefined;
   if (nestedFallbackByComplexity || topLevelFallbackByComplexity) {
     mergedAgent.fallbackByComplexity = {
-      ...(nestedFallbackByComplexity ?? {}),
-      ...(topLevelFallbackByComplexity ?? {}),
+      ...nestedFallbackByComplexity,
+      ...topLevelFallbackByComplexity,
     };
   }
 
@@ -195,8 +195,8 @@ export function loadSettings(projDir: string): LoadedSettings {
   const topLevelPreflight = asRecord(raw.preflight);
   if (nestedPreflight || topLevelPreflight) {
     mergedAgent.preflight = {
-      ...(nestedPreflight ?? {}),
-      ...(topLevelPreflight ?? {}),
+      ...nestedPreflight,
+      ...topLevelPreflight,
     };
   }
 
@@ -204,8 +204,8 @@ export function loadSettings(projDir: string): LoadedSettings {
   const topLevelReviewIterations = asRecord(raw.reviewIterations) as Record<string, number> | undefined;
   mergedAgent.reviewIterations = {
     ...DEFAULT_REVIEW_ITERATIONS,
-    ...(nestedReviewIterations ?? {}),
-    ...(topLevelReviewIterations ?? {}),
+    ...nestedReviewIterations,
+    ...topLevelReviewIterations,
   };
 
   const modelsRaw = (raw.models ?? {}) as Record<string, unknown>;

@@ -41,9 +41,9 @@ artifacts/
 
 - `../../lib-ts/types.ts` — `CombinedReviewResult`, `CorroborationResult` types
 - `../../lib-ts/constants.ts` — `ENABLE_ROBUST_PLAN_WRITES` feature flag
-- `../../../_core/lib-ts/runtime/atomic-write.ts` — atomic file I/O
-- `../../../_core/lib-ts/runtime/constants.ts` — `sanitizeFilename`
-- `../../../_core/lib-ts/runtime/logger.ts` — logging
+- `../../../_shared/lib-ts/base/atomic-write.ts` — atomic file I/O
+- `../../../_shared/lib-ts/base/constants.ts` — `sanitizeFilename`
+- `../../../_shared/lib-ts/base/logger.ts` — logging
 
 ## Hooks
 

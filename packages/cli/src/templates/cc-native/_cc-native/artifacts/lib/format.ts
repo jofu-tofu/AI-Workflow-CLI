@@ -3,7 +3,7 @@
  * Extracted from artifacts.ts — no file I/O.
  */
 
-import { sanitizeFilename } from "../../../_core/lib-ts/runtime/constants.js";
+import { sanitizeFilename } from "../../../_shared/lib-ts/base/constants.js";
 import { DEFAULT_DISPLAY } from "../../lib-ts/types.js";
 import type {
   CombinedReviewResult,
@@ -75,14 +75,14 @@ export function formatCombinedMarkdown(
     if (corroboration.blocking.length > 0) {
       lines.push("### Blocking Dimensions\n");
       for (const group of corroboration.blocking) {
-        lines.push(`- **${group.dimension}**: ${group.issues.length} issues from ${group.agentCount} agents (threshold: ≥${group.threshold})`);
+        lines.push(`- **${group.dimension}**: ${group.agentCount} agents agree (threshold: ≥${group.threshold} agents, ${group.issues.length} issues)`);
       }
       lines.push("");
     }
     if (corroboration.solo.length > 0) {
       lines.push("### Solo Dimensions (informational)\n");
       for (const s of corroboration.solo) {
-        lines.push(`- **${s.dimension}**: ${s.issues.length} issues from ${s.agentCount} agents (threshold: >${s.threshold}, not exceeded)`);
+        lines.push(`- **${s.dimension}**: ${s.agentCount} agent${s.agentCount !== 1 ? "s" : ""} (threshold: ≥${s.threshold} agents, not met)`);
       }
       lines.push("");
     }
@@ -192,7 +192,7 @@ export function buildInlineReviewSummary(
     if (corroboration && dim) {
       const group = corroboration.blocking.find(g => g.dimension === dim);
       if (group) {
-        annotation = ` [CORROBORATED — ${group.issues.length} issues from ${group.agentCount} agents exceeds threshold ${group.threshold}]`;
+        annotation = ` [CORROBORATED — ${group.agentCount} agents agree, threshold ≥${group.threshold}]`;
       } else {
         annotation = " [perspective]";
       }
@@ -259,10 +259,10 @@ export function buildHighIssuesDocument(
 ): string {
   if (corroboration && corroboration.blocking.length > 0) {
     const lines = ["# Corroborated High-Severity Issues\n"];
-    lines.push("> Only issues from dimensions where the total count exceeded the proportional threshold are shown.\n");
+    lines.push("> Only issues from dimensions where enough distinct agents independently agreed are shown.\n");
 
     for (const group of corroboration.blocking) {
-      lines.push(`## ${group.dimension} (${group.issues.length} issues from ${group.agentCount} agents, threshold: ${group.threshold})\n`);
+      lines.push(`## ${group.dimension} (${group.agentCount} agents agree, threshold: ≥${group.threshold} agents, ${group.issues.length} issues)\n`);
       for (const { agent, issue } of group.issues) {
         const cat = issue.category ?? "general";
         const text = String(issue.issue ?? "").trim();
@@ -275,7 +275,7 @@ export function buildHighIssuesDocument(
 
     if (corroboration.solo.length > 0) {
       lines.push("---\n");
-      lines.push(`> ${corroboration.solo.length} dimension${corroboration.solo.length !== 1 ? "s" : ""} had issues below threshold (not blocking): ${corroboration.solo.map(s => `${s.dimension} (${s.issues.length}/${s.threshold})`).join(", ")}\n`);
+      lines.push(`> ${corroboration.solo.length} dimension${corroboration.solo.length !== 1 ? "s" : ""} had insufficient agent agreement (not blocking): ${corroboration.solo.map(s => `${s.dimension} (${s.agentCount}/${s.threshold} agents)`).join(", ")}\n`);
     }
 
     return lines.join("\n");
@@ -332,18 +332,18 @@ export function buildCorroborationReport(
   if (corroborationResult.blocking.length > 0) {
     lines.push("## Blocking Issues (Corroborated)");
     lines.push("");
-    lines.push("| Dimension | Issues | Agents | Threshold | Status |");
-    lines.push("|-----------|--------|--------|-----------|--------|");
+    lines.push("| Dimension | Agents Agreeing | Threshold | Issues | Status |");
+    lines.push("|-----------|----------------|-----------|--------|--------|");
 
     for (const group of corroborationResult.blocking) {
       lines.push(
-        `| ${group.dimension} | ${group.issues.length} | ${group.agentCount} | ${group.threshold} | ⛔ EXCEEDED |`
+        `| ${group.dimension} | ${group.agentCount} | ≥${group.threshold} | ${group.issues.length} | ⛔ CORROBORATED |`
       );
     }
     lines.push("");
 
     for (const group of corroborationResult.blocking) {
-      lines.push(`### ${group.dimension} (${group.issues.length} issues)`);
+      lines.push(`### ${group.dimension} (${group.agentCount} agents, ${group.issues.length} issues)`);
       lines.push("");
       for (const {agent, issue} of group.issues) {
         lines.push(`- **[${agent}]** ${issue.issue || "No description"}`);
@@ -355,12 +355,12 @@ export function buildCorroborationReport(
   if (corroborationResult.solo.length > 0) {
     lines.push("## Solo Findings (Below Threshold)");
     lines.push("");
-    lines.push("| Dimension | Issues | Agents | Threshold | Status |");
-    lines.push("|-----------|--------|--------|-----------|--------|");
+    lines.push("| Dimension | Agents Agreeing | Threshold | Issues | Status |");
+    lines.push("|-----------|----------------|-----------|--------|--------|");
 
     for (const group of corroborationResult.solo) {
       lines.push(
-        `| ${group.dimension} | ${group.issues.length} | ${group.agentCount} | ${group.threshold} | ℹ️ SOLO |`
+        `| ${group.dimension} | ${group.agentCount} | ≥${group.threshold} | ${group.issues.length} | ℹ️ SOLO |`
       );
     }
     lines.push("");

@@ -67,8 +67,9 @@ Hooks that invoke this system (all in `../_cc-native/hooks/`):
 | Module | Key Exports |
 |--------|-------------|
 | `review-pipeline.ts` | `runReviewPipeline(input)` — main entry point |
-| `agent-selection.ts` | `resolveMandatoryAgents()`, `selectAgents()`, `assignModelsToAgents()` |
+| `agent-selection.ts` | `resolveMandatoryAgents()`, `selectAgents()`, `assignModelsToAgents(agents, config, available?, options?)`, `resolveEnabledProviders()` (@internal). `assignModelsToAgents` accepts optional `{ isCliAvailable, randomFn }` for DI. |
 | `corroboration.ts` | `computeCorroboratedDecision()` |
+| `preflight.ts` | `runPreflight()`, `collectPreflightChecks()` (@internal), `buildPreflightReport()` (@internal), `KNOWN_PROVIDERS` |
 | `graduation.ts` | `computePassEligible()`, `extractTopIssuesForTracker()`, `advanceIterationState()` |
 | `orchestrator.ts` | `runOrchestrator()`, `buildOrchestratorSchema()` (re-exported) |
 | `output-builder.ts` | `buildReviewOutput()`, `truncateAgentIssues()`, `overrideVerdictsByThreshold()` |

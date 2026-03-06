@@ -19,9 +19,9 @@ import {
   logWarn,
   emitContextAndBlock,
   getToolInput,
-} from "../../_core/lib-ts/hooks/hook-utils.js";
-import { inference } from "../../_core/lib-ts/runtime/inference.js";
-import { isInternalCall } from "../../_core/lib-ts/runtime/subprocess-utils.js";
+} from "../../_shared/lib-ts/base/hook-utils.js";
+import { inference } from "../../_shared/lib-ts/base/inference.js";
+import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
 
 const VALIDATION_SYSTEM_PROMPT = `The sub-agent receives ONLY the prompt text — no conversation history, no prior context.
 
