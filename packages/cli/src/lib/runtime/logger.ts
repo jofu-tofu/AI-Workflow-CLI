@@ -29,7 +29,8 @@ const LEVELS: Record<string, number> = {
   error: 3,
 };
 
-const MAX_LOG_LINES = 10_000; // Max lines in global log before pruning
+const MAX_LOG_BYTES = 2_000_000; // 2MB threshold before pruning
+let _prunedThisProcess = false;
 
 // Module-level session ID cache
 let _cachedSessionId: string | null = null;
@@ -148,21 +149,20 @@ export function hookLog(
     const dir = path.dirname(logPath);
     fs.mkdirSync(dir, { recursive: true });
 
-    // Line-count guard: prune to last MAX_LOG_LINES
-    try {
-      if (fs.existsSync(logPath)) {
-        const content = fs.readFileSync(logPath, "utf8");
-        const lines = content.split(/\r?\n/);
-        if (lines.length > MAX_LOG_LINES) {
-          fs.writeFileSync(
-            logPath,
-            lines.slice(lines.length - MAX_LOG_LINES).join("\n"),
-            "utf8",
-          );
+    // Size-based prune: runs at most once per bun process
+    if (!_prunedThisProcess) {
+      _prunedThisProcess = true;
+      try {
+        const stat = fs.statSync(logPath);
+        if (stat.size > MAX_LOG_BYTES) {
+          const content = fs.readFileSync(logPath, "utf8");
+          const pruneTarget = Math.floor(content.length * 0.1);
+          const keepFrom = content.indexOf("\n", pruneTarget);
+          if (keepFrom > 0) {
+            fs.writeFileSync(logPath, content.slice(keepFrom + 1), "utf8");
+          }
         }
-      }
-    } catch {
-      // ignore
+      } catch { /* file doesn't exist yet — fine */ }
     }
 
     fs.appendFileSync(logPath, line, "utf8");

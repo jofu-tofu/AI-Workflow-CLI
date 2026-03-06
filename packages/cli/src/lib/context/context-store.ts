@@ -27,6 +27,9 @@ import type { ContextState, IndexFile, IndexEntry, Mode } from "../types.js";
 
 const INDEX_VERSION = "3.0";
 
+// Module-level index cache — safe because each hook is a separate bun process
+let _indexCache: IndexFile | null = null;
+
 // ---------------------------------------------------------------------------
 // Public utilities
 // ---------------------------------------------------------------------------
@@ -73,25 +76,31 @@ export function determineArtifactType(
 // ---------------------------------------------------------------------------
 
 function loadIndex(projectRoot?: string): IndexFile {
+  if (_indexCache) return _indexCache;
   const indexPath = getIndexPath(projectRoot);
   if (fs.existsSync(indexPath)) {
     try {
       const raw = fs.readFileSync(indexPath, "utf8");
-      return JSON.parse(raw) as IndexFile;
+      _indexCache = JSON.parse(raw) as IndexFile;
+      return _indexCache;
     } catch (error: unknown) {
       logWarn("context_store", `Failed to read index, recreating: ${error}`);
     }
   }
-  return { version: INDEX_VERSION, updated_at: nowIso(), sessions: {}, contexts: {} };
+  const fresh: IndexFile = { version: INDEX_VERSION, updated_at: nowIso(), sessions: {}, contexts: {} };
+  _indexCache = fresh;
+  return fresh;
 }
 
 function saveIndex(index: IndexFile, projectRoot?: string): boolean {
   index.updated_at = nowIso();
   const content = JSON.stringify(index, null, 2);
-  const [success, error] = atomicWrite(getIndexPath(projectRoot), content);
+  // fsync: false — index.json is reconstructable by scanning _output/contexts/
+  const [success, error] = atomicWrite(getIndexPath(projectRoot), content, 2, [500, 1000], false);
   if (!success) {
     logWarn("context_store", `Failed to write index: ${error}`);
   }
+  _indexCache = index;
   return success;
 }
 

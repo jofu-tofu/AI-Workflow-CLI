@@ -21,6 +21,7 @@ export function atomicWrite(
   content: string,
   maxAttempts = 2,
   backoffMs: number[] = [500, 1000],
+  fsync = true,
 ): [boolean, null | string] {
   // Ensure parent directory exists
   const dir = path.dirname(filePath);
@@ -37,7 +38,7 @@ export function atomicWrite(
       const fd = fs.openSync(tmpPath, "w");
       try {
         fs.writeSync(fd, content, undefined, "utf8");
-        fs.fsyncSync(fd);
+        if (fsync) fs.fsyncSync(fd);
       } finally {
         fs.closeSync(fd);
       }
@@ -85,6 +86,7 @@ export function atomicAppend(
   content: string,
   maxAttempts = 2,
   backoffMs: number[] = [500, 1000],
+  fsync = true,
 ): [boolean, null | string] {
   // Ensure parent directory exists
   const dir = path.dirname(filePath);
@@ -97,7 +99,7 @@ export function atomicAppend(
       const fd = fs.openSync(filePath, "a");
       try {
         fs.writeSync(fd, content, undefined, "utf8");
-        fs.fsyncSync(fd);
+        if (fsync) fs.fsyncSync(fd);
       } finally {
         fs.closeSync(fd);
       }

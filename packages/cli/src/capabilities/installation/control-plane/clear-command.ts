@@ -752,6 +752,23 @@ export default class ClearCommand extends BaseCommand {
     return toRemove.length > 0 || pruned
   }
 
+  private async countCoreIdeManagedFiles(targetDir: string): Promise<number> {
+    const coreTemplatePath = await this.getCoreTemplatePathSafe()
+    if (!coreTemplatePath) return 0
+
+    let total = 0
+    for (const ide of Object.values(IDE_FOLDERS)) {
+      const sourceIdeRoot = join(coreTemplatePath, ide.root)
+      const targetIdeRoot = join(targetDir, ide.root)
+      // eslint-disable-next-line no-await-in-loop
+      if (!(await pathExists(sourceIdeRoot)) || !(await pathExists(targetIdeRoot))) continue
+      // eslint-disable-next-line no-await-in-loop
+      total += await this.countMatchingManagedFiles(sourceIdeRoot, targetIdeRoot)
+    }
+
+    return total
+  }
+
   private async countMatchingManagedFiles(sourceDir: string, targetDir: string): Promise<number> {
     let entries
     try {
@@ -777,23 +794,6 @@ export default class ClearCommand extends BaseCommand {
     }
 
     return count
-  }
-
-  private async countCoreIdeManagedFiles(targetDir: string): Promise<number> {
-    const coreTemplatePath = await this.getCoreTemplatePathSafe()
-    if (!coreTemplatePath) return 0
-
-    let total = 0
-    for (const ide of Object.values(IDE_FOLDERS)) {
-      const sourceIdeRoot = join(coreTemplatePath, ide.root)
-      const targetIdeRoot = join(targetDir, ide.root)
-      // eslint-disable-next-line no-await-in-loop
-      if (!(await pathExists(sourceIdeRoot)) || !(await pathExists(targetIdeRoot))) continue
-      // eslint-disable-next-line no-await-in-loop
-      total += await this.countMatchingManagedFiles(sourceIdeRoot, targetIdeRoot)
-    }
-
-    return total
   }
 
   /**
@@ -830,8 +830,8 @@ export default class ClearCommand extends BaseCommand {
   private async displayPendingChanges(
     targetDir: string,
     folders: {
-      coreRuntimeFolders: string[]
       coreIdeFilesToRemove: number
+      coreRuntimeFolders: string[]
       ideMethodFolders: string[]
       methodRuntimeFolders: string[]
       methodsToRemove: string[]
@@ -922,7 +922,7 @@ export default class ClearCommand extends BaseCommand {
     outputMethodFolders: string[],
     ideMethodFolders: string[],
     coreRuntimeFolders: string[],
-  ): Promise<{deletedCoreRuntime: number; deletedIde: number; deletedOutput: number; deletedMethodRuntime: number}> {
+  ): Promise<{deletedCoreRuntime: number; deletedIde: number; deletedMethodRuntime: number; deletedOutput: number;}> {
     const deleteFolder = async (
       folder: string,
       type: string,
@@ -1032,6 +1032,46 @@ export default class ClearCommand extends BaseCommand {
   }
 
   /**
+   * Find all method runtime folders in the target directory.
+   * Looks for .aiwcli/_{method}/ structure (e.g., .aiwcli/_gsd/, .aiwcli/_bmad/).
+   *
+   * @param targetDir - Directory to search in
+   * @param template - Optional template/method name to filter by (e.g., 'bmad', 'gsd')
+   * @returns Array of method runtime folder paths
+   */
+  private async findMethodRuntimeFolders(targetDir: string, template?: string): Promise<string[]> {
+    const foundFolders: string[] = []
+    const containerDir = join(targetDir, AIWCLI_CONTAINER)
+
+    try {
+      const entries = await fs.readdir(containerDir, {withFileTypes: true})
+
+      for (const entry of entries) {
+        if (
+          !entry.isDirectory() ||
+          !entry.name.startsWith('_') ||
+          entry.name === OUTPUT_FOLDER_NAME ||
+          entry.name === '_core' ||
+          false
+        ) {
+          continue
+        }
+
+        // If template specified, only include matching folder
+        if (template && entry.name !== `_${template}`) {
+          continue
+        }
+
+        foundFolders.push(join(containerDir, entry.name))
+      }
+    } catch {
+      // Directory can't be read - return empty
+    }
+
+    return foundFolders
+  }
+
+  /**
    * Find all method output folders in the target directory.
    * Looks for _output/{method}/ structure at project root.
    *
@@ -1085,46 +1125,6 @@ export default class ClearCommand extends BaseCommand {
     return foundFolders
   }
 
-  /**
-   * Find all method runtime folders in the target directory.
-   * Looks for .aiwcli/_{method}/ structure (e.g., .aiwcli/_gsd/, .aiwcli/_bmad/).
-   *
-   * @param targetDir - Directory to search in
-   * @param template - Optional template/method name to filter by (e.g., 'bmad', 'gsd')
-   * @returns Array of method runtime folder paths
-   */
-  private async findMethodRuntimeFolders(targetDir: string, template?: string): Promise<string[]> {
-    const foundFolders: string[] = []
-    const containerDir = join(targetDir, AIWCLI_CONTAINER)
-
-    try {
-      const entries = await fs.readdir(containerDir, {withFileTypes: true})
-
-      for (const entry of entries) {
-        if (
-          !entry.isDirectory() ||
-          !entry.name.startsWith('_') ||
-          entry.name === OUTPUT_FOLDER_NAME ||
-          entry.name === '_core' ||
-          false
-        ) {
-          continue
-        }
-
-        // If template specified, only include matching folder
-        if (template && entry.name !== `_${template}`) {
-          continue
-        }
-
-        foundFolders.push(join(containerDir, entry.name))
-      }
-    } catch {
-      // Directory can't be read - return empty
-    }
-
-    return foundFolders
-  }
-
   private async getCoreTemplatePathSafe(): Promise<null | string> {
     try {
       return await getTemplatePath(CORE_TEMPLATE_NAME)
@@ -1149,8 +1149,8 @@ export default class ClearCommand extends BaseCommand {
     removedAiwcliContainer: boolean
     removedClaudeDir: boolean
     removedCodexDir: boolean
-    removedOutputDir: boolean
     removedCoreIdeFiles: number
+    removedOutputDir: boolean
     removedWindsurfDir: boolean
     updatedClaudeSettings: boolean
     updatedWindsurfSettings: boolean
@@ -1305,14 +1305,14 @@ export default class ClearCommand extends BaseCommand {
    * @param cleanup.updatedWindsurfSettings - Whether Windsurf settings were updated
    */
   private reportClearResults(
-    deleteCounts: {deletedCoreRuntime: number; deletedIde: number; deletedOutput: number; deletedMethodRuntime: number},
+    deleteCounts: {deletedCoreRuntime: number; deletedIde: number; deletedMethodRuntime: number; deletedOutput: number;},
     cleanup: {
       gitExcludeUpdated: boolean
       removedAiwcliContainer: boolean
       removedClaudeDir: boolean
       removedCodexDir: boolean
-      removedOutputDir: boolean
       removedCoreIdeFiles: number
+      removedOutputDir: boolean
       removedWindsurfDir: boolean
       updatedClaudeSettings: boolean
       updatedWindsurfSettings: boolean

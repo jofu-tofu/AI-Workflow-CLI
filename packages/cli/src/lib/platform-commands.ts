@@ -9,8 +9,6 @@
  * in cmd.exe while remaining valid in bash on Unix (where it's a no-op).
  */
 
-import {homedir} from 'node:os'
-
 /**
  * Resolver path token that appears in all template hook commands.
  * Shared between templates and adapter — changing this requires updating

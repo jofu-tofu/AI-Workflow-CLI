@@ -73,6 +73,10 @@ skills/skill-index.json
 # But allow Windsurf template files
 !**/templates/**/.windsurf/
 
+# Codex / Cognition — allow template source files
+!**/templates/**/.codex/
+!**/templates/**/.cognition/
+
 # BMAD local files
 _bmad/
 # But allow BMAD template files

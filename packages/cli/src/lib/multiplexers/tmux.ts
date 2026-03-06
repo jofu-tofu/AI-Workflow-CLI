@@ -140,13 +140,13 @@ export class TmuxMultiplexer implements Multiplexer {
     // Set default-terminal BEFORE session creation (batched into single invocation)
     try {
       execSync(
-        'tmux start-server \\; set -g default-terminal "tmux-256color"',
+        String.raw`tmux start-server \; set -g default-terminal "tmux-256color"`,
         {stdio: 'ignore', timeout: 3000},
       )
     } catch {
       try {
         execSync(
-          'tmux start-server \\; set -g default-terminal "screen-256color"',
+          String.raw`tmux start-server \; set -g default-terminal "screen-256color"`,
           {stdio: 'ignore', timeout: 3000},
         )
       } catch { /* best-effort */ }

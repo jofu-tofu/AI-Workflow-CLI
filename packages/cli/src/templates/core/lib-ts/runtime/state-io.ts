@@ -142,7 +142,8 @@ export function writeStateJson(
   fs.mkdirSync(dir, { recursive: true });
 
   const content = JSON.stringify(toDict(state), null, 2);
-  return atomicWrite(sp, content);
+  // fsync: false — state.json is reconstructable from context folder contents
+  return atomicWrite(sp, content, 2, [500, 1000], false);
 }
 
 /**

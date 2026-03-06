@@ -432,5 +432,5 @@ Both `.aiwcli/_core/skills/handoff-system/` (working copy) and `packages/cli/src
 **Windsurf and Codex workflows also reference scripts:**
 When updating script paths, check:
 - `packages/cli/src/templates/core/.windsurf/workflows/handoff.md`
-- `packages/cli/src/templates/core/.codex/skills/handoff.md`
+- `packages/cli/src/templates/core/.codex/workflows/handoff.md`
 

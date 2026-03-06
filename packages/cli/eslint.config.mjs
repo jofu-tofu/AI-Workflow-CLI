@@ -147,6 +147,32 @@ const sharedLibOverrides = {
   },
 }
 
+// Test files interact with template runtime code that uses snake_case data
+// contracts. They also use patterns (await-in-loop for sequential setup,
+// top-level hooks) that are appropriate in tests but flagged in app code.
+const testOverrides = {
+  files: ['test/**/*.ts'],
+  rules: {
+    'arrow-body-style': 'off',
+    'camelcase': 'off',
+    'complexity': 'off',
+    'mocha/no-top-level-hooks': 'off',
+    'no-await-in-loop': 'off',
+    'no-promise-executor-return': 'off',
+    'no-return-await': 'off',
+    '@stylistic/padding-line-between-statements': 'off',
+    '@typescript-eslint/no-explicit-any': 'off',
+    '@typescript-eslint/no-unused-vars': ['error', {argsIgnorePattern: '^_', varsIgnorePattern: '^_'}],
+    'perfectionist/sort-interfaces': 'off',
+    'unicorn/no-array-callback-reference': 'off',
+    'unicorn/no-array-reduce': 'off',
+    'unicorn/no-negated-condition': 'off',
+    'unicorn/no-useless-undefined': 'off',
+    'unicorn/numeric-separators-style': 'off',
+    'unicorn/prefer-string-raw': 'off',
+  },
+}
+
 // bin/ scripts import from dist/ which doesn't exist until after build.
 // Suppress import/no-unresolved for bin files since they only run post-build.
 const binOverrides = {
@@ -163,6 +189,7 @@ export default [
   boundaryOverrides,
   templateOverrides,
   sharedLibOverrides,
+  testOverrides,
   binOverrides,
   prettier,
 ]

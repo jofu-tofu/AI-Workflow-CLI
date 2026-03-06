@@ -38,8 +38,10 @@ function copyDirRecursive(sourceDir, destinationDir) {
 }
 
 function rewriteContents(_relativePath, contents) {
-  return CONTENT_REWRITES.reduce(
-    (current, {from, to}) => current.replaceAll(from, to),
-    contents,
-  )
+  let result = contents
+  for (const {from, to} of CONTENT_REWRITES) {
+    result = result.replaceAll(from, to)
+  }
+
+  return result
 }
