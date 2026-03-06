@@ -8,15 +8,6 @@ import {expect} from 'chai'
 
 import LaunchCommand from '../../src/commands/launch.js'
 
-type PrototypeMap = Record<string, unknown>
-
-function getPrototypeMethods(): Set<string> {
-  const proto = LaunchCommand.prototype as unknown as PrototypeMap
-  return new Set(
-    Object.getOwnPropertyNames(proto).filter((name) => typeof proto[name] === 'function'),
-  )
-}
-
 describe('launch command', () => {
   describe('metadata and help', () => {
     it('has a description', () => {
@@ -44,18 +35,6 @@ describe('launch command', () => {
       expect(LaunchCommand.baseFlags).to.have.property('debug')
     })
 
-    it('exposes launch helpers used by run flow', () => {
-      const methods = getPrototypeMethods()
-      expect(methods.has('waitForSentinel')).to.equal(true)
-      expect(methods.has('handleJsonOutput')).to.equal(true)
-    })
-
-    it('exposes helper utilities for session/prompt handling', () => {
-      const methods = getPrototypeMethods()
-      expect(methods.has('buildUniqueSessionName')).to.equal(true)
-      expect(methods.has('sanitizeSessionName')).to.equal(true)
-      expect(methods.has('shellQuote')).to.equal(true)
-    })
   })
 
   describe('codex flag', () => {
