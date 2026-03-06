@@ -62,7 +62,10 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
   delete process.env['CLAUDECODE']
   delete process.env['CLAUDE_CODE_ENTRYPOINT']
 
-  if (platform === 'win32') {
+  const useCodex = flags.codex
+  const useDevin = flags.devin
+
+  if (platform === 'win32' && !useCodex && !useDevin) {
     await ensureLspPatch({
       debugLog: (message) => host.debug(message),
       warn(message) {
@@ -71,8 +74,6 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
     })
   }
 
-  const useCodex = flags.codex
-  const useDevin = flags.devin
   const cliCommand = useDevin ? 'devin' : useCodex ? 'codex' : 'claude'
   const cliArgs = useDevin ? buildDevinArgs() : useCodex ? buildCodexArgs(platform) : ['--dangerously-skip-permissions']
   const launchFlag = useDevin ? '--devin' : useCodex ? '--codex' : ''

@@ -130,6 +130,35 @@ describe('executeLaunch', () => {
     platformMocks.getClaudeCodeVersion.mockResolvedValue('1.2.3')
   })
 
+  describe('Windows prelaunch patching', () => {
+    it('runs the LSP patch for Claude launches on Windows', async () => {
+      const request = makeRequest({platform: 'win32', flags: {'no-tmux': true}})
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(platformMocks.ensureLspPatch).toHaveBeenCalledTimes(1)
+    })
+
+    it('skips the LSP patch for Devin launches on Windows', async () => {
+      const request = makeRequest({platform: 'win32', flags: {devin: true, 'no-tmux': true}})
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(platformMocks.ensureLspPatch).not.toHaveBeenCalled()
+    })
+
+    it('skips the LSP patch for Codex launches on Windows', async () => {
+      const request = makeRequest({platform: 'win32', flags: {codex: true, 'no-tmux': true}})
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(platformMocks.ensureLspPatch).not.toHaveBeenCalled()
+    })
+  })
+
   describe('inline spawn (no multiplexer)', () => {
     it('exits 0 when --no-tmux bypasses mux detection', async () => {
       const request = makeRequest({flags: {'no-tmux': true}})
