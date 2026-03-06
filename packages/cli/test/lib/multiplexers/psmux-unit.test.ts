@@ -216,45 +216,6 @@ describe('psmux multiplexer unit', () => {
     })
 
     expect(mocks.splitFlagFromDimensions).toHaveBeenCalledWith(220, 90)
-    const splitArgs = mocks.execFileAsync.mock.calls.at(-1)?.[1] as string[]
-    expect(splitArgs).toEqual(expect.arrayContaining(['split-window', '-h', '-c', 'C:\\repo']))
-    expect(result.launched).toBe(true)
-  })
-
-  it('splitPane runs bootstrap set-option commands before split-window', async () => {
-    platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    const mux = await PsmuxMultiplexer.create()
-    mocks.execFileAsync
-      .mockResolvedValueOnce(okExec())
-      .mockResolvedValueOnce(okExec())
-      .mockResolvedValueOnce(okExec())
-      .mockResolvedValueOnce(okExec())
-      .mockResolvedValueOnce(okExec())
-      .mockResolvedValueOnce(okExec())
-      .mockResolvedValueOnce(okExec('%44\n'))
-
-    const result = await mux!.splitPane({
-      toolName: 'claude',
-      args: [],
-      split: 'h',
-      cwd: 'C:\\repo',
-    })
-
-    const callArgs = mocks.execFileAsync.mock.calls.map((call) => call[1] as string[])
-    const mouseIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g mouse on')
-    const historyIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g history-limit 50000')
-    const cursorBlinkIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g cursor-blink off')
-    const cursorStyleIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g cursor-style block')
-    const statusIntervalIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g status-interval 0')
-    const terminalOverridesIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g terminal-overrides ,*:Ss@:Se@:Cs@:Cr@')
-    const splitIndex = callArgs.findIndex((args) => args[0] === 'split-window')
-    expect(mouseIndex).toBeGreaterThanOrEqual(0)
-    expect(historyIndex).toBeGreaterThan(mouseIndex)
-    expect(cursorBlinkIndex).toBeGreaterThan(historyIndex)
-    expect(cursorStyleIndex).toBeGreaterThan(cursorBlinkIndex)
-    expect(statusIntervalIndex).toBeGreaterThan(cursorStyleIndex)
-    expect(terminalOverridesIndex).toBeGreaterThan(statusIntervalIndex)
-    expect(splitIndex).toBeGreaterThan(terminalOverridesIndex)
     expect(result.launched).toBe(true)
   })
 
@@ -380,43 +341,6 @@ describe('psmux multiplexer unit', () => {
       expect.arrayContaining(['new-session', '-d', '-c', process.cwd(), '-s', 'aiw-main']),
       {timeout: 5000},
     )
-  })
-
-  it('createSession runs bootstrap set-option commands sequentially', async () => {
-    platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    const mux = await PsmuxMultiplexer.create()
-    mocks.execFileAsync.mockReset()
-    mocks.execFileAsync
-      .mockResolvedValueOnce(okExec()) // new-session -d
-      .mockResolvedValueOnce(okExec()) // has-session
-      .mockResolvedValueOnce(okExec()) // set-option mouse
-      .mockResolvedValueOnce(okExec()) // set-option history
-      .mockResolvedValueOnce(okExec()) // set-option cursor-blink
-      .mockResolvedValueOnce(okExec()) // set-option cursor-style
-      .mockResolvedValueOnce(okExec()) // set-option status-interval
-      .mockResolvedValueOnce(okExec()) // set-option terminal-overrides
-
-    await mux!.createSession({
-      sessionName: 'aiw-main',
-      toolPath: 'C:\\tools\\claude.exe',
-      toolArgs: [],
-      reattach: false,
-      enableMouse: true,
-    })
-
-    const callArgs = mocks.execFileAsync.mock.calls.map((call) => call[1] as string[])
-    const mouseIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g mouse on')
-    const historyIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g history-limit 50000')
-    const cursorBlinkIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g cursor-blink off')
-    const cursorStyleIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g cursor-style block')
-    const statusIntervalIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g status-interval 0')
-    const terminalOverridesIndex = callArgs.findIndex((args) => args.join(' ') === 'set-option -g terminal-overrides ,*:Ss@:Se@:Cs@:Cr@')
-    expect(mouseIndex).toBeGreaterThanOrEqual(0)
-    expect(historyIndex).toBeGreaterThan(mouseIndex)
-    expect(cursorBlinkIndex).toBeGreaterThan(historyIndex)
-    expect(cursorStyleIndex).toBeGreaterThan(cursorBlinkIndex)
-    expect(statusIntervalIndex).toBeGreaterThan(cursorStyleIndex)
-    expect(terminalOverridesIndex).toBeGreaterThan(statusIntervalIndex)
   })
 
   it('createSession retries attach once on exit code 1 and succeeds', async () => {

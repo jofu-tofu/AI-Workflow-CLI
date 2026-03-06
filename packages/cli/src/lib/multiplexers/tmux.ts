@@ -24,13 +24,15 @@ import {buildShellCommand, buildTmuxRuntimeBootstrapCommands} from '../tmux-sess
 
 type TmuxSplitFlag = '-h' | '-v'
 
-function buildEnvPrefix(env: Record<string, string>): string {
+/** @internal */
+export function buildEnvPrefix(env: Record<string, string>): string {
   return Object.entries(env)
     .map(([key, value]) => `${key}=${quoteForSh(value)}`)
     .join(' ')
 }
 
-function buildShToolCommand(params: {
+/** @internal */
+export function buildShToolCommand(params: {
   args: string[];
   env: Record<string, string>;
   mode: 'exec' | 'repl';
@@ -53,7 +55,8 @@ function buildShToolCommand(params: {
   return base
 }
 
-function buildCommandArgs(
+/** @internal */
+export function buildCommandArgs(
   args: string[],
   mode: 'exec' | 'repl',
   promptText?: string,
@@ -62,9 +65,10 @@ function buildCommandArgs(
   return [...args, promptText]
 }
 
-function withWindowsTmuxBootstrap(command: string): string {
-  if (process.platform !== 'win32') return command
-  const bootstrap = buildTmuxRuntimeBootstrapCommands(process.platform).join('; ')
+/** @internal */
+export function withWindowsTmuxBootstrap(command: string, platform: NodeJS.Platform = process.platform): string {
+  if (platform !== 'win32') return command
+  const bootstrap = buildTmuxRuntimeBootstrapCommands(platform).join('; ')
   return `${bootstrap}; ${command}`
 }
 
@@ -116,6 +120,27 @@ async function resolveAutoSplit(
   }
 }
 
+/** @internal */
+export function buildTmuxSplitWindowArgs(params: { splitFlag: '-h' | '-v'; command: string; cwd?: string; splitTarget?: string }): string[] {
+  const args = ['split-window', params.splitFlag, '-P', '-F', '#{pane_id}']
+  if (params.cwd) {
+    args.push('-c', params.cwd)
+  }
+  if (params.splitTarget) {
+    args.push('-t', params.splitTarget)
+  }
+  args.push(params.command)
+  return args
+}
+
+/** @internal */
+export function buildTmuxCreateSessionArgs(params: { sessionName: string; cwd: string; shellCommand: string; reattach?: boolean }): string[] {
+  const args = ['new-session']
+  if (params.reattach) args.push('-A')
+  args.push('-c', params.cwd, '-s', params.sessionName, params.shellCommand)
+  return args
+}
+
 export class TmuxMultiplexer implements Multiplexer {
   readonly backend = 'tmux' as const
   private readonly tmuxPath: string
@@ -160,9 +185,12 @@ export class TmuxMultiplexer implements Multiplexer {
       enableMouse: options.enableMouse ?? true,
     })
 
-    const args = ['new-session']
-    if (reattach) args.push('-A')
-    args.push('-c', process.cwd(), '-s', sessionName, shellCommand)
+    const args = buildTmuxCreateSessionArgs({
+      sessionName,
+      cwd: process.cwd(),
+      shellCommand,
+      reattach,
+    })
 
     return spawnAttached('tmux', args, cleanClaudeEnv(), this.backend)
   }
@@ -252,15 +280,14 @@ export class TmuxMultiplexer implements Multiplexer {
       }
 
       // Build tmux split-window command
-      const tmuxArgs = ['split-window', splitFlag, '-P', '-F', '#{pane_id}']
-      if (cwd) {
-        const cwdPath = process.platform === 'win32' ? toMsysPosixPath(cwd) : cwd
-        tmuxArgs.push('-c', cwdPath)
-      }
-
-      if (splitTarget) tmuxArgs.push('-t', splitTarget)
+      const cwdPath = cwd ? (process.platform === 'win32' ? toMsysPosixPath(cwd) : cwd) : undefined
       const bootstrappedCommand = withWindowsTmuxBootstrap(paneCommand)
-      tmuxArgs.push(`bash -lc ${quoteForSh(bootstrappedCommand)}`)
+      const tmuxArgs = buildTmuxSplitWindowArgs({
+        splitFlag,
+        command: `bash -lc ${quoteForSh(bootstrappedCommand)}`,
+        cwd: cwdPath,
+        splitTarget,
+      })
 
       const split = await execFileAsync(this.tmuxPath, tmuxArgs, {timeout: 5000})
       if (split.exitCode !== 0) {
