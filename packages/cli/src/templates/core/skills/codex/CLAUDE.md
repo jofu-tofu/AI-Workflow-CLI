@@ -7,10 +7,12 @@ Launch Codex CLI in a visible pane (tmux on Unix, Windows Terminal/window fallba
 ```
 codex/
 ├── CLAUDE.md       ← This file
+├── SKILL.md        ← Skill metadata (user-invocable)
 ├── lib/
 │   └── codex-watcher.ts  ← Reusable watch/summarize library
 └── scripts/
-    └── launch-codex.ts   ← Single entry point (launch + optional watch)
+    ├── launch-codex.ts   ← Single entry point (launch + optional watch)
+    └── watch-codex.ts    ← Standalone watch mode
 ```
 
 ## Script: launch-codex.ts

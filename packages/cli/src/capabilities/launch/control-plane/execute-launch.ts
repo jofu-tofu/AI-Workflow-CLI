@@ -147,6 +147,7 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
       host.warn(versionCheck.warning)
     }
   }
+
   let exitCode = 0
 
   try {

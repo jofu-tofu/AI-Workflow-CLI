@@ -5,21 +5,21 @@ import {join} from 'node:path'
 
 export interface ContextFixtureOptions {
   contextId?: string
-  mode?: 'idle' | 'active' | 'has_staged_work'
-  sessionId?: string
-  planContent?: string
   handoffPath?: string
-  tasks?: Array<{id: string; subject: string; status: string}>
+  mode?: 'active' | 'has_staged_work' | 'idle'
+  nextArtifactType?: 'handoff' | 'plan'
+  planContent?: string
+  sessionId?: string
+  tasks?: Array<{id: string; status: string; subject: string;}>
   workConsumed?: boolean
-  nextArtifactType?: 'plan' | 'handoff'
 }
 
 export interface ContextFixture {
-  projectRoot: string
-  contextId: string
-  getState(): Record<string, unknown>
-  getIndex(): Record<string, unknown>
   cleanup(): Promise<void>
+  contextId: string
+  getIndex(): Record<string, unknown>
+  getState(): Record<string, unknown>
+  projectRoot: string
 }
 
 function nowIso(): string {

@@ -1,6 +1,6 @@
 import {expect} from 'chai'
 
-import type {Multiplexer} from '../../src/lib/multiplexer.js'
+import type {Multiplexer as _Multiplexer} from '../../src/lib/multiplexer.js'
 
 describe('multiplexer', () => {
   describe('interface types', () => {
@@ -33,10 +33,10 @@ describe('multiplexer', () => {
         delete process.env.TMUX
         expect(mux.isInsideSession()).to.equal(false)
       } finally {
-        if (original !== undefined) {
-          process.env.TMUX = original
-        } else {
+        if (original === undefined) {
           delete process.env.TMUX
+        } else {
+          process.env.TMUX = original
         }
       }
     })
@@ -74,7 +74,7 @@ describe('multiplexer', () => {
     it('encoded PowerShell command round-trips preserve $env: and nested quotes', () => {
       // Regression test: -Command "..." caused $env:PSMUX_PANE expansion and inner quote stripping.
       // -EncodedCommand (Base64 UTF-16LE) bypasses all interpolation.
-      const testCommand = "$env:PSMUX_PANE='1'; & 'C:\\tool.exe' @('--arg', 'shell_type=\"bash\"')"
+      const testCommand = String.raw`$env:PSMUX_PANE='1'; & 'C:\tool.exe' @('--arg', 'shell_type="bash"')`
       const encoded = Buffer.from(testCommand, 'utf16le').toString('base64')
       const decoded = Buffer.from(encoded, 'base64').toString('utf16le')
       expect(decoded).to.equal(testCommand)
@@ -95,10 +95,10 @@ describe('multiplexer', () => {
         delete process.env.PSMUX_PANE
         expect(mux.isInsideSession()).to.equal(false)
       } finally {
-        if (original !== undefined) {
-          process.env.PSMUX_PANE = original
-        } else {
+        if (original === undefined) {
           delete process.env.PSMUX_PANE
+        } else {
+          process.env.PSMUX_PANE = original
         }
       }
     })

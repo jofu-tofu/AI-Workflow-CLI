@@ -46,6 +46,69 @@ import {
   type WindowsTerminalStrategy,
 } from './terminal-strategy.js'
 
+/** @internal */
+export interface SpawnArgs {
+  command: string
+  args: string[]
+}
+
+/** @internal */
+export function resolveTerminalPlatform(platform: NodeJS.Platform, isWSLResult: boolean): 'windows' | 'darwin' | 'wsl' | 'linux' {
+  if (isWindowsPlatform(platform)) return 'windows'
+  if (platform === 'darwin') return 'darwin'
+  if (isWSLResult) return 'wsl'
+  return 'linux'
+}
+
+/** @internal */
+export function buildMacTerminalSpawnArgs(cwd: string, command: string): SpawnArgs {
+  const escapedPath = escapeSingleQuotedPath(cwd, 'bash')
+  const fullCommand = `cd '${escapedPath}' && ${command}`
+  const escapedCommand = fullCommand.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)
+  return {
+    command: 'osascript',
+    args: ['-e', `tell application "Terminal" to do script "${escapedCommand}"`],
+  }
+}
+
+/** @internal */
+export function buildWindowsTerminalSpawnArgs(cwd: string, command: string, powershellCmd: string): SpawnArgs {
+  return {
+    command: 'wt',
+    args: ['-d', cwd, powershellCmd, '-NoExit', '-Command', command],
+  }
+}
+
+/** @internal */
+export function buildPowerShellFallbackSpawnArgs(cwd: string, command: string, powershellCmd: string): SpawnArgs {
+  const escapedPath = escapeSingleQuotedPath(cwd, 'powershell')
+  const psCommand = `Start-Process ${powershellCmd} -ArgumentList '-NoExit','-Command',"cd '${escapedPath}'; ${command}"`
+  return {
+    command: powershellCmd,
+    args: ['-Command', psCommand],
+  }
+}
+
+/** @internal */
+export function buildLinuxTerminalSpawnArgs(cwd: string, command: string, terminalInfo: { cmd: string; getArgs: (cmd: string) => string[] }): SpawnArgs {
+  const escapedPath = escapeSingleQuotedPath(cwd, 'bash')
+  const fullCommand = `cd '${escapedPath}' && ${command}`
+  return {
+    command: terminalInfo.cmd,
+    args: terminalInfo.getArgs(fullCommand),
+  }
+}
+
+/** @internal */
+export function buildWSLTerminalSpawnArgs(cwd: string, command: string): SpawnArgs {
+  const escapedPath = escapeSingleQuotedPath(cwd, 'bash')
+  const bashCmd = `cd '${escapedPath}' && ${command}; exec bash`
+  return {
+    command: 'wt.exe',
+    args: ['wsl.exe', '--', 'bash', '-c', bashCmd],
+  }
+}
+
 /**
  * Options for launching a new terminal window.
  */
@@ -105,12 +168,11 @@ async function launchPowerShellFallback(
   debugLog?: (message: string) => void,
 ): Promise<TerminalLaunchResult> {
   return new Promise<TerminalLaunchResult>((resolve) => {
-    const escapedPath = escapeSingleQuotedPath(cwd, 'powershell')
-    const psCommand = `Start-Process ${powershellCmd} -ArgumentList '-NoExit','-Command',"cd '${escapedPath}'; ${command}"`
+    const spawnArgs = buildPowerShellFallbackSpawnArgs(cwd, command, powershellCmd)
 
-    debugLog?.(`Launching PowerShell fallback with command: ${psCommand}`)
+    debugLog?.(`Launching PowerShell fallback with command: ${spawnArgs.args[1]}`)
 
-    const terminal = spawn(powershellCmd, ['-Command', psCommand], {
+    const terminal = spawn(spawnArgs.command, spawnArgs.args, {
       detached: true,
       stdio: 'ignore',
       env: cleanClaudeEnv(),
@@ -208,7 +270,8 @@ async function launchWindowsTerminal(
 
     debugLog?.('Using Windows Terminal with PowerShell')
     return new Promise<TerminalLaunchResult>((resolve) => {
-      const terminal = spawn('wt', ['-d', cwd, powershellCmd, '-NoExit', '-Command', command], {
+      const spawnArgs = buildWindowsTerminalSpawnArgs(cwd, command, powershellCmd)
+      const terminal = spawn(spawnArgs.command, spawnArgs.args, {
         detached: true,
         stdio: 'ignore',
         env: cleanClaudeEnv(),
@@ -251,15 +314,11 @@ async function launchMacTerminal(
   debugLog?: (message: string) => void,
 ): Promise<TerminalLaunchResult> {
   return new Promise<TerminalLaunchResult>((resolve) => {
-    // Escape single quotes for bash context
-    const escapedPath = escapeSingleQuotedPath(cwd, 'bash')
-    const fullCommand = `cd '${escapedPath}' && ${command}`
-    // Escape double quotes and backslashes for AppleScript context
-    const escapedCommand = fullCommand.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)
+    const spawnArgs = buildMacTerminalSpawnArgs(cwd, command)
 
-    debugLog?.(`Launching macOS Terminal with command: ${fullCommand}`)
+    debugLog?.(`Launching macOS Terminal with command: cd '${escapeSingleQuotedPath(cwd, 'bash')}' && ${command}`)
 
-    const terminal = spawn('osascript', ['-e', `tell application "Terminal" to do script "${escapedCommand}"`], {
+    const terminal = spawn(spawnArgs.command, spawnArgs.args, {
       detached: true,
       stdio: 'ignore',
       env: cleanClaudeEnv(),
@@ -289,13 +348,12 @@ async function launchWSLTerminal(
   command: string,
   debugLog?: (message: string) => void,
 ): Promise<TerminalLaunchResult> {
-  const escapedPath = escapeSingleQuotedPath(cwd, 'bash')
-  const bashCmd = `cd '${escapedPath}' && ${command}; exec bash`
+  const spawnArgs = buildWSLTerminalSpawnArgs(cwd, command)
 
-  debugLog?.(`Launching WSL via wt.exe with command: ${bashCmd}`)
+  debugLog?.(`Launching WSL via wt.exe with command: ${spawnArgs.args[4]}`)
 
   return new Promise<TerminalLaunchResult>((resolve) => {
-    const proc = spawn('wt.exe', ['wsl.exe', '--', 'bash', '-c', bashCmd], {
+    const proc = spawn(spawnArgs.command, spawnArgs.args, {
       detached: true,
       stdio: 'ignore',
       env: cleanClaudeEnv(),
@@ -331,15 +389,13 @@ async function launchLinuxTerminal(
     }
   }
 
-  // Escape single quotes for bash shell
-  const escapedPath = escapeSingleQuotedPath(cwd, 'bash')
-  const fullCommand = `cd '${escapedPath}' && ${command}`
+  const spawnArgs = buildLinuxTerminalSpawnArgs(cwd, command, terminal)
 
-  debugLog?.(`Launching ${terminal.cmd} with command: ${fullCommand}`)
+  debugLog?.(`Launching ${terminal.cmd} with command: cd '${escapeSingleQuotedPath(cwd, 'bash')}' && ${command}`)
 
   // Launch terminal (single async operation)
   return new Promise<TerminalLaunchResult>((resolve) => {
-    const proc = spawn(terminal.cmd, terminal.getArgs(fullCommand), {
+    const proc = spawn(spawnArgs.command, spawnArgs.args, {
       detached: true,
       stdio: 'ignore',
       env: cleanClaudeEnv(),

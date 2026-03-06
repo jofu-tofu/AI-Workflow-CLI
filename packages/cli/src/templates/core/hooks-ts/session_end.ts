@@ -20,7 +20,6 @@ import {
   shouldStage,
 } from "../lib-ts/hooks/session-end-logic.js";
 import { getContextDir } from "../lib-ts/runtime/constants.js";
-import { getGitState } from "../lib-ts/runtime/git-state.js";
 import { nowIso } from "../lib-ts/runtime/utils.js";
 
 /**
@@ -67,15 +66,11 @@ function main(): void {
   const source = payload.source ?? "unknown";
   const permissionMode = payload.permission_mode ?? "";
 
-  // Capture git state
-  const gitState = getGitState(projectRoot);
-
   // Save session metadata
   state.last_session = buildSessionMetadata(
     sessionId,
     source,
     payload.transcript_path ?? undefined,
-    gitState,
   );
   state.last_active = nowIso();
 

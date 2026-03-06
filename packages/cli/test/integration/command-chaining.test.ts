@@ -96,8 +96,10 @@ describe('Command Chaining Integration', () => {
       expect(result).to.include('Launch')
 
       // Check no ANSI codes in cached output
-      // eslint-disable-next-line no-control-regex, unicorn/escape-case, unicorn/no-hex-escape
-      expect(helpOutput).to.not.match(/\x1b\[/)
+      /* eslint-disable no-control-regex */
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally matching ANSI escape
+      expect(helpOutput).to.not.match(/\u001B\[/)
+      /* eslint-enable no-control-regex */
     })
 
     it('quiet mode enhances pipeline cleanliness', () => {
@@ -115,10 +117,7 @@ describe('Command Chaining Integration', () => {
       expect(result).to.include('OK')
     })
 
-    it('PowerShell chains work (Windows only)', function (this: any) {
-      if (!isWindows) {
-        this.skip()
-      }
+    it.skipIf(!isWindows)('PowerShell chains work (Windows only)', () => {
 
       const script = `& ${binPath} launch --help; echo "PowerShell"`
       const result = execSync(script, {

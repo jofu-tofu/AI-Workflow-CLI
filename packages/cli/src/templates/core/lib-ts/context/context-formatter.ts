@@ -493,19 +493,10 @@ function collectStatePointers(contextId: string, contextDir: string, state: Cont
   return "**Key artifacts:**\n" + pointers.join("\n");
 }
 
-function countFilesRecursive(dirPath: string): number {
-  let count = 0;
+function countFiles(dirPath: string): number {
   try {
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isFile()) {
-        count++;
-      } else if (entry.isDirectory()) {
-        count += countFilesRecursive(path.join(dirPath, entry.name));
-      }
-    }
-  } catch { /* permission errors, etc. */ }
-  return count;
+    return fs.readdirSync(dirPath).length;
+  } catch { return 0; }
 }
 
 function collectFolderInventory(contextId: string, contextDir: string, _state: ContextState): string | null {
@@ -522,7 +513,7 @@ function collectFolderInventory(contextId: string, contextDir: string, _state: C
   for (const dir of dirs) {
     const dirPath = path.join(contextDir, dir.name);
     const desc = KNOWN_FOLDERS[dir.name] ?? "Project-specific artifacts";
-    const fileCount = countFilesRecursive(dirPath);
+    const fileCount = countFiles(dirPath);
     lines.push(`- \`${dir.name}/\` — ${desc} (${fileCount} file${fileCount !== 1 ? "s" : ""})`);
   }
   return lines.join("\n");

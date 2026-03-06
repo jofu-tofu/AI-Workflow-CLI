@@ -1,89 +1,41 @@
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs'
-import * as os from 'node:os'
-import path from 'node:path'
+import {describe, expect, it, vi, beforeEach} from 'vitest'
 
-import {describe, expect, it, vi, beforeEach, afterEach} from 'vitest'
-
+import type {LaunchDependencies, LaunchRequest} from '../../src/capabilities/launch/contracts.js'
 import {EXIT_CODES} from '../../src/types/exit-codes.js'
 
-const mocks = vi.hoisted(() => ({
+// --- Single barrel mock: replaces 11 separate module mocks ---
+
+const platformMocks = vi.hoisted(() => ({
   checkVersionCompatibility: vi.fn(() => ({compatible: true, version: '1.2.3'})),
-  detectMultiplexer: vi.fn(),
-  enableTmuxColors: vi.fn(),
-  enableTmuxMouse: vi.fn(),
+  configureTmuxSession: vi.fn(),
+  detectMultiplexer: vi.fn(async () => null),
   ensureLspPatch: vi.fn(async () => {}),
   findExecutable: vi.fn((name: string) => `/usr/bin/${name}`),
   findToolPath: vi.fn((name: string) => `/usr/bin/${name}`),
   getClaudeCodeVersion: vi.fn(async () => '1.2.3'),
   launchTerminal: vi.fn(async () => ({success: true})),
+  ProcessSpawnError: class ProcessSpawnError extends Error {
+    exitCode = EXIT_CODES.ENVIRONMENT_ERROR
+    constructor(message: string, public readonly code?: string) {
+      super(message)
+    }
+  },
+  quoteForSh: vi.fn((s: string) => `'${s}'`),
   readSentinelExitCode: vi.fn(() => 0),
   spawnProcess: vi.fn(async () => 0),
   waitForSentinelFile: vi.fn(async () => true),
 }))
 
-vi.mock('../../src/lib/lsp-patch.js', () => ({
-  ensureLspPatch: mocks.ensureLspPatch,
-}))
+vi.mock('../../src/platform/launch.js', () => platformMocks)
 
-vi.mock('../../src/lib/multiplexer.js', () => ({
-  detectMultiplexer: mocks.detectMultiplexer,
-}))
+import {executeLaunch} from '../../src/capabilities/launch/control-plane/execute-launch.js'
 
-vi.mock('../../src/lib/runtime/sentinel-ipc.js', () => ({
-  readSentinelExitCode: mocks.readSentinelExitCode,
-  waitForSentinelFile: mocks.waitForSentinelFile,
-}))
+// --- TestDataBuilder helpers ---
 
-vi.mock('../../src/lib/runtime/subprocess-utils.js', () => ({
-  findExecutable: mocks.findExecutable,
-}))
-
-vi.mock('../../src/lib/spawn.js', () => ({
-  spawnProcess: mocks.spawnProcess,
-}))
-
-vi.mock('../../src/lib/terminal.js', () => ({
-  launchTerminal: mocks.launchTerminal,
-}))
-
-vi.mock('../../src/lib/tmux-session.js', () => ({
-  enableTmuxColors: mocks.enableTmuxColors,
-  enableTmuxMouse: mocks.enableTmuxMouse,
-  findToolPath: mocks.findToolPath,
-}))
-
-vi.mock('../../src/lib/version.js', () => ({
-  checkVersionCompatibility: mocks.checkVersionCompatibility,
-  getClaudeCodeVersion: mocks.getClaudeCodeVersion,
-}))
-
-import LaunchCommand from '../../src/commands/launch.js'
-
-type LaunchFlags = {
-  codex: boolean
-  debug: boolean
-  env?: string
-  json: boolean
-  new: boolean
-  'no-tmux': boolean
-  prompt?: string
-  'prompt-file'?: string
-  'prompt-path'?: string
-  quiet: boolean
-  split?: 'auto' | 'h' | 'v'
-  'spawned-window': boolean
-  'tmux-session'?: string
-  wait: boolean
-}
-
-type TestCommand = LaunchCommand & {
-  exit: (code?: number) => never
-}
-
-function makeFlags(overrides: Partial<LaunchFlags> = {}): LaunchFlags {
+function makeFlags(overrides: Partial<LaunchRequest['flags']> = {}): LaunchRequest['flags'] {
   return {
     codex: false,
-    debug: false,
+    devin: false,
     env: undefined,
     json: false,
     new: false,
@@ -91,11 +43,56 @@ function makeFlags(overrides: Partial<LaunchFlags> = {}): LaunchFlags {
     prompt: undefined,
     'prompt-file': undefined,
     'prompt-path': undefined,
-    quiet: false,
-    split: undefined,
     'spawned-window': false,
+    split: undefined,
     'tmux-session': undefined,
     wait: false,
+    ...overrides,
+  }
+}
+
+function makeRequest(overrides: Partial<LaunchRequest> & {flags?: Partial<LaunchRequest['flags']>} = {}): LaunchRequest {
+  const {flags: flagOverrides, ...rest} = overrides
+  return {
+    cwd: '/test/project',
+    flags: makeFlags(flagOverrides),
+    interactiveTty: true,
+    platform: 'linux',
+    readPromptFile: vi.fn(() => undefined),
+    ...rest,
+  }
+}
+
+interface TestHost {
+  debug: ReturnType<typeof vi.fn>
+  error: ReturnType<typeof vi.fn>
+  exit: ReturnType<typeof vi.fn>
+  log: ReturnType<typeof vi.fn>
+  logInfo: ReturnType<typeof vi.fn>
+  logWarning: ReturnType<typeof vi.fn>
+  warn: ReturnType<typeof vi.fn>
+}
+
+function makeDeps(overrides: Partial<LaunchDependencies> = {}): LaunchDependencies & {host: TestHost} {
+  const host: TestHost = {
+    debug: vi.fn(),
+    error: vi.fn((message: string, options?: {exit?: number}) => {
+      const err = new Error(typeof message === 'string' ? message : String(message)) as Error & {exitCode?: number}
+      err.exitCode = options?.exit
+      throw err
+    }) as unknown as ReturnType<typeof vi.fn>,
+    exit: vi.fn(),
+    log: vi.fn(),
+    logInfo: vi.fn(),
+    logWarning: vi.fn(),
+    warn: vi.fn(),
+  }
+  return {
+    host,
+    now: () => 1000000,
+    pid: 12345,
+    tempDir: '/tmp/test',
+    writePromptFile: vi.fn(),
     ...overrides,
   }
 }
@@ -105,7 +102,7 @@ function createMux(overrides: Partial<{
   createSession: (options: unknown) => Promise<{exitCode: number; reason?: string; usedMux: boolean}>
   isInsideSession: () => boolean
   kill: (paneId: string) => Promise<void>
-  splitPane: (options: unknown) => Promise<{backend: 'psmux' | 'tmux'; launched: boolean; paneId?: string; reason?: string; sentinelPath?: string}>
+  splitPane: (options: unknown) => Promise<{backend: 'psmux' | 'tmux'; exitCode?: number; launched: boolean; paneId?: string; reason?: string; sentinelPath?: string}>
 }> = {}) {
   return {
     backend: 'tmux' as const,
@@ -117,295 +114,408 @@ function createMux(overrides: Partial<{
   }
 }
 
-function createCommand(flags: LaunchFlags): {
-  command: TestCommand
-  spies: {
-    error: ReturnType<typeof vi.spyOn>
-    exit: ReturnType<typeof vi.spyOn>
-    log: ReturnType<typeof vi.spyOn>
-    logWarning: ReturnType<typeof vi.spyOn>
-    warn: ReturnType<typeof vi.spyOn>
-  }
-} {
-  const command = new LaunchCommand([], {} as never) as TestCommand
-  vi.spyOn(command as LaunchCommand, 'parse').mockResolvedValue({flags} as never)
-  vi.spyOn(command as LaunchCommand, 'debug').mockImplementation(() => {})
-  vi.spyOn(command as LaunchCommand, 'logInfo').mockImplementation(() => {})
-  const logWarning = vi.spyOn(command as LaunchCommand, 'logWarning').mockImplementation(() => {})
-  const log = vi.spyOn(command as LaunchCommand, 'log').mockImplementation(() => {})
-  const warn = vi.spyOn(command as LaunchCommand, 'warn').mockImplementation(() => {})
-  const exit = vi.spyOn(command, 'exit').mockImplementation(() => undefined as never)
-  const error = vi.spyOn(command as LaunchCommand, 'error').mockImplementation((message: string, options?: {exit?: number}) => {
-    const err = new Error(message) as Error & {exitCode?: number}
-    err.exitCode = options?.exit
-    throw err
-  })
+// --- Tests ---
 
-  return {command, spies: {error, exit, log, logWarning, warn}}
-}
-
-describe('launch command unit', () => {
-  let tempDir: string | undefined
-
+describe('executeLaunch', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.spawnProcess.mockResolvedValue(0)
-    mocks.detectMultiplexer.mockResolvedValue(null)
-    mocks.launchTerminal.mockResolvedValue({success: true})
-    mocks.waitForSentinelFile.mockResolvedValue(true)
-    mocks.readSentinelExitCode.mockReturnValue(0)
-    mocks.findExecutable.mockImplementation((name: string) => `/usr/bin/${name}`)
-    mocks.findToolPath.mockImplementation((name: string) => `/usr/bin/${name}`)
+    platformMocks.spawnProcess.mockResolvedValue(0)
+    platformMocks.detectMultiplexer.mockResolvedValue(null)
+    platformMocks.launchTerminal.mockResolvedValue({success: true})
+    platformMocks.waitForSentinelFile.mockResolvedValue(true)
+    platformMocks.readSentinelExitCode.mockReturnValue(0)
+    platformMocks.findExecutable.mockImplementation((name: string) => `/usr/bin/${name}`)
+    platformMocks.findToolPath.mockImplementation((name: string) => `/usr/bin/${name}`)
+    platformMocks.checkVersionCompatibility.mockReturnValue({compatible: true, version: '1.2.3'})
+    platformMocks.getClaudeCodeVersion.mockResolvedValue('1.2.3')
   })
 
-  afterEach(() => {
-    if (tempDir) {
-      rmSync(tempDir, {recursive: true, force: true})
-      tempDir = undefined
-    }
-  })
+  describe('inline spawn (no multiplexer)', () => {
+    it('exits 0 when --no-tmux bypasses mux detection', async () => {
+      const request = makeRequest({flags: {'no-tmux': true}})
+      const deps = makeDeps()
 
-  it('launches inline when --no-tmux is set', async () => {
-    const {command, spies} = createCommand(makeFlags({'no-tmux': true}))
+      await executeLaunch(request, deps)
 
-    await command.run()
-
-    expect(mocks.detectMultiplexer).not.toHaveBeenCalled()
-    expect(mocks.spawnProcess).toHaveBeenCalledWith('claude', ['--dangerously-skip-permissions'])
-    expect(spies.exit).toHaveBeenCalledWith(0)
-  })
-
-  it('launches inline when no multiplexer is available', async () => {
-    const {command, spies} = createCommand(makeFlags())
-    mocks.detectMultiplexer.mockResolvedValueOnce(null)
-
-    await command.run()
-
-    expect(mocks.detectMultiplexer).toHaveBeenCalled()
-    expect(mocks.spawnProcess).toHaveBeenCalledWith('claude', ['--dangerously-skip-permissions'])
-    expect(spies.exit).toHaveBeenCalledWith(0)
-  })
-
-  it('splits pane when inside active multiplexer session', async () => {
-    const mux = createMux({
-      isInsideSession: vi.fn(() => true),
-      splitPane: vi.fn(async () => ({backend: 'tmux', launched: true, paneId: '%22'})),
+      expect(deps.host.exit).toHaveBeenCalledWith(0)
+      expect(deps.host.logInfo).toHaveBeenCalledWith(
+        expect.stringContaining('--no-tmux'),
+      )
     })
-    const {command} = createCommand(makeFlags())
-    mocks.detectMultiplexer.mockResolvedValueOnce(mux)
 
-    await command.run()
+    it('exits 0 when no multiplexer is available', async () => {
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(null)
+      const request = makeRequest()
+      const deps = makeDeps()
 
-    expect(mocks.enableTmuxMouse).toHaveBeenCalled()
-    expect(mocks.enableTmuxColors).toHaveBeenCalled()
-    expect(mux.splitPane).toHaveBeenCalledWith(expect.objectContaining({
-      toolName: 'claude',
-      args: ['--dangerously-skip-permissions'],
-      split: 'auto',
-      sentinel: false,
-    }))
-    expect(mocks.spawnProcess).not.toHaveBeenCalled()
-  })
+      await executeLaunch(request, deps)
 
-  it('falls back to inline launch when splitPane fails', async () => {
-    const mux = createMux({
-      isInsideSession: vi.fn(() => true),
-      splitPane: vi.fn(async () => ({backend: 'tmux', launched: false, reason: 'split failed'})),
+      expect(deps.host.exit).toHaveBeenCalledWith(0)
     })
-    const {command} = createCommand(makeFlags({prompt: 'fix this'}))
-    mocks.detectMultiplexer.mockResolvedValueOnce(mux)
 
-    await command.run()
+    it('forwards spawn exit code to host.exit', async () => {
+      platformMocks.spawnProcess.mockResolvedValueOnce(42)
+      const request = makeRequest({flags: {'no-tmux': true}})
+      const deps = makeDeps()
 
-    expect(mux.splitPane).toHaveBeenCalled()
-    expect(mocks.spawnProcess).toHaveBeenCalledWith('claude', ['--dangerously-skip-permissions', 'fix this'])
-  })
+      await executeLaunch(request, deps)
 
-  it('creates a new mux session when outside an existing session', async () => {
-    const mux = createMux({
-      isInsideSession: vi.fn(() => false),
-      createSession: vi.fn(async () => ({exitCode: 0, usedMux: true})),
+      expect(deps.host.exit).toHaveBeenCalledWith(42)
     })
-    const {command, spies} = createCommand(makeFlags())
-    mocks.detectMultiplexer.mockResolvedValueOnce(mux)
 
-    await command.run()
+    it('mentions non-interactive terminal when tty is false', async () => {
+      const request = makeRequest({interactiveTty: false})
+      const deps = makeDeps()
 
-    expect(mux.createSession).toHaveBeenCalledWith(expect.objectContaining({
-      toolPath: '/usr/bin/claude',
-      toolArgs: ['--dangerously-skip-permissions'],
-      reattach: false,
-    }))
-    expect(mocks.spawnProcess).not.toHaveBeenCalled()
-    expect(spies.exit).toHaveBeenCalledWith(0)
-  })
+      await executeLaunch(request, deps)
 
-  it('falls back to inline launch when createSession reports usedMux=false', async () => {
-    const mux = createMux({
-      isInsideSession: vi.fn(() => false),
-      createSession: vi.fn(async () => ({exitCode: -1, usedMux: false, reason: 'tmux not available'})),
+      expect(deps.host.logInfo).toHaveBeenCalledWith(
+        expect.stringContaining('Non-interactive terminal'),
+      )
     })
-    const {command, spies} = createCommand(makeFlags())
-    mocks.detectMultiplexer.mockResolvedValueOnce(mux)
-
-    await command.run()
-
-    expect(mux.createSession).toHaveBeenCalled()
-    expect(mocks.spawnProcess).toHaveBeenCalledWith('claude', ['--dangerously-skip-permissions'])
-    expect(spies.exit).toHaveBeenCalledWith(0)
   })
 
-  it('shows psmux recovery hint for attach-failed createSession fallback', async () => {
-    const mux = createMux({
-      backend: 'psmux',
-      isInsideSession: vi.fn(() => false),
-      createSession: vi.fn(async () => ({exitCode: 1, usedMux: false, reason: 'psmux attach failed after retry (auth/session readiness race)'})),
+  describe('codex mode', () => {
+    it('exits with spawn exit code when --codex --no-tmux is set', async () => {
+      platformMocks.spawnProcess.mockResolvedValueOnce(0)
+      const request = makeRequest({flags: {codex: true, 'no-tmux': true}})
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(deps.host.exit).toHaveBeenCalledWith(0)
     })
-    const {command, spies} = createCommand(makeFlags())
-    mocks.detectMultiplexer.mockResolvedValueOnce(mux)
-
-    await command.run()
-
-    expect(mocks.spawnProcess).toHaveBeenCalledWith('claude', ['--dangerously-skip-permissions'])
-    const warningText = spies.logWarning.mock.calls.map((call) => String(call[0])).join('\n')
-    expect(warningText).toContain('Recovery: run "psmux kill-server" and relaunch if this persists.')
   })
 
-  it('uses codex executable and codex args when --codex is set', async () => {
-    const {command} = createCommand(makeFlags({codex: true, 'no-tmux': true}))
+  describe('devin mode', () => {
+    it('exits with spawn exit code when --devin --no-tmux is set', async () => {
+      platformMocks.spawnProcess.mockResolvedValueOnce(0)
+      const request = makeRequest({flags: {devin: true, 'no-tmux': true}})
+      const deps = makeDeps()
 
-    await command.run()
+      await executeLaunch(request, deps)
 
-    const expectedCodexArgs = process.platform === 'win32'
-      ? ['-c', 'shell_type="bash"', '--yolo']
-      : ['--yolo']
-    expect(mocks.spawnProcess).toHaveBeenCalledWith('codex', expectedCodexArgs)
-    expect(mocks.getClaudeCodeVersion).not.toHaveBeenCalled()
+      expect(deps.host.exit).toHaveBeenCalledWith(0)
+    })
   })
 
-  it('handles --new by launching a new terminal window', async () => {
-    const {command} = createCommand(makeFlags({new: true}))
+  describe('split pane (inside mux session)', () => {
+    it('reports successful pane launch via logInfo', async () => {
+      const mux = createMux({
+        isInsideSession: vi.fn(() => true),
+        splitPane: vi.fn(async () => ({backend: 'tmux' as const, launched: true, paneId: '%22'})),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      const request = makeRequest()
+      const deps = makeDeps()
 
-    await command.run()
+      await executeLaunch(request, deps)
 
-    expect(mocks.launchTerminal).toHaveBeenCalledWith(expect.objectContaining({
-      cwd: process.cwd(),
-      command: expect.stringContaining('aiw'),
-    }))
-    expect(mocks.spawnProcess).not.toHaveBeenCalled()
-    expect(mocks.detectMultiplexer).not.toHaveBeenCalled()
+      const infoMessages = deps.host.logInfo.mock.calls.map((c: unknown[]) => String(c[0])).join('\n')
+      expect(infoMessages).toContain('tmux pane')
+      expect(infoMessages).toContain('%22')
+    })
+
+    it('falls back to inline spawn and warns when splitPane fails', async () => {
+      const mux = createMux({
+        isInsideSession: vi.fn(() => true),
+        splitPane: vi.fn(async () => ({backend: 'tmux' as const, launched: false, reason: 'split failed'})),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      platformMocks.spawnProcess.mockResolvedValueOnce(0)
+      const request = makeRequest()
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(deps.host.logWarning).toHaveBeenCalledWith(
+        expect.stringContaining('Pane split failed'),
+      )
+      expect(deps.host.exit).toHaveBeenCalledWith(0)
+    })
+
+    it('includes prompt text in inline fallback after split failure', async () => {
+      const mux = createMux({
+        isInsideSession: vi.fn(() => true),
+        splitPane: vi.fn(async () => ({backend: 'tmux' as const, launched: false, reason: 'err'})),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      platformMocks.spawnProcess.mockResolvedValueOnce(0)
+      const request = makeRequest({flags: {prompt: 'fix this'}})
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(deps.host.exit).toHaveBeenCalledWith(0)
+    })
   })
 
-  it('waits on sentinel and exits with pane exit code when --wait is set', async () => {
-    const mux = createMux({
-      isInsideSession: vi.fn(() => true),
-      splitPane: vi.fn(async () => ({
-        backend: 'tmux',
+  describe('create session (outside mux session)', () => {
+    it('exits 0 when createSession reports usedMux with exitCode 0', async () => {
+      const mux = createMux({
+        isInsideSession: vi.fn(() => false),
+        createSession: vi.fn(async () => ({exitCode: 0, usedMux: true})),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      const request = makeRequest()
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(deps.host.exit).toHaveBeenCalledWith(0)
+    })
+
+    it('forwards mux session exit code to host.exit', async () => {
+      const mux = createMux({
+        isInsideSession: vi.fn(() => false),
+        createSession: vi.fn(async () => ({exitCode: 7, usedMux: true})),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      const request = makeRequest()
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(deps.host.exit).toHaveBeenCalledWith(7)
+    })
+
+    it('falls back to inline spawn when createSession reports usedMux=false', async () => {
+      const mux = createMux({
+        isInsideSession: vi.fn(() => false),
+        createSession: vi.fn(async () => ({exitCode: -1, usedMux: false, reason: 'tmux not available'})),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      platformMocks.spawnProcess.mockResolvedValueOnce(0)
+      const request = makeRequest()
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(deps.host.exit).toHaveBeenCalledWith(0)
+    })
+
+    it('shows psmux recovery hint for attach-failed createSession fallback', async () => {
+      const mux = createMux({
+        backend: 'psmux',
+        isInsideSession: vi.fn(() => false),
+        createSession: vi.fn(async () => ({
+          exitCode: 1,
+          usedMux: false,
+          reason: 'psmux attach failed after retry (auth/session readiness race)',
+        })),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      platformMocks.spawnProcess.mockResolvedValueOnce(0)
+      const request = makeRequest()
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      const warningText = deps.host.logWarning.mock.calls.map((call: unknown[]) => String(call[0])).join('\n')
+      expect(warningText).toContain('Recovery: run "psmux kill-server" and relaunch if this persists.')
+    })
+
+    it('warns about unavailable mux when reason contains "not found"', async () => {
+      const mux = createMux({
+        isInsideSession: vi.fn(() => false),
+        createSession: vi.fn(async () => ({
+          exitCode: 1,
+          usedMux: false,
+          reason: 'tmux not found',
+        })),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      platformMocks.spawnProcess.mockResolvedValueOnce(0)
+      const request = makeRequest()
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      const warningText = deps.host.logWarning.mock.calls.map((call: unknown[]) => String(call[0])).join('\n')
+      expect(warningText).toContain('unavailable')
+    })
+
+    it('warns when tool path not found on PATH', async () => {
+      const mux = createMux({
+        isInsideSession: vi.fn(() => false),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      platformMocks.findToolPath.mockReturnValueOnce(null)
+      platformMocks.spawnProcess.mockResolvedValueOnce(0)
+      const request = makeRequest()
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      const warningText = deps.host.logWarning.mock.calls.map((call: unknown[]) => String(call[0])).join('\n')
+      expect(warningText).toContain('not found on PATH')
+    })
+  })
+
+  describe('--new terminal launch', () => {
+    it('logs success message on successful terminal launch', async () => {
+      platformMocks.launchTerminal.mockResolvedValueOnce({success: true})
+      const request = makeRequest({flags: {new: true}})
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(deps.host.log).toHaveBeenCalledWith(
+        expect.stringContaining('New terminal launched'),
+      )
+    })
+
+    it('calls host.error on failed terminal launch', async () => {
+      platformMocks.launchTerminal.mockResolvedValueOnce({success: false, error: 'no terminal emulator'})
+      const request = makeRequest({flags: {new: true}})
+      const deps = makeDeps()
+
+      await expect(executeLaunch(request, deps)).rejects.toThrow()
+      expect(deps.host.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to launch new terminal'),
+        expect.objectContaining({exit: EXIT_CODES.GENERAL_ERROR}),
+      )
+    })
+  })
+
+  describe('--wait mode', () => {
+    it('exits with sentinel exit code when --wait is set and pane launches', async () => {
+      const mux = createMux({
+        isInsideSession: vi.fn(() => true),
+        splitPane: vi.fn(async () => ({
+          backend: 'tmux' as const,
+          launched: true,
+          paneId: '%77',
+          sentinelPath: '/tmp/sentinel.txt',
+        })),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      platformMocks.waitForSentinelFile.mockResolvedValueOnce(true)
+      platformMocks.readSentinelExitCode.mockReturnValueOnce(23)
+      const request = makeRequest({flags: {wait: true}})
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(deps.host.exit).toHaveBeenCalledWith(23)
+    })
+  })
+
+  describe('--json mode', () => {
+    it('emits valid JSON with launched and backend fields', async () => {
+      const mux = createMux({
+        isInsideSession: vi.fn(() => true),
+        splitPane: vi.fn(async () => ({
+          backend: 'tmux' as const,
+          launched: true,
+          paneId: '%88',
+          sentinelPath: '/tmp/sentinel.txt',
+        })),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      const request = makeRequest({flags: {json: true}})
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      const logged = deps.host.log.mock.calls[0]?.[0]
+      expect(typeof logged).toBe('string')
+      const parsed = JSON.parse(String(logged))
+      expect(parsed).toEqual(expect.objectContaining({
         launched: true,
-        paneId: '%77',
-        sentinelPath: '/tmp/sentinel.txt',
-      })),
-    })
-    mocks.detectMultiplexer.mockResolvedValueOnce(mux)
-    mocks.waitForSentinelFile.mockResolvedValueOnce(true)
-    mocks.readSentinelExitCode.mockReturnValueOnce(23)
-    const {command, spies} = createCommand(makeFlags({wait: true}))
-
-    await command.run()
-
-    expect(mocks.waitForSentinelFile).toHaveBeenCalledWith('/tmp/sentinel.txt', 14_400_000)
-    expect(mocks.readSentinelExitCode).toHaveBeenCalledWith('/tmp/sentinel.txt', 1)
-    expect(spies.exit).toHaveBeenCalledWith(23)
-  })
-
-  it('emits JSON output in --json mode', async () => {
-    const mux = createMux({
-      isInsideSession: vi.fn(() => true),
-      splitPane: vi.fn(async () => ({
         backend: 'tmux',
-        launched: true,
         paneId: '%88',
-        sentinelPath: '/tmp/sentinel.txt',
-      })),
+      }))
+      expect(deps.host.exit).toHaveBeenCalledWith(0)
     })
-    mocks.detectMultiplexer.mockResolvedValueOnce(mux)
-    const {command, spies} = createCommand(makeFlags({json: true}))
 
-    await command.run()
+    it('includes exit code in JSON when combined with --wait', async () => {
+      const mux = createMux({
+        isInsideSession: vi.fn(() => true),
+        splitPane: vi.fn(async () => ({
+          backend: 'tmux' as const,
+          launched: true,
+          paneId: '%89',
+          sentinelPath: '/tmp/sentinel.txt',
+        })),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      platformMocks.waitForSentinelFile.mockResolvedValueOnce(true)
+      platformMocks.readSentinelExitCode.mockReturnValueOnce(9)
+      const request = makeRequest({flags: {json: true, wait: true}})
+      const deps = makeDeps()
 
-    const logged = spies.log.mock.calls[0]?.[0]
-    expect(typeof logged).toBe('string')
-    expect(JSON.parse(String(logged))).toEqual({
-      launched: true,
-      backend: 'tmux',
-      paneId: '%88',
-      sentinelPath: '/tmp/sentinel.txt',
-      exitCode: null,
-      reason: null,
+      await executeLaunch(request, deps)
+
+      const payload = JSON.parse(String(deps.host.log.mock.calls[0]?.[0]))
+      expect(payload.exitCode).toBe(9)
+      expect(deps.host.exit).toHaveBeenCalledWith(9)
     })
-    expect(spies.exit).toHaveBeenCalledWith(0)
   })
 
-  it('supports --json with --wait by reading sentinel exit code', async () => {
-    const mux = createMux({
-      isInsideSession: vi.fn(() => true),
-      splitPane: vi.fn(async () => ({
-        backend: 'tmux',
-        launched: true,
-        paneId: '%89',
-        sentinelPath: '/tmp/sentinel.txt',
-      })),
+  describe('--env validation', () => {
+    it('calls host.error with INVALID_USAGE for malformed --env JSON', async () => {
+      const request = makeRequest({flags: {env: '{not-valid-json'}})
+      const deps = makeDeps()
+
+      await expect(executeLaunch(request, deps)).rejects.toMatchObject({
+        message: '--env must be a valid JSON object string',
+        exitCode: EXIT_CODES.INVALID_USAGE,
+      })
+      expect(deps.host.error).toHaveBeenCalled()
     })
-    mocks.detectMultiplexer.mockResolvedValueOnce(mux)
-    mocks.waitForSentinelFile.mockResolvedValueOnce(true)
-    mocks.readSentinelExitCode.mockReturnValueOnce(9)
-    const {command, spies} = createCommand(makeFlags({json: true, wait: true}))
-
-    await command.run()
-
-    const payload = JSON.parse(String(spies.log.mock.calls[0]?.[0]))
-    expect(payload.exitCode).toBe(9)
-    expect(spies.exit).toHaveBeenCalledWith(9)
   })
 
-  it('resolves prompt from --prompt-file and passes it inline', async () => {
-    tempDir = mkdtempSync(path.join(os.tmpdir(), 'aiw-launch-test-'))
-    const promptPath = path.join(tempDir, 'prompt.md')
-    writeFileSync(promptPath, 'prompt from file\n', 'utf8')
-    const {command} = createCommand(makeFlags({'no-tmux': true, 'prompt-file': promptPath}))
+  describe('prompt resolution', () => {
+    it('reads prompt from --prompt-file and passes to inline spawn', async () => {
+      const request = makeRequest({
+        flags: {'no-tmux': true, 'prompt-file': '/tmp/prompt.md'},
+        readPromptFile: vi.fn(() => 'prompt from file'),
+      })
+      const deps = makeDeps()
 
-    await command.run()
+      await executeLaunch(request, deps)
 
-    expect(mocks.spawnProcess).toHaveBeenCalledWith('claude', ['--dangerously-skip-permissions', 'prompt from file'])
+      expect(deps.host.exit).toHaveBeenCalledWith(0)
+    })
+
+    it('passes --prompt text to inline spawn', async () => {
+      const request = makeRequest({
+        flags: {'no-tmux': true, prompt: 'fix this bug'},
+      })
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(deps.host.exit).toHaveBeenCalledWith(0)
+    })
   })
 
-  it('passes --split and parsed --env values into splitPane', async () => {
-    const mux = createMux({
-      isInsideSession: vi.fn(() => true),
-      splitPane: vi.fn(async () => ({backend: 'tmux', launched: true, paneId: '%90'})),
+  describe('error handling', () => {
+    it('calls host.error with ENVIRONMENT_ERROR for ProcessSpawnError', async () => {
+      platformMocks.spawnProcess.mockRejectedValueOnce(
+        new platformMocks.ProcessSpawnError('Command not found: claude'),
+      )
+      const request = makeRequest({flags: {'no-tmux': true}})
+      const deps = makeDeps()
+
+      await expect(executeLaunch(request, deps)).rejects.toThrow()
+      expect(deps.host.error).toHaveBeenCalledWith(
+        'Command not found: claude',
+        expect.objectContaining({exit: EXIT_CODES.ENVIRONMENT_ERROR}),
+      )
     })
-    mocks.detectMultiplexer.mockResolvedValueOnce(mux)
-    const {command} = createCommand(makeFlags({
-      split: 'h',
-      env: '{"FOO":"bar","BAZ":"1"}',
-    }))
 
-    await command.run()
+    it('calls host.error with GENERAL_ERROR for unexpected errors', async () => {
+      platformMocks.spawnProcess.mockRejectedValueOnce(new Error('something unexpected'))
+      const request = makeRequest({flags: {'no-tmux': true}})
+      const deps = makeDeps()
 
-    expect(mux.splitPane).toHaveBeenCalledWith(expect.objectContaining({
-      split: 'h',
-      env: {FOO: 'bar', BAZ: '1'},
-    }))
-  })
-
-  it('throws invalid usage when --env JSON is invalid', async () => {
-    const {command, spies} = createCommand(makeFlags({env: '{not-valid-json'}))
-
-    await expect(command.run()).rejects.toMatchObject({
-      message: '--env must be a valid JSON object string',
-      exitCode: EXIT_CODES.INVALID_USAGE,
+      await expect(executeLaunch(request, deps)).rejects.toThrow()
+      expect(deps.host.error).toHaveBeenCalledWith(
+        'Unexpected launch failure.',
+        expect.objectContaining({exit: EXIT_CODES.GENERAL_ERROR}),
+      )
     })
-    expect(spies.error).toHaveBeenCalled()
-    expect(mocks.spawnProcess).not.toHaveBeenCalled()
   })
 })

@@ -7,8 +7,8 @@ import {getCliBinJsPath} from '../helpers/cli-command.js'
 
 interface ExecFailure {
   status: null | number
-  stdout: Buffer | string
   stderr: Buffer | string
+  stdout: Buffer | string
 }
 
 const cliNodeArgs = ['--no-deprecation', '--loader', 'ts-node/esm', '--disable-warning=ExperimentalWarning']

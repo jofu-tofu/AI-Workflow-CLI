@@ -4,6 +4,7 @@ dist-test/
 _output/
 .aiwcli/
 .codex/
+!src/templates/**/.codex/
 bin/aiw
 
 # Socket artifacts

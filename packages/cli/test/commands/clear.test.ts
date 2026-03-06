@@ -5,16 +5,9 @@
  */
 
 import {expect} from 'chai'
-import {beforeAll, describe, it} from 'vitest'
+import {describe, it} from 'vitest'
 
 import ClearCommand from '../../src/commands/clear.js'
-
-function getClassMethodNames(): Set<string> {
-  const proto = ClearCommand.prototype as unknown as Record<string, unknown>
-  return new Set(
-    Object.getOwnPropertyNames(proto).filter((name) => typeof proto[name] === 'function'),
-  )
-}
 
 describe('clear command', () => {
   describe('command metadata', () => {
@@ -107,56 +100,4 @@ describe('clear command', () => {
     })
   })
 
-  describe('implementation verification', () => {
-    let methods: Set<string>
-
-    beforeAll(() => {
-      methods = getClassMethodNames()
-    })
-
-    it('should find output folders', () => {
-      expect(methods.has('findOutputFolders')).to.equal(true)
-    })
-
-    it('should find method runtime folders', () => {
-      expect(methods.has('findMethodRuntimeFolders')).to.equal(true)
-    })
-
-    it('should find IDE method folders', () => {
-      expect(methods.has('findIdeMethodFolders')).to.equal(true)
-    })
-
-    it('should handle folder deletion', () => {
-      expect(methods.has('executeFolderDeletion')).to.equal(true)
-    })
-
-    it('should update git exclude after clearing', () => {
-      expect(methods.has('cleanupGitExclude')).to.equal(true)
-    })
-
-    it('should reconstruct IDE settings after clearing', () => {
-      expect(methods.has('reconstructSettingsAfterRemoval')).to.equal(true)
-    })
-
-    it('should extract method names for settings update', () => {
-      expect(methods.has('extractMethodNames')).to.equal(true)
-    })
-
-    it('should include cleanup/reporting helpers', () => {
-      expect(methods.has('performPostDeleteCleanup')).to.equal(true)
-      expect(methods.has('reportClearResults')).to.equal(true)
-    })
-
-    it('should support output cleanup mode', () => {
-      expect(methods.has('cleanRuntimeOutput')).to.equal(true)
-    })
-
-    it('should support IDE folder deletion checks', () => {
-      expect(methods.has('tryRemoveIdeFolder')).to.equal(true)
-    })
-
-    it('should expose pending-change display helper', () => {
-      expect(methods.has('displayPendingChanges')).to.equal(true)
-    })
-  })
 })

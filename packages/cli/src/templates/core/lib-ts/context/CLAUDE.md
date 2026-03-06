@@ -82,13 +82,14 @@ Formats context state for injection into Claude's context window.
 
 ### `context-selector.ts`
 
-Finds contexts by various criteria.
+Routes prompts to contexts. Single entry point: `determineContext()`.
 
-| Function | Purpose |
+| Function / Class | Purpose |
 |----------|---------|
-| `selectActiveContext(root?)` | Find the single active context (errors if multiple) |
-| `findContextByMode(mode, root?)` | Find contexts in a given mode |
-| `findStagedWorkContext(root?)` | Find context with `has_staged_work` mode |
+| `determineContext(prompt, sessionId, projectRoot)` | Main entry — session match, caret commands, plan/handoff fallback, or create new |
+| `resolveContextByPrefix(prefix, root?)` | Resolve context by ID prefix |
+| `parseChainedCaret(prompt)` | Parse `^` caret commands from prompt |
+| `BlockRequest` (class) | Thrown when request should be blocked with a message |
 
 ### `plan-manager.ts`
 
@@ -123,7 +124,6 @@ Tracks task progress (ISC criteria) within a context.
 | `session_end.ts` | `getContextBySessionId()`, `updateMode()`, `saveState()` |
 | `user_prompt_submit.ts` | `getAllContexts()`, `maybeActivate()`, `determineArtifactType()` |
 | `archive_plan.ts` | `getContextBySessionId()`, `archivePlan()` |
-| `save_handoff.ts` | `getContextBySessionId()`, `updateContext()` |
 | `cc-native-plan-review.ts` | `getContextBySessionId()`, `getAllContexts()` |
 
 ## Design Decisions
@@ -132,4 +132,6 @@ Tracks task progress (ISC criteria) within a context.
 - **No moves out of lib-ts:** Context is pure library code imported by ~8 shared hooks. Moving it would require updating all those import paths for no structural gain. The subfolder is already co-located; it just needed documentation.
 - **`maybeActivate()` is idempotent:** Can be called from any hook without checking current mode — safe to call repeatedly.
 - **`determineArtifactType()` drives session restore:** Returns `"plan"` or `"handoff"` to dispatch the correct restoration path in `session_start.ts`.
+
+<!-- context-layer: last-audited=2026-03-05 | version=2 -->
 

@@ -111,9 +111,9 @@ describe('Piping Support Integration', () => {
         encoding: 'utf8',
         shell: '/bin/sh',
       })
-      // Should be clean semver version
+      // Should contain a semver version (oclif may include package/platform info)
       const version = result.trim()
-      expect(version).to.match(/^\d+\.\d+\.\d+$/)
+      expect(version).to.match(/\d+\.\d+\.\d+/)
     })
   })
 

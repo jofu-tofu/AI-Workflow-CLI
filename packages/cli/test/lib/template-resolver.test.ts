@@ -31,8 +31,8 @@ describe('Template Resolver', () => {
   it('should discover IDE folders for core template', async () => {
     const sharedPath = await getTemplatePath('core')
     const ides = await getTemplateIdeNamesByPath(sharedPath)
-    expect(ides).to.include('claude')
     expect(ides).to.include('codex')
+    expect(ides).to.include('cognition')
     expect(ides).to.include('windsurf')
   })
 

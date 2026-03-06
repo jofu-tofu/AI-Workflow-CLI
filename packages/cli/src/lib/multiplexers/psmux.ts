@@ -20,7 +20,8 @@ import {execFileAsync, findExecutable} from '../runtime/subprocess-utils.js'
 import {wrapSentinelPowerShell} from '../sentinel-wrapper.js'
 import {quoteForPowerShell, toEncodedPowerShell} from '../shell-quoting.js'
 
-interface PsmuxVersion {
+/** @internal */
+export interface PsmuxVersion {
   major: number
   minor: number
   patch: number
@@ -31,7 +32,8 @@ const ATTACH_RETRY_DELAY_MS = 200
 const SESSION_READY_BACKOFF_MS = [50, 100, 150, 250] as const
 const PSMUX_TERMINAL_OVERRIDES = ',*:Ss@:Se@:Cs@:Cr@'
 
-function meetsMinVersion(v: PsmuxVersion): boolean {
+/** @internal */
+export function meetsMinVersion(v: PsmuxVersion): boolean {
   if (v.major > MIN_VERSION.major) return true
   if (v.major < MIN_VERSION.major) return false
   if (v.minor > MIN_VERSION.minor) return true
@@ -39,9 +41,21 @@ function meetsMinVersion(v: PsmuxVersion): boolean {
   return v.patch >= MIN_VERSION.patch
 }
 
+/** @internal */
+export function parseVersionString(stdout: string): PsmuxVersion | null {
+  const match = stdout.trim().match(/(\d+)\.(\d+)\.(\d+)/)
+  if (!match) return null
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+  }
+}
+
 type PsmuxSplitFlag = '-h' | '-v'
 
-function buildCommandArgs(
+/** @internal */
+export function buildCommandArgs(
   args: string[],
   mode: 'exec' | 'repl',
   promptPath?: string,
@@ -53,7 +67,8 @@ function buildCommandArgs(
   return [...args, bootstrap]
 }
 
-function buildPowerShellToolCommand(params: {
+/** @internal */
+export function buildPowerShellToolCommand(params: {
   args: string[];
   env: Record<string, string>;
   mode: 'exec' | 'repl';
@@ -74,6 +89,29 @@ function buildPowerShellToolCommand(params: {
     : invocation
 
   return [envPrefix, body].filter(Boolean).join('; ')
+}
+
+/** @internal */
+export function buildCreateSessionArgs(params: { sessionName: string; cwd: string; encodedCommand: string }): string[] {
+  return ['new-session', '-d', '-c', params.cwd, '-s', params.sessionName, params.encodedCommand]
+}
+
+/** @internal */
+export function buildSplitWindowArgs(params: { splitFlag: '-h' | '-v'; encodedCommand: string; cwd?: string; splitTarget?: string }): string[] {
+  const args = ['split-window', params.splitFlag, '-P', '-F', '#{pane_id}']
+  if (params.cwd) {
+    args.push('-c', params.cwd)
+  }
+  if (params.splitTarget?.trim()) {
+    args.push('-t', params.splitTarget.trim())
+  }
+  args.push(params.encodedCommand)
+  return args
+}
+
+/** @internal */
+export function buildAttachArgs(sessionName: string): string[] {
+  return ['attach', '-t', sessionName]
 }
 
 export class PsmuxMultiplexer implements Multiplexer {
@@ -99,14 +137,8 @@ export class PsmuxMultiplexer implements Multiplexer {
     const result = await execFileAsync(psmuxPath, ['-V'], {timeout: 3000})
     if (result.exitCode !== 0) return null
 
-    const match = result.stdout.trim().match(/(\d+)\.(\d+)\.(\d+)/)
-    if (!match) return null
-
-    const version: PsmuxVersion = {
-      major: Number(match[1]),
-      minor: Number(match[2]),
-      patch: Number(match[3]),
-    }
+    const version = parseVersionString(result.stdout)
+    if (!version) return null
 
     if (!meetsMinVersion(version)) return null
 
@@ -133,11 +165,11 @@ export class PsmuxMultiplexer implements Multiplexer {
     // Inject PSMUX_PANE=1 for inside-session detection
     const commandWithEnv = `$env:PSMUX_PANE='1'; ${shellCommand}`
 
-    const psmuxArgs = ['new-session', '-d',
-      '-c', process.cwd(),
-      '-s', sessionName,
-      toEncodedPowerShell(commandWithEnv),
-    ]
+    const psmuxArgs = buildCreateSessionArgs({
+      sessionName,
+      cwd: process.cwd(),
+      encodedCommand: toEncodedPowerShell(commandWithEnv),
+    })
 
     if (reattach) {
       const exists = await this.hasSession(sessionName)
@@ -175,7 +207,7 @@ export class PsmuxMultiplexer implements Multiplexer {
 
     await this.applyBootstrapDefaults(enableMouse)
 
-    const attachArgs = ['attach', '-t', sessionName]
+    const attachArgs = buildAttachArgs(sessionName)
     const env = cleanClaudeEnv()
 
     const firstAttach = await spawnAttached(this.psmuxPath, attachArgs, env, this.backend)
@@ -258,16 +290,12 @@ export class PsmuxMultiplexer implements Multiplexer {
       await this.applyBootstrapDefaults()
 
       // Build psmux split-window command
-      const psmuxArgs = ['split-window', splitFlag, '-P', '-F', '#{pane_id}']
-      if (cwd) {
-        psmuxArgs.push('-c', cwd)
-      }
-
-      if (options.splitTarget?.trim()) {
-        psmuxArgs.push('-t', options.splitTarget.trim())
-      }
-
-      psmuxArgs.push(effectivePaneCommand)
+      const psmuxArgs = buildSplitWindowArgs({
+        splitFlag,
+        encodedCommand: effectivePaneCommand,
+        cwd,
+        splitTarget: options.splitTarget,
+      })
 
       const split = await execFileAsync(this.psmuxPath, psmuxArgs, {timeout: 5000})
       if (split.exitCode !== 0) {
@@ -374,7 +402,8 @@ function findPsmuxInWinget(): null | string {
   }
 }
 
-function buildPsmuxBootstrapCommands(enableMouse = true): string[][] {
+/** @internal */
+export function buildPsmuxBootstrapCommands(enableMouse = true): string[][] {
   const commands: string[][] = []
   if (enableMouse) {
     commands.push(['set-option', '-g', 'mouse', 'on'])
@@ -390,7 +419,8 @@ function buildPsmuxBootstrapCommands(enableMouse = true): string[][] {
   return commands
 }
 
-function buildPsmuxShellCommand(opts: CreateSessionOptions, promptFilePath?: string): string {
+/** @internal */
+export function buildPsmuxShellCommand(opts: CreateSessionOptions, promptFilePath?: string): string {
   const {toolPath, toolArgs} = opts
 
   const cmdParts: string[] = []
@@ -408,7 +438,8 @@ function buildPsmuxShellCommand(opts: CreateSessionOptions, promptFilePath?: str
   return cmdParts.join(' ')
 }
 
-function formatPromptPathForBootstrap(promptPath: string): string {
+/** @internal */
+export function formatPromptPathForBootstrap(promptPath: string): string {
   if (process.platform !== 'win32') return promptPath
   return promptPath.replaceAll('\\', '/')
 }

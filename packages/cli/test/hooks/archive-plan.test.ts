@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url'
 
 import {afterEach, describe, expect, it} from 'vitest'
 
-import {createContextFixture, type ContextFixture} from './fixtures/context-fixture.js'
+import {type ContextFixture, createContextFixture} from './fixtures/context-fixture.js'
 import {runHookSubprocess} from './harness/hook-subprocess.js'
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))

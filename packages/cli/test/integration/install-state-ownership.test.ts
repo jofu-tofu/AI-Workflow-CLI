@@ -13,7 +13,32 @@ import {cleanupTestDir, createTestDir, pathExists} from '../helpers/test-utils.j
 
 const execFileAsync = promisify(execFile)
 
-function quietClear(command: ClearCommand, template?: string): ClearCommand {
+// Mock inquirer prompts at the module boundary (used by the interactive wizard)
+vi.mock('@inquirer/select', () => ({default: vi.fn()}))
+vi.mock('@inquirer/checkbox', () => ({default: vi.fn()}))
+vi.mock('@inquirer/input', () => ({default: vi.fn()}))
+vi.mock('@inquirer/confirm', () => ({default: vi.fn()}))
+
+interface QuietClearOptions {
+  template?: string
+}
+
+interface QuietInitOptions {
+  ides?: string[]
+  interactive?: boolean
+  method?: string
+}
+
+function silenceCommand<T extends ClearCommand | InitCommand>(command: T): T {
+  vi.spyOn(command, 'log').mockImplementation(() => {})
+  vi.spyOn(command, 'logInfo').mockImplementation(() => {})
+  vi.spyOn(command, 'logSuccess').mockImplementation(() => {})
+  if ('logWarning' in command) vi.spyOn(command as ClearCommand, 'logWarning').mockImplementation(() => {})
+  if ('warn' in command) vi.spyOn(command as InitCommand, 'warn').mockImplementation(() => {})
+  return command
+}
+
+function quietClear(command: ClearCommand, options?: QuietClearOptions): ClearCommand {
   vi.spyOn(command, 'parse').mockResolvedValue({
     flags: {
       debug: false,
@@ -22,17 +47,13 @@ function quietClear(command: ClearCommand, template?: string): ClearCommand {
       help: false,
       output: false,
       quiet: true,
-      template,
+      template: options?.template,
     },
   } as never)
-  vi.spyOn(command, 'log').mockImplementation(() => {})
-  vi.spyOn(command, 'logInfo').mockImplementation(() => {})
-  vi.spyOn(command, 'logSuccess').mockImplementation(() => {})
-  vi.spyOn(command, 'logWarning').mockImplementation(() => {})
-  return command
+  return silenceCommand(command)
 }
 
-function quietInit(command: InitCommand, options?: {ides?: string[]; interactive?: boolean; method?: string}): InitCommand {
+function quietInit(command: InitCommand, options?: QuietInitOptions): InitCommand {
   vi.spyOn(command, 'parse').mockResolvedValue({
     flags: {
       debug: false,
@@ -43,26 +64,32 @@ function quietInit(command: InitCommand, options?: {ides?: string[]; interactive
       quiet: true,
     },
   } as never)
-  vi.spyOn(command as never, 'installGlobalResolver').mockImplementation(async () => {})
-  vi.spyOn(command, 'log').mockImplementation(() => {})
-  vi.spyOn(command, 'logInfo').mockImplementation(() => {})
-  vi.spyOn(command, 'logSuccess').mockImplementation(() => {})
-  vi.spyOn(command, 'warn').mockImplementation(() => {})
-  return command
+  return silenceCommand(command)
 }
 
 describe('install-state ownership', () => {
   let originalCwd: string
+  let originalHome: string | undefined
   let testDir: string
 
   beforeEach(async () => {
     originalCwd = process.cwd()
+    originalHome = process.env.HOME
     testDir = await createTestDir('aiw-install-state-ownership')
+    // Redirect HOME so installGlobalResolver writes into the temp dir
+    // instead of polluting the real ~/.aiwcli/bin/
+    process.env.HOME = testDir
     process.chdir(testDir)
   })
 
   afterEach(async () => {
     process.chdir(originalCwd)
+    if (originalHome === undefined) {
+      delete process.env.HOME
+    } else {
+      process.env.HOME = originalHome
+    }
+
     vi.restoreAllMocks()
     await cleanupTestDir(testDir)
   })
@@ -77,14 +104,30 @@ describe('install-state ownership', () => {
     expect(settings).to.not.have.property('methods')
   })
 
-  it('does not perform a minimal install when interactive setup is cancelled', async () => {
+  it('does not install anything when interactive setup is cancelled', async () => {
+    // Mock inquirer prompts at the module boundary: the wizard calls select,
+    // checkbox, input (x2), then confirm. Return plausible answers for the
+    // first four and `false` for the confirmation to trigger cancellation.
+    const {default: mockSelect} = await import('@inquirer/select')
+    const {default: mockCheckbox} = await import('@inquirer/checkbox')
+    const {default: mockInput} = await import('@inquirer/input')
+    const {default: mockConfirm} = await import('@inquirer/confirm')
+
+    vi.mocked(mockSelect).mockResolvedValue('cc-native')
+    vi.mocked(mockCheckbox).mockResolvedValue(['claude'])
+    vi.mocked(mockInput).mockResolvedValue('test-user')
+    vi.mocked(mockConfirm).mockResolvedValue(false)
+
     const command = quietInit(new InitCommand([], {} as never), {interactive: true})
-    const minimalInstall = vi.spyOn(command as never, 'performMinimalInstall').mockImplementation(async () => {})
-    vi.spyOn(command as never, 'runInteractiveWizard').mockResolvedValue({confirmed: false} as never)
+    const logSpy = vi.mocked(command.log)
 
     await command.run()
 
-    expect(minimalInstall.mock.calls).to.have.length(0)
+    // Observable output: cancellation message was logged
+    const loggedMessages = logSpy.mock.calls.map((args) => args[0]).join('\n')
+    expect(loggedMessages).to.include('cancelled')
+
+    // Observable state: no core directory was created
     expect(await pathExists(join(testDir, '.aiwcli', '_core'))).to.equal(false)
   })
 
@@ -100,17 +143,17 @@ describe('install-state ownership', () => {
   })
 
   it('backfills legacy methods during init so existing settings survive', async () => {
-    await fs.mkdir(join(testDir, '.aiwcli', '_gsd', 'hooks'), {recursive: true})
-    await fs.writeFile(join(testDir, '.aiwcli', '_gsd', 'hooks', 'gsd-unified-review.py'), '# legacy\n', 'utf8')
-    await reconstructIdeSettings(testDir, ['gsd'], ['claude'])
+    await fs.mkdir(join(testDir, '.aiwcli', '_planning-with-files'), {recursive: true})
+    await fs.writeFile(join(testDir, '.aiwcli', '_planning-with-files', 'placeholder.md'), '# legacy\n', 'utf8')
+    await reconstructIdeSettings(testDir, ['planning-with-files'], ['claude'])
 
     await quietInit(new InitCommand([], {} as never), {ides: ['claude'], method: 'cc-native'}).run()
 
     const installState = JSON.parse(await fs.readFile(join(testDir, '.aiwcli', 'state', 'install-state.json'), 'utf8'))
-    expect(Object.keys(installState.methods).sort()).to.deep.equal(['cc-native', 'gsd'])
+    expect(Object.keys(installState.methods).sort()).to.deep.equal(['cc-native', 'planning-with-files'])
 
     const settings = await fs.readFile(join(testDir, '.claude', 'settings.json'), 'utf8')
-    expect(settings).to.include('gsd-unified-review.py')
+    expect(settings).to.include('init-session.sh')
     expect(settings).to.include('mark_questions_asked.ts')
   })
 
@@ -120,7 +163,7 @@ describe('install-state ownership', () => {
     await fs.writeFile(join(testDir, '.claude', 'commands', 'cc-native', 'placeholder.md'), '# test\n', 'utf8')
     await reconstructIdeSettings(testDir, ['cc-native'], ['claude'])
 
-    await quietClear(new ClearCommand([], {} as never), 'cc-native').run()
+    await quietClear(new ClearCommand([], {} as never), {template: 'cc-native'}).run()
 
     expect(await pathExists(join(testDir, '.aiwcli', '_cc-native'))).to.equal(false)
     expect(await pathExists(join(testDir, '.claude', 'commands', 'cc-native'))).to.equal(false)
@@ -135,7 +178,7 @@ describe('install-state ownership', () => {
     await fs.mkdir(join(testDir, '_output', 'gsd'), {recursive: true})
     await fs.writeFile(join(testDir, '_output', 'gsd', 'artifact.md'), '# artifact\n', 'utf8')
 
-    await quietClear(new ClearCommand([], {} as never), 'gsd').run()
+    await quietClear(new ClearCommand([], {} as never), {template: 'gsd'}).run()
 
     expect(await pathExists(join(testDir, '_output', 'gsd'))).to.equal(false)
     expect(await pathExists(join(testDir, '_output'))).to.equal(false)
