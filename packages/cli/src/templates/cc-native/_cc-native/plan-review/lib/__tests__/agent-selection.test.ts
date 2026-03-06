@@ -1,21 +1,16 @@
 /**
- * Tests for agent-selection module, focusing on:
- * - assignModelsToAgents with preflight filtering
- * - Provider priority ordering (codex-first)
+ * Tests for agent-selection module.
+ * Tests resolveEnabledProviders directly with simple predicates — zero mocks.
+ * Tests assignModelsToAgents with DI options (randomFn, isCliAvailable) — zero mocks.
+ * Logger mock is for noise suppression only.
  */
 
-import { describe, it, expect, mock, beforeEach } from "bun:test";
+import { describe, it, expect, mock } from "bun:test";
 import type { AgentConfig, ModelsConfig } from "../../../lib-ts/types.js";
 
 // ---------------------------------------------------------------------------
-// Mocks
+// Mock logger for noise suppression only (no assertions on logger calls)
 // ---------------------------------------------------------------------------
-
-const mockFindExecutable = mock(() => "/usr/bin/mock-cli" as string | null);
-
-mock.module("../../../../_core/lib-ts/runtime/subprocess-utils.js", () => ({
-  findExecutable: mockFindExecutable,
-}));
 
 mock.module("../../../../_core/lib-ts/runtime/logger.js", () => ({
   logDebug: () => {},
@@ -24,7 +19,12 @@ mock.module("../../../../_core/lib-ts/runtime/logger.js", () => ({
   logError: () => {},
 }));
 
-const { assignModelsToAgents } = await import("../agent-selection.js");
+// Mock subprocess-utils so module load doesn't fail (not used by tests via DI)
+mock.module("../../../../_core/lib-ts/runtime/subprocess-utils.js", () => ({
+  findExecutable: () => null,
+}));
+
+const { assignModelsToAgents, resolveEnabledProviders } = await import("../agent-selection.js");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -46,23 +46,139 @@ function makeModelsConfig(providers: Record<string, { enabled: boolean; models: 
   return { providers };
 }
 
+/** CLI always available */
+const allAvailable = () => true;
+
+/** CLI never available */
+const noneAvailable = () => false;
+
+/** Only specific CLIs available */
+const onlyAvailable = (...names: string[]) => (name: string) => names.includes(name);
+
 // ---------------------------------------------------------------------------
-// Tests
+// resolveEnabledProviders — pure, zero mocks
+// ---------------------------------------------------------------------------
+
+describe("resolveEnabledProviders", () => {
+  it("returns enabled providers sorted by priority (codex first)", () => {
+    const config = makeModelsConfig({
+      claude: { enabled: true, models: ["sonnet"] },
+      codex: { enabled: true, models: ["codex-mini-latest"] },
+    });
+
+    const result = resolveEnabledProviders(config, allAvailable);
+
+    expect(result.length).toBe(2);
+    expect(result[0]![0]).toBe("codex");
+    expect(result[1]![0]).toBe("claude");
+  });
+
+  it("excludes providers whose CLI is not available", () => {
+    const config = makeModelsConfig({
+      claude: { enabled: true, models: ["sonnet"] },
+      codex: { enabled: true, models: ["codex-mini-latest"] },
+    });
+
+    const result = resolveEnabledProviders(config, onlyAvailable("claude"));
+
+    expect(result.length).toBe(1);
+    expect(result[0]![0]).toBe("claude");
+  });
+
+  it("excludes disabled providers", () => {
+    const config = makeModelsConfig({
+      claude: { enabled: false, models: ["sonnet"] },
+      codex: { enabled: true, models: ["codex-mini-latest"] },
+    });
+
+    const result = resolveEnabledProviders(config, allAvailable);
+
+    expect(result.length).toBe(1);
+    expect(result[0]![0]).toBe("codex");
+  });
+
+  it("excludes providers with empty model lists", () => {
+    const config = makeModelsConfig({
+      claude: { enabled: true, models: [] },
+      codex: { enabled: true, models: ["codex-mini-latest"] },
+    });
+
+    const result = resolveEnabledProviders(config, allAvailable);
+
+    expect(result.length).toBe(1);
+    expect(result[0]![0]).toBe("codex");
+  });
+
+  it("filters models by preflight results", () => {
+    const config = makeModelsConfig({
+      claude: { enabled: true, models: ["sonnet", "opus"] },
+    });
+
+    const preflightAvailable = new Map([
+      ["claude", new Set(["sonnet"])],
+    ]);
+
+    const result = resolveEnabledProviders(config, allAvailable, preflightAvailable);
+
+    expect(result.length).toBe(1);
+    expect(result[0]![1].models).toEqual(["sonnet"]);
+  });
+
+  it("skips provider when no models passed preflight", () => {
+    const config = makeModelsConfig({
+      claude: { enabled: true, models: ["sonnet"] },
+      codex: { enabled: true, models: ["codex-mini-latest"] },
+    });
+
+    // Only claude passed preflight
+    const preflightAvailable = new Map([
+      ["claude", new Set(["sonnet"])],
+    ]);
+
+    const result = resolveEnabledProviders(config, allAvailable, preflightAvailable);
+
+    expect(result.length).toBe(1);
+    expect(result[0]![0]).toBe("claude");
+  });
+
+  it("returns empty when no providers are available", () => {
+    const config = makeModelsConfig({
+      codex: { enabled: true, models: ["codex-mini-latest"] },
+    });
+
+    const result = resolveEnabledProviders(config, noneAvailable);
+
+    expect(result).toEqual([]);
+  });
+
+  it("puts unknown providers after known ones in priority", () => {
+    const config = makeModelsConfig({
+      gemini: { enabled: true, models: ["gemini-pro"] },
+      codex: { enabled: true, models: ["codex-mini"] },
+    });
+
+    const result = resolveEnabledProviders(config, allAvailable);
+
+    expect(result[0]![0]).toBe("codex");
+    expect(result[1]![0]).toBe("gemini");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// assignModelsToAgents — uses DI, zero subprocess mocks
 // ---------------------------------------------------------------------------
 
 describe("assignModelsToAgents", () => {
-  beforeEach(() => {
-    mockFindExecutable.mockReset();
-    mockFindExecutable.mockReturnValue("/usr/bin/mock-cli");
-  });
-
   it("assigns provider and model to agents", () => {
     const agents = [makeAgent("a1"), makeAgent("a2")];
     const config = makeModelsConfig({
       claude: { enabled: true, models: ["sonnet"] },
     });
 
-    const result = assignModelsToAgents(agents, config);
+    const result = assignModelsToAgents(agents, config, undefined, {
+      isCliAvailable: allAvailable,
+      randomFn: () => 0,
+    });
 
     expect(result.length).toBe(2);
     expect(result[0]!.provider).toBe("claude");
@@ -77,25 +193,26 @@ describe("assignModelsToAgents", () => {
       codex: { enabled: true, models: ["codex-mini-latest"] },
     });
 
-    const result = assignModelsToAgents(agents, config);
+    const result = assignModelsToAgents(agents, config, undefined, {
+      isCliAvailable: allAvailable,
+      randomFn: () => 0,
+    });
 
-    // All agents should be on codex (higher priority)
     expect(result.every(a => a.provider === "codex")).toBe(true);
     expect(result.every(a => a.model === "codex-mini-latest")).toBe(true);
   });
 
   it("falls back to claude when codex CLI not found", () => {
-    mockFindExecutable.mockImplementation((name: string) => {
-      return name === "claude" ? "/usr/bin/claude" : null;
-    });
-
     const agents = [makeAgent("a1")];
     const config = makeModelsConfig({
       claude: { enabled: true, models: ["sonnet"] },
       codex: { enabled: true, models: ["codex-mini-latest"] },
     });
 
-    const result = assignModelsToAgents(agents, config);
+    const result = assignModelsToAgents(agents, config, undefined, {
+      isCliAvailable: onlyAvailable("claude"),
+      randomFn: () => 0,
+    });
 
     expect(result[0]!.provider).toBe("claude");
     expect(result[0]!.model).toBe("sonnet");
@@ -107,12 +224,14 @@ describe("assignModelsToAgents", () => {
       claude: { enabled: true, models: ["sonnet", "opus"] },
     });
 
-    // Only sonnet passed preflight
     const preflightAvailable = new Map([
       ["claude", new Set(["sonnet"])],
     ]);
 
-    const result = assignModelsToAgents(agents, config, preflightAvailable);
+    const result = assignModelsToAgents(agents, config, preflightAvailable, {
+      isCliAvailable: allAvailable,
+      randomFn: () => 0,
+    });
 
     expect(result[0]!.provider).toBe("claude");
     expect(result[0]!.model).toBe("sonnet");
@@ -125,25 +244,28 @@ describe("assignModelsToAgents", () => {
       codex: { enabled: true, models: ["codex-mini-latest"] },
     });
 
-    // Only claude passed, codex failed entirely
     const preflightAvailable = new Map([
       ["claude", new Set(["sonnet"])],
     ]);
 
-    const result = assignModelsToAgents(agents, config, preflightAvailable);
+    const result = assignModelsToAgents(agents, config, preflightAvailable, {
+      isCliAvailable: allAvailable,
+      randomFn: () => 0,
+    });
 
     expect(result[0]!.provider).toBe("claude");
   });
 
   it("falls back to claude defaults when all providers fail CLI check", () => {
-    mockFindExecutable.mockReturnValue(null);
-
     const agents = [makeAgent("a1")];
     const config = makeModelsConfig({
       codex: { enabled: true, models: ["codex-mini-latest"] },
     });
 
-    const result = assignModelsToAgents(agents, config);
+    const result = assignModelsToAgents(agents, config, undefined, {
+      isCliAvailable: noneAvailable,
+      randomFn: () => 0,
+    });
 
     expect(result[0]!.provider).toBe("claude");
   });
@@ -155,7 +277,10 @@ describe("assignModelsToAgents", () => {
       codex: { enabled: true, models: ["codex-mini-latest"] },
     });
 
-    const result = assignModelsToAgents(agents, config);
+    const result = assignModelsToAgents(agents, config, undefined, {
+      isCliAvailable: allAvailable,
+      randomFn: () => 0,
+    });
 
     expect(result[0]!.provider).toBe("codex");
   });
@@ -167,26 +292,33 @@ describe("assignModelsToAgents", () => {
       codex: { enabled: true, models: ["codex-mini-latest"] },
     });
 
-    const result = assignModelsToAgents(agents, config);
+    const result = assignModelsToAgents(agents, config, undefined, {
+      isCliAvailable: allAvailable,
+      randomFn: () => 0,
+    });
 
     expect(result[0]!.provider).toBe("codex");
   });
 
-  it("without preflight, does not filter models", () => {
+  it("selects deterministic model with randomFn", () => {
     const agents = [makeAgent("a1")];
     const config = makeModelsConfig({
       codex: { enabled: true, models: ["model-a", "model-b"] },
     });
 
-    // Run multiple times to statistically verify both models can be assigned
-    const models = new Set<string>();
-    for (let i = 0; i < 50; i++) {
-      const result = assignModelsToAgents(agents, config);
-      models.add(result[0]!.model);
-    }
+    // randomFn=0 picks index 0 (model-a)
+    const result0 = assignModelsToAgents(agents, config, undefined, {
+      isCliAvailable: allAvailable,
+      randomFn: () => 0,
+    });
+    expect(result0[0]!.model).toBe("model-a");
 
-    // At least one of the models should appear (statistically near-certain with 50 runs)
-    expect(models.size).toBeGreaterThanOrEqual(1);
+    // randomFn=0.5 picks index 1 (model-b)
+    const result1 = assignModelsToAgents(agents, config, undefined, {
+      isCliAvailable: allAvailable,
+      randomFn: () => 0.5,
+    });
+    expect(result1[0]!.model).toBe("model-b");
   });
 
   it("preserves agent fields other than provider and model", () => {
@@ -198,7 +330,10 @@ describe("assignModelsToAgents", () => {
       claude: { enabled: true, models: ["sonnet"] },
     });
 
-    const result = assignModelsToAgents([agent], config);
+    const result = assignModelsToAgents([agent], config, undefined, {
+      isCliAvailable: allAvailable,
+      randomFn: () => 0,
+    });
 
     expect(result[0]!.name).toBe("test-agent");
     expect(result[0]!.focus).toBe("security");

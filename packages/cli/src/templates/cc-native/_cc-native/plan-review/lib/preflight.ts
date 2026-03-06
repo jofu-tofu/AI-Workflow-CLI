@@ -25,6 +25,57 @@ const PREFLIGHT_COMMANDS: Record<string, PreflightCommandConfig> = {
   codex:  preflightCommandConfig("codex"),
 };
 
+export const KNOWN_PROVIDERS = new Set(Object.keys(PREFLIGHT_COMMANDS));
+
+// ---------------------------------------------------------------------------
+// Pure Functions (extracted for direct testing)
+// ---------------------------------------------------------------------------
+
+/** @internal — Collect unique provider:model combos, filtering to known providers. */
+export function collectPreflightChecks(
+  modelsConfig: ModelsConfig,
+  knownProviders: Set<string>,
+): { checks: Array<{ provider: string; model: string }>; skippedProviders: string[] } {
+  const checks: Array<{ provider: string; model: string }> = [];
+  const seen = new Set<string>();
+  const skippedProviders: string[] = [];
+
+  for (const [provider, config] of Object.entries(modelsConfig.providers)) {
+    if (!config.enabled || config.models.length === 0) continue;
+    if (!knownProviders.has(provider)) {
+      skippedProviders.push(provider);
+      continue;
+    }
+    for (const model of config.models) {
+      const key = `${provider}:${model}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        checks.push({ provider, model });
+      }
+    }
+  }
+
+  return { checks, skippedProviders };
+}
+
+/** @internal — Build availability report from check results. */
+export function buildPreflightReport(
+  results: Array<{ provider: string; model: string; available: boolean; error?: string; latencyMs?: number }>,
+  totalMs: number,
+): PreflightReport {
+  const available = new Map<string, Set<string>>();
+  for (const r of results) {
+    if (r.available) {
+      if (!available.has(r.provider)) available.set(r.provider, new Set());
+      available.get(r.provider)!.add(r.model);
+    }
+  }
+
+  const allFailed = available.size === 0;
+
+  return { checks: results as PreflightCheckResult[], available, allFailed, totalMs };
+}
+
 // ---------------------------------------------------------------------------
 // Run All Checks
 // ---------------------------------------------------------------------------
@@ -37,22 +88,10 @@ export async function runPreflight(
   const start = Date.now();
 
   // Collect unique provider:model combos from enabled providers
-  const checks: Array<{ provider: string; model: string }> = [];
-  const seen = new Set<string>();
+  const { checks, skippedProviders } = collectPreflightChecks(modelsConfig, KNOWN_PROVIDERS);
 
-  for (const [provider, config] of Object.entries(modelsConfig.providers)) {
-    if (!config.enabled || config.models.length === 0) continue;
-    if (!PREFLIGHT_COMMANDS[provider]) {
-      logWarn(HOOK, `No preflight command for provider '${provider}', skipping`);
-      continue;
-    }
-    for (const model of config.models) {
-      const key = `${provider}:${model}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        checks.push({ provider, model });
-      }
-    }
+  for (const provider of skippedProviders) {
+    logWarn(HOOK, `No preflight command for provider '${provider}', skipping`);
   }
 
   if (checks.length === 0) {
@@ -69,17 +108,8 @@ export async function runPreflight(
     ),
   );
 
-  // Build available map
-  const available = new Map<string, Set<string>>();
-  for (const r of results) {
-    if (r.available) {
-      if (!available.has(r.provider)) available.set(r.provider, new Set());
-      available.get(r.provider)!.add(r.model);
-    }
-  }
-
-  const allFailed = available.size === 0;
   const totalMs = Date.now() - start;
+  const report = buildPreflightReport(results, totalMs);
 
   // Log summary
   const passed = results.filter(r => r.available).length;
@@ -92,5 +122,5 @@ export async function runPreflight(
     }
   }
 
-  return { checks: results, available, allFailed, totalMs };
+  return report;
 }
