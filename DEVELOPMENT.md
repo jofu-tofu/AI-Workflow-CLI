@@ -312,7 +312,7 @@ aiwcli/
 │   ├── src/
 │   │   ├── commands/       # CLI commands (launch, init, branch)
 │   │   ├── lib/            # Library code
-│   │   ├── templates/      # Built-in templates (bmad, cc-native, gsd)
+│   │   ├── templates/      # Built-in templates (cc-native, planning-with-files)
 │   │   └── types/          # TypeScript type definitions
 │   └── test/               # Test files
 ├── examples/               # Example workflow files

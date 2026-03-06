@@ -13,7 +13,7 @@ AIW wraps Claude Code with infrastructure that it doesn't have natively: **persi
 
 - **Context that survives `/clear` and compaction** — AIW tracks what you're working on, which plan you approved, what tasks remain, and restores all of it when a new session starts. No more re-explaining.
 - **A hook system that automates the boring parts** — 13 TypeScript hooks (run via Bun) fire on Claude Code lifecycle events (session start, prompt submit, tool use, plan exit, session end). They archive plans, track tasks, monitor context window usage, suggest relevant files, and manage state transitions — automatically.
-- **Workflow templates you can swap** — Four template methods (cc-native, bmad, gsd, planning-with-files) provide different development philosophies. Each brings its own hooks, workflows, agents, and libraries. Install one, switch later, or build your own.
+- **Workflow templates you can swap** — Two template methods (`cc-native` and `planning-with-files`) provide different development philosophies. Each brings its own hooks, workflows, agents, and libraries. Install one, switch later, or build your own.
 - **Parallel workstreams via git worktrees** — Branch into isolated worktrees with their own Claude Code sessions. Work on three features simultaneously without stashing.
 
 ---
@@ -64,15 +64,13 @@ AIW uses a two-layer template architecture:
 
 **Core infrastructure** (`core/` source, installed as `.aiwcli/_core/`) is installed by every template method. It provides the context management system, session lifecycle hooks, task tracking, and core libraries. This is the foundation.
 
-**Method-specific code** (`_cc-native/`, `_bmad/`, etc.) adds workflows, agents, hooks, and libraries tailored to a specific development philosophy.
+**Method-specific code** (`_cc-native/`, etc.) adds workflows, agents, hooks, and libraries tailored to a specific development philosophy.
 
 ### Available Methods
 
 | Method | Philosophy | What It Adds |
 |--------|-----------|--------------|
 | **cc-native** | Native Claude Code power features — planning, review, agents | Plan review pipeline, stuck detection, early clarification prompts, plan context injection |
-| **bmad** | Build-Measure-Analyze-Deploy — multi-agent team | Analyst, Architect, Dev, PM, Tech Writer, UX Designer agents |
-| **gsd** | Get Stuff Done — streamlined productivity | Unified review system, goal-staged workflows |
 | **planning-with-files** | Manus-style file-based planning | File-based project planning with session hooks |
 
 ```bash

@@ -21,8 +21,8 @@ This document provides a visual and conceptual overview of the AIW CLI core cont
 │  ─────────────────────────           ──────────────────────                 │
 │  core/                               _output/                               │
 │  _cc-native/                         _output/cc-native/                     │
-│  _gsd/                               _output/gsd/                           │
-│  _bmad/                              _output/bmad/                          │
+│  _planning-with-files/              _output/planning-with-files/           │
+│  _{method}/                         _output/{method}/                       │
 │                                                                             │
 │  Contains:                           Contains:                              │
 │  • TypeScript libraries              • Context data (state.json)           │
@@ -164,7 +164,7 @@ NO "in_progress" or "paused" states = NO orphan problem!
 │  │   │               ├── plan.md                                           │
 │  │   │               └── reviews/                                          │
 │  │   │                                                                      │
-│  │   └── gsd/ ◀───────────────────── GSD method outputs (future)           │
+│  │   └── {method}/ ◀──────────────── Other method outputs                  │
 │  │       └── contexts/                                                      │
 │  │                                                                          │
 │  ├── _core/ ◀───────────────────────── READ-ONLY: Core infrastructure     │

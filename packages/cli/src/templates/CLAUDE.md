@@ -6,8 +6,8 @@ Write all method outputs to `_output/{method}/`:
 
 ```
 _output/
-├── gsd/.planning/    # GSD planning artifacts
-├── bmad/docs/        # BMAD documentation
+├── cc-native/plans/  # Example method artifacts
+├── planning-with-files/plans/ # Example method artifacts
 └── {method}/{subdir}/ # Other method outputs
 ```
 
@@ -36,19 +36,6 @@ packages/cli/src/templates/
 │   ├── .windsurf/                    #   Windsurf: workflows/
 │   └── .gitignore
 │
-├── gsd/                              # GSD method template
-│   ├── .aiwcli/_gsd/                 #   Templates, workflows, hooks, config, docs
-│   ├── .claude/                      #   Claude Code: settings.json, commands/, agents/
-│   ├── .windsurf/                    #   Windsurf: workflows/
-│   ├── GSD-README.md
-│   ├── TEMPLATE-SCHEMA.md
-│   └── MIGRATION.md
-│
-├── bmad/                             # BMAD method template
-│   ├── .aiwcli/_bmad/               #   Agents, workflows, teams, testarch, config
-│   ├── .claude/                      #   Claude Code: settings.json, commands/
-│   └── ...
-│
 ├── planning-with-files/              # Planning-with-Files method template
 │   ├── .claude/                      #   Claude Code: settings.json, skills/
 │   ├── .windsurf/                    #   Windsurf: workflows/, scripts/
@@ -73,12 +60,12 @@ packages/cli/src/templates/
 When multiple templates install, settings.json files merge:
 
 **Hook merging** - Hooks combine by lifecycle event
-**Method namespacing** - Use method name as top-level key: `"gsd": { ... }`
+**Method namespacing** - Use method name as top-level key: `"cc-native": { ... }`
 
 ```json
 {
-  "gsd": { "planReview": { "enabled": true } },
-  "bmad": { "agents": { "defaultModel": "claude-3-opus" } }
+  "cc-native": { "planReview": { "enabled": true } },
+  "planning-with-files": { "planning": { "enabled": true } }
 }
 ```
 
@@ -148,7 +135,7 @@ Load and execute `_{method}/workflows/{name}.md`.
 | Reference Type | Pattern |
 |----------------|---------|
 | Templates | `_{method}/templates/FILE.md.template` |
-| Workflows (Claude) | `/gsd:workflow-name` (maps to `.claude/commands/gsd/workflow-name.md`) |
+| Workflows (Claude) | `/{method}:workflow-name` (maps to `.claude/commands/{method}/workflow-name.md`) |
 | Workflows (Windsurf) | `workflow-name` from method workflows |
 | Outputs | `_output/{method}/{subdir}/FILE.md` |
 
@@ -158,13 +145,13 @@ Load and execute `_{method}/workflows/{name}.md`.
 
 | Element | Convention | Example |
 |---------|------------|---------|
-| Method folder | `_{lowercase}` | `_gsd` |
+| Method folder | `_{lowercase}` | `_cc-native` |
 | Template file | `UPPERCASE.md.template` | `PROJECT.md.template` |
 | Workflow file | `kebab-case.md` | `new-project.md` |
 | Output file | `UPPERCASE.md` | `PROJECT.md` |
-| Hook file | `{method}-{name}.{ext}` | `gsd-plan-review.ts` |
-| Settings key | `{method}` | `"gsd": {}` |
-| Readme | `{METHOD}-README.md` | `GSD-README.md` |
+| Hook file | `{method}-{name}.{ext}` | `cc-native-plan-review.ts` |
+| Settings key | `{method}` | `"cc-native": {}` |
+| Readme | `{METHOD}-README.md` | `CC-NATIVE-README.md` |
 
 ---
 

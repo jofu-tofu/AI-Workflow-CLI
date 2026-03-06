@@ -88,9 +88,9 @@ describe('Init Command Structure - Integration Tests', () => {
   })
 
   describe('Subcommand Pattern Deprecated', () => {
-    it('validates pai init bmad (old pattern) shows error', () => {
+    it('validates positional template argument shows error', () => {
       try {
-        execSync(`${bin} init bmad`, {
+        execSync(`${bin} init cc-native`, {
           encoding: 'utf8',
           stdio: 'pipe',
         })
