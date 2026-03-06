@@ -13,7 +13,7 @@ import {
   validateHookEvent,
 } from '../../../src/templates/core/lib-ts/hooks/hook-utils.js'
 import type {HookInput} from '../../../src/templates/core/lib-ts/types.js'
-import {createContextFixture, type ContextFixture} from '../fixtures/context-fixture.js'
+import {type ContextFixture, createContextFixture} from '../fixtures/context-fixture.js'
 
 describe('hook-utils', () => {
   const fixtures: ContextFixture[] = []
@@ -118,14 +118,14 @@ describe('hook-utils', () => {
       hook_event_name: 'PostToolUse',
       context_window: {
         current_usage: {
-          input_tokens: 7_400,
+          input_tokens: 7400,
         },
         context_window_size: 100_000,
       },
     }
 
     const [pct, tokensUsed, maxTokens] = getContextPercentRemaining(payload)
-    expect(tokensUsed).toBe(CONTEXT_BASELINE_TOKENS + 7_400)
+    expect(tokensUsed).toBe(CONTEXT_BASELINE_TOKENS + 7400)
     expect(maxTokens).toBe(100_000)
     expect(pct).toBe(70)
   })
@@ -135,7 +135,7 @@ describe('hook-utils', () => {
       hook_event_name: 'PostToolUse',
       context_window: {
         current_usage: {
-          input_tokens: 5_000,
+          input_tokens: 5000,
         },
         context_window_size: 100,
       },

@@ -61,7 +61,7 @@ describe('shell-quoting', () => {
 
   describe('escapeSingleQuotedPath', () => {
     it('escapes single quotes for bash dialect', () => {
-      expect(escapeSingleQuotedPath("/tmp/it's-here", 'bash')).toBe("/tmp/it'\\''s-here")
+      expect(escapeSingleQuotedPath("/tmp/it's-here", 'bash')).toBe(String.raw`/tmp/it'\''s-here`)
     })
 
     it('escapes single quotes for powershell dialect', () => {

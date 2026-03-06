@@ -11,7 +11,7 @@ import {
 describe('launch-options', () => {
   describe('parseExtraEnv', () => {
     it('returns empty object for undefined input', () => {
-      expect(parseExtraEnv(undefined)).toEqual({})
+      expect(parseExtraEnv()).toEqual({})
     })
 
     it('parses valid JSON object string', () => {
@@ -152,7 +152,7 @@ describe('launch-options', () => {
   describe('buildUniqueSessionName', () => {
     it('builds deterministic name with injected now and pid', () => {
       const now = 1_700_000_000_000
-      const pid = 4_242
+      const pid = 4242
       const expected = sanitizeSessionName(`my-session-${now.toString(36)}-${pid.toString(36)}`)
 
       expect(buildUniqueSessionName('My Session', now, pid)).toBe(expected)

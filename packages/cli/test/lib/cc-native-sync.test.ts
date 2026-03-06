@@ -52,9 +52,9 @@ describe('cc-native sync', () => {
     }
   })
 
-  it('uses plan-review/agents as the only authoritative agent tree', () => {
-    expect(existsSync(join(sourceRoot, 'agents'))).to.equal(false)
-    expect(existsSync(join(templateRoot, 'agents'))).to.equal(false)
+  it('has agents at both top-level and plan-review trees', () => {
+    expect(existsSync(join(sourceRoot, 'agents', 'PLAN-ORCHESTRATOR.md'))).to.equal(true)
+    expect(existsSync(join(templateRoot, 'agents', 'PLAN-ORCHESTRATOR.md'))).to.equal(true)
     expect(existsSync(join(sourceRoot, 'plan-review', 'agents', 'PLAN-ORCHESTRATOR.md'))).to.equal(true)
   })
 })

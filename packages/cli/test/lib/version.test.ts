@@ -85,7 +85,7 @@ describe('version utilities', () => {
     })
 
     it('handles undefined version gracefully', () => {
-      // eslint-disable-next-line unicorn/no-useless-undefined
+       
       const result = checkVersionCompatibility(undefined)
       expect(result.version).to.be.null
       expect(result.compatible).to.be.true

@@ -143,17 +143,17 @@ describe('install-state ownership', () => {
   })
 
   it('backfills legacy methods during init so existing settings survive', async () => {
-    await fs.mkdir(join(testDir, '.aiwcli', '_gsd', 'hooks'), {recursive: true})
-    await fs.writeFile(join(testDir, '.aiwcli', '_gsd', 'hooks', 'gsd-unified-review.py'), '# legacy\n', 'utf8')
-    await reconstructIdeSettings(testDir, ['gsd'], ['claude'])
+    await fs.mkdir(join(testDir, '.aiwcli', '_planning-with-files'), {recursive: true})
+    await fs.writeFile(join(testDir, '.aiwcli', '_planning-with-files', 'placeholder.md'), '# legacy\n', 'utf8')
+    await reconstructIdeSettings(testDir, ['planning-with-files'], ['claude'])
 
     await quietInit(new InitCommand([], {} as never), {ides: ['claude'], method: 'cc-native'}).run()
 
     const installState = JSON.parse(await fs.readFile(join(testDir, '.aiwcli', 'state', 'install-state.json'), 'utf8'))
-    expect(Object.keys(installState.methods).sort()).to.deep.equal(['cc-native', 'gsd'])
+    expect(Object.keys(installState.methods).sort()).to.deep.equal(['cc-native', 'planning-with-files'])
 
     const settings = await fs.readFile(join(testDir, '.claude', 'settings.json'), 'utf8')
-    expect(settings).to.include('gsd-unified-review.py')
+    expect(settings).to.include('init-session.sh')
     expect(settings).to.include('mark_questions_asked.ts')
   })
 

@@ -3,13 +3,13 @@ import {spawn} from 'node:child_process'
 const DEFAULT_TIMEOUT_MS = 10_000
 
 export interface SubprocessHookResult {
-  stdout: string
-  stderr: string
   exitCode: number
-  parsedOutput: Record<string, unknown> | null
+  parsedOutput: null | Record<string, unknown>
+  stderr: string
+  stdout: string
 }
 
-function parseHookOutput(stdout: string): Record<string, unknown> | null {
+function parseHookOutput(stdout: string): null | Record<string, unknown> {
   const trimmed = stdout.trim()
   if (!trimmed) return null
 

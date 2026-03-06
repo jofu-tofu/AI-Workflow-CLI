@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url'
 
 import {afterEach, describe, expect, it} from 'vitest'
 
-import {createContextFixture, type ContextFixture} from './fixtures/context-fixture.js'
+import {type ContextFixture, createContextFixture} from './fixtures/context-fixture.js'
 import {
   runHookSubprocess,
   type SubprocessHookResult,
@@ -41,14 +41,14 @@ function lintInput(cwd: string, filePath: string): Record<string, unknown> {
   }
 }
 
-function readAdditionalContext(result: SubprocessHookResult): string | null {
+function readAdditionalContext(result: SubprocessHookResult): null | string {
   const parsed = result.parsedOutput
   if (!parsed) return null
 
-  const hookSpecificOutput = parsed.hookSpecificOutput
+  const {hookSpecificOutput} = parsed
   if (!hookSpecificOutput || typeof hookSpecificOutput !== 'object') return null
 
-  const additionalContext = (hookSpecificOutput as Record<string, unknown>).additionalContext
+  const {additionalContext} = (hookSpecificOutput as Record<string, unknown>)
   return typeof additionalContext === 'string' ? additionalContext : null
 }
 

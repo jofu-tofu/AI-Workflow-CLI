@@ -261,7 +261,7 @@ describe('context-selector', () => {
       expect(updatedState?.session_ids).toContain('session-handoff')
     })
 
-    it('does not skip context selection when internal call flag is set', () => {
+    it('skips context selection when internal call flag is set', () => {
       const projectRoot = createProjectRoot()
       projectRoots.push(projectRoot)
       process.env.AIWCLI_INTERNAL_CALL = 'true'
@@ -271,9 +271,9 @@ describe('context-selector', () => {
         'session-internal',
         projectRoot,
       )
-      expect(contextId).toBeTruthy()
-      expect(method.startsWith('auto_created')).toBe(true)
-      expect(outputText).toContain('Context Created')
+      expect(contextId).toBeNull()
+      expect(method).toBe('skip_internal')
+      expect(outputText).toBeNull()
     })
 
     it('auto-creates a context when no match logic applies', () => {
