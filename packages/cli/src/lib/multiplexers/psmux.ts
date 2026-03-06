@@ -97,7 +97,7 @@ export function buildCreateSessionArgs(params: { sessionName: string; cwd: strin
 }
 
 /** @internal */
-export function buildSplitWindowArgs(params: { splitFlag: '-h' | '-v'; encodedCommand: string; cwd?: string; splitTarget?: string }): string[] {
+export function buildSplitWindowArgs(params: { splitFlag: '-h' | '-v'; encodedCommand: string; cwd?: string; splitTarget?: string | undefined }): string[] {
   const args = ['split-window', params.splitFlag, '-P', '-F', '#{pane_id}']
   if (params.cwd) {
     args.push('-c', params.cwd)
