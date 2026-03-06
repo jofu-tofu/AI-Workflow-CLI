@@ -1,0 +1,126 @@
+/**
+ * Preflight health checks for plan review agents.
+ * Validates provider+model combos work before committing agents to them.
+ * Runs minimal "ping" requests in parallel per unique provider:model combo.
+ *
+ * Uses shared checkProviderModel() from _core/lib-ts/runtime/preflight.ts.
+ * This module provides the batch orchestrator and provider registry specific
+ * to the plan review pipeline.
+ */
+
+import { preflightCommandConfig } from "../../../_core/lib-ts/runtime/cli-args.js";
+import { logInfo, logWarn } from "../../../_core/lib-ts/runtime/logger.js";
+import { checkProviderModel, type PreflightCommandConfig } from "../../../_core/lib-ts/runtime/preflight.js";
+import type { ModelsConfig, PreflightCheckResult, PreflightReport } from "../../lib-ts/types.js";
+
+const HOOK = "preflight";
+const DEFAULT_TIMEOUT_MS = 15000;
+
+// ---------------------------------------------------------------------------
+// Provider Registry (built from centralized cli-args)
+// ---------------------------------------------------------------------------
+
+const PREFLIGHT_COMMANDS: Record<string, PreflightCommandConfig> = {
+  claude: preflightCommandConfig("claude"),
+  codex:  preflightCommandConfig("codex"),
+};
+
+export const KNOWN_PROVIDERS = new Set(Object.keys(PREFLIGHT_COMMANDS));
+
+// ---------------------------------------------------------------------------
+// Pure Functions (extracted for direct testing)
+// ---------------------------------------------------------------------------
+
+/** @internal — Collect unique provider:model combos, filtering to known providers. */
+export function collectPreflightChecks(
+  modelsConfig: ModelsConfig,
+  knownProviders: Set<string>,
+): { checks: Array<{ provider: string; model: string }>; skippedProviders: string[] } {
+  const checks: Array<{ provider: string; model: string }> = [];
+  const seen = new Set<string>();
+  const skippedProviders: string[] = [];
+
+  for (const [provider, config] of Object.entries(modelsConfig.providers)) {
+    if (!config.enabled || config.models.length === 0) continue;
+    if (!knownProviders.has(provider)) {
+      skippedProviders.push(provider);
+      continue;
+    }
+    for (const model of config.models) {
+      const key = `${provider}:${model}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        checks.push({ provider, model });
+      }
+    }
+  }
+
+  return { checks, skippedProviders };
+}
+
+/** @internal — Build availability report from check results. */
+export function buildPreflightReport(
+  results: Array<{ provider: string; model: string; available: boolean; error?: string; latencyMs?: number }>,
+  totalMs: number,
+): PreflightReport {
+  const available = new Map<string, Set<string>>();
+  for (const r of results) {
+    if (r.available) {
+      if (!available.has(r.provider)) available.set(r.provider, new Set());
+      available.get(r.provider)!.add(r.model);
+    }
+  }
+
+  const allFailed = available.size === 0;
+
+  return { checks: results as PreflightCheckResult[], available, allFailed, totalMs };
+}
+
+// ---------------------------------------------------------------------------
+// Run All Checks
+// ---------------------------------------------------------------------------
+
+export async function runPreflight(
+  modelsConfig: ModelsConfig,
+  timeoutMs?: number,
+): Promise<PreflightReport> {
+  const effectiveTimeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const start = Date.now();
+
+  // Collect unique provider:model combos from enabled providers
+  const { checks, skippedProviders } = collectPreflightChecks(modelsConfig, KNOWN_PROVIDERS);
+
+  for (const provider of skippedProviders) {
+    logWarn(HOOK, `No preflight command for provider '${provider}', skipping`);
+  }
+
+  if (checks.length === 0) {
+    logWarn(HOOK, "No provider:model combos to check");
+    return { checks: [], available: new Map(), allFailed: true, totalMs: Date.now() - start };
+  }
+
+  logInfo(HOOK, `Checking ${checks.length} provider:model combo(s): ${checks.map(c => `${c.provider}:${c.model}`).join(", ")}`);
+
+  // Run all checks in parallel (pass provider-specific config from registry)
+  const results = await Promise.all(
+    checks.map(({ provider, model }) =>
+      checkProviderModel(provider, model, PREFLIGHT_COMMANDS[provider]!, effectiveTimeout, HOOK),
+    ),
+  );
+
+  const totalMs = Date.now() - start;
+  const report = buildPreflightReport(results, totalMs);
+
+  // Log summary
+  const passed = results.filter(r => r.available).length;
+  const failed = results.filter(r => !r.available).length;
+  logInfo(HOOK, `Preflight complete: ${passed} passed, ${failed} failed (${totalMs}ms)`);
+
+  for (const r of results) {
+    if (!r.available) {
+      logWarn(HOOK, `  FAIL ${r.provider}:${r.model} — ${r.error}`);
+    }
+  }
+
+  return report;
+}
