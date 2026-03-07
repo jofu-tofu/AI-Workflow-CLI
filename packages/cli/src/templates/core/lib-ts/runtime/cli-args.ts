@@ -4,7 +4,7 @@
  * platform quoting, model tier resolution, and env setup.
  */
 
-import { CLAUDE_MODELS, CODEX_MODELS } from "./models.js";
+import { CLAUDE_MODELS, CODEX_MODELS, DEVIN_MODELS } from "./models.js";
 import type { PreflightCommandConfig } from "./preflight.js";
 import { getInternalSubprocessEnv, shellQuoteWin } from "./subprocess-utils.js";
 
@@ -15,7 +15,7 @@ import { getInternalSubprocessEnv, shellQuoteWin } from "./subprocess-utils.js";
 // ---------------------------------------------------------------------------
 
 export type InvocationMode = "structured" | "print" | "preflight";
-export type CliProvider = "claude" | "codex";
+export type CliProvider = "claude" | "codex" | "devin";
 export type ModelTier = "fast" | "standard" | "smart";
 
 const VALID_SANDBOXES = ["read-only", "workspace-write", "danger-full-access"] as const;
@@ -71,6 +71,12 @@ export const CODEX_MODEL_TIERS: Record<ModelTier, string> = {
   smart: CODEX_MODELS.codex,
 };
 
+export const DEVIN_MODEL_TIERS: Record<ModelTier, string> = {
+  fast: DEVIN_MODELS.sonnet,
+  standard: DEVIN_MODELS.swe,
+  smart: DEVIN_MODELS.opus,
+};
+
 export const TIER_TIMEOUTS: Record<ModelTier, number> = {
   fast: 15,
   standard: 30,
@@ -91,7 +97,9 @@ export function resolveModelForProvider(
   provider: CliProvider,
 ): string {
   if (!isModelTier(model)) return model;
-  return provider === "codex" ? CODEX_MODEL_TIERS[model] : MODEL_TIERS[model];
+  if (provider === "codex") return CODEX_MODEL_TIERS[model];
+  if (provider === "devin") return DEVIN_MODEL_TIERS[model];
+  return MODEL_TIERS[model];
 }
 
 export function getTierTimeout(tier: ModelTier): number {
@@ -101,6 +109,12 @@ export function getTierTimeout(tier: ModelTier): number {
 /** Resolve a Codex model: tier resolution + pass-through. No aliases (those are skill-specific). */
 export function resolveCodexModel(input: string): string {
   if (isModelTier(input)) return CODEX_MODEL_TIERS[input as ModelTier];
+  return input;
+}
+
+/** Resolve a Devin model: tier resolution + pass-through. No aliases (those are skill-specific). */
+export function resolveDevinModel(input: string): string {
+  if (isModelTier(input)) return DEVIN_MODEL_TIERS[input as ModelTier];
   return input;
 }
 
@@ -286,4 +300,4 @@ export function preflightCommandConfig(provider: CliProvider): PreflightCommandC
   };
 }
 
-export {CLAUDE_MODELS, CODEX_MODELS} from "./models.js";
+export {CLAUDE_MODELS, CODEX_MODELS, DEVIN_MODELS} from "./models.js";

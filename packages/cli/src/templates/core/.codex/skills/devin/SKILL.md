@@ -1,3 +1,9 @@
+---
+name: devin
+description: Delegate implementation to Devin sub-agents. USE WHEN devin OR send to devin OR devin implement OR hand off to devin OR launch devin OR run devin.
+user-invocable: true
+---
+
 # Devin Workflow
 
 Use Devin CLI handoff instructions from `.aiwcli/_core/skills/devin/SKILL.md`.

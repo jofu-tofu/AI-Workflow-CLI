@@ -14,3 +14,10 @@ export const CODEX_MODELS = {
   codex: "gpt-5.4",
   gpt: "gpt-5.4",
 } as const;
+
+export const DEVIN_MODELS = {
+  swe: "swe",
+  gpt: "gpt",
+  opus: "opus",
+  sonnet: "sonnet",
+} as const;
