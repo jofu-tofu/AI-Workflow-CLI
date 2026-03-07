@@ -144,9 +144,44 @@ weight: 1.0
 
 `mandatory: true` agents always run. `mandatory: false` agents are selected by the orchestrator based on plan complexity.
 
+## Model & Provider Configuration
+
+Model assignment flows through a multi-layer pipeline:
+
+1. **Config source:** `cc-native.config.json` → `models.providers` section
+2. **Defaults:** `lib-ts/settings.ts` → `DEFAULT_MODELS_CONFIG`
+3. **Loading:** `loadModelsConfig()` parses config into `ModelsConfig` (including `reasoning_effort`)
+4. **Assignment:** `assignModelsToAgents()` assigns provider, model, and `reasoning_effort` from the selected `ProviderConfig` to each `AgentConfig`
+5. **Invocation:** Provider agents (e.g. `CodexAgent.buildCliArgs()`) emit CLI flags
+
+**Current defaults:**
+- Codex: model `gpt-5.4`, `reasoning_effort: "low"` → `codex exec --model gpt-5.4 -c model_reasoning_effort="low"`
+- Claude: model `sonnet` → `claude --model sonnet`
+
+**Provider priority:** `["codex", "claude"]` — Codex is preferred (cheaper/faster), Claude is fallback.
+
+**`reasoning_effort` field:** Configured per-provider in `ProviderConfig`. Passed through `assignModelsToAgents()` to `AgentConfig.reasoning_effort`. `CodexAgent` emits it as `-c model_reasoning_effort="<value>"`. When absent, the flag is omitted and the CLI default applies.
+
+### Verifying model/config changes
+
+**Always test model or config changes against the real CLI.** Use `codex exec` directly to confirm the model name and flags are accepted before committing:
+
+```bash
+# Verify model + reasoning_effort works
+codex exec --model gpt-5.4 -c 'model_reasoning_effort="low"' --sandbox read-only --ephemeral \
+  -o /tmp/test-out.txt "Say hello" 2>&1 | head -20
+
+# Check the output header for: model, reasoning effort, provider
+# A 400 error like "model is not supported" means the model name is wrong
+```
+
+Invalid model names fail at runtime with no compile-time safety net. The CLI header prints the resolved `model:` and `reasoning effort:` — always verify these match expectations.
+
 ## Design Decisions
 
 - **Thin hook, fat pipeline:** The hook is ~70 lines and delegates everything to `review-pipeline.ts`. This enables testing the pipeline without hook machinery.
 - **Parallel reviews:** All selected agents run simultaneously via `Promise.all()`. Review time is bounded by the slowest agent, not total agents.
 - **Questions gate first:** Questions must be asked before review. `wasQuestionsAsked()` prevents skipping the gate via repeated ExitPlanMode attempts.
 - **Co-location:** Moved from scattered `lib-ts/`, `agents/`, and `workflows/` to `plan-review/` to follow the handoff system pattern. See root CLAUDE.md "System Co-location Pattern".
+
+<!-- context-layer: last-audited=2026-03-07 | version=2 -->

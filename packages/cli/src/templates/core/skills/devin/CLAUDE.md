@@ -69,4 +69,4 @@ Session discovery and summarization:
 
 Re-exports `persistSummary`, `waitForPaneClose` from agent-launcher.
 
-<!-- context-layer: generated=2026-03-06 | version=1 -->
+<!-- context-layer: generated=2026-03-06 | last-audited=2026-03-07 | version=2 -->
