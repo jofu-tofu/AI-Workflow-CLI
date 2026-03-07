@@ -3,6 +3,8 @@ node_modules/
 dist-test/
 _output/
 .aiwcli/
+.claude/
+!src/templates/**/.claude/
 .codex/
 !src/templates/**/.codex/
 bin/aiw

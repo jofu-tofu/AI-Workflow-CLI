@@ -73,7 +73,8 @@ skills/skill-index.json
 # But allow Windsurf template files
 !**/templates/**/.windsurf/
 
-# Codex / Cognition — allow template source files
+# Claude / Codex / Cognition — allow template source files
+!**/templates/**/.claude/
 !**/templates/**/.codex/
 !**/templates/**/.cognition/
 

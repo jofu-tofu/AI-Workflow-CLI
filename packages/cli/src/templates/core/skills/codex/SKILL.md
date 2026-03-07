@@ -1,3 +1,9 @@
+---
+name: codex
+description: Delegate implementation to Codex sub-agents. USE WHEN codex OR send to codex OR codex implement OR hand off to codex OR launch codex OR run codex.
+user-invocable: true
+---
+
 # /codex
 
 ## Role
