@@ -1,6 +1,7 @@
-import {describe, expect, it} from 'vitest'
+import {afterEach, describe, expect, it} from 'vitest'
 
 import {
+  defaultShell,
   detectPowerShell,
   findAvailableLinuxTerminal,
   isWSL,
@@ -70,7 +71,34 @@ describe('terminal-strategy', () => {
     })
   })
 
+  describe('defaultShell', () => {
+    const originalShell = process.env.SHELL
+
+    afterEach(() => {
+      if (originalShell === undefined) {
+        delete process.env.SHELL
+      } else {
+        process.env.SHELL = originalShell
+      }
+    })
+
+    it('returns $SHELL when set', () => {
+      process.env.SHELL = '/usr/bin/zsh'
+      expect(defaultShell()).toBe('/usr/bin/zsh')
+    })
+
+    it('falls back to bash when $SHELL is not set', () => {
+      delete process.env.SHELL
+      expect(defaultShell()).toBe('bash')
+    })
+  })
+
   describe('findAvailableLinuxTerminal', () => {
+    it('prefers x-terminal-emulator as system default', () => {
+      const terminal = findAvailableLinuxTerminal((command) => command === 'x-terminal-emulator' || command === 'gnome-terminal')
+      expect(terminal?.cmd).toBe('x-terminal-emulator')
+    })
+
     it('returns the first available configured terminal', () => {
       const terminal = findAvailableLinuxTerminal((command) => command === 'xterm')
       expect(terminal?.cmd).toBe('xterm')

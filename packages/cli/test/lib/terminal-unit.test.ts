@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   isWindowsPlatform: vi.fn((platform?: NodeJS.Platform) => platform === 'win32'),
   resolveWindowsTerminalStrategy: vi.fn(() => ['windows-terminal']),
   spawn: vi.fn(),
+  tmpdir: vi.fn(() => '/tmp'),
+  writeFileSync: vi.fn(),
 }))
 
 vi.mock('node:child_process', () => ({
@@ -23,6 +25,11 @@ vi.mock('node:child_process', () => ({
 
 vi.mock('node:fs', () => ({
   existsSync: mocks.existsSync,
+  writeFileSync: mocks.writeFileSync,
+}))
+
+vi.mock('node:os', () => ({
+  tmpdir: mocks.tmpdir,
 }))
 
 vi.mock('../../src/lib/mux-utils.js', () => ({
@@ -46,6 +53,7 @@ vi.mock('../../src/lib/shell-quoting.js', () => ({
 }))
 
 vi.mock('../../src/lib/terminal-strategy.js', () => ({
+  defaultShell: vi.fn(() => 'bash'),
   detectPowerShell: mocks.detectPowerShell,
   findAvailableLinuxTerminal: mocks.findAvailableLinuxTerminal,
   isWSL: mocks.isWSL,
@@ -92,7 +100,7 @@ describe('terminal unit', () => {
     platformSpy = undefined
   })
 
-  it('launches macOS Terminal.app through osascript', async () => {
+  it('launches macOS Terminal.app via open with a temporary script', async () => {
     platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
 
     const result = await launchTerminal({
@@ -101,7 +109,26 @@ describe('terminal unit', () => {
     })
 
     expect(result.success).toBe(true)
+    expect(mocks.writeFileSync).toHaveBeenCalledTimes(1)
     expect(mocks.spawn).toHaveBeenCalledTimes(1)
+    expect(mocks.spawn.mock.calls[0]?.[0]).toBe('open')
+    expect(mocks.spawn.mock.calls[0]?.[1]).toEqual(['-a', 'Terminal', expect.stringMatching(/\.command$/)])
+  })
+
+  it('returns failure when the macOS launch script cannot be written', async () => {
+    platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    mocks.writeFileSync.mockImplementationOnce(() => {
+      throw new Error('disk full')
+    })
+
+    const result = await launchTerminal({
+      cwd: '/repo',
+      command: 'aiw launch',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Failed to prepare Terminal launch script')
+    expect(mocks.spawn).not.toHaveBeenCalled()
   })
 
   it('launches Windows Terminal with PowerShell strategy by default', async () => {
@@ -258,4 +285,3 @@ describe('terminal unit', () => {
     expect(mocks.spawn).toHaveBeenCalledTimes(1)
   })
 })
-

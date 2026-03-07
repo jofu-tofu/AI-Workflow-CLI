@@ -1,7 +1,9 @@
-import {describe, expect, it} from 'vitest'
+import {afterEach, beforeEach, describe, expect, it} from 'vitest'
 
+import {defaultShell} from '../../src/lib/terminal-strategy.js'
 import {
   buildLinuxTerminalSpawnArgs,
+  buildMacTerminalScriptContent,
   buildMacTerminalSpawnArgs,
   buildPowerShellFallbackSpawnArgs,
   buildWindowsTerminalSpawnArgs,
@@ -37,32 +39,31 @@ describe('terminal pure functions', () => {
   })
 
   describe('buildMacTerminalSpawnArgs', () => {
-    it('returns osascript command', () => {
-      const result = buildMacTerminalSpawnArgs('/repo', 'aiw launch')
-      expect(result.command).toBe('osascript')
+    it('returns open command', () => {
+      const result = buildMacTerminalSpawnArgs('/tmp/aiw.command')
+      expect(result.command).toBe('open')
     })
 
-    it('includes AppleScript tell command', () => {
-      const result = buildMacTerminalSpawnArgs('/repo', 'aiw launch')
-      expect(result.args).toHaveLength(2)
-      expect(result.args[0]).toBe('-e')
-      expect(result.args[1]).toContain('tell application "Terminal" to do script')
+    it('targets Terminal.app with the generated script', () => {
+      const result = buildMacTerminalSpawnArgs('/tmp/aiw.command')
+      expect(result.args).toEqual(['-a', 'Terminal', '/tmp/aiw.command'])
+    })
+  })
+
+  describe('buildMacTerminalScriptContent', () => {
+    it('wraps the launch in the requested login shell', () => {
+      const result = buildMacTerminalScriptContent('/repo', 'aiw launch', '/bin/zsh')
+      expect(result).toContain('#!/bin/sh')
+      expect(result).toContain(`exec '/bin/zsh' -lc '`)
+      expect(result).toContain('aiw launch')
     })
 
-    it('includes cd and command in script', () => {
-      const result = buildMacTerminalSpawnArgs('/repo', 'aiw launch')
-      expect(result.args[1]).toContain('/repo')
-      expect(result.args[1]).toContain('aiw launch')
-    })
-
-    it('escapes double quotes in the command for AppleScript', () => {
-      const result = buildMacTerminalSpawnArgs('/repo', 'echo "hello"')
-      expect(result.args[1]).toContain(String.raw`\"`)
-    })
-
-    it('escapes backslashes for AppleScript', () => {
-      const result = buildMacTerminalSpawnArgs('/repo', 'echo \\n')
-      expect(result.args[1]).toContain('\\\\')
+    it('keeps the working directory and login shell handoff in the script', () => {
+      const result = buildMacTerminalScriptContent('/repo', 'echo "hello"', '/bin/zsh')
+      expect(result).toContain('/repo')
+      expect(result).toContain('echo "hello"')
+      expect(result).toContain(`/bin/zsh`)
+      expect(result).toContain('-l')
     })
   })
 
@@ -159,25 +160,49 @@ describe('terminal pure functions', () => {
   })
 
   describe('buildWSLTerminalSpawnArgs', () => {
+    const originalShell = process.env.SHELL
+
+    beforeEach(() => {
+      process.env.SHELL = '/bin/bash'
+    })
+
+    afterEach(() => {
+      if (originalShell === undefined) {
+        delete process.env.SHELL
+      } else {
+        process.env.SHELL = originalShell
+      }
+    })
+
     it('returns wt.exe command', () => {
       const result = buildWSLTerminalSpawnArgs('/repo', 'aiw launch')
       expect(result.command).toBe('wt.exe')
     })
 
-    it('includes wsl.exe and bash chain', () => {
+    it('uses the default shell from $SHELL', () => {
+      process.env.SHELL = '/usr/bin/zsh'
+      const shell = defaultShell()
       const result = buildWSLTerminalSpawnArgs('/repo', 'aiw launch')
       expect(result.args[0]).toBe('wsl.exe')
       expect(result.args[1]).toBe('--')
-      expect(result.args[2]).toBe('bash')
+      expect(result.args[2]).toBe(shell)
       expect(result.args[3]).toBe('-c')
     })
 
-    it('includes cd and command with exec bash suffix', () => {
+    it('includes wsl.exe and shell chain', () => {
       const result = buildWSLTerminalSpawnArgs('/repo', 'aiw launch')
-      const bashCmd = result.args[4]
-      expect(bashCmd).toContain("cd '/repo'")
-      expect(bashCmd).toContain('aiw launch')
-      expect(bashCmd).toContain('exec bash')
+      expect(result.args[0]).toBe('wsl.exe')
+      expect(result.args[1]).toBe('--')
+      expect(result.args[2]).toBe('/bin/bash')
+      expect(result.args[3]).toBe('-c')
+    })
+
+    it('includes cd and command with exec shell suffix', () => {
+      const result = buildWSLTerminalSpawnArgs('/repo', 'aiw launch')
+      const shellCmd = result.args[4]
+      expect(shellCmd).toContain("cd '/repo'")
+      expect(shellCmd).toContain('aiw launch')
+      expect(shellCmd).toContain('exec /bin/bash')
     })
   })
 })

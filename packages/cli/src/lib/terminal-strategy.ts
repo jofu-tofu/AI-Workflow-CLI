@@ -11,12 +11,19 @@ export type WindowsTerminalStrategy =
   | 'powershell-fallback'
   | 'windows-terminal'
 
-export const LINUX_TERMINALS: TerminalConfig[] = [
-  {cmd: 'gnome-terminal', getArgs: (command: string) => ['--', 'bash', '-c', `${command}; exec bash`]},
-  {cmd: 'konsole', getArgs: (command: string) => ['-e', `bash -c "${command}; exec bash"`]},
-  {cmd: 'xterm', getArgs: (command: string) => ['-e', `bash -c "${command}; exec bash"`]},
-  {cmd: 'x-terminal-emulator', getArgs: (command: string) => ['-e', `bash -c "${command}; exec bash"`]},
-]
+export function defaultShell(): string {
+  return process.env.SHELL || 'bash'
+}
+
+export const LINUX_TERMINALS: TerminalConfig[] = (() => {
+  const shell = defaultShell()
+  return [
+    {cmd: 'x-terminal-emulator', getArgs: (command: string) => ['-e', `${shell} -c "${command}; exec ${shell}"`]},
+    {cmd: 'gnome-terminal', getArgs: (command: string) => ['--', shell, '-c', `${command}; exec ${shell}`]},
+    {cmd: 'konsole', getArgs: (command: string) => ['-e', `${shell} -c "${command}; exec ${shell}"`]},
+    {cmd: 'xterm', getArgs: (command: string) => ['-e', `${shell} -c "${command}; exec ${shell}"`]},
+  ]
+})()
 
 export function resolveWindowsTerminalStrategy(
   preference: WindowsShellPreference,

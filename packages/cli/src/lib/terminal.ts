@@ -6,9 +6,9 @@
  *
  * ## Supported Platforms
  * - **Windows**: Windows Terminal (wt.exe) with PowerShell 7 (pwsh) fallback to PowerShell 5.1
- * - **macOS**: Terminal.app via AppleScript
+ * - **macOS**: Terminal.app via `open` + temporary `.command` script
  * - **WSL**: Windows Terminal (wt.exe) via wsl.exe, falls back to Linux emulators
- * - **Linux**: gnome-terminal, konsole, xterm, x-terminal-emulator (in order of preference)
+ * - **Linux**: x-terminal-emulator, gnome-terminal, konsole, xterm (in order of preference)
  *
  * ## Usage
  * ```typescript
@@ -29,7 +29,8 @@
  */
 
 import {spawn} from 'node:child_process'
-import {existsSync} from 'node:fs'
+import {existsSync, writeFileSync} from 'node:fs'
+import {tmpdir} from 'node:os'
 import path from 'node:path'
 
 import {cleanClaudeEnv} from './mux-utils.js'
@@ -38,6 +39,7 @@ import {isWindowsPlatform} from './runtime/platform-adapter.js'
 import {findMsysBash} from './runtime/tmux-preflight.js'
 import {escapeSingleQuotedPath} from './shell-quoting.js'
 import {
+  defaultShell,
   detectPowerShell,
   findAvailableLinuxTerminal,
   isWSL,
@@ -61,13 +63,21 @@ export function resolveTerminalPlatform(platform: NodeJS.Platform, isWSLResult: 
 }
 
 /** @internal */
-export function buildMacTerminalSpawnArgs(cwd: string, command: string): SpawnArgs {
+export function buildMacTerminalScriptContent(cwd: string, command: string, shellPath: string = defaultShell()): string {
   const escapedPath = escapeSingleQuotedPath(cwd, 'bash')
-  const fullCommand = `cd '${escapedPath}' && ${command}`
-  const escapedCommand = fullCommand.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)
+  const escapedShell = escapeSingleQuotedPath(shellPath, 'bash')
+  const fullCommand = `cd '${escapedPath}' && ${command}; exec '${escapedShell}' -l`
+  const escapedCommand = escapeSingleQuotedPath(fullCommand, 'bash')
+  return `#!/bin/sh
+exec '${escapedShell}' -lc '${escapedCommand}'
+`
+}
+
+/** @internal */
+export function buildMacTerminalSpawnArgs(scriptPath: string): SpawnArgs {
   return {
-    command: 'osascript',
-    args: ['-e', `tell application "Terminal" to do script "${escapedCommand}"`],
+    command: 'open',
+    args: ['-a', 'Terminal', scriptPath],
   }
 }
 
@@ -102,10 +112,11 @@ export function buildLinuxTerminalSpawnArgs(cwd: string, command: string, termin
 /** @internal */
 export function buildWSLTerminalSpawnArgs(cwd: string, command: string): SpawnArgs {
   const escapedPath = escapeSingleQuotedPath(cwd, 'bash')
-  const bashCmd = `cd '${escapedPath}' && ${command}; exec bash`
+  const shell = defaultShell()
+  const shellCmd = `cd '${escapedPath}' && ${command}; exec ${shell}`
   return {
     command: 'wt.exe',
-    args: ['wsl.exe', '--', 'bash', '-c', bashCmd],
+    args: ['wsl.exe', '--', shell, '-c', shellCmd],
   }
 }
 
@@ -302,7 +313,10 @@ async function launchWindowsTerminal(
 }
 
 /**
- * Launch macOS Terminal.app with command.
+ * Launch macOS Terminal.app with a temporary `.command` script.
+ *
+ * Avoids AppleScript/Automation prompts by delegating to `open(1)` instead of
+ * sending Apple Events to Terminal.app.
  *
  * @param cwd - Working directory
  * @param command - Command to execute
@@ -313,10 +327,25 @@ async function launchMacTerminal(
   command: string,
   debugLog?: (message: string) => void,
 ): Promise<TerminalLaunchResult> {
-  return new Promise<TerminalLaunchResult>((resolve) => {
-    const spawnArgs = buildMacTerminalSpawnArgs(cwd, command)
+  const scriptPath = path.join(
+    tmpdir(),
+    `aiwcli-terminal-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.command`,
+  )
 
-    debugLog?.(`Launching macOS Terminal with command: cd '${escapeSingleQuotedPath(cwd, 'bash')}' && ${command}`)
+  try {
+    writeFileSync(scriptPath, buildMacTerminalScriptContent(cwd, command), {
+      encoding: 'utf8',
+      mode: 0o700,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return {success: false, error: `Failed to prepare Terminal launch script: ${message}`}
+  }
+
+  return new Promise<TerminalLaunchResult>((resolve) => {
+    const spawnArgs = buildMacTerminalSpawnArgs(scriptPath)
+
+    debugLog?.(`Launching macOS Terminal with script: ${scriptPath}`)
 
     const terminal = spawn(spawnArgs.command, spawnArgs.args, {
       detached: true,
@@ -334,9 +363,9 @@ async function launchMacTerminal(
 }
 
 /**
- * Launch Windows Terminal (wt.exe) from WSL, running the command inside a new bash session.
+ * Launch Windows Terminal (wt.exe) from WSL, running the command inside a new shell session.
  *
- * Uses wt.exe → wsl.exe → bash so the new terminal inherits the correct WSL distro.
+ * Uses wt.exe → wsl.exe → $SHELL so the new terminal inherits the correct WSL distro.
  * Claude Code nesting-detection vars are stripped via cleanClaudeEnv().
  *
  * @param cwd - Working directory (WSL path)
@@ -416,9 +445,9 @@ async function launchLinuxTerminal(
  * This function automatically detects the platform and uses the appropriate
  * terminal emulator:
  * - **Windows**: Windows Terminal (wt.exe) with PowerShell, falls back to PowerShell directly
- * - **macOS**: Terminal.app via AppleScript
+ * - **macOS**: Terminal.app via `open` + temporary `.command` script
  * - **WSL**: Windows Terminal (wt.exe) via wsl.exe, falls back to Linux terminals
- * - **Linux**: Tries gnome-terminal, konsole, xterm, x-terminal-emulator in order
+ * - **Linux**: Tries x-terminal-emulator, gnome-terminal, konsole, xterm in order
  *
  * The terminal is launched in detached mode, allowing the parent process to exit
  * without affecting the new terminal.
@@ -466,4 +495,3 @@ export async function launchTerminal(options: TerminalLaunchOptions): Promise<Te
 
   return launchLinuxTerminal(cwd, command, debugLog)
 }
-
