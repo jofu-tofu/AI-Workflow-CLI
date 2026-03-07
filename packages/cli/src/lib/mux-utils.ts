@@ -1,7 +1,6 @@
 import {type ChildProcess, spawn} from 'node:child_process'
 
 import type {CreateSessionResult} from './multiplexer.js'
-import {getInternalSubprocessEnv} from './runtime/subprocess-utils.js'
 
 const CELL_ASPECT_RATIO = 2
 
@@ -45,11 +44,12 @@ export function splitFlagFromDimensions(width: number, height: number): '-h' | '
 
 export function cleanClaudeEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
-    ...getInternalSubprocessEnv(),
+    ...process.env,
     ...extra,
   }
 
   delete env['CLAUDECODE']
   delete env['CLAUDE_CODE_ENTRYPOINT']
+  delete env['AIWCLI_INTERNAL_CALL']
   return env
 }

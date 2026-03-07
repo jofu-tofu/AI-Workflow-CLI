@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   buildShellCommand: vi.fn(),
   buildTmuxRuntimeBootstrapCommands: vi.fn(() => []),
   cleanupSentinelIpc: vi.fn(),
-  cleanClaudeEnv: vi.fn(() => ({AIWCLI_INTERNAL_CALL: 'true'})),
+  cleanClaudeEnv: vi.fn(() => ({})),
   createSentinelIpcPaths: vi.fn(() => ({
     tmpDir: '/tmp/tmux-sentinel',
     inputPath: '/tmp/tmux-sentinel/input.txt',

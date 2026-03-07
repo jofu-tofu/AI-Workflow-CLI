@@ -4,7 +4,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   cleanupSentinelIpc: vi.fn(),
-  cleanClaudeEnv: vi.fn(() => ({AIWCLI_INTERNAL_CALL: 'true'})),
+  cleanClaudeEnv: vi.fn(() => ({})),
   createSentinelIpcPaths: vi.fn(() => ({
     tmpDir: 'C:\\tmp\\psmux-sentinel',
     inputPath: 'C:\\tmp\\psmux-sentinel\\input.txt',
@@ -281,7 +281,7 @@ describe('psmux multiplexer unit', () => {
     expect(mocks.spawnAttached).toHaveBeenCalledWith(
       'C:\\tools\\psmux.exe',
       ['attach', '-t', 'aiw-main'],
-      {AIWCLI_INTERNAL_CALL: 'true'},
+      {},
       'psmux',
     )
   })

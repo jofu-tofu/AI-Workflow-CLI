@@ -46,9 +46,11 @@ describe('mux-utils', () => {
       expect(env.TEST_KEEP).toBe('value')
     })
 
-    it('marks subprocesses as internal', () => {
+    it('strips AIWCLI_INTERNAL_CALL so launched sessions are not marked internal', () => {
+      process.env.AIWCLI_INTERNAL_CALL = 'true'
       const env = cleanClaudeEnv()
-      expect(env.AIWCLI_INTERNAL_CALL).toBe('true')
+      expect(env.AIWCLI_INTERNAL_CALL).toBeUndefined()
+      delete process.env.AIWCLI_INTERNAL_CALL
     })
   })
 })

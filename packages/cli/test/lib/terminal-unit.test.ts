@@ -1,7 +1,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  cleanClaudeEnv: vi.fn(() => ({AIWCLI_INTERNAL_CALL: 'true'})),
+  cleanClaudeEnv: vi.fn(() => ({})),
   detectPowerShell: vi.fn(() => 'pwsh'),
   escapeSingleQuotedPath: vi.fn((value: string) => value),
   existsSync: vi.fn(() => true),
