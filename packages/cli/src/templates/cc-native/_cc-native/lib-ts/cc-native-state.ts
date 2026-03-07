@@ -4,16 +4,17 @@
  * See cc-native-plan-review-spec.md §4.5
  */
 
+import { getContextBySessionId, saveState } from "../../_shared/lib-ts/context/context-store.js";
+import { logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
+import { nowIso } from "../../_shared/lib-ts/base/utils.js";
 import type {
   CcNativeState,
   PlanReviewState,
+  QuestionsAskedState,
   IterationState,
   StuckDetectionState,
 } from "./types.js";
-import { getContextBySessionId, saveState } from "../../_core/lib-ts/context/context-store.js";
-import { logInfo, logWarn } from "../../_core/lib-ts/runtime/logger.js";
-import { nowIso } from "../../_core/lib-ts/runtime/utils.js";
-import type { ContextState } from "../../_core/lib-ts/types.js";
+import type { ContextState } from "../../_shared/lib-ts/types.js";
 
 /**
  * ContextState extended with the cc_native method-specific data.
@@ -61,8 +62,8 @@ export function saveCcNativeState(
       saveState(state.id, state, projectRoot);
       return true;
     }
-  } catch (error: unknown) {
-    logWarn("utils", `Failed to save cc_native state: ${error}`);
+  } catch (e: unknown) {
+    logWarn("utils", `Failed to save cc_native state: ${e}`);
   }
   return false;
 }
@@ -144,9 +145,9 @@ export function markPlanReviewed(
         max: iterationState.max ?? 1,
         complexity: iterationState.complexity ?? "unknown",
       };
-      const {history} = iterationState;
+      const history = iterationState.history;
       if (history && history.length > 0) {
-        const lastEntry = history.at(-1);
+        const lastEntry = history[history.length - 1];
         if (lastEntry) {
           reviewData.iteration.latest_verdict = lastEntry.verdict ?? "unknown";
         }
@@ -166,8 +167,8 @@ export function markPlanReviewed(
         `Failed to save plan review state for session ${sessionId}`,
       );
     }
-  } catch (error: unknown) {
-    logWarn(hookName, `Failed to mark plan reviewed: ${error}`);
+  } catch (e: unknown) {
+    logWarn(hookName, `Failed to mark plan reviewed: ${e}`);
   }
 }
 
@@ -254,8 +255,8 @@ export function markQuestionsAsked(
     ccNative.questions_asked.asked_at = timestamp;
 
     return saveCcNativeState(sessionId, projectRoot, ccNative);
-  } catch (error: unknown) {
-    logWarn("utils", `Failed to mark questions asked: ${error}`);
+  } catch (e: unknown) {
+    logWarn("utils", `Failed to mark questions asked: ${e}`);
     return false;
   }
 }
@@ -277,8 +278,8 @@ export function resetPlanQuestionsAsked(
       };
     }
     return saveCcNativeState(sessionId, projectRoot, ccNative);
-  } catch (error: unknown) {
-    logWarn("utils", `Failed to reset plan questions asked: ${error}`);
+  } catch (e: unknown) {
+    logWarn("utils", `Failed to reset plan questions asked: ${e}`);
     return false;
   }
 }
@@ -310,8 +311,8 @@ export function updateStuckDetectionState(
     const ccNative = getCcNativeState(sessionId, projectRoot) ?? {};
     ccNative.stuck_detection = stuckState;
     return saveCcNativeState(sessionId, projectRoot, ccNative);
-  } catch (error: unknown) {
-    logWarn("utils", `Failed to update stuck detection state: ${error}`);
+  } catch (e: unknown) {
+    logWarn("utils", `Failed to update stuck detection state: ${e}`);
     return false;
   }
 }

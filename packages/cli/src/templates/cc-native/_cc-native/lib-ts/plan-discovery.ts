@@ -3,15 +3,15 @@
  * Extracted from cc-native-plan-review.ts.
  */
 
-import * as crypto from "node:crypto";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
+import * as os from "node:os";
+import * as crypto from "node:crypto";
+
+import { logInfo, logDebug } from "../../_shared/lib-ts/base/logger.js";
+import { findPlanPathInTranscript } from "../../_shared/lib-ts/context/plan-manager.js";
 
 import type { DiscoveredPlan } from "./types.js";
-import { findPlanPathInTranscript } from "../../_core/lib-ts/context/plan-manager.js";
-import { logInfo, logDebug } from "../../_core/lib-ts/runtime/logger.js";
-
 
 const HOOK = "plan-discovery";
 

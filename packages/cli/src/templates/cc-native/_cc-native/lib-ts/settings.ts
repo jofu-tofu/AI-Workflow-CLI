@@ -5,22 +5,18 @@
 
 import * as path from "node:path";
 
+import { logInfo } from "../../_shared/lib-ts/base/logger.js";
 
-import { aggregateAgents } from "./aggregate-agents.js";
-import { loadConfig, getDisplaySettings } from "./config.js";
-import { DEFAULT_REVIEW_ITERATIONS } from "./state.js";
 import type {
   AgentConfig,
-  AgentReviewSettings,
-  AgentSelectionConfig,
-  LoadedSettings,
-  ModelsConfig,
-  PlanReviewSettings,
+  OrchestratorConfig,
   ProviderConfig,
+  ModelsConfig,
 } from "./types.js";
 import { DEFAULT_DISPLAY, DEFAULT_SANITIZATION } from "./types.js";
-import { logInfo } from "../../_core/lib-ts/runtime/logger.js";
-import { CODEX_MODELS } from "../../_core/lib-ts/runtime/models.js";
+import { loadConfig, getDisplaySettings } from "./config.js";
+import { aggregateAgents } from "./aggregate-agents.js";
+import { DEFAULT_REVIEW_ITERATIONS } from "./state.js";
 
 const HOOK = "settings";
 
@@ -61,10 +57,10 @@ export const DEFAULT_AGENTS: Array<{ name: string; model: string; provider: stri
   { ...AGENT_DEFAULTS, name: "constraint-validator", focus: "constraint identification and satisfaction", categories: ALL_CATEGORIES },
 ];
 
-export const DEFAULT_ORCHESTRATOR = { enabled: true, model: CODEX_MODELS.codex, provider: "codex", timeout: 60 } as const;
+export const DEFAULT_ORCHESTRATOR: { enabled: boolean; model: string; timeout: number } = { enabled: true, model: "opus", timeout: 60 };
 export const DEFAULT_AGENT_MODEL = "sonnet";
 
-export const DEFAULT_AGENT_SELECTION: AgentSelectionConfig = {
+export const DEFAULT_AGENT_SELECTION: Record<string, unknown> = {
   simple: { min: 3, max: 3 },
   medium: { min: 5, max: 5 },
   high: { min: 7, max: 7 },
@@ -75,8 +71,8 @@ export const DEFAULT_COMPLEXITY_CATEGORIES = ["code", "infrastructure", "documen
 
 export const DEFAULT_MODELS_CONFIG: ModelsConfig = {
   providers: {
-    claude: { enabled: false, models: ["sonnet"] },
-    codex: { enabled: true, models: [CODEX_MODELS.codex] },
+    claude: { enabled: true, models: ["sonnet"] },
+    codex: { enabled: true, models: ["gpt-5.1-codex-mini"] },
   },
 };
 
@@ -84,131 +80,58 @@ export const DEFAULT_MODELS_CONFIG: ModelsConfig = {
 // Settings Loading
 // ---------------------------------------------------------------------------
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : undefined;
-}
-
-function asStringArray(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const filtered = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
-  return filtered.length > 0 ? filtered : undefined;
-}
-
-export function loadSettings(projDir: string): LoadedSettings {
-  const defaultPlan: PlanReviewSettings = {
-    enabled: true,
-    reviewers: {
-      codex: { enabled: true, model: "", timeout: 120 },
-      gemini: { enabled: false, model: "", timeout: 120 },
+export function loadSettings(projDir: string): Record<string, unknown> {
+  const defaults: Record<string, unknown> = {
+    planReview: {
+      enabled: true,
+      reviewers: {
+        codex: { enabled: true, model: "", timeout: 120 },
+        gemini: { enabled: false, model: "", timeout: 120 },
+      },
+      display: { ...DEFAULT_DISPLAY },
     },
-    display: { ...DEFAULT_DISPLAY },
-  };
-
-  const defaultAgent: AgentReviewSettings = {
-    enabled: true,
-    orchestrator: { ...DEFAULT_ORCHESTRATOR },
-    timeout: 180,
-    highIssueThreshold: 3,
-    legacyMode: false,
-    display: { ...DEFAULT_DISPLAY },
-    agentSelection: { ...DEFAULT_AGENT_SELECTION },
-    agentDefaults: { model: DEFAULT_AGENT_MODEL },
-    complexityCategories: [...DEFAULT_COMPLEXITY_CATEGORIES],
-    sanitization: { ...DEFAULT_SANITIZATION },
+    agentReview: {
+      enabled: true,
+      orchestrator: { ...DEFAULT_ORCHESTRATOR },
+      timeout: 180,
+      highIssueThreshold: 3,
+      legacyMode: false,
+      display: { ...DEFAULT_DISPLAY },
+      agentSelection: { ...DEFAULT_AGENT_SELECTION },
+      agentDefaults: { model: DEFAULT_AGENT_MODEL },
+      complexityCategories: [...DEFAULT_COMPLEXITY_CATEGORIES],
+      sanitization: { ...DEFAULT_SANITIZATION },
+    },
   };
 
   const config = loadConfig(projDir);
-  if (!config || Object.keys(config).length === 0) {
-    return { planReview: defaultPlan, agentReview: defaultAgent, models: {} };
-  }
-
-  // Cast raw config to access arbitrary keys from JSON
-  const raw = config as Record<string, unknown>;
+  if (!config || Object.keys(config).length === 0) return { ...defaults, models: {} };
 
   // Merge planReview
-  const planReviewRaw = (asRecord(raw.planReview) ?? {}) as Partial<PlanReviewSettings>;
-  const mergedPlan: PlanReviewSettings = { ...defaultPlan, ...planReviewRaw };
-  if (planReviewRaw.reviewers) {
-    mergedPlan.reviewers = { ...defaultPlan.reviewers, ...planReviewRaw.reviewers };
+  const planReview = config.planReview ?? {};
+  const mergedPlan = { ...defaults.planReview, ...planReview };
+  if (planReview.reviewers) {
+    mergedPlan.reviewers = { ...defaults.planReview.reviewers, ...planReview.reviewers };
   }
   mergedPlan.display = getDisplaySettings(config, "planReview");
 
   // Merge agentReview
-  const agentReviewRawRecord = asRecord(raw.agentReview);
-  const agentReviewRaw = (agentReviewRawRecord ?? {}) as Partial<AgentReviewSettings>;
-  const mergedAgent: AgentReviewSettings = { ...defaultAgent, ...agentReviewRaw };
+  const agentReview = (config as Record<string, unknown>).agentReview ?? {};
+  const mergedAgent = { ...defaults.agentReview, ...agentReview };
   if (!mergedAgent.orchestrator || typeof mergedAgent.orchestrator !== "object") {
     mergedAgent.orchestrator = { ...DEFAULT_ORCHESTRATOR };
   } else {
     mergedAgent.orchestrator = { ...DEFAULT_ORCHESTRATOR, ...mergedAgent.orchestrator };
   }
   mergedAgent.display = getDisplaySettings(config, "agentReview");
+  const configRecord = config as Record<string, unknown>;
+  mergedAgent.agentSelection = { ...DEFAULT_AGENT_SELECTION, ...((configRecord.agentSelection as Record<string, unknown>) ?? {}) };
+  mergedAgent.agentDefaults = { model: DEFAULT_AGENT_MODEL, ...((configRecord.agentDefaults as Record<string, unknown>) ?? {}) };
+  mergedAgent.complexityCategories = (configRecord.complexityCategories as string[]) ?? [...DEFAULT_COMPLEXITY_CATEGORIES];
+  mergedAgent.sanitization = { ...DEFAULT_SANITIZATION, ...((configRecord.sanitization as Record<string, unknown>) ?? {}) };
+  mergedAgent.reviewIterations = { ...DEFAULT_REVIEW_ITERATIONS, ...agentReview.reviewIterations ?? {} };
 
-  const nestedAgentSelection = asRecord(agentReviewRawRecord?.agentSelection) as AgentSelectionConfig | undefined;
-  const topLevelAgentSelection = asRecord(raw.agentSelection) as AgentSelectionConfig | undefined;
-  mergedAgent.agentSelection = {
-    ...DEFAULT_AGENT_SELECTION,
-    ...nestedAgentSelection,
-    ...topLevelAgentSelection,
-  };
-
-  const nestedAgentDefaults = asRecord(agentReviewRawRecord?.agentDefaults) as { model?: string } | undefined;
-  const topLevelAgentDefaults = asRecord(raw.agentDefaults) as { model?: string } | undefined;
-  mergedAgent.agentDefaults = {
-    model: DEFAULT_AGENT_MODEL,
-    ...nestedAgentDefaults,
-    ...topLevelAgentDefaults,
-  };
-
-  const nestedComplexityCategories = asStringArray(agentReviewRawRecord?.complexityCategories);
-  const topLevelComplexityCategories = asStringArray(raw.complexityCategories);
-  mergedAgent.complexityCategories = topLevelComplexityCategories
-    ?? nestedComplexityCategories
-    ?? [...DEFAULT_COMPLEXITY_CATEGORIES];
-
-  const nestedSanitization = asRecord(agentReviewRawRecord?.sanitization);
-  const topLevelSanitization = asRecord(raw.sanitization);
-  mergedAgent.sanitization = {
-    ...DEFAULT_SANITIZATION,
-    ...nestedSanitization,
-    ...topLevelSanitization,
-  };
-
-  const nestedFallbackByComplexity = asRecord(agentReviewRawRecord?.fallbackByComplexity) as Record<string, number> | undefined;
-  const topLevelFallbackByComplexity = asRecord(raw.fallbackByComplexity) as Record<string, number> | undefined;
-  if (nestedFallbackByComplexity || topLevelFallbackByComplexity) {
-    mergedAgent.fallbackByComplexity = {
-      ...nestedFallbackByComplexity,
-      ...topLevelFallbackByComplexity,
-    };
-  }
-
-  const nestedMandatoryAgents = agentReviewRawRecord?.mandatoryAgents as AgentReviewSettings["mandatoryAgents"] | undefined;
-  const topLevelMandatoryAgents = raw.mandatoryAgents as AgentReviewSettings["mandatoryAgents"] | undefined;
-  if (nestedMandatoryAgents !== undefined || topLevelMandatoryAgents !== undefined) {
-    mergedAgent.mandatoryAgents = topLevelMandatoryAgents ?? nestedMandatoryAgents;
-  }
-
-  const nestedPreflight = asRecord(agentReviewRawRecord?.preflight);
-  const topLevelPreflight = asRecord(raw.preflight);
-  if (nestedPreflight || topLevelPreflight) {
-    mergedAgent.preflight = {
-      ...nestedPreflight,
-      ...topLevelPreflight,
-    };
-  }
-
-  const nestedReviewIterations = asRecord(agentReviewRawRecord?.reviewIterations) as Record<string, number> | undefined;
-  const topLevelReviewIterations = asRecord(raw.reviewIterations) as Record<string, number> | undefined;
-  mergedAgent.reviewIterations = {
-    ...DEFAULT_REVIEW_ITERATIONS,
-    ...nestedReviewIterations,
-    ...topLevelReviewIterations,
-  };
-
-  const modelsRaw = (raw.models ?? {}) as Record<string, unknown>;
+  const modelsRaw = (config as Record<string, unknown>).models ?? {};
   return { planReview: mergedPlan, agentReview: mergedAgent, models: modelsRaw };
 }
 
@@ -216,7 +139,7 @@ export function loadSettings(projDir: string): LoadedSettings {
 // Models Config
 // ---------------------------------------------------------------------------
 
-export function loadModelsConfig(settings: LoadedSettings): ModelsConfig {
+export function loadModelsConfig(settings: Record<string, unknown>): ModelsConfig {
   const raw = settings.models as Record<string, unknown> | undefined;
   if (!raw?.providers || typeof raw.providers !== "object") {
     return DEFAULT_MODELS_CONFIG;
@@ -238,9 +161,9 @@ export function loadModelsConfig(settings: LoadedSettings): ModelsConfig {
 
 export function loadAgentLibrary(
   projDir: string,
-  settings?: AgentReviewSettings,
+  settings?: Record<string, unknown>,
 ): AgentConfig[] {
-  const agentsData = aggregateAgents(path.join(projDir, "_cc-native", "plan-review", "agents", "plan-review"));
+  const agentsData = aggregateAgents(path.join(projDir, "_cc-native", "agents", "plan-review"));
   const defaultModel = settings?.agentDefaults?.model ?? DEFAULT_AGENT_MODEL;
 
   if (!agentsData || agentsData.length === 0) {

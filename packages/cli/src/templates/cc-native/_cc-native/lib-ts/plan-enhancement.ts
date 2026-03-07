@@ -37,10 +37,5 @@ Evaluate whether the plan captures decisions that would be lost when this sessio
 - What constraints exist that aren't obvious from the code
 - What would break if assumptions change
 
-If the plan has gaps, address them before presenting to the user.
-
-### Coding Standards Check
-If this plan modifies code, verify it against the coding standards you read earlier:
-test-first design, file structure conventions, extensibility. Which standards did you apply,
-and which did you consciously skip (with reasoning)?`;
+If the plan has gaps, address them before presenting to the user.`;
 }

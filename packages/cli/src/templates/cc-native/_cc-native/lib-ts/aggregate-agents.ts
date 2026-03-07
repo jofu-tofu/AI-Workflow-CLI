@@ -1,18 +1,12 @@
 /**
  * Agent frontmatter parser — discovers and loads agent configs from markdown files.
  * See cc-native-plan-review-spec.md §4.14
- *
- * NOTE: This file intentionally stays in lib-ts/ rather than plan-review/lib/.
- * Both settings.ts (shared cc-native infra) and plan-questions.ts (plan-review) import it.
- * Moving it to plan-review/ would create a forbidden backward dependency: lib-ts → plan-review.
- * Do not move this file without first moving settings.ts out of lib-ts/.
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-
+import { logDebug, logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
 import type { AgentConfig } from "./types.js";
-import { logDebug, logInfo, logWarn } from "../../_core/lib-ts/runtime/logger.js";
 
 /**
  * Extract simple YAML frontmatter from markdown content.
@@ -53,7 +47,7 @@ export function extractFrontmatter(
       value = value
         .slice(1, -1)
         .split(",")
-        .map((s) => s.trim().replaceAll(/^["']|["']$/g, ""))
+        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
         .filter(Boolean);
     }
     // Handle booleans
@@ -97,13 +91,11 @@ export function extractBody(content: string): string {
  * Discover and load all agent configs from a directory of markdown files.
  * Skips the plan-orchestrator agent. Defaults categories to ["code"].
  *
- * @param agentsDir - Path to agents directory. Callers must pass an explicit path.
- *   Known call sites: settings.ts → plan-review/agents/plan-review,
- *   plan-questions.ts → plan-review/agents/plan-questions
+ * @param agentsDir - Path to agents directory (default: _cc-native/agents/)
  * @returns Array of AgentConfig objects
  */
 export function aggregateAgents(agentsDir?: string): AgentConfig[] {
-  const dir = agentsDir ?? path.join("_cc-native", "plan-review", "agents");
+  const dir = agentsDir ?? path.join("_cc-native", "agents");
 
   if (!fs.existsSync(dir)) {
     logWarn("aggregate", `Agents directory not found: ${dir}`);
@@ -122,8 +114,8 @@ export function aggregateAgents(agentsDir?: string): AgentConfig[] {
     let content: string;
     try {
       content = fs.readFileSync(filePath, "utf-8");
-    } catch (error: unknown) {
-      logWarn("aggregate", `Failed to read ${file}: ${error}`);
+    } catch (e: unknown) {
+      logWarn("aggregate", `Failed to read ${file}: ${e}`);
       continue;
     }
 

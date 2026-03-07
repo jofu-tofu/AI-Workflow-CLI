@@ -13,11 +13,6 @@
  */
 
 import { z } from "zod";
-
-import { hydeQueryEmbedding } from "./hyde.js";
-import { logInfo, logWarn, logError } from "./logger.js";
-import { checkOllamaHealth, embedOne } from "./ollama-client.js";
-import { loadTranscript } from "./transcript-loader.js";
 import {
   VECTOR_TOP_K,
   MAX_PARALLEL_SUMMARIZERS,
@@ -31,15 +26,19 @@ import {
   type RankedSession,
   type RetrievalResult,
 } from "./types.js";
+import { logInfo, logWarn, logError, logDebug } from "./logger.js";
+import { checkOllamaHealth, embedOne } from "./ollama-client.js";
 import { openVectorDb, searchKnn } from "./vector-store.js";
+import { loadTranscript } from "./transcript-loader.js";
+import { hydeQueryEmbedding } from "./hyde.js";
 
 const HOOK_NAME = "rlm_retrieve";
 
 // Dynamic import for inference (crosses package boundary)
-let inferenceAsync: typeof import("../../../../_core/lib-ts/runtime/inference.js").inferenceAsync;
+let inferenceAsync: typeof import("../../../../_shared/lib-ts/base/inference.js").inferenceAsync;
 
 try {
-  const mod = await import("../../../../_core/lib-ts/runtime/inference.js");
+  const mod = await import("../../../../_shared/lib-ts/base/inference.js");
   inferenceAsync = mod.inferenceAsync;
 } catch {
   // Fallback: warn and provide a stub that always fails
@@ -79,12 +78,10 @@ if (!query) {
   );
   process.exitCode = 1;
 } else {
-  try {
-    await runPipeline(query, topK, projectFilter);
-  } catch (error) {
-    logError(HOOK_NAME, `Fatal: ${error}`, { stderr: true });
+  runPipeline(query, topK, projectFilter).catch((e) => {
+    logError(HOOK_NAME, `Fatal: ${e}`, { stderr: true });
     process.exitCode = 1;
-  }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -130,8 +127,8 @@ async function runPipeline(
       });
       hydeTiming = Date.now() - hydeStart;
       logInfo(HOOK_NAME, `HyDE query embedding completed in ${hydeTiming}ms`);
-    } catch (error) {
-      logWarn(HOOK_NAME, `HyDE failed: ${error}, falling back to direct query embedding`);
+    } catch (e) {
+      logWarn(HOOK_NAME, `HyDE failed: ${e}, falling back to direct query embedding`);
       queryEmbedding = await embedOne(query);
     }
   } else {
@@ -185,7 +182,7 @@ async function runPipeline(
       }
     }
   }
-  const sessions = [...sessionMap.values()];
+  const sessions = Array.from(sessionMap.values());
   logInfo(
     HOOK_NAME,
     `Stage 2: ${results.length} chunks → ${sessions.length} sessions`,
@@ -257,10 +254,10 @@ async function summarizeSessions(
     const promises = batch.map(async (session) => {
       try {
         return await summarizeOneSession(query, session);
-      } catch (error) {
+      } catch (e) {
         logWarn(
           HOOK_NAME,
-          `Summarize failed for ${session.result.session_id}: ${error}`,
+          `Summarize failed for ${session.result.session_id}: ${e}`,
         );
         return null;
       }
@@ -400,8 +397,8 @@ async function rankSessions(
         key_findings: r.key_findings,
       };
     }).filter((r): r is RankedSession => r !== null);
-  } catch (error) {
-    logWarn(HOOK_NAME, `Rank parse failed: ${error}, marking all as relevant`);
+  } catch (e) {
+    logWarn(HOOK_NAME, `Rank parse failed: ${e}, marking all as relevant`);
     return summaries.map((s) => ({
       session_id: s.session_id,
       project: s.project,

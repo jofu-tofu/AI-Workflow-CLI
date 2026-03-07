@@ -1,4 +1,3 @@
-/* eslint-disable n/no-unsupported-features/node-builtins -- Bun runtime provides fetch */
 /**
  * Ollama HTTP client for local embeddings.
  *
@@ -7,14 +6,13 @@
  */
 
 import { z } from "zod";
-
-import { logDebug } from "./logger.js";
 import {
   OLLAMA_BASE_URL,
   OLLAMA_EMBED_MODEL,
   EMBED_DIMENSIONS,
   HYDE_OLLAMA_MODEL,
 } from "./types.js";
+import { logDebug, logError } from "./logger.js";
 
 const HOOK_NAME = "rlm_ollama";
 const BATCH_SIZE = 32;
@@ -54,7 +52,7 @@ export async function checkOllamaHealth(
   const cfg = { ...DEFAULT_CONFIG, ...config };
   try {
     const resp = await fetch(`${cfg.baseUrl}/api/tags`, {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(5_000),
     });
     if (!resp.ok) {
       return { ok: false, error: `Ollama responded with ${resp.status}` };
@@ -76,8 +74,8 @@ export async function checkOllamaHealth(
       };
     }
     return { ok: true };
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
     return {
       ok: false,
       error: `Cannot reach Ollama at ${cfg.baseUrl}: ${msg}. Is Ollama running?`,
@@ -119,7 +117,7 @@ export async function embed(
       throw new Error(`Invalid Ollama embed response: ${parseResult.error.message}`);
     }
 
-    const {data} = parseResult;
+    const data = parseResult.data;
     if (data.embeddings.length !== batch.length) {
       throw new Error(
         `Expected ${batch.length} embeddings, got ${data.embeddings.length}`,
@@ -199,11 +197,11 @@ export async function generateText(
       text: data.response || "",
       latency_ms: Date.now() - startTime,
     };
-  } catch (error) {
+  } catch (e) {
     return {
       success: false,
       text: "",
-      error: String(error),
+      error: String(e),
       latency_ms: Date.now() - startTime,
     };
   }

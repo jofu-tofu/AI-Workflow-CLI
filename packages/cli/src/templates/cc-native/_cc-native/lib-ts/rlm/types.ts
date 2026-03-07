@@ -5,10 +5,9 @@
  * Claude Code session transcripts across all projects.
  */
 
-import { homedir } from "node:os";
-import { join } from "node:path";
-
-import { getProjectRoot } from "../../../_core/lib-ts/runtime/constants.js";
+import { homedir } from "os";
+import { join } from "path";
+import { getProjectRoot } from "../../../_shared/lib-ts/base/constants.js";
 import { loadConfig } from "../config.js";
 
 // ---------------------------------------------------------------------------
@@ -35,12 +34,12 @@ export const TOP_N_HEAP = 50;
 // ---------------------------------------------------------------------------
 
 export const WEIGHT = {
-  summary: 3,
-  segmentTopic: 3,
-  keywords: 2,
-  filesTouched: 2,
+  summary: 3.0,
+  segmentTopic: 3.0,
+  keywords: 2.0,
+  filesTouched: 2.0,
   commandsRun: 1.5,
-  toolCalls: 1,
+  toolCalls: 1.0,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -142,7 +141,7 @@ export const HYDE_NUM_RESPONSES = _ccNativeConfig.numResponses ?? 5;
 export const HYDE_MAX_TOKENS = _ccNativeConfig.maxTokens ?? 200;
 
 /** Per-response generation timeout in milliseconds. Local models usually respond in 500-1500ms. */
-export const HYDE_TIMEOUT_MS = _ccNativeConfig.timeoutMs ?? 10_000;
+export const HYDE_TIMEOUT_MS = _ccNativeConfig.timeoutMs ?? 10000;
 
 /** Fallback to direct query embedding if HyDE fails? true = graceful degradation (recommended). */
 export const HYDE_FALLBACK_TO_QUERY = _ccNativeConfig.fallbackToQuery ?? true;

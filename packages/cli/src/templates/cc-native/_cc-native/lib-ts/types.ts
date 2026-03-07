@@ -5,11 +5,7 @@
  */
 
 // Re-export shared types used by cc-native consumers
-export type { ContextState, HookInput, HookOutput } from "../../_core/lib-ts/types.js";
-
-// Import AgentConfig for local use and re-export
-import type { AgentConfig as _AgentConfig } from "../../_core/lib-ts/types.js";
-export type AgentConfig = _AgentConfig;
+export type { ContextState, HookInput, HookOutput } from "../../_shared/lib-ts/types.js";
 
 // ---------------------------------------------------------------------------
 // Verdict & Decision Types
@@ -122,13 +118,21 @@ export interface ReviewDecisionResult {
 // Agent & Orchestrator Configuration
 // ---------------------------------------------------------------------------
 
-// AgentConfig re-exported from _core/lib-ts/types.ts above
+/** Configuration for a Claude Code review agent */
+export interface AgentConfig {
+  name: string;
+  model: string;
+  provider: string; // e.g. "claude" | "codex" — assigned at runtime by assignModelsToAgents()
+  focus: string;
+  categories: string[];
+  description: string;
+  system_prompt: string; // Markdown body content for --system-prompt
+}
 
 /** Configuration for the plan orchestrator */
 export interface OrchestratorConfig {
   enabled: boolean;
   model: string;
-  provider?: string;
   timeout: number;
 }
 
@@ -141,66 +145,6 @@ export interface ProviderConfig {
 /** Model provider pool configuration */
 export interface ModelsConfig {
   providers: Record<string, ProviderConfig>;
-}
-
-// ---------------------------------------------------------------------------
-// Settings Interfaces (typed output of loadSettings())
-// ---------------------------------------------------------------------------
-
-/** Agent selection count range for a single complexity tier */
-export interface AgentSelectionRange {
-  min: number;
-  max: number;
-}
-
-/** Agent selection configuration (per-tier ranges + fallback) */
-export interface AgentSelectionConfig {
-  simple?: AgentSelectionRange;
-  medium?: AgentSelectionRange;
-  high?: AgentSelectionRange;
-  fallbackCount?: number;
-}
-
-/** Preflight health-check configuration */
-export interface PreflightSettings {
-  enabled?: boolean;
-  timeoutMs?: number;
-}
-
-/** Plan review section of merged settings (the "planReview" key) */
-export interface PlanReviewSettings {
-  enabled?: boolean;
-  reviewers?: {
-    codex?: { enabled?: boolean; model?: string; timeout?: number };
-    gemini?: { enabled?: boolean; model?: string; timeout?: number };
-  };
-  display?: Partial<DisplaySettings>;
-}
-
-/** Agent review section of merged settings (the "agentReview" key) */
-export interface AgentReviewSettings {
-  enabled?: boolean;
-  timeout?: number;
-  orchestrator?: OrchestratorConfig;
-  legacyMode?: boolean;
-  highIssueThreshold?: number;
-  maxIssuesPerAgent?: number;
-  mandatoryAgents?: string[] | Record<string, string[]>;
-  agentSelection?: AgentSelectionConfig;
-  agentDefaults?: { model?: string };
-  complexityCategories?: string[];
-  sanitization?: { maxSessionIdLength?: number; maxTitleLength?: number };
-  reviewIterations?: Record<string, number>;
-  display?: Partial<DisplaySettings>;
-  preflight?: PreflightSettings;
-  fallbackByComplexity?: Record<string, number>;
-}
-
-/** Top-level settings object returned by loadSettings() */
-export interface LoadedSettings {
-  planReview: PlanReviewSettings;
-  agentReview: AgentReviewSettings;
-  models: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +273,7 @@ export interface Reviewer {
 // JSON Schemas (moved to reviewers/schemas.ts)
 // ---------------------------------------------------------------------------
 // Re-export for backwards compatibility
-export { AGENT_REVIEW_PROMPT_PREFIX, ORCHESTRATOR_SCHEMA, REVIEW_PROMPT_PREFIX, REVIEW_SCHEMA } from "../plan-review/lib/reviewers/schemas.js";
+export { REVIEW_SCHEMA, ORCHESTRATOR_SCHEMA, REVIEW_PROMPT_PREFIX, AGENT_REVIEW_PROMPT_PREFIX } from "./reviewers/schemas.js";
 
 // ---------------------------------------------------------------------------
 // Display Defaults
@@ -382,25 +326,4 @@ export interface AgentSelectionResult {
 export interface IterationAdvancement {
   updatedState: IterationState;
   newGraduates: string[];
-}
-
-// ---------------------------------------------------------------------------
-// Preflight Types
-// ---------------------------------------------------------------------------
-
-/** Result from a single provider+model preflight check */
-export interface PreflightCheckResult {
-  provider: string;
-  model: string;
-  available: boolean;
-  latencyMs: number;
-  error?: string;
-}
-
-/** Aggregated preflight report across all provider+model combos */
-export interface PreflightReport {
-  checks: PreflightCheckResult[];
-  available: Map<string, Set<string>>;  // provider → set of working models
-  allFailed: boolean;
-  totalMs: number;
 }

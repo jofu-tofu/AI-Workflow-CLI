@@ -9,28 +9,24 @@
 | Hook | Trigger | Purpose |
 |------|---------|---------|
 | `cc-native-plan-review.ts` | PreToolUse: ExitPlanMode | Questions gate + plan review before user approval |
-| `mark_questions_asked.ts` | PostToolUse: AskUserQuestion | Marks questions-asked state after user answers |
-| `enhance_plan_post_subagent.ts` | PostToolUse: Task | Post-subagent plan enhancement |
-| `enhance_plan_post_write.ts` | PostToolUse: Write | Post-write plan enhancement |
+| `add_plan_context.ts` | PostToolUse: AskUserQuestion, PreToolUse: Task | Mark questions asked; nudge Plan subagent to ask questions first |
 | `plan_questions_early.ts` | UserPromptSubmit | Inject Phase A clarification prompt in plan mode |
-| `validate_task_prompt.ts` | PreToolUse: TaskCreate | Validates task creation prompts |
 
 ### Plan Review Architecture
 
-The hook is a thin coordinator (~70 lines) that delegates to `plan-review/lib/review-pipeline.ts`. The pipeline wires together focused modules:
+The hook is a thin coordinator (~70 lines) that delegates to `lib-ts/review-pipeline.ts`. The pipeline wires together focused modules:
 
-| Module | Location | Responsibility |
-|--------|----------|----------------|
-| `cli-args.ts` | `_core/lib-ts/runtime/` | Centralized CLI arg construction for Claude/Codex agents — all providers delegate here |
-| `plan-discovery.ts` | `lib-ts/` | Find plan file, read content, compute hash |
-| `settings.ts` | `lib-ts/` | Load + merge config with defaults, load agent library |
-| `agent-selection.ts` | `plan-review/lib/` | Mandatory agent resolution, orchestrator-based selection, model assignment |
-| `graduation.ts` | `plan-review/lib/` | Pass eligibility, pass streaks, graduation threshold, iteration advancement |
-| `output-builder.ts` | `plan-review/lib/` | Issue truncation, verdict override, context/block message construction |
-| `review-pipeline.ts` | `plan-review/lib/` | Pipeline orchestrator wiring all modules together |
-| `artifacts/lib/format.ts` | `artifacts/` | Pure formatting (markdown, JSON, inline summaries) |
-| `artifacts/lib/write.ts` | `artifacts/` | File I/O for review artifacts |
-| `artifacts/lib/tracker.ts` | `artifacts/` | Review tracker management |
+| Module | Responsibility |
+|--------|----------------|
+| `plan-discovery.ts` | Find plan file, read content, compute hash |
+| `settings.ts` | Load + merge config with defaults, load agent library |
+| `agent-selection.ts` | Mandatory agent resolution, orchestrator-based selection, model assignment |
+| `graduation.ts` | Pass eligibility, pass streaks, graduation threshold, iteration advancement |
+| `output-builder.ts` | Issue truncation, verdict override, context/block message construction |
+| `review-pipeline.ts` | Pipeline orchestrator wiring all modules together |
+| `artifacts/format.ts` | Pure formatting (markdown, JSON, inline summaries) |
+| `artifacts/write.ts` | File I/O for review artifacts |
+| `artifacts/tracker.ts` | Review tracker management |
 
 ### Questions Gate (in review-pipeline.ts)
 
@@ -43,10 +39,10 @@ Before running plan review agents, the pipeline checks `wasQuestionsAsked()`. If
 CC-native hooks are TypeScript, run via `bun`. Use relative imports from the hook file location.
 
 ```typescript
-// Shared library imports (via _core/lib-ts/)
-import { loadHookInput, runHook, logInfo, emitContext } from "../../_core/lib-ts/hooks/hook-utils.js";
-import { isInternalCall } from "../../_core/lib-ts/runtime/subprocess-utils.js";
-import { getProjectRoot } from "../../_core/lib-ts/runtime/constants.js";
+// Shared library imports (via _shared/lib-ts/)
+import { loadHookInput, runHook, logInfo, emitContext } from "../../_shared/lib-ts/base/hook-utils.js";
+import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
+import { getProjectRoot } from "../../_shared/lib-ts/base/constants.js";
 
 // CC-native library imports (via ../lib-ts/)
 import { wasQuestionsAsked, markQuestionsAsked } from "../lib-ts/cc-native-state.js";
@@ -56,7 +52,7 @@ import type { AgentConfig } from "../lib-ts/types.js";
 
 **Important:** Always use `.js` extensions in import paths — Bun resolves `.ts` files from `.js` imports.
 
-**Import direction:** Hooks → `_cc-native/lib-ts/` → `_core/lib-ts/`. Never reverse.
+**Import direction:** Hooks → `_cc-native/lib-ts/` → `_shared/lib-ts/`. Never reverse.
 
 ---
 
@@ -65,7 +61,7 @@ import type { AgentConfig } from "../lib-ts/types.js";
 Hooks can be invoked recursively when spawning subprocesses (agents, orchestrator). Always check and skip:
 
 ```typescript
-import { isInternalCall } from "../../_core/lib-ts/runtime/subprocess-utils.js";
+import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
 
 function main(): void {
   // FIRST LINE of main - before any other logic
@@ -88,7 +84,7 @@ Claude Code hooks return JSON to stdout. The format is specific to each hook typ
 Use the shared hook utilities — never construct JSON manually:
 
 ```typescript
-import { emitContext, emitContextAndBlock } from "../../_core/lib-ts/hooks/hook-utils.js";
+import { emitContext, emitContextAndBlock } from "../../_shared/lib-ts/base/hook-utils.js";
 
 // Inject context without blocking:
 emitContext("Information for Claude to see...");
@@ -106,7 +102,7 @@ emitContextAndBlock(
 
 ## Debugging Output
 
-For logging tiers, visibility rules, and stderr behavior, see **`_core/lib-ts/CLAUDE.md`** (the shared library guide). The key rules:
+For logging tiers, visibility rules, and stderr behavior, see **`_shared/lib-ts/CLAUDE.md`** (the shared library guide). The key rules:
 
 - **stderr is opt-in.** `log_debug/log_info/log_warn/log_error` write to file only (no UI noise)
 - **`logBlocking()` / `log_hook_error()`** for problems that must be visible
@@ -116,7 +112,7 @@ For logging tiers, visibility rules, and stderr behavior, see **`_core/lib-ts/CL
 TypeScript hooks use re-exported logger functions from `hook-utils.ts`:
 
 ```typescript
-import { logDebug, logInfo, logWarn, logError } from "../../_core/lib-ts/hooks/hook-utils.js";
+import { logDebug, logInfo, logWarn, logError } from "../../_shared/lib-ts/base/hook-utils.js";
 
 logDebug("hook-name", `Found ${items.length} items`);  // file only
 logInfo("hook-name", "Starting hook...");                // file only
@@ -130,15 +126,15 @@ logError("hook-name", `Failed: ${e}`);                   // file only
 Plan review hooks integrate with the shared context system for state management:
 
 ```typescript
-import { getContextBySessionId, getAllContexts } from "../../_core/lib-ts/context/context-store.js";
-import { getContextReviewsDir } from "../../_core/lib-ts/runtime/constants.js";
+import { getContextBySessionId, getAllContexts } from "../../_shared/lib-ts/context/context-store.js";
+import { getContextReviewsDir } from "../../_shared/lib-ts/base/constants.js";
 
 // Find active context
 const context = getContextBySessionId(sessionId, projectRoot);
 if (!context) {
   // Fallback: find single planning context
   const allActive = getAllContexts("active", projectRoot);
-  const planning = allActive.filter((c: any) => c.mode === "active" || c.mode === "has_staged_work");
+  const planning = allActive.filter((c: any) => c.mode === "active" || c.mode === "has_plan");
   if (planning.length === 1) {
     context = planning[0];
   }
@@ -161,7 +157,7 @@ import { isPlanAlreadyReviewed, markPlanReviewed, wasQuestionsAsked } from "../l
 Hooks should fail gracefully — a broken hook shouldn't break the user's workflow. `runHook()` and `runHookAsync()` handle this automatically: uncaught errors log to file and exit 0 (non-blocking).
 
 ```typescript
-import { runHook, logInfo } from "../../_core/lib-ts/hooks/hook-utils.js";
+import { runHook, logInfo } from "../../_shared/lib-ts/base/hook-utils.js";
 
 function main(): void {
   // Hook logic — uncaught errors are handled by runHook
@@ -174,7 +170,7 @@ runHook(main, "hook_name");
 For async hooks (plan review with parallel agents):
 
 ```typescript
-import { runHookAsync } from "../../_core/lib-ts/hooks/hook-utils.js";
+import { runHookAsync } from "../../_shared/lib-ts/base/hook-utils.js";
 
 async function main(): Promise<void> {
   // Async hook logic with Promise.all() etc.
@@ -189,7 +185,7 @@ Use `emitContextAndBlock()` for intentional blocking (e.g., plan review denial).
 
 ## Error Handling: Non-Critical Operations
 
-Wrap non-critical shared library calls in try/catch to prevent false "hook error" UI display. See **`_core/lib-ts/CLAUDE.md`** > Context Store for the pattern and rationale.
+Wrap non-critical shared library calls in try/catch to prevent false "hook error" UI display. See **`_shared/lib-ts/CLAUDE.md`** > Context Store for the pattern and rationale.
 
 **When to catch locally vs let bubble:**
 - **Catch locally:** Side effects like mode transitions, state saves — the hook's primary purpose can still succeed without them
@@ -221,7 +217,7 @@ Validate TypeScript syntax after editing hooks:
 bun --print "import('.aiwcli/_cc-native/hooks/cc-native-plan-review.ts')" 2>&1 | head -5
 
 # Or check imports resolve (dry run)
-bun build --no-bundle .aiwcli/_cc-native/hooks/mark_questions_asked.ts --outdir /dev/null 2>&1
+bun build --no-bundle .aiwcli/_cc-native/hooks/add_plan_context.ts --outdir /dev/null 2>&1
 ```
 
 Hooks fail silently on import errors — verify after any import path changes.
@@ -239,30 +235,13 @@ Hooks fail silently on import errors — verify after any import path changes.
 | 2026-02-10 | **Migrated cc-native hooks from Python to TypeScript.** `cc-native-plan-review.ts` (async, parallel agent reviews via `Promise.all()`), `add_plan_context.ts`, `plan_questions_early.ts`. All hooks use `runHook()`/`runHookAsync()` entry points. Library code in `_cc-native/lib-ts/` (18 files). Settings.json updated to use `bun` runner. Python `.py` files kept as fallback until TS hooks verified. |
 | 2026-02-10 | Flipped TS logger stderr default to opt-in (`opts?.stderr === true`). Added `logBlocking()` for intentional stderr visibility. Removed redundant `{stderr: false}` from hook-utils.ts, user_prompt_submit.ts, context_monitor.ts. Added "Hook Error Visibility" section documenting visibility tiers and exit code behavior. |
 | 2026-02-10 | Fixed `debug.py` `context_path` crash. Added local try/catch around `maybeActivate` in `user_prompt_submit.ts` and `context_monitor.ts` to prevent stderr error display on non-critical I/O failures. Removed dead `context_path` from `_emitHookEnd` in `hook-utils.ts`. Added "Error Handling" section to CLAUDE.md. |
-| 2026-02-21 | **Coding standards nudge injected in plan mode.** `plan_questions_early.ts` now emits `CODING_STANDARDS_NUDGE` after Phase A prompt — covers test-first design, file structure fit, and extensibility analysis. Standards reference doc at `plan-review/CODING-STANDARDS-CHECKLIST.md`. Post-write self-check added to `plan-enhancement.ts` `getPlanQualityReviewContext()`. |
-| 2026-02-21 | **ContextLayer Audit:** Updated hook roster — removed stale `add_plan_context.ts`, added `mark_questions_asked.ts`, `enhance_plan_post_subagent.ts`, `enhance_plan_post_write.ts`, `validate_task_prompt.ts`. |
-
----
-## Context Maintenance
-
-**After modifying files in this directory:** scan the entries above — if any claim is now
-false or incomplete, update this file before ending the task. Do not defer.
-
-**Add** an entry only if an agent would fail without knowing it, it is not obvious from
-the code, and it belongs at this scope (project-wide rule → root CLAUDE.md; WHY decision
-→ inline comment or ADR; inferable from code → nowhere).
-
-**Remove** any entry that fails the falsifiability test: if removing it would not change
-how an agent acts here, remove it. If a convention here conflicts with the codebase,
-the codebase wins — update this file, do not work around it. Prune aggressively.
-
-**Staleness anchor:** This file assumes `cc-native-plan-review.ts` exists. If it doesn't, this file
-is stale — update or regenerate before relying on it.
-
-**Trigger Audit or Generate:**
-- Rename/move files or dirs → Audit
-- >20% of files changed → Generate
-- 30+ days without touching this file → Audit
-- Agent mistake caused by this file → fix immediately, then Audit
-
-<!-- context-layer: generated=2026-02-10 | last-audited=2026-03-01 | version=3 | dir-commits-at-audit=58 -->
+| 2026-02-07 | Handoff staging lifecycle: `has_handoff` mode + `handoff_consumed` flag mirrors plan lifecycle. `save_handoff.py` no longer transitions to idle — stays active for session_end staging. `session_end.py` stages `active→has_handoff` when handoff_path set and not consumed. `session_start.py` restores `has_handoff→active` on /clear. `context_selector.py` has fallback Case 3b for has_handoff. PostToolUse context_monitor matcher simplified from specific tool list to `*`. |
+| 2026-02-07 | Removed PreToolUse:Write matcher from `add_plan_context.py`. Write-time plan nudges were redundant after consolidating enforcement to PreToolUse:Task. Removed `is_plan_file_write()`, `load_plan_context_config()`, `PHASE_B_ENFORCEMENT`, `nudge_write_questions()`, and `project_dir` import. |
+| 2026-02-07 | Question enforcement is now advisory-only (never blocks). `add_plan_context.py` uses `emit_context()` for all question nudges — no `permissionDecision:deny` anywhere. Removed `emit_context_and_block` import and `TASK_ENFORCEMENT_REASON` constant. |
+| 2026-02-07 | Moved question enforcement to PreToolUse:Task (Plan subagent gate). `add_plan_context.py` now handles three events: PostToolUse:AskUserQuestion, PreToolUse:Task (primary gate), PreToolUse:Write (fallback). Added `is_plan_task()`, `is_internal_call()` guard, `TASK_ENFORCEMENT_CONTEXT` constant. Registered `^Task$` command hook in settings.json. |
+| 2026-02-07 | Deleted `plan_accepted.py` (dead code — PostToolUse:ExitPlanMode never fires due to /clear race). Plan field assignment handled by `session_end.py` fallback. Added `plan_consumed` flag to prevent infinite plan re-staging. |
+| 2026-02-07 | Hook lifecycle diagnostics: all hooks now use `run_hook(main, "hook_name")` entry point. Logs HOOK_START/HOOK_END with template origin, event type, duration_ms, and status. Millisecond timestamps in logger. |
+| 2026-02-07 | Unified logger: all diagnostic logging uses `log_debug/log_info/log_warn/log_error` from `_shared/lib/base/logger.py` instead of eprint/print-to-stderr. Updated debugging and error handling docs. |
+| 2026-02-06 | Merged mark_questions_asked.py into add_plan_context.py. Hook now handles both PostToolUse:AskUserQuestion and PreToolUse:Write. Deleted standalone mark_questions_asked.py. |
+| 2026-02-06 | Fixed add_plan_context.py trigger docs (was PostToolUse: EnterPlanMode, is PreToolUse: Write). Added emit_context/emit_context_and_block utility docs. |
+| 2026-02-03 | Initial creation |

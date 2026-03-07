@@ -11,8 +11,9 @@
  * See: Gao et al., "Precise Zero-Shot Dense Retrieval without Relevance Labels" (ACL 2023)
  */
 
+import { generateText } from "./ollama-client.js";
+import { embed, embedOne } from "./ollama-client.js";
 import { logDebug, logInfo, logWarn } from "./logger.js";
-import { generateText , embed, embedOne } from "./ollama-client.js";
 
 const HOOK_NAME = "rlm_hyde";
 
@@ -104,7 +105,7 @@ export async function hydeQueryEmbedding(
   logInfo(HOOK_NAME, `Generating ${config.numResponses} hypothetical responses via Ollama`);
 
   // Step 1: Generate N hypothetical responses in parallel
-  const promises = Array.from({ length: config.numResponses }, (_) =>
+  const promises = Array.from({ length: config.numResponses }, (_, i) =>
     generateText(query, {
       systemPrompt: HYDE_SYSTEM_PROMPT,
       maxTokens: config.maxTokens,

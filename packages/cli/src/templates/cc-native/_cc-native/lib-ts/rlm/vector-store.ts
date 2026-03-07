@@ -7,9 +7,8 @@
 
 import { Database } from "bun:sqlite";
 import * as sqliteVec from "sqlite-vec";
-
-import { logDebug } from "./logger.js";
 import { RLM_VECTOR_DB_PATH, EMBED_DIMENSIONS, type VectorSearchResult } from "./types.js";
+import { logDebug, logInfo } from "./logger.js";
 
 const HOOK_NAME = "rlm_vector";
 
@@ -155,7 +154,7 @@ export function deleteSessionChunks(
     `SELECT rowid FROM chunks WHERE session_id = ? AND project = ?`,
   ).all(sessionId, project);
 
-  const rows = (Array.isArray(rawRows) ? rawRows : []).filter((row) => isRowidResult(row));
+  const rows = (Array.isArray(rawRows) ? rawRows : []).filter(isRowidResult);
 
   if (rows.length > 0) {
     const tx = db.transaction(() => {
@@ -238,7 +237,7 @@ export function searchKnn(
   }
 
   const rawRows = db.query(sql).all(...params);
-  const rows = (Array.isArray(rawRows) ? rawRows : []).filter((row) => isSearchResultRow(row));
+  const rows = (Array.isArray(rawRows) ? rawRows : []).filter(isSearchResultRow);
 
   return rows.map((r) => ({
     chunk_id: r.rowid,

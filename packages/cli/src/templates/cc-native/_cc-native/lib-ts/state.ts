@@ -6,12 +6,11 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-
+import { atomicWrite } from "../../_shared/lib-ts/base/atomic-write.js";
+import { logInfo, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
+import { nowIso } from "../../_shared/lib-ts/base/utils.js";
 import { validatePlanPath } from "./constants.js";
 import type { IterationState, IterationEntry } from "./types.js";
-import { atomicWrite } from "../../_core/lib-ts/runtime/atomic-write.js";
-import { logInfo, logWarn, logError } from "../../_core/lib-ts/runtime/logger.js";
-import { nowIso } from "../../_core/lib-ts/runtime/utils.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -73,11 +72,11 @@ export function loadState(planPath: string): Record<string, unknown> | null {
     }
 
     return state;
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes("Invalid plan path")) {
-      logError("state", `SECURITY: Invalid plan path: ${error}`);
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message.includes("Invalid plan path")) {
+      logError("state", `SECURITY: Invalid plan path: ${e}`);
     } else {
-      logError("state", `Failed to load state: ${error}`);
+      logError("state", `Failed to load state: ${e}`);
     }
     return null;
   }
@@ -110,11 +109,11 @@ export function saveStateToPlan(
     }
 
     return true;
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes("Invalid plan path")) {
-      logError("state", `SECURITY: Invalid plan path: ${error}`);
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message.includes("Invalid plan path")) {
+      logError("state", `SECURITY: Invalid plan path: ${e}`);
     } else {
-      logError("state", String(error));
+      logError("state", String(e));
     }
     return false;
   }
@@ -132,12 +131,12 @@ export function deleteState(planPath: string): boolean {
       logInfo("state", `Deleted state file: ${stateFile}`);
     }
     return true;
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes("Invalid plan path")) {
-      logError("state", `SECURITY: Invalid plan path in delete: ${error}`);
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message.includes("Invalid plan path")) {
+      logError("state", `SECURITY: Invalid plan path in delete: ${e}`);
       return false;
     }
-    logWarn("state", `Failed to delete state file: ${error}`);
+    logWarn("state", `Failed to delete state file: ${e}`);
     return false;
   }
 }
@@ -178,7 +177,6 @@ export function getIterationState(
     passStreaks: {},
     lastPlanHash: "",
     lastPlanPath: "",
-    sessionId: "",
   };
 }
 
@@ -210,7 +208,7 @@ export function shouldContinueIterating(
   verdict: string,
   config?: Record<string, unknown>,
 ): boolean {
-  const {current} = iteration;
+  const current = iteration.current;
   const maxIter = iteration.max;
 
   // At or past max iterations
@@ -254,8 +252,8 @@ export function loadIterationState(reviewsDir: string): IterationState | null {
   if (!fs.existsSync(iterationFile)) return null;
   try {
     return JSON.parse(fs.readFileSync(iterationFile, "utf-8")) as IterationState;
-  } catch (error) {
-    logError("state", `Failed to load iteration state: ${error}`);
+  } catch (e) {
+    logError("state", `Failed to load iteration state: ${e}`);
     return null;
   }
 }
@@ -270,8 +268,8 @@ export function saveIterationState(reviewsDir: string, state: IterationState): b
     const toWrite = { ...state, schema_version: "1.0.0" };
     fs.writeFileSync(iterationFile, JSON.stringify(toWrite, null, 2), "utf-8");
     return true;
-  } catch (error) {
-    logError("state", `Failed to save iteration state: ${error}`);
+  } catch (e) {
+    logError("state", `Failed to save iteration state: ${e}`);
     return false;
   }
 }

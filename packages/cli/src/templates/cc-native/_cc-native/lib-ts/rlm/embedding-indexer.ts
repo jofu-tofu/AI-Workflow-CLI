@@ -13,17 +13,14 @@
  *   bun embedding-indexer.ts --stats                    # Show index statistics
  */
 
-import { readFileSync, existsSync, readdirSync } from "node:fs";
-import { readdir } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
-
+import { readdir } from "fs/promises";
+import { readFileSync, existsSync, readdirSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 import { z } from "zod";
-
-import { logInfo, logWarn, logError } from "./logger.js";
+import { RLM_INDEX_DIR, type SessionIndex } from "./types.js";
+import { logInfo, logWarn, logError, logDebug } from "./logger.js";
 import { checkOllamaHealth, embed } from "./ollama-client.js";
-import { loadTranscript } from "./transcript-loader.js";
-import { RLM_INDEX_DIR } from "./types.js";
 import {
   openVectorDb,
   insertChunks,
@@ -33,6 +30,7 @@ import {
   getStats,
   type ChunkRow,
 } from "./vector-store.js";
+import { loadTranscript } from "./transcript-loader.js";
 
 const HOOK_NAME = "rlm_embed_idx";
 const MAX_EMBED_CHARS = 8000;
@@ -66,12 +64,10 @@ const projectFilter = projectArg ? projectArg.split("=")[1] : null;
 if (isStats) {
   showStats();
 } else if (isBatch) {
-  try {
-    await runBatch();
-  } catch (error) {
-    logError(HOOK_NAME, `Fatal: ${error}`, { stderr: true });
+  runBatch().catch((e) => {
+    logError(HOOK_NAME, `Fatal: ${e}`, { stderr: true });
     process.exitCode = 1;
-  }
+  });
 } else {
   process.stderr.write(
     "Usage: bun embedding-indexer.ts --batch [--limit=N] [--project=name]\n" +
@@ -236,9 +232,9 @@ async function runBatch(): Promise<void> {
           if (embedded % 50 === 0) {
             logInfo(HOOK_NAME, `Progress: ${embedded} sessions embedded`, { stderr: true });
           }
-        } catch (error) {
+        } catch (e) {
           errors++;
-          logWarn(HOOK_NAME, `Error embedding ${indexFile}: ${error}`);
+          logWarn(HOOK_NAME, `Error embedding ${indexFile}: ${e}`);
         }
       }
 
