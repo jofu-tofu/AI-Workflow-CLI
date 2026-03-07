@@ -50,21 +50,22 @@ npm test
 
 | Location | Purpose | When to Modify |
 |----------|---------|----------------|
-| `.aiwcli/` | Runtime hooks and libraries | During development |
-| `packages/cli/src/templates/` | Distribution templates | After `.aiwcli/` changes |
+| `.aiwcli/` | Core runtime hooks and libraries | During development for shared/core code |
+| `packages/cli/src/templates/` | Distribution templates and canonical method templates | During template/method development |
 
-**Synchronization Rule:** Changes to `.aiwcli/` must be synchronized to `packages/cli/src/templates/`. This ensures new project initializations receive updates.
+**Synchronization Rule:** Changes to `.aiwcli/_core` must be synchronized to `packages/cli/src/templates/core/`. Method templates such as `packages/cli/src/templates/cc-native/` are edited directly in template source.
 
 ### Template Synchronization
 
-**When modifying hooks, library code, or settings in `.aiwcli/`:**
+**When modifying shared core hooks, library code, or settings in `.aiwcli/_core`:**
 
 Runtime files execute from `.aiwcli/_core/` in this repo. Template source lives under `packages/cli/src/templates/core/` and is normalized to `_core` during install.
+
+CC-native is different: `packages/cli/src/templates/cc-native/_cc-native` is the canonical source for the packaged method runtime. Do not treat repo-root `.aiwcli/_cc-native` as a build input.
 
 **Files that need synchronization:**
 - `.aiwcli/_core/hooks-ts/*.ts` → `packages/cli/src/templates/core/hooks-ts/`
 - `.aiwcli/_core/lib-ts/**/*.ts` → `packages/cli/src/templates/core/lib-ts/`
-- `.aiwcli/_cc-native/**` → `packages/cli/src/templates/cc-native/_cc-native/`
 - `.aiwcli/_core/skills/handoff-system/**` → `packages/cli/src/templates/core/skills/handoff-system/`
 - `.aiwcli/_core/skills/meta-plan/**` → `packages/cli/src/templates/core/skills/meta-plan/`
 - `.aiwcli/_core/skills/codex/**` → `packages/cli/src/templates/core/skills/codex/`
@@ -89,16 +90,13 @@ Runtime files execute from `.aiwcli/_core/` in this repo. Template source lives 
 - Adding/changing library functions used by hooks
 - Updating settings.json hook configurations
 - Moving runtime files inside `.aiwcli/_core/`
-- Updating `.aiwcli/_cc-native/` runtime files that are mirrored into the cc-native template
+- Changing template-owned method code under `packages/cli/src/templates/cc-native/`
 
 **Sync commands:**
 
 ```bash
-# Sync cc-native runtime tree into its template mirror
-cd packages/cli
-npm run sync:cc-native
-
 # Sync extracted shared library modules into CLI and template wrappers
+cd packages/cli
 npm run sync:shared-lib
 ```
 
@@ -156,18 +154,15 @@ npm run sync:shared-lib
 │       ├── codex/              # Codex pane launcher skill
 │       └── meta-plan/          # Prompt amplification for complex problems
 │
-└── _cc-native/                 # Claude Code method-specific code
-    ├── hooks/
-    │   ├── cc-native-plan-review.ts         # Multi-step plan review (async)
-    │   ├── mark_questions_asked.ts          # Marks questions-asked state
-    │   ├── enhance_plan_post_subagent.ts    # Post-subagent plan enhancement
-    │   ├── enhance_plan_post_write.ts       # Post-write plan enhancement
-    │   ├── plan_questions_early.ts          # Phase A clarification prompt
-    │   └── validate_task_prompt.ts          # Task creation prompt validation
-    ├── lib-ts/                 # CC-native shared library
-    ├── artifacts/              # Review artifact generation
-    ├── plan-review/            # Multi-agent plan review pipeline
-    └── agents/                 # Agent spec files
+packages/cli/src/templates/cc-native/
+├── _cc-native/                 # Canonical CC-Native method runtime/template source
+│   ├── hooks/                  # Installed into .aiwcli/_cc-native/hooks in user projects
+│   ├── lib-ts/                 # CC-Native shared library
+│   ├── artifacts/              # Review artifact generation
+│   ├── plan-review/            # Multi-agent plan review pipeline
+│   ├── agents/                 # Agent spec files
+│   └── cc-native.config.json   # Plan review configuration
+└── .claude/settings.json       # Hook wiring for installed CC-Native projects
 
 _output/
 ├── index.json                   # Global context cache
@@ -216,7 +211,7 @@ Hooks are TypeScript scripts run via Bun, triggered by Claude Code lifecycle eve
 - `codex_explorer.ts` — Codex explorer agent integration
 - `lint_after_edit.ts` — Post-edit lint dispatching
 
-**CC-Native Hooks** (`.aiwcli/_cc-native/hooks/` — 6 hooks):
+**CC-Native Hooks** (`packages/cli/src/templates/cc-native/_cc-native/hooks/` source, installed as `.aiwcli/_cc-native/hooks/`):
 - `cc-native-plan-review.ts` — Multi-step plan review (CLI + agents)
 - `mark_questions_asked.ts` — Marks questions-asked state after user answers
 - `enhance_plan_post_subagent.ts` — Post-subagent plan enhancement
@@ -230,16 +225,16 @@ Hooks are TypeScript scripts run via Bun, triggered by Claude Code lifecycle eve
 
 ### Modifying Hooks
 
-1. Edit the hook in `.aiwcli/_core/hooks-ts/` or `.aiwcli/_cc-native/hooks/`
+1. Edit the hook in `.aiwcli/_core/hooks-ts/` for shared/core behavior, or `packages/cli/src/templates/cc-native/_cc-native/hooks/` for CC-Native
 2. Test by running Claude Code with the modified hook
-3. Synchronize to `packages/cli/src/templates/`
+3. Synchronize core changes to `packages/cli/src/templates/` when applicable
 4. Run tests: `cd packages/cli && npm test`
 
 ### Modifying Libraries
 
-1. Edit the library in `.aiwcli/_core/lib-ts/` or `.aiwcli/_cc-native/lib-ts/`
+1. Edit the library in `.aiwcli/_core/lib-ts/` for shared/core code, or `packages/cli/src/templates/cc-native/_cc-native/lib-ts/` for CC-Native
 2. Test dependent hooks manually
-3. Synchronize to `packages/cli/src/templates/`
+3. Synchronize core changes to `packages/cli/src/templates/` when applicable
 4. Run tests: `cd packages/cli && npm test`
 
 ### Adding New Hooks

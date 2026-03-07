@@ -4,6 +4,8 @@
 
 CC-Native uses Claude Code's native tools with minimal workflow overhead. Plan review runs automatically via external CLIs (Codex/Gemini) and parallel Claude Code agents when exiting plan mode.
 
+This directory is the canonical source for the packaged CC-Native template. Build/package steps copy it directly; they do not mirror from a repo-root `.aiwcli/_cc-native`.
+
 ---
 
 ## Directory Structure
@@ -14,8 +16,11 @@ packages/cli/src/templates/cc-native/
 │   ├── workflows/*.md        # Workflow definitions
 │   ├── hooks/                # Hook scripts (TypeScript, run via bun)
 │   │   ├── cc-native-plan-review.ts   # Unified plan review (CLI + agents)
-│   │   ├── add_plan_context.ts        # Clarifying questions offer
-│   │   └── plan_questions_early.ts    # Phase A clarification prompt
+│   │   ├── plan_questions_early.ts    # Phase A clarification prompt
+│   │   ├── mark_questions_asked.ts    # Tracks whether clarification happened
+│   │   ├── enhance_plan_post_write.ts # Post-write plan enhancement
+│   │   ├── enhance_plan_post_subagent.ts # Post-subagent plan enhancement
+│   │   └── validate_task_prompt.ts    # Task prompt validation gate
 │   ├── lib-ts/               # CC-Native specific TypeScript libraries
 │   │   ├── cc-native-state.ts # State management
 │   │   ├── config.ts          # Configuration loading
@@ -233,8 +238,11 @@ Hook scripts live in `_cc-native/hooks/`. IDE-specific wiring in `.claude/settin
 | Hook | Trigger | Purpose |
 |------|---------|---------|
 | `cc-native-plan-review.ts` | ExitPlanMode | Unified review: CLI + orchestrator + agents |
-| `add_plan_context.ts` | PostToolUse:AskUserQuestion, PreToolUse:Task | Mark questions asked; nudge Plan subagent |
+| `mark_questions_asked.ts` | PostToolUse:AskUserQuestion | Mark that clarification questions were asked |
+| `enhance_plan_post_write.ts` | PostToolUse:Write | Nudge plan improvement after write-heavy work |
+| `enhance_plan_post_subagent.ts` | PostToolUse:Task | Nudge plan improvement after subagent work |
 | `plan_questions_early.ts` | UserPromptSubmit | Injects Phase A clarification in plan mode |
+| `validate_task_prompt.ts` | PreToolUse:Task | Blocks vague or non-self-contained Task prompts |
 
 ### Claude Feedback Mechanism
 
@@ -302,4 +310,3 @@ Each selected agent:
 | 1.2.0 | Added multi-agent plan review via Claude Code agents, reordered hooks (archive last) |
 | 1.1.0 | Added plan review via Codex/Gemini with Claude feedback, config.json |
 | 1.0.0 | Initial release with fix, research, implement workflows |
-
