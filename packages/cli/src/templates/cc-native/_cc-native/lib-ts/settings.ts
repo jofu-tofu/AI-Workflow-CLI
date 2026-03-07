@@ -72,7 +72,7 @@ export const DEFAULT_COMPLEXITY_CATEGORIES = ["code", "infrastructure", "documen
 export const DEFAULT_MODELS_CONFIG: ModelsConfig = {
   providers: {
     claude: { enabled: true, models: ["sonnet"] },
-    codex: { enabled: true, models: ["gpt-5.4-low"] },
+    codex: { enabled: true, models: ["gpt-5.4"], reasoning_effort: "low" },
   },
 };
 
@@ -150,6 +150,7 @@ export function loadModelsConfig(settings: Record<string, unknown>): ModelsConfi
     providers[name] = {
       enabled: c.enabled !== false,
       models: Array.isArray(c.models) ? (c.models as string[]).filter(Boolean) : [],
+      ...(typeof c.reasoning_effort === "string" ? { reasoning_effort: c.reasoning_effort } : {}),
     };
   }
   return { providers };

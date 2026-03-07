@@ -133,7 +133,7 @@ export function assignModelsToAgents(
   return agents.map(agent => {
     const modelIdx = Math.floor(randomFn() * providerConfig.models.length);
     const model = providerConfig.models[modelIdx] ?? providerConfig.models[0] ?? agent.model;
-    return { ...agent, provider: providerName, model };
+    return { ...agent, provider: providerName, model, reasoning_effort: providerConfig.reasoning_effort };
   });
 }
 

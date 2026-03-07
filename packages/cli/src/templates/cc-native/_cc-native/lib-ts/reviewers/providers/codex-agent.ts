@@ -56,6 +56,7 @@ export class CodexAgent extends BaseCliAgent<ReviewerResult> {
 
     const cmdArgs = ["exec", "--sandbox", "read-only"];
     if (this.agent.model) cmdArgs.push("--model", this.agent.model);
+    if (this.agent.reasoning_effort) cmdArgs.push("-c", `model_reasoning_effort="${this.agent.reasoning_effort}"`);
     cmdArgs.push("--output-schema", schemaPath, "-o", outPath, "-");
 
     return cmdArgs;

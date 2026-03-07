@@ -127,6 +127,7 @@ export interface AgentConfig {
   categories: string[];
   description: string;
   system_prompt: string; // Markdown body content for --system-prompt
+  reasoning_effort?: string; // e.g. "low" | "medium" | "high" — passed from ProviderConfig
 }
 
 /** Configuration for the plan orchestrator */
@@ -140,6 +141,7 @@ export interface OrchestratorConfig {
 export interface ProviderConfig {
   enabled: boolean;
   models: string[];
+  reasoning_effort?: string; // e.g. "low" | "medium" | "high" — applied to all models in this provider
 }
 
 /** Model provider pool configuration */

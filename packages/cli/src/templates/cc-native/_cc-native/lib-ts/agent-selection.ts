@@ -79,7 +79,7 @@ export function assignModelsToAgents(
     const [providerName, providerConfig] = entry;
     const modelIdx = Math.floor(Math.random() * providerConfig.models.length);
     const model = providerConfig.models[modelIdx] ?? providerConfig.models[0] ?? agent.model;
-    return { ...agent, provider: providerName, model };
+    return { ...agent, provider: providerName, model, reasoning_effort: providerConfig.reasoning_effort };
   });
 }
 
