@@ -5,7 +5,7 @@
 
 import * as path from "node:path";
 
-import { logInfo } from "../../_shared/lib-ts/base/logger.js";
+import { logInfo } from "../../_core/lib-ts/runtime/logger.js";
 
 import type {
   AgentConfig,

@@ -5,7 +5,7 @@
  */
 
 import { spawn } from "child_process";
-import { shellQuoteWin } from "../../_shared/lib-ts/base/subprocess-utils.js";
+import { shellQuoteWin } from "../../_core/lib-ts/runtime/subprocess-utils.js";
 
 const DEBATE_SCHEMA = {
   type: "object",

@@ -4,7 +4,7 @@
  * See cc-native-plan-review-spec.md §4.8
  */
 
-import { logInfo, logWarn } from "../../_shared/lib-ts/base/logger.js";
+import { logInfo, logWarn } from "../../_core/lib-ts/runtime/logger.js";
 import type { AgentConfig, OrchestratorConfig, OrchestratorResult } from "./types.js";
 import { OrchestratorClaudeAgent } from "./reviewers/providers/orchestrator-claude-agent.js";
 

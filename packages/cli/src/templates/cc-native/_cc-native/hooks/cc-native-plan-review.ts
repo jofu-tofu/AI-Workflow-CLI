@@ -18,9 +18,9 @@ import {
   logWarn,
   emitContext,
   emitContextAndBlock,
-} from "../../_shared/lib-ts/base/hook-utils.js";
-import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
-import { getProjectRoot, getAiwcliDir } from "../../_shared/lib-ts/base/constants.js";
+} from "../../_core/lib-ts/hooks/hook-utils.js";
+import { isInternalCall } from "../../_core/lib-ts/runtime/subprocess-utils.js";
+import { getProjectRoot, getAiwcliDir } from "../../_core/lib-ts/runtime/constants.js";
 import { runReviewPipeline } from "../lib-ts/review-pipeline.js";
 import type { PipelineResult } from "../lib-ts/types.js";
 

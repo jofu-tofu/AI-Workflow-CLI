@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { AgentConfig, OrchestratorConfig, OrchestratorResult } from "../types.js";
 
 // Mock subprocess-utils to avoid actual CLI invocations
-vi.mock("../../../_shared/lib-ts/base/subprocess-utils.js", () => ({
+vi.mock("../../../_core/lib-ts/runtime/subprocess-utils.js", () => ({
   findExecutable: vi.fn(),
   execFileAsync: vi.fn(),
   getInternalSubprocessEnv: vi.fn(() => ({})),
@@ -17,7 +17,7 @@ vi.mock("../../../_shared/lib-ts/base/subprocess-utils.js", () => ({
 }));
 
 // Mock logger to suppress output
-vi.mock("../../../_shared/lib-ts/base/logger.js", () => ({
+vi.mock("../../../_core/lib-ts/runtime/logger.js", () => ({
   logDebug: vi.fn(),
   logInfo: vi.fn(),
   logWarn: vi.fn(),
@@ -92,7 +92,7 @@ describe("OrchestratorClaudeAgent via runOrchestrator", () => {
   let execFileAsync: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
-    const subproc = await import("../../../_shared/lib-ts/base/subprocess-utils.js");
+    const subproc = await import("../../../_core/lib-ts/runtime/subprocess-utils.js");
     findExecutable = subproc.findExecutable as ReturnType<typeof vi.fn>;
     execFileAsync = subproc.execFileAsync as ReturnType<typeof vi.fn>;
   });

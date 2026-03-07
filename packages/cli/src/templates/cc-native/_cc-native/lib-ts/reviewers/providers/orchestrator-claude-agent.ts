@@ -3,8 +3,8 @@
  * Analyzes plan complexity and selects reviewer agents via Claude CLI.
  */
 
-import { logDebug } from "../../../../_shared/lib-ts/base/logger.js";
-import { shellQuoteWin } from "../../../../_shared/lib-ts/base/subprocess-utils.js";
+import { logDebug } from "../../../../_core/lib-ts/runtime/logger.js";
+import { shellQuoteWin } from "../../../../_core/lib-ts/runtime/subprocess-utils.js";
 import { parseCliOutput } from "../../cli-output-parser.js";
 import type { AgentConfig, OrchestratorResult, ComplexityCategory } from "../../types.js";
 import { BaseCliAgent } from "../base/base-agent.js";

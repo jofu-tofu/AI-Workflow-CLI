@@ -17,8 +17,8 @@ import {
   runHook,
   logInfo,
   emitContext,
-} from "../../_shared/lib-ts/base/hook-utils.js";
-import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
+} from "../../_core/lib-ts/hooks/hook-utils.js";
+import { isInternalCall } from "../../_core/lib-ts/runtime/subprocess-utils.js";
 import { getPlanQualityReviewContext } from "../lib-ts/plan-enhancement.js";
 import * as path from "path";
 import * as os from "os";

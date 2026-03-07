@@ -6,8 +6,8 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { logDebug, logWarn } from "../../../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv, execFileAsync } from "../../../../_shared/lib-ts/base/subprocess-utils.js";
+import { logDebug, logWarn } from "../../../../_core/lib-ts/runtime/logger.js";
+import { getInternalSubprocessEnv, execFileAsync } from "../../../../_core/lib-ts/runtime/subprocess-utils.js";
 import { parseJsonMaybe, coerceToReview } from "../../json-parser.js";
 import { debugLog, debugRaw } from "../../debug.js";
 import type { ReviewerResult } from "../../types.js";

@@ -5,9 +5,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { atomicWrite } from "../../../_shared/lib-ts/base/atomic-write.js";
-import { logDebug, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
-import { sanitizeFilename } from "../../../_shared/lib-ts/base/constants.js";
+import { atomicWrite } from "../../../_core/lib-ts/runtime/atomic-write.js";
+import { logDebug, logWarn, logError } from "../../../_core/lib-ts/runtime/logger.js";
+import { sanitizeFilename } from "../../../_core/lib-ts/runtime/constants.js";
 import { ENABLE_ROBUST_PLAN_WRITES } from "../constants.js";
 import type { CombinedReviewResult, CorroborationResult } from "../types.js";
 import {

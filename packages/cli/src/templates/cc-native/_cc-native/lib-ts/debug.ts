@@ -8,7 +8,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { hookLog } from "../../_shared/lib-ts/base/logger.js";
+import { hookLog } from "../../_core/lib-ts/runtime/logger.js";
 
 /** Feature flag — set CCNATIVE_DEBUG_DISABLE=1 to turn off */
 const DEBUG_ENABLED = !["1", "true", "yes"].includes(

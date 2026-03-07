@@ -15,7 +15,7 @@ export {
   writeStateJson,
   writeIndexJson,
   freezeTime,
-} from "../../../_shared/lib-ts/__tests__/helpers.js";
+} from "../../../_core/lib-ts/__tests__/helpers.js";
 
 import type {
   ReviewData,

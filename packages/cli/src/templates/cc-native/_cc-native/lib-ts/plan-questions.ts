@@ -5,7 +5,7 @@
  */
 
 import * as path from "node:path";
-import { logInfo, logWarn, logError } from "../../_shared/lib-ts/base/logger.js";
+import { logInfo, logWarn, logError } from "../../_core/lib-ts/runtime/logger.js";
 import { aggregateAgents } from "./aggregate-agents.js";
 import { runAgentReview } from "./reviewers/index.js";
 import { QUESTIONS_SCHEMA } from "./reviewers/schemas.js";
@@ -25,7 +25,7 @@ export interface PlanQuestionsResult {
 // Provider assignment (local copy — avoids circular import from hook)
 // ---------------------------------------------------------------------------
 
-import { findExecutable } from "../../_shared/lib-ts/base/subprocess-utils.js";
+import { findExecutable } from "../../_core/lib-ts/runtime/subprocess-utils.js";
 
 function assignProvider(agent: AgentConfig): AgentConfig {
   // Default to claude provider with the agent's configured model

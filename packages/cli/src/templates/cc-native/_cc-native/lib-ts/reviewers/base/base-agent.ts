@@ -4,8 +4,8 @@
  * Provider-specific implementations (Claude, Codex, Gemini) extend this class.
  */
 
-import { logDebug, logInfo, logWarn, logError } from "../../../../_shared/lib-ts/base/logger.js";
-import { getInternalSubprocessEnv, findExecutable, execFileAsync } from "../../../../_shared/lib-ts/base/subprocess-utils.js";
+import { logDebug, logInfo, logWarn, logError } from "../../../../_core/lib-ts/runtime/logger.js";
+import { getInternalSubprocessEnv, findExecutable, execFileAsync } from "../../../../_core/lib-ts/runtime/subprocess-utils.js";
 import { debugLog, debugRaw } from "../../debug.js";
 import type { AgentConfig } from "../../types.js";
 

@@ -3,7 +3,7 @@
  * See cc-native-plan-review-spec.md §4.10-4.11
  */
 
-import { logDebug, logWarn } from "../../_shared/lib-ts/base/logger.js";
+import { logDebug, logWarn } from "../../_core/lib-ts/runtime/logger.js";
 import type { ReviewData, Verdict } from "./types.js";
 
 /**

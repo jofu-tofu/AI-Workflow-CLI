@@ -4,7 +4,7 @@
  * See cc-native-plan-review-spec.md §4.10
  */
 
-import { logWarn } from "../../../_shared/lib-ts/base/logger.js";
+import { logWarn } from "../../../_core/lib-ts/runtime/logger.js";
 import type { AgentConfig, ReviewerResult, ReviewOptions } from "../types.js";
 import { makeResult } from "./types.js";
 import type { Reviewer } from "./types.js";

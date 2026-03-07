@@ -4,7 +4,7 @@ import * as path from "node:path";
 import {
   createTempDir, cleanupTempDir, createSampleState, createSampleIndex,
   writeStateJson, writeIndexJson, createSampleHookInput, runHookSubprocess,
-} from "../../../../_shared/lib-ts/__tests__/helpers.js";
+} from "../../../../_core/lib-ts/__tests__/helpers.js";
 
 const HOOK_PATH = path.resolve(".aiwcli/_cc-native/hooks/plan_questions_early.ts");
 

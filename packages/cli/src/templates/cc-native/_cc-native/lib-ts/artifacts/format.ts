@@ -3,7 +3,7 @@
  * Extracted from artifacts.ts — no file I/O.
  */
 
-import { sanitizeFilename } from "../../../_shared/lib-ts/base/constants.js";
+import { sanitizeFilename } from "../../../_core/lib-ts/runtime/constants.js";
 import type {
   CombinedReviewResult,
   ReviewerResult,

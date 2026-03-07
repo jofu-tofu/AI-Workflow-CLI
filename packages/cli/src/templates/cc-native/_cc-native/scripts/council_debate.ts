@@ -6,7 +6,7 @@
 
 import { runAgentReview } from "../lib-ts/reviewers/agent.js";
 import type { AgentConfig } from "../lib-ts/reviewers/types.js";
-import { logInfo, logError } from "../../_shared/lib-ts/base/logger.js";
+import { logInfo, logError } from "../../_core/lib-ts/runtime/logger.js";
 
 // Debate schema - each agent responds with their perspective
 const DEBATE_SCHEMA = {

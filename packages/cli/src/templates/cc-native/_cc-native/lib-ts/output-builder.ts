@@ -3,7 +3,7 @@
  * Extracted from cc-native-plan-review.ts.
  */
 
-import { logInfo } from "../../_shared/lib-ts/base/logger.js";
+import { logInfo } from "../../_core/lib-ts/runtime/logger.js";
 
 import type {
   ReviewerResult,

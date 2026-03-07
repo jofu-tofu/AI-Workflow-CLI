@@ -3,7 +3,7 @@
  * Uses claude CLI with --json-schema and --system-prompt flags.
  */
 
-import { shellQuoteWin } from "../../../../_shared/lib-ts/base/subprocess-utils.js";
+import { shellQuoteWin } from "../../../../_core/lib-ts/runtime/subprocess-utils.js";
 import { parseCliOutput } from "../../cli-output-parser.js";
 import { coerceToReview } from "../../json-parser.js";
 import type { ReviewerResult } from "../../types.js";
