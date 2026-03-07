@@ -3,6 +3,7 @@
  * Extracted from codex skill to avoid duplication across agent launch scripts.
  */
 
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import path from "node:path";
@@ -20,6 +21,9 @@ import type { ContextState } from "../types.js";
 export const POLL_INTERVAL_MS = 2000;
 export const POLL_TIMEOUT_MS = 3000;
 export const WAIT_TIMEOUT_MS_DEFAULT = 14_400_000;
+
+/** Well-known directory for agent output files, keyed by tmux session. */
+const AGENT_OUTPUT_DIR_NAME = "aiw-agent-output";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -43,10 +47,144 @@ export function sleep(ms: number): Promise<void> {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Session Key — multi-backend multiplexer identity
+// ---------------------------------------------------------------------------
+
+/**
+ * Derive a stable session key that is shared by ALL panes in the same
+ * multiplexer session.  Works across backends:
+ *
+ *  tmux  → parse $TMUX ("<socket>,<pid>,<idx>") → "tmux-<socket-name>-<pid>"
+ *  psmux → query `psmux display-message -p '#{session_name}'` → "psmux-<name>"
+ *  none  → null  (caller should fall back to project-root key)
+ */
+export function getSessionKey(): string | null {
+  // --- tmux -----------------------------------------------------------------
+  const tmuxEnv = process.env.TMUX;
+  if (tmuxEnv) {
+    const parts = tmuxEnv.split(",");
+    if (parts.length >= 2) {
+      const socketName = path.basename(parts[0]); // e.g. "default"
+      return `tmux-${socketName}-${parts[1]}`;
+    }
+  }
+
+  // --- psmux ----------------------------------------------------------------
+  // $PSMUX_PANE is set by createSession() and inherited by split panes.
+  // psmux supports tmux-compatible display-message, so we can query the
+  // session name synchronously (fast local call).
+  if (process.env.PSMUX_PANE || process.platform === "win32") {
+    try {
+      const psmuxPath = findExecutable("psmux");
+      if (psmuxPath) {
+        const name = execFileSync(psmuxPath, [
+          "display-message", "-p", "#{session_name}",
+        ], { encoding: "utf8", timeout: 3000 }).trim();
+        if (name) return `psmux-${name}`;
+      }
+    } catch {
+      // Not inside a psmux session, or psmux not available
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Simple deterministic hash for project root paths.
+ * Produces a short alphanumeric suffix for directory names.
+ */
+function simpleHash(str: string): string {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h).toString(36);
+}
+
+/**
+ * Get the well-known output directory for the current session.
+ * Creates the directory if it doesn't exist.
+ *
+ * Resolution order:
+ *  1. Multiplexer session key (tmux/psmux) — shared across all panes
+ *  2. Project root fallback — used for exec/window modes where there is
+ *     no multiplexer session context.  Keyed on project dir so concurrent
+ *     runs in different projects don't collide.
+ *
+ * Pattern: `$TMPDIR/aiw-agent-output/<session-key>/`
+ */
+export function getAgentOutputDir(projectRoot?: string): string {
+  const sessionKey = getSessionKey();
+  const key = sessionKey
+    ?? `project-${path.basename(projectRoot ?? process.cwd())}-${simpleHash(projectRoot ?? process.cwd())}`;
+  const dir = path.join(os.tmpdir(), AGENT_OUTPUT_DIR_NAME, key);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch { /* best-effort */ }
+  return dir;
+}
+
+/**
+ * Sanitize an identifier for use in filenames.
+ * tmux/psmux pane IDs `%42` → `p42`, other special chars → `_`.
+ */
+function sanitizeId(id: string): string {
+  return id.replace(/^%/, "p").replaceAll(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+/**
+ * Get the well-known (predictable) path for an agent task's summary.
+ *
+ * With taskId: `<outputDir>/<prefix>-<taskId>.md`   (concurrency-safe, direct lookup)
+ * Without:     `<outputDir>/<prefix>-latest.md`      (single-agent fallback)
+ *
+ * The caller generates the taskId before launching the agent, passes it via
+ * `--task-id`, and can read the exact file path afterward without needing the
+ * background task's stdout.  Multiple concurrent agents use different taskIds.
+ */
+export function getWellKnownSummaryPath(
+  prefix: string,
+  taskId?: string | null,
+  projectRoot?: string,
+): string {
+  const dir = getAgentOutputDir(projectRoot);
+  const suffix = taskId ? sanitizeId(taskId) : "latest";
+  return path.join(dir, `${prefix}-${suffix}.md`);
+}
+
+/**
+ * List all well-known summary files for a given agent prefix.
+ * Returns file paths sorted by mtime (newest first).
+ * Useful for discovering all completed task summaries.
+ */
+export function listWellKnownSummaries(prefix: string, projectRoot?: string): string[] {
+  const dir = getAgentOutputDir(projectRoot);
+  try {
+    const entries = fs.readdirSync(dir)
+      .filter((name) => name.startsWith(`${prefix}-`) && name.endsWith(".md"));
+    const withMtime = entries.map((name) => {
+      const fullPath = path.join(dir, name);
+      try {
+        return { path: fullPath, mtimeMs: fs.statSync(fullPath).mtimeMs };
+      } catch {
+        return null;
+      }
+    }).filter((e): e is { path: string; mtimeMs: number } => e !== null);
+    withMtime.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    return withMtime.map((e) => e.path);
+  } catch {
+    return [];
+  }
+}
+
 export function persistSummary(
   summary: string,
   prefix: string,
   sessionId?: string,
+  taskId?: string | null,
+  projectRoot?: string,
 ): string | null {
   try {
     const suffix = sessionId
@@ -57,6 +195,16 @@ export function persistSummary(
       `${prefix}-summary-${Date.now()}-${suffix}.md`,
     );
     fs.writeFileSync(filePath, summary, "utf8");
+
+    // Also write to well-known path so the calling session can find it
+    // without needing the background task's stdout.
+    try {
+      const wellKnown = getWellKnownSummaryPath(prefix, taskId, projectRoot);
+      fs.writeFileSync(wellKnown, summary, "utf8");
+    } catch (wkError) {
+      logWarn("agent-launcher", `Failed to write well-known summary: ${String(wkError)}`);
+    }
+
     return filePath.replaceAll("\\", "/");
   } catch (error) {
     logWarn("agent-launcher", `Failed to persist summary: ${String(error)}`);

@@ -33,6 +33,7 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/codex/scripts/launch-codex
 - `--model <alias|tier|id>` — Aliases: `spark` → `gpt-5.3-codex-spark`, `codex` → `gpt-5.4`, `gpt` → `gpt-5.4`. Tiers: `fast`/`standard`/`smart` (resolved via `resolveModelForProvider()`). Or a full model ID.
 - `--sandbox <mode>` — `read-only`, `workspace-write`, or `danger-full-access`. Default is `danger-full-access`.
 - `--prompt <text>` — append extra instructions. In `plan` and `--file` modes, these are embedded into a bootstrap temp file alongside the target path.
+- `--task-id <id>` — Caller-provided task ID for direct summary file lookup. If omitted, auto-generated as `<timestamp>-<pid>`. Enables the caller to know the exact summary file path without reading background task stdout.
 - `--no-yolo` — Disable YOLO mode (`--dangerously-bypass-approvals-and-sandbox`).
 - `--no-watch` — Disable watch/summarize mode.
 
@@ -54,10 +55,14 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/codex/scripts/launch-codex
   3. Transcript-line fallback
   4. Static `Summary unavailable` message
 - Summary persistence:
-  - `persistSummary()` in `codex-watcher.ts` writes to `os.tmpdir()/codex-summary-<ts>-<id>.md`
-  - Called before stdout output — temp file survives even if background task capture fails
-  - Best-effort: logs warning on failure, returns null, stdout output still proceeds
-  - File path printed as `[summary_file:<path>]` marker for automated retrieval
+  - `persistSummary()` in `agent-launcher.ts` writes to `os.tmpdir()/codex-summary-<ts>-<id>.md` (unique per run)
+  - Also writes to well-known path: `$TMPDIR/aiw-agent-output/<session-key>/codex-<taskId>.md`
+  - Task ID is caller-provided via `--task-id` or auto-generated as `<timestamp>-<pid>`
+  - Caller can compute the exact path via `getWellKnownSummaryPath("codex", taskId)` — no discovery needed
+  - Multiple concurrent agents use different task IDs, so they don't clobber each other
+  - Session key resolution: tmux (`$TMUX`), psmux (`psmux display-message`), exec fallback (project-root hash)
+  - Task ID + summary path printed early (before agent runs) so even partial stdout capture is useful
+  - Best-effort: logs warning on failure, stdout output still proceeds
 
 **Design decisions:**
 - Prompt is delivered at launch time (no tmux buffer paste/capture workflow)

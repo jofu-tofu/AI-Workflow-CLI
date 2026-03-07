@@ -13,6 +13,7 @@ import path from "node:path";
 import { findLatestPlan } from "../../../lib-ts/context/plan-manager.js";
 import {
   findLatestPlanByMtime,
+  getWellKnownSummaryPath,
   resolveContextForLaunch,
   writeFileRefPromptFile,
   writeInlinePromptFile,
@@ -61,6 +62,7 @@ if (rawArgs.length === 0) {
 let modelFlag: string | undefined;
 let contextFlag: string | undefined;
 let extraPrompt: string | undefined;
+let taskId: string | undefined;
 let watch = true;
 const args: string[] = [];
 
@@ -71,6 +73,8 @@ for (let i = 0; i < rawArgs.length; i++) {
     contextFlag = rawArgs[++i];
   } else if (rawArgs[i] === "--prompt" && i + 1 < rawArgs.length) {
     extraPrompt = rawArgs[++i];
+  } else if (rawArgs[i] === "--task-id" && i + 1 < rawArgs.length) {
+    taskId = rawArgs[++i];
   } else if (rawArgs[i] === "--no-watch") {
     watch = false;
   } else if (rawArgs[i] === "--prompt") {
@@ -160,9 +164,18 @@ if (args[0] === "plan") {
 // ---------------------------------------------------------------------------
 
 const launchCwd = process.env.AIW_CALLER_CWD?.trim() || process.cwd();
+
+// Generate task ID if not provided by caller.
+if (!taskId) {
+  taskId = `${Date.now()}-${process.pid}`;
+}
+const wellKnownPath = getWellKnownSummaryPath("devin", taskId, projectRoot);
+console.log(`Task ID: ${taskId}`);
+console.log(`Summary will be at: ${wellKnownPath}`);
+
 if (resolvedModel) console.log(`Model: ${resolvedModel}${modelFlag !== resolvedModel ? ` (from "${modelFlag}")` : ""}`);
 
-logDebug("devin-skill", `Launching: model=${resolvedModel ?? "default"}, extraPrompt=${Boolean(extraPrompt)}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
+logDebug("devin-skill", `Launching: model=${resolvedModel ?? "default"}, taskId=${taskId}, extraPrompt=${Boolean(extraPrompt)}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
 
 const launchStartedAtMs = Date.now();
 
@@ -228,22 +241,24 @@ if (watch && (result.paneId || result.sentinelPath)) {
 
     const summary = (await summarizeDevinSession(projectRoot, launchStartedAtMs, result.paneId))
       ?? SUMMARY_UNAVAILABLE_MESSAGE;
-    const summaryPath = persistSummary(summary, "devin");
+    const summaryPath = persistSummary(summary, "devin", undefined, taskId, projectRoot);
 
     console.log("\n--- Devin Session Summary ---");
     console.log(summary);
+    console.log(`\n[well_known_summary:${wellKnownPath}]`);
     if (summaryPath) {
-      console.log(`\n[summary_file:${summaryPath}]`);
+      console.log(`[summary_file:${summaryPath}]`);
     }
   } catch (error) {
     logWarn("devin-skill", `Watch flow failed: ${String(error)}`);
     const { persistSummary: persistFallback } = await import("../lib/devin-watcher.js");
     const fallbackMsg = "Devin session completed. Summary unavailable (watch error).";
-    const fallbackPath = persistFallback(fallbackMsg, "devin");
+    const fallbackPath = persistFallback(fallbackMsg, "devin", undefined, taskId, projectRoot);
     console.log("\n--- Devin Session Summary ---");
     console.log(fallbackMsg);
+    console.log(`\n[well_known_summary:${wellKnownPath}]`);
     if (fallbackPath) {
-      console.log(`\n[summary_file:${fallbackPath}]`);
+      console.log(`[summary_file:${fallbackPath}]`);
     }
   } finally {
     cleanupSentinel(result.sentinelPath);

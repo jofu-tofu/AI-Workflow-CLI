@@ -14,6 +14,7 @@ import path from "node:path";
 import { findLatestPlan } from "../../../lib-ts/context/plan-manager.js";
 import {
   findLatestPlanByMtime,
+  getWellKnownSummaryPath,
   resolveContextForLaunch,
   sleep,
   writeFileRefPromptFile,
@@ -175,6 +176,7 @@ let modelFlag: string | undefined;
 let sandboxFlag: CodexSandbox | undefined;
 let contextFlag: string | undefined;
 let extraPrompt: string | undefined;
+let taskId: string | undefined;
 let yolo = true;
 let watch = true;
 const args: string[] = [];
@@ -193,6 +195,8 @@ for (let i = 0; i < rawArgs.length; i++) {
     contextFlag = rawArgs[++i];
   } else if (rawArgs[i] === "--prompt" && i + 1 < rawArgs.length) {
     extraPrompt = rawArgs[++i];
+  } else if (rawArgs[i] === "--task-id" && i + 1 < rawArgs.length) {
+    taskId = rawArgs[++i];
   } else switch (rawArgs[i]) {
  case "--no-watch": {
     watch = false;
@@ -302,11 +306,23 @@ if (args[0] === "plan") {
 // ---------------------------------------------------------------------------
 
 const launchCwd = process.env.AIW_CALLER_CWD?.trim() || process.cwd();
+
+// Generate task ID if not provided by caller.  Caller-provided IDs enable
+// direct file lookup; auto-generated IDs still allow glob discovery.
+if (!taskId) {
+  taskId = `${Date.now()}-${process.pid}`;
+}
+const wellKnownPath = getWellKnownSummaryPath("codex", taskId, projectRoot);
+// Print task ID and well-known path early — even if the background task
+// output is lost, the caller can note these from partial stdout capture.
+console.log(`Task ID: ${taskId}`);
+console.log(`Summary will be at: ${wellKnownPath}`);
+
 if (yolo) console.log("Mode: YOLO (bypass approvals and sandbox)");
 if (sandboxFlag) console.log(`Sandbox: ${sandboxFlag}`);
 if (resolvedModel) console.log(`Model: ${resolvedModel}${modelFlag !== resolvedModel ? ` (from "${modelFlag}")` : ""}`);
 
-logDebug("codex-skill", `Launching: model=${resolvedModel ?? "default"}, sandbox=${sandboxFlag ?? "default"}, yolo=${yolo}, extraPrompt=${Boolean(extraPrompt)}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
+logDebug("codex-skill", `Launching: model=${resolvedModel ?? "default"}, sandbox=${sandboxFlag ?? "default"}, yolo=${yolo}, taskId=${taskId}, extraPrompt=${Boolean(extraPrompt)}, source=${args[0]}, bytes=${promptPath ? fs.statSync(promptPath).size : 0}`);
 
 const launchStartedAtMs = Date.now();
 
@@ -387,22 +403,24 @@ if (watch && (result.paneId || result.sentinelPath)) {
       ?? (sessionId ? await summarizeViaResume(sessionId) : null)
       ?? summarizeFromSessionFileFallback(sessionFile)
       ?? SUMMARY_UNAVAILABLE_MESSAGE;
-    const summaryPath = persistSummary(summary, "codex", sessionId || undefined);
+    const summaryPath = persistSummary(summary, "codex", sessionId || undefined, taskId, projectRoot);
 
     console.log("\n--- Codex Session Summary ---");
     console.log(summary);
+    console.log(`\n[well_known_summary:${wellKnownPath}]`);
     if (summaryPath) {
-      console.log(`\n[summary_file:${summaryPath}]`);
+      console.log(`[summary_file:${summaryPath}]`);
     }
   } catch (error) {
     logWarn("codex-skill", `Watch flow failed: ${String(error)}`);
     const fallbackMsg = "Codex session completed. Summary unavailable (watch error).";
     const { persistSummary: persistFallback } = await import("../lib/codex-watcher.js");
-    const fallbackPath = persistFallback(fallbackMsg, "codex");
+    const fallbackPath = persistFallback(fallbackMsg, "codex", undefined, taskId, projectRoot);
     console.log("\n--- Codex Session Summary ---");
     console.log(fallbackMsg);
+    console.log(`\n[well_known_summary:${wellKnownPath}]`);
     if (fallbackPath) {
-      console.log(`\n[summary_file:${fallbackPath}]`);
+      console.log(`[summary_file:${fallbackPath}]`);
     }
   } finally {
     cleanupSentinel(result.sentinelPath);

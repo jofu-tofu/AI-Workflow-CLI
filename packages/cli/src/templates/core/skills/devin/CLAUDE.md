@@ -29,6 +29,7 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/devin/scripts/launch-devin
 - `<text...>` -- join remaining args as inline prompt
 - `--model <name>` -- Models: `swe`, `gpt`, `opus`, `sonnet`. Tiers: `fast`/`standard`/`smart`. Or pass-through.
 - `--prompt <text>` -- append extra instructions
+- `--task-id <id>` -- Caller-provided task ID for direct summary file lookup. If omitted, auto-generated as `<timestamp>-<pid>`. Enables the caller to know the exact summary file path without reading background task stdout.
 - `--no-watch` -- Disable watch/summarize mode
 
 **Plan discovery order:**
@@ -45,7 +46,13 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/devin/scripts/launch-devin
 - Watch is enabled by default
 - Uses `waitForPaneClose` from shared agent-launcher
 - Summary cascade: (1) `devin list --format json` metadata, (2) tmux pane scrollback capture, (3) static unavailable message
-- Summary persisted to temp file via `persistSummary("devin", ...)`
+- Summary persisted to temp file via `persistSummary("devin", ...)` (unique per run)
+- Also writes to well-known path: `$TMPDIR/aiw-agent-output/<session-key>/devin-<taskId>.md`
+- Task ID is caller-provided via `--task-id` or auto-generated as `<timestamp>-<pid>`
+- Caller can compute the exact path via `getWellKnownSummaryPath("devin", taskId)` -- no discovery needed
+- Multiple concurrent agents use different task IDs, so they don't clobber each other
+- Session key resolution: tmux (`$TMUX`), psmux (`psmux display-message`), exec fallback (project-root hash)
+- Task ID + summary path printed early (before agent runs) so even partial stdout capture is useful
 
 **Design decisions:**
 - No sandbox/YOLO flags (Devin uses `--permission-mode` instead, defaulting to `auto`)
