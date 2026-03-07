@@ -121,20 +121,22 @@ async function resolveAutoSplit(
 }
 
 /** @internal */
-export function buildTmuxSplitWindowArgs(params: { splitFlag: '-h' | '-v'; command: string; cwd?: string | undefined; splitTarget?: string | undefined }): string[] {
+export function buildTmuxSplitWindowArgs(params: { command: string; cwd?: string | undefined; splitFlag: '-h' | '-v'; splitTarget?: string | undefined }): string[] {
   const args = ['split-window', params.splitFlag, '-P', '-F', '#{pane_id}']
   if (params.cwd) {
     args.push('-c', params.cwd)
   }
+
   if (params.splitTarget) {
     args.push('-t', params.splitTarget)
   }
+
   args.push(params.command)
   return args
 }
 
 /** @internal */
-export function buildTmuxCreateSessionArgs(params: { sessionName: string; cwd: string; shellCommand: string; reattach?: boolean | undefined }): string[] {
+export function buildTmuxCreateSessionArgs(params: { cwd: string; reattach?: boolean | undefined; sessionName: string; shellCommand: string; }): string[] {
   const args = ['new-session']
   if (params.reattach) args.push('-A')
   args.push('-c', params.cwd, '-s', params.sessionName, params.shellCommand)

@@ -9,8 +9,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import type { DiscoveredPlan } from "./types.js";
-import { logInfo, logDebug } from "../../_shared/lib-ts/base/logger.js";
-import { findPlanPathInTranscript } from "../../_shared/lib-ts/context/plan-manager.js";
+import { findPlanPathInTranscript } from "../../_core/lib-ts/context/plan-manager.js";
+import { logInfo, logDebug } from "../../_core/lib-ts/runtime/logger.js";
 
 
 const HOOK = "plan-discovery";

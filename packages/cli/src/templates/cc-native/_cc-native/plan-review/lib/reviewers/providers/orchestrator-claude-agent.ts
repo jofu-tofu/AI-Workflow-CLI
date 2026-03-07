@@ -3,10 +3,10 @@
  * Analyzes plan complexity and selects reviewer agents via Claude CLI.
  */
 
-import type { ExecutionBackend , ExecutionResult } from "../../../../../_shared/lib-ts/agent-exec/execution-backend.js";
-import { parseStructuredOutput } from "../../../../../_shared/lib-ts/agent-exec/structured-output.js";
-import { buildCliInvocation, reviewSpec, type CliProvider } from "../../../../../_shared/lib-ts/base/cli-args.js";
-import { logDebug } from "../../../../../_shared/lib-ts/base/logger.js";
+import type { ExecutionBackend , ExecutionResult } from "../../../../../_core/lib-ts/agent-exec/execution-backend.js";
+import { parseStructuredOutput } from "../../../../../_core/lib-ts/agent-exec/structured-output.js";
+import { buildCliInvocation, reviewSpec, type CliProvider } from "../../../../../_core/lib-ts/runtime/cli-args.js";
+import { logDebug } from "../../../../../_core/lib-ts/runtime/logger.js";
 import { debugLog, debugRaw } from "../../../../lib-ts/debug.js";
 import type { AgentConfig, AgentReviewSettings, AgentSelectionConfig, OrchestratorResult, ComplexityCategory } from "../../../../lib-ts/types.js";
 import { BaseCliAgent } from "../base/base-agent.js";
@@ -32,8 +32,6 @@ const DEFAULT_AGENT_SELECTION: AgentSelectionConfig = {
   high: { min: 12, max: 12 },
   fallbackCount: 3,
 };
-
-const DEFAULT_ORCHESTRATOR_SYSTEM_PROMPT = "You are a plan orchestrator for code review. Call StructuredOutput immediately.";
 
 /**
  * Claude CLI-based orchestrator agent.
@@ -79,7 +77,7 @@ export class OrchestratorClaudeAgent extends BaseCliAgent<OrchestratorResult> {
     this.settings = settings;
 
     const selection = settings.agentSelection ?? DEFAULT_AGENT_SELECTION;
-    this.fallbackCount = selection.fallbackCount ?? DEFAULT_AGENT_SELECTION.fallbackCount;
+    this.fallbackCount = selection.fallbackCount ?? 2;
     this.mandatoryCount = agentLibrary.filter((a) => mandatoryNames.has(a.name)).length;
 
     logDebug("orchestrator", `Mandatory agents (always run): ${[...mandatoryNames].sort().join(", ")}`);
@@ -87,7 +85,15 @@ export class OrchestratorClaudeAgent extends BaseCliAgent<OrchestratorResult> {
   }
 
   protected buildCliArgs(): string[] {
-    const systemPrompt = this.agent.system_prompt.trim() || DEFAULT_ORCHESTRATOR_SYSTEM_PROMPT;
+    const systemPrompt = `You are a plan orchestrator for code review. Your job is to analyze plans and select appropriate reviewer agents.
+
+You MUST call StructuredOutput immediately with your analysis. Do NOT ask questions or use any other tools.
+
+When selecting agents:
+- Match agent expertise to plan requirements
+- Consider what each agent specializes in
+- Only select agents whose categories match the plan category
+- Fewer agents for simple plans, more for complex plans`;
 
     return buildCliInvocation(
       reviewSpec((this.agent.provider ?? "claude") as CliProvider, this.agent.model, this.schema, systemPrompt),

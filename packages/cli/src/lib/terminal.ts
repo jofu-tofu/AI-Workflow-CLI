@@ -48,12 +48,12 @@ import {
 
 /** @internal */
 export interface SpawnArgs {
-  command: string
   args: string[]
+  command: string
 }
 
 /** @internal */
-export function resolveTerminalPlatform(platform: NodeJS.Platform, isWSLResult: boolean): 'windows' | 'darwin' | 'wsl' | 'linux' {
+export function resolveTerminalPlatform(platform: NodeJS.Platform, isWSLResult: boolean): 'darwin' | 'linux' | 'windows' | 'wsl' {
   if (isWindowsPlatform(platform)) return 'windows'
   if (platform === 'darwin') return 'darwin'
   if (isWSLResult) return 'wsl'

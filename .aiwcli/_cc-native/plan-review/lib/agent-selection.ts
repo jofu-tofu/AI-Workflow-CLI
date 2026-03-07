@@ -55,7 +55,7 @@ const PROVIDER_PRIORITY = ["codex", "claude"];
 // Pure Provider Resolution (extracted for direct testing)
 // ---------------------------------------------------------------------------
 
-/** @internal — Filter/sort providers by priority. Pure — no filesystem access. */
+/** @internal */
 export function resolveEnabledProviders(
   modelsConfig: ModelsConfig,
   isCliAvailable: (cliName: string) => boolean,
@@ -116,7 +116,7 @@ export function assignModelsToAgents(
     randomFn?: () => number;
   },
 ): AgentConfig[] {
-  const isCliAvailable = options?.isCliAvailable ?? ((name: string) => !!findExecutable(name));
+  const isCliAvailable = options?.isCliAvailable ?? ((name: string) => Boolean(findExecutable(name)));
   const randomFn = options?.randomFn ?? Math.random;
 
   const enabledProviders = resolveEnabledProviders(modelsConfig, isCliAvailable, preflightAvailable);

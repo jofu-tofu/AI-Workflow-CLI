@@ -15,17 +15,17 @@ import { truncateAgentIssues, overrideVerdictsByThreshold, buildReviewOutput } f
 import { runPlanQuestions } from "./plan-questions.js";
 import { runPreflight } from "./preflight.js";
 import { runAgentReview } from "./reviewers/index.js";
-import { getContextReviewsDir, getContextDir, getReviewFolderPath } from "../../../_shared/lib-ts/base/constants.js";
-import { logDiagnostic } from "../../../_shared/lib-ts/base/hook-utils.js";
+import { getContextBySessionId, getAllContexts } from "../../../_core/lib-ts/context/context-store.js";
+import { logDiagnostic } from "../../../_core/lib-ts/hooks/hook-utils.js";
+import { getContextReviewsDir, getContextDir, getReviewFolderPath } from "../../../_core/lib-ts/runtime/constants.js";
 import {
   logDebug,
   logInfo,
   logWarn,
   logError,
-} from "../../../_shared/lib-ts/base/logger.js";
-import { eprint } from "../../../_shared/lib-ts/base/utils.js";
-import { getContextBySessionId, getAllContexts } from "../../../_shared/lib-ts/context/context-store.js";
-import type { ContextState } from "../../../_shared/lib-ts/types.js";
+} from "../../../_core/lib-ts/runtime/logger.js";
+import { eprint } from "../../../_core/lib-ts/runtime/utils.js";
+import type { ContextState } from "../../../_core/lib-ts/types.js";
 import { writeCombinedArtifacts, buildCorroborationReport, buildHighIssuesDocument, writeReviewTracker } from "../../artifacts/lib/index.js";
 import type { ReviewTrackerEntry } from "../../artifacts/lib/index.js";
 import {

@@ -21,6 +21,7 @@ The hook is a thin coordinator (~70 lines) that delegates to `plan-review/lib/re
 
 | Module | Location | Responsibility |
 |--------|----------|----------------|
+| `cli-args.ts` | `_core/lib-ts/runtime/` | Centralized CLI arg construction for Claude/Codex agents — all providers delegate here |
 | `plan-discovery.ts` | `lib-ts/` | Find plan file, read content, compute hash |
 | `settings.ts` | `lib-ts/` | Load + merge config with defaults, load agent library |
 | `agent-selection.ts` | `plan-review/lib/` | Mandatory agent resolution, orchestrator-based selection, model assignment |
@@ -33,7 +34,7 @@ The hook is a thin coordinator (~70 lines) that delegates to `plan-review/lib/re
 
 ### Questions Gate (in review-pipeline.ts)
 
-Before running plan review agents, the pipeline checks `wasQuestionsAsked()`. If the user hasn't been asked questions yet, it runs a fresh-context plan-questions agent (from `plan-review/agents/plan-questions/PLAN-QUESTIONER.md`) that independently reviews the plan and generates questions, assumptions, and ambiguities. If questions are found, ExitPlanMode is denied with the question list injected as context. After the user answers via AskUserQuestion (which triggers `mark_questions_asked.ts`), the next ExitPlanMode attempt passes the gate and proceeds to normal plan review.
+Before running plan review agents, the pipeline checks `wasQuestionsAsked()`. If the user hasn't been asked questions yet, it runs a fresh-context plan-questions agent (from `agents/plan-questions/PLAN-QUESTIONER.md`) that independently reviews the plan and generates questions, assumptions, and ambiguities. If questions are found, ExitPlanMode is denied with the question list injected as context. After the user answers via AskUserQuestion (which triggers `mark_questions_asked.ts`), the next ExitPlanMode attempt passes the gate and proceeds to normal plan review.
 
 ---
 
@@ -42,10 +43,10 @@ Before running plan review agents, the pipeline checks `wasQuestionsAsked()`. If
 CC-native hooks are TypeScript, run via `bun`. Use relative imports from the hook file location.
 
 ```typescript
-// Shared library imports (via _shared/lib-ts/)
-import { loadHookInput, runHook, logInfo, emitContext } from "../../_shared/lib-ts/base/hook-utils.js";
-import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
-import { getProjectRoot } from "../../_shared/lib-ts/base/constants.js";
+// Shared library imports (via _core/lib-ts/)
+import { loadHookInput, runHook, logInfo, emitContext } from "../../_core/lib-ts/hooks/hook-utils.js";
+import { isInternalCall } from "../../_core/lib-ts/runtime/subprocess-utils.js";
+import { getProjectRoot } from "../../_core/lib-ts/runtime/constants.js";
 
 // CC-native library imports (via ../lib-ts/)
 import { wasQuestionsAsked, markQuestionsAsked } from "../lib-ts/cc-native-state.js";
@@ -55,7 +56,7 @@ import type { AgentConfig } from "../lib-ts/types.js";
 
 **Important:** Always use `.js` extensions in import paths — Bun resolves `.ts` files from `.js` imports.
 
-**Import direction:** Hooks → `_cc-native/lib-ts/` → `_shared/lib-ts/`. Never reverse.
+**Import direction:** Hooks → `_cc-native/lib-ts/` → `_core/lib-ts/`. Never reverse.
 
 ---
 
@@ -64,7 +65,7 @@ import type { AgentConfig } from "../lib-ts/types.js";
 Hooks can be invoked recursively when spawning subprocesses (agents, orchestrator). Always check and skip:
 
 ```typescript
-import { isInternalCall } from "../../_shared/lib-ts/base/subprocess-utils.js";
+import { isInternalCall } from "../../_core/lib-ts/runtime/subprocess-utils.js";
 
 function main(): void {
   // FIRST LINE of main - before any other logic
@@ -87,7 +88,7 @@ Claude Code hooks return JSON to stdout. The format is specific to each hook typ
 Use the shared hook utilities — never construct JSON manually:
 
 ```typescript
-import { emitContext, emitContextAndBlock } from "../../_shared/lib-ts/base/hook-utils.js";
+import { emitContext, emitContextAndBlock } from "../../_core/lib-ts/hooks/hook-utils.js";
 
 // Inject context without blocking:
 emitContext("Information for Claude to see...");
@@ -105,7 +106,7 @@ emitContextAndBlock(
 
 ## Debugging Output
 
-For logging tiers, visibility rules, and stderr behavior, see **`_shared/lib-ts/CLAUDE.md`** (the shared library guide). The key rules:
+For logging tiers, visibility rules, and stderr behavior, see **`_core/lib-ts/CLAUDE.md`** (the shared library guide). The key rules:
 
 - **stderr is opt-in.** `log_debug/log_info/log_warn/log_error` write to file only (no UI noise)
 - **`logBlocking()` / `log_hook_error()`** for problems that must be visible
@@ -115,7 +116,7 @@ For logging tiers, visibility rules, and stderr behavior, see **`_shared/lib-ts/
 TypeScript hooks use re-exported logger functions from `hook-utils.ts`:
 
 ```typescript
-import { logDebug, logInfo, logWarn, logError } from "../../_shared/lib-ts/base/hook-utils.js";
+import { logDebug, logInfo, logWarn, logError } from "../../_core/lib-ts/hooks/hook-utils.js";
 
 logDebug("hook-name", `Found ${items.length} items`);  // file only
 logInfo("hook-name", "Starting hook...");                // file only
@@ -129,8 +130,8 @@ logError("hook-name", `Failed: ${e}`);                   // file only
 Plan review hooks integrate with the shared context system for state management:
 
 ```typescript
-import { getContextBySessionId, getAllContexts } from "../../_shared/lib-ts/context/context-store.js";
-import { getContextReviewsDir } from "../../_shared/lib-ts/base/constants.js";
+import { getContextBySessionId, getAllContexts } from "../../_core/lib-ts/context/context-store.js";
+import { getContextReviewsDir } from "../../_core/lib-ts/runtime/constants.js";
 
 // Find active context
 const context = getContextBySessionId(sessionId, projectRoot);
@@ -160,7 +161,7 @@ import { isPlanAlreadyReviewed, markPlanReviewed, wasQuestionsAsked } from "../l
 Hooks should fail gracefully — a broken hook shouldn't break the user's workflow. `runHook()` and `runHookAsync()` handle this automatically: uncaught errors log to file and exit 0 (non-blocking).
 
 ```typescript
-import { runHook, logInfo } from "../../_shared/lib-ts/base/hook-utils.js";
+import { runHook, logInfo } from "../../_core/lib-ts/hooks/hook-utils.js";
 
 function main(): void {
   // Hook logic — uncaught errors are handled by runHook
@@ -173,7 +174,7 @@ runHook(main, "hook_name");
 For async hooks (plan review with parallel agents):
 
 ```typescript
-import { runHookAsync } from "../../_shared/lib-ts/base/hook-utils.js";
+import { runHookAsync } from "../../_core/lib-ts/hooks/hook-utils.js";
 
 async function main(): Promise<void> {
   // Async hook logic with Promise.all() etc.
@@ -188,7 +189,7 @@ Use `emitContextAndBlock()` for intentional blocking (e.g., plan review denial).
 
 ## Error Handling: Non-Critical Operations
 
-Wrap non-critical shared library calls in try/catch to prevent false "hook error" UI display. See **`_shared/lib-ts/CLAUDE.md`** > Context Store for the pattern and rationale.
+Wrap non-critical shared library calls in try/catch to prevent false "hook error" UI display. See **`_core/lib-ts/CLAUDE.md`** > Context Store for the pattern and rationale.
 
 **When to catch locally vs let bubble:**
 - **Catch locally:** Side effects like mode transitions, state saves — the hook's primary purpose can still succeed without them
@@ -234,7 +235,7 @@ Hooks fail silently on import errors — verify after any import path changes.
 | Date | Change |
 |------|--------|
 | 2026-02-14 | **Plan review hook refactored into focused modules.** `cc-native-plan-review.ts` reduced from 1061 to ~70 lines (thin coordinator). Core logic moved to `review-pipeline.ts`. Extracted: `plan-discovery.ts`, `settings.ts`, `agent-selection.ts`, `graduation.ts`, `output-builder.ts`. Split `artifacts.ts` (822 lines) into `artifacts/format.ts`, `artifacts/write.ts`, `artifacts/tracker.ts` with barrel re-export. Added `loadIterationState()`/`saveIterationState()` to `state.ts`. New pipeline types in `types.ts`. |
-| 2026-02-14 | **Questions gate added to plan review.** `cc-native-plan-review.ts` now runs a fresh-context plan-questions agent before plan review. If `wasQuestionsAsked()` returns false, the PLAN-QUESTIONER agent (from `plan-review/agents/plan-questions/`) generates questions/assumptions/ambiguities using `QUESTIONS_SCHEMA`. On questions found, ExitPlanMode is denied with question list as context. New library module: `lib-ts/plan-questions.ts`. Agent directory reorganized under `plan-review/agents/`: review agents in `plan-review/`, question agents in `plan-questions/`. |
+| 2026-02-14 | **Questions gate added to plan review.** `cc-native-plan-review.ts` now runs a fresh-context plan-questions agent before plan review. If `wasQuestionsAsked()` returns false, the PLAN-QUESTIONER agent (from `agents/plan-questions/`) generates questions/assumptions/ambiguities using `QUESTIONS_SCHEMA`. On questions found, ExitPlanMode is denied with question list as context. New library module: `lib-ts/plan-questions.ts`. Agent directory reorganized: review agents moved to `agents/plan-review/`, question agents in `agents/plan-questions/`. |
 | 2026-02-10 | **Migrated cc-native hooks from Python to TypeScript.** `cc-native-plan-review.ts` (async, parallel agent reviews via `Promise.all()`), `add_plan_context.ts`, `plan_questions_early.ts`. All hooks use `runHook()`/`runHookAsync()` entry points. Library code in `_cc-native/lib-ts/` (18 files). Settings.json updated to use `bun` runner. Python `.py` files kept as fallback until TS hooks verified. |
 | 2026-02-10 | Flipped TS logger stderr default to opt-in (`opts?.stderr === true`). Added `logBlocking()` for intentional stderr visibility. Removed redundant `{stderr: false}` from hook-utils.ts, user_prompt_submit.ts, context_monitor.ts. Added "Hook Error Visibility" section documenting visibility tiers and exit code behavior. |
 | 2026-02-10 | Fixed `debug.py` `context_path` crash. Added local try/catch around `maybeActivate` in `user_prompt_submit.ts` and `context_monitor.ts` to prevent stderr error display on non-critical I/O failures. Removed dead `context_path` from `_emitHookEnd` in `hook-utils.ts`. Added "Error Handling" section to CLAUDE.md. |
@@ -264,4 +265,4 @@ is stale — update or regenerate before relying on it.
 - 30+ days without touching this file → Audit
 - Agent mistake caused by this file → fix immediately, then Audit
 
-<!-- context-layer: generated=2026-02-10 | last-audited=2026-02-21 | version=2 | dir-commits-at-audit=58 -->
+<!-- context-layer: generated=2026-02-10 | last-audited=2026-03-01 | version=3 | dir-commits-at-audit=58 -->

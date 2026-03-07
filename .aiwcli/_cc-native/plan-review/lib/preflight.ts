@@ -14,7 +14,7 @@ import { checkProviderModel, type PreflightCommandConfig } from "../../../_core/
 import type { ModelsConfig, PreflightCheckResult, PreflightReport } from "../../lib-ts/types.js";
 
 const HOOK = "preflight";
-const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_TIMEOUT_MS = 15_000;
 
 // ---------------------------------------------------------------------------
 // Provider Registry (built from centralized cli-args)
@@ -31,7 +31,7 @@ export const KNOWN_PROVIDERS = new Set(Object.keys(PREFLIGHT_COMMANDS));
 // Pure Functions (extracted for direct testing)
 // ---------------------------------------------------------------------------
 
-/** @internal — Collect unique provider:model combos, filtering to known providers. */
+/** @internal */
 export function collectPreflightChecks(
   modelsConfig: ModelsConfig,
   knownProviders: Set<string>,
@@ -58,7 +58,7 @@ export function collectPreflightChecks(
   return { checks, skippedProviders };
 }
 
-/** @internal — Build availability report from check results. */
+/** @internal */
 export function buildPreflightReport(
   results: Array<{ provider: string; model: string; available: boolean; error?: string; latencyMs?: number }>,
   totalMs: number,

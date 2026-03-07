@@ -68,6 +68,7 @@ Runtime files execute from `.aiwcli/_core/` in this repo. Template source lives 
 - `.aiwcli/_core/skills/handoff-system/**` → `packages/cli/src/templates/core/skills/handoff-system/`
 - `.aiwcli/_core/skills/meta-plan/**` → `packages/cli/src/templates/core/skills/meta-plan/`
 - `.aiwcli/_core/skills/codex/**` → `packages/cli/src/templates/core/skills/codex/`
+- `.aiwcli/_core/skills/devin/**` → `packages/cli/src/templates/core/skills/devin/`
 - `.aiwcli/_core/scripts/*.ts` → `packages/cli/src/templates/core/scripts/`
 - `.aiwcli/_core/lib-ts/context/**` → `packages/cli/src/templates/core/lib-ts/context/`
 - `.aiwcli/_core/lib-ts/runtime/**` → `packages/cli/src/templates/core/lib-ts/runtime/`

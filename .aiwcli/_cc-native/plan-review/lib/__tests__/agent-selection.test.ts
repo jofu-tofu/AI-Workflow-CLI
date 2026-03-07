@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, mock } from "bun:test";
+
 import type { AgentConfig, ModelsConfig } from "../../../lib-ts/types.js";
 
 // ---------------------------------------------------------------------------
@@ -13,10 +14,10 @@ import type { AgentConfig, ModelsConfig } from "../../../lib-ts/types.js";
 // ---------------------------------------------------------------------------
 
 mock.module("../../../../_core/lib-ts/runtime/logger.js", () => ({
-  logDebug: () => {},
-  logInfo: () => {},
-  logWarn: () => {},
-  logError: () => {},
+  logDebug() {},
+  logInfo() {},
+  logWarn() {},
+  logError() {},
 }));
 
 // Mock subprocess-utils so module load doesn't fail (not used by tests via DI)
@@ -59,6 +60,7 @@ const onlyAvailable = (...names: string[]) => (name: string) => names.includes(n
 // resolveEnabledProviders — pure, zero mocks
 // ---------------------------------------------------------------------------
 
+describe("agent-selection", () => {
 describe("resolveEnabledProviders", () => {
   it("returns enabled providers sorted by priority (codex first)", () => {
     const config = makeModelsConfig({
@@ -339,4 +341,5 @@ describe("assignModelsToAgents", () => {
     expect(result[0]!.focus).toBe("security");
     expect(result[0]!.system_prompt).toBe("Be thorough");
   });
+});
 });

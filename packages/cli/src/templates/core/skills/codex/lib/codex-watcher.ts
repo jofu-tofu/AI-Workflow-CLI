@@ -3,26 +3,23 @@ import * as os from "node:os";
 import path from "node:path";
 
 import { inference } from "../../../lib-ts/runtime/inference.js";
-import { logDebug, logWarn } from "../../../lib-ts/runtime/logger.js";
+import { logWarn } from "../../../lib-ts/runtime/logger.js";
 import { CODEX_MODELS } from "../../../lib-ts/runtime/models.js";
-import { execFileAsync, findExecutable } from "../../../lib-ts/runtime/subprocess-utils.js";
+import { execFileAsync } from "../../../lib-ts/runtime/subprocess-utils.js";
 
-type PaneBackend = "tmux" | "window" | "exec";
+// Re-export shared symbols that consumers import from this module
+export {
+  type PaneWatchTarget,
+  persistSummary,
+  sleep,
+  waitForPaneClose,
+} from "../../../lib-ts/runtime/agent-launcher.js";
 
-export const POLL_INTERVAL_MS = 2000;
-export const POLL_TIMEOUT_MS = 3000;
 export const SUMMARY_TIMEOUT_SEC = 8;
 export const RESUME_TIMEOUT_MS = 45_000;
 export const MAX_TRANSCRIPT_LINES = 220;
 export const MAX_LINE_LENGTH = 500;
-export const WAIT_TIMEOUT_MS_DEFAULT = 14_400_000;
 export const SUMMARY_UNAVAILABLE_MESSAGE = "Codex session completed. Summary unavailable.";
-
-export interface PaneWatchTarget {
-  backend?: PaneBackend;
-  paneId?: string;
-  sentinelPath?: string;
-}
 
 export const TRANSCRIPT_SUMMARY_PROMPT = `Summarize this Codex session transcript excerpt.
 Return 3-5 concise bullet points.
@@ -43,12 +40,6 @@ Do not ask follow-up questions.
 Do not request additional input.
 If the prior session was brief, still provide a best-effort summary.`;
 
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 export function safeCleanup(filePath: string): void {
   try {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
@@ -63,27 +54,6 @@ export function readTextIfExists(filePath: string): string {
     return fs.readFileSync(filePath, "utf8").trim();
   } catch {
     return "";
-  }
-}
-
-export function persistSummary(
-  summary: string,
-  sessionId?: string,
-): string | null {
-  try {
-    const suffix = sessionId
-      ? sessionId.replaceAll(/[^a-zA-Z0-9_-]/g, "").slice(0, 8)
-      : String(process.pid);
-    const filePath = path.join(
-      os.tmpdir(),
-      `codex-summary-${Date.now()}-${suffix}.md`,
-    );
-    fs.writeFileSync(filePath, summary, "utf8");
-    // Normalize to forward slashes for cross-platform path parsing
-    return filePath.replaceAll("\\", "/");
-  } catch (error) {
-    logWarn("codex-capture", `Failed to persist summary: ${String(error)}`);
-    return null;
   }
 }
 
@@ -163,78 +133,6 @@ export function looksLikeBadSummary(output: string): boolean {
     normalized.includes("could you provide") ||
     normalized.includes("paste")
   );
-}
-
-async function waitForSentinelClose(sentinelPath: string, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (true) {
-    if (fs.existsSync(sentinelPath)) return;
-    if (Date.now() >= deadline) {
-      logDebug("codex-capture", `watch timeout reached waiting for sentinel ${sentinelPath}`);
-      return;
-    }
-
-    const remainingMs = deadline - Date.now();
-    await sleep(Math.max(0, Math.min(POLL_INTERVAL_MS, remainingMs)));
-  }
-}
-
-function normalizeWatchTarget(target: string | PaneWatchTarget): PaneWatchTarget {
-  if (typeof target === "string") {
-    return { backend: "tmux", paneId: target };
-  }
-  return target;
-}
-
-export async function waitForPaneClose(
-  target: string | PaneWatchTarget,
-  timeoutMs = WAIT_TIMEOUT_MS_DEFAULT,
-): Promise<void> {
-  const watch = normalizeWatchTarget(target);
-
-  if (watch.sentinelPath) {
-    await waitForSentinelClose(watch.sentinelPath, timeoutMs);
-    return;
-  }
-
-  const backend = watch.backend ?? "tmux";
-  const paneId = watch.paneId ?? "";
-
-  if (backend !== "tmux") {
-    logDebug("codex-capture", `No pane watcher for backend=${backend}; continuing without wait`);
-    return;
-  }
-
-  if (!paneId) return;
-
-  const tmuxPath = findExecutable("tmux");
-  if (!tmuxPath) {
-    logWarn("codex-capture", `tmux unavailable while watching pane ${paneId}`);
-    return;
-  }
-
-  const deadline = Date.now() + timeoutMs;
-  while (true) {
-    if (Date.now() >= deadline) {
-      logDebug("codex-capture", `watch timeout reached for pane ${paneId} after ${timeoutMs}ms`);
-      return;
-    }
-
-    const result = await execFileAsync(tmuxPath, ["list-panes", "-a", "-F", "#{pane_id}"], {
-      timeout: POLL_TIMEOUT_MS,
-    });
-
-    if (result.exitCode !== 0) {
-      logDebug("codex-capture", `list-panes failed; assuming pane closed (${result.stderr.trim() || "no stderr"})`);
-      return;
-    }
-
-    const activePaneIds = result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    if (!activePaneIds.includes(paneId)) return;
-
-    const remainingMs = deadline - Date.now();
-    await sleep(Math.max(0, Math.min(POLL_INTERVAL_MS, remainingMs)));
-  }
 }
 
 export async function summarizeViaSessionFile(sessionFile: string): Promise<string | null> {

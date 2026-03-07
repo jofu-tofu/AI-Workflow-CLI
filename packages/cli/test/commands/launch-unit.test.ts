@@ -1,5 +1,5 @@
-import {describe, expect, it, vi, beforeEach} from 'vitest'
-
+/* eslint-disable import/order -- vi.mock must precede mocked module import */
+import {beforeEach, describe, expect, it, vi} from 'vitest'
 import type {LaunchDependencies, LaunchRequest} from '../../src/capabilities/launch/contracts.js'
 import {EXIT_CODES} from '../../src/types/exit-codes.js'
 
@@ -16,6 +16,7 @@ const platformMocks = vi.hoisted(() => ({
   launchTerminal: vi.fn(async () => ({success: true})),
   ProcessSpawnError: class ProcessSpawnError extends Error {
     exitCode = EXIT_CODES.ENVIRONMENT_ERROR
+
     constructor(message: string, public readonly code?: string) {
       super(message)
     }

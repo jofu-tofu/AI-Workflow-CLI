@@ -40,12 +40,15 @@ export async function runHookSubprocess(
   env?: Record<string, string>,
 ): Promise<SubprocessHookResult> {
   return await new Promise<SubprocessHookResult>((resolve, reject) => {
+    const cleanEnv = {...process.env}
+    // Remove internal-call marker so hooks run their full logic in tests
+    delete cleanEnv.AIWCLI_INTERNAL_CALL
     const child = spawn(
       'bun',
       ['run', hookPath],
       {
         env: {
-          ...process.env,
+          ...cleanEnv,
           ...env,
         },
         stdio: ['pipe', 'pipe', 'pipe'],

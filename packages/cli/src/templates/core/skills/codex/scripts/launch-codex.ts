@@ -11,16 +11,20 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import path from "node:path";
 
-import { buildExternalAgentContext } from "../../../lib-ts/context/context-formatter.js";
-import { getContextBySessionId, getContext } from "../../../lib-ts/context/context-store.js";
 import { findLatestPlan } from "../../../lib-ts/context/plan-manager.js";
+import {
+  findLatestPlanByMtime,
+  resolveContextForLaunch,
+  sleep,
+  writeFileRefPromptFile,
+  writeInlinePromptFile,
+} from "../../../lib-ts/runtime/agent-launcher.js";
 import { aiwLaunch } from "../../../lib-ts/runtime/aiw-cli.js";
 import { resolveCodexModel, buildCliInvocation, isCodexSandbox, type CodexSandbox, type CliArgSpec } from "../../../lib-ts/runtime/cli-args.js";
 import { getProjectRoot } from "../../../lib-ts/runtime/constants.js";
 import { logDebug, logWarn } from "../../../lib-ts/runtime/logger.js";
 import { CODEX_MODELS } from "../../../lib-ts/runtime/models.js";
 import { displayPath } from "../../../lib-ts/runtime/utils.js";
-import type { ContextState } from "../../../lib-ts/types.js";
 
 /** Codex-specific model abbreviations. Checked before tier resolution. */
 const CODEX_ALIASES: Record<string, string> = {
@@ -47,12 +51,6 @@ function cleanupSentinel(sentinelPath: string | null | undefined): void {
     const dir = path.dirname(sentinelPath);
     fs.rmSync(dir, { recursive: true, force: true });
   } catch { /* best-effort */ }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }
 
 function collectSessionJsonlFiles(rootDir: string): string[] {
@@ -161,64 +159,6 @@ async function waitForCaptureSession(
   return findLatestSessionCandidate(projectRoot, launchStartedAtMs, false);
 }
 
-/** Fallback plan discovery: scan all context plan dirs by mtime. */
-function findLatestPlanByMtime(projectRoot: string): string | null {
-  const contextsDir = path.join(projectRoot, "_output", "contexts");
-  if (!fs.existsSync(contextsDir)) return null;
-
-  let best: { path: string; mtime: number } | null = null;
-
-  for (const ctxEntry of fs.readdirSync(contextsDir)) {
-    if (ctxEntry.startsWith("_")) continue;
-    const plansDir = path.join(contextsDir, ctxEntry, "plans");
-    if (!fs.existsSync(plansDir)) continue;
-
-    for (const file of fs.readdirSync(plansDir)) {
-      if (!file.endsWith(".md")) continue;
-      const fullPath = path.join(plansDir, file);
-      try {
-        const mtime = fs.statSync(fullPath).mtimeMs;
-        if (!best || mtime > best.mtime) {
-          best = { path: fullPath, mtime };
-        }
-      } catch { /* skip unreadable */ }
-    }
-  }
-
-  return best?.path ?? null;
-}
-
-function buildFileModeBootstrapPrompt(
-  targetPath: string,
-  sourceLabel: "plan" | "file",
-  extraPrompt?: string,
-  orientation?: string,
-): string {
-  const absolutePath = path.resolve(targetPath);
-  const sourceTitle = sourceLabel === "plan" ? "Plan Source" : "File Source";
-  const sections: string[] = ["## Startup Brief", ""];
-
-  if (orientation?.trim()) {
-    sections.push(orientation.trim(), "", "---", "");
-  }
-
-  sections.push(
-    `## ${sourceTitle}`,
-    "",
-    `Primary input path: ${absolutePath}`,
-    "",
-    "Read this file directly from disk before taking action.",
-    "Treat its contents as the source of truth.",
-    "Do not ask for the file contents to be pasted inline.",
-  );
-
-  if (extraPrompt?.trim()) {
-    sections.push("", "## Additional Instructions", "", extraPrompt.trim());
-  }
-
-  return sections.join("\n");
-}
-
 // ---------------------------------------------------------------------------
 // Arg parsing
 // ---------------------------------------------------------------------------
@@ -296,24 +236,9 @@ if (modelFlag) {
 }
 
 let promptPath: string | null = null;
-let tempFile: string | null = null;
-let fileReferencePath: string | null = null;
-let fileReferenceLabel: "plan" | "file" | null = null;
-let extraPromptEmbedded = false;
 
 const projectRoot = getProjectRoot(process.cwd());
-
-// Context lookup — available for all modes (orientation header + plan discovery)
-// --context flag preferred (passed by skill caller); CLAUDE_SESSION_ID as fallback (hooks only)
-let ctx: ContextState | null = null;
-if (contextFlag) {
-  ctx = getContext(contextFlag, projectRoot) ?? null;
-} else {
-  const sessionId = process.env.CLAUDE_SESSION_ID;
-  if (sessionId) {
-    ctx = getContextBySessionId(sessionId, projectRoot) ?? null;
-  }
-}
+const ctx = resolveContextForLaunch(contextFlag, projectRoot);
 
 if (args[0] === "plan") {
   // Plan discovery: context system first, mtime fallback second
@@ -332,9 +257,15 @@ if (args[0] === "plan") {
     process.exit(1);
   }
 
-  fileReferencePath = path.resolve(planPath);
-  fileReferenceLabel = "plan";
   console.log(`Found plan: ${displayPath(planPath)}`);
+  promptPath = writeFileRefPromptFile({
+    fileReferencePath: path.resolve(planPath),
+    label: "plan",
+    extraPrompt,
+    ctx,
+    projectRoot,
+    tempFilePrefix: "codex",
+  });
 
 } else if (args[0] === "--file") {
   if (!args[1]) {
@@ -346,71 +277,24 @@ if (args[0] === "plan") {
     eprint(`Error: File not found: ${filePath}`);
     process.exit(1);
   }
-  fileReferencePath = path.resolve(filePath);
-  fileReferenceLabel = "file";
+  promptPath = writeFileRefPromptFile({
+    fileReferencePath: filePath,
+    label: "file",
+    extraPrompt,
+    ctx,
+    projectRoot,
+    tempFilePrefix: "codex",
+  });
 
 } else {
-  // Inline text: join args, write to temp file
-  const text = args.join(" ");
-  tempFile = path.join(os.tmpdir(), `codex-prompt-${Date.now()}.md`);
-  fs.writeFileSync(tempFile, text, "utf8");
-  promptPath = tempFile;
-}
-
-if (fileReferencePath && fileReferenceLabel) {
-  let orientation = "";
-  if (ctx) {
-    try {
-      orientation = buildExternalAgentContext(ctx, projectRoot);
-    } catch {
-      logWarn("codex-skill", `Context orientation build failed for ${ctx.id}, continuing without header`);
-    }
-  }
-
-  const bootstrap = buildFileModeBootstrapPrompt(
-    fileReferencePath,
-    fileReferenceLabel,
+  // Inline text: join args, write to temp file with context + extra prompt
+  promptPath = writeInlinePromptFile({
+    text: args.join(" "),
     extraPrompt,
-    orientation,
-  );
-  tempFile = path.join(os.tmpdir(), `codex-file-ref-${Date.now()}.md`);
-  fs.writeFileSync(tempFile, bootstrap, "utf8");
-  promptPath = tempFile;
-  extraPromptEmbedded = Boolean(extraPrompt?.trim());
-}
-
-// Prepend context orientation if available — graceful degradation on failure
-if (ctx && promptPath && !fileReferencePath) {
-  try {
-    const orientation = buildExternalAgentContext(ctx, projectRoot);
-    const original = fs.readFileSync(promptPath, "utf8");
-    const combined = `${orientation}\n\n---\n\n${original}`;
-    const contextPromptPath = path.join(os.tmpdir(), `codex-ctx-prompt-${Date.now()}.md`);
-    fs.writeFileSync(contextPromptPath, combined, "utf8");
-    if (tempFile) {
-      try { fs.unlinkSync(tempFile); } catch { /* ignore */ }
-    }
-    promptPath = contextPromptPath;
-    tempFile = contextPromptPath;
-  } catch {
-    logWarn("codex-skill", `Context orientation prepend failed for ${ctx.id}, continuing without header`);
-  }
-}
-
-if (extraPrompt && promptPath && !extraPromptEmbedded) {
-  try {
-    const base = fs.readFileSync(promptPath, "utf8");
-    const combined = `${base}\n\n---\n\n## Additional Instructions\n\n${extraPrompt}`;
-    const extraPromptPath = path.join(os.tmpdir(), `codex-extra-prompt-${Date.now()}.md`);
-    fs.writeFileSync(extraPromptPath, combined, "utf8");
-    if (tempFile) {
-      try { fs.unlinkSync(tempFile); } catch { /* ignore */ }
-    }
-    promptPath = extraPromptPath;
-    tempFile = extraPromptPath;
-  } catch {
-    logWarn("codex-skill", "Extra prompt append failed, continuing without it");
-  }
+    ctx,
+    projectRoot,
+    tempFilePrefix: "codex",
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -450,8 +334,8 @@ if (!result.launched) {
   const execInv = buildCliInvocation(execSpec);
   const promptContent = promptPath ? fs.readFileSync(promptPath, "utf8") : "";
 
-  if (tempFile) {
-    try { fs.unlinkSync(tempFile); } catch { /* ignore */ }
+  if (promptPath) {
+    try { fs.unlinkSync(promptPath); } catch { /* ignore */ }
   }
 
   const { execFileAsync } = await import("../../../lib-ts/runtime/subprocess-utils.js");
@@ -503,7 +387,7 @@ if (watch && (result.paneId || result.sentinelPath)) {
       ?? (sessionId ? await summarizeViaResume(sessionId) : null)
       ?? summarizeFromSessionFileFallback(sessionFile)
       ?? SUMMARY_UNAVAILABLE_MESSAGE;
-    const summaryPath = persistSummary(summary, sessionId || undefined);
+    const summaryPath = persistSummary(summary, "codex", sessionId || undefined);
 
     console.log("\n--- Codex Session Summary ---");
     console.log(summary);
@@ -514,7 +398,7 @@ if (watch && (result.paneId || result.sentinelPath)) {
     logWarn("codex-skill", `Watch flow failed: ${String(error)}`);
     const fallbackMsg = "Codex session completed. Summary unavailable (watch error).";
     const { persistSummary: persistFallback } = await import("../lib/codex-watcher.js");
-    const fallbackPath = persistFallback(fallbackMsg);
+    const fallbackPath = persistFallback(fallbackMsg, "codex");
     console.log("\n--- Codex Session Summary ---");
     console.log(fallbackMsg);
     if (fallbackPath) {

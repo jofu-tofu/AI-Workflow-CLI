@@ -42,7 +42,7 @@ export function meetsMinVersion(v: PsmuxVersion): boolean {
 }
 
 /** @internal */
-export function parseVersionString(stdout: string): PsmuxVersion | null {
+export function parseVersionString(stdout: string): null | PsmuxVersion {
   const match = stdout.trim().match(/(\d+)\.(\d+)\.(\d+)/)
   if (!match) return null
   return {
@@ -92,19 +92,21 @@ export function buildPowerShellToolCommand(params: {
 }
 
 /** @internal */
-export function buildCreateSessionArgs(params: { sessionName: string; cwd: string; encodedCommand: string }): string[] {
+export function buildCreateSessionArgs(params: { cwd: string; encodedCommand: string; sessionName: string; }): string[] {
   return ['new-session', '-d', '-c', params.cwd, '-s', params.sessionName, params.encodedCommand]
 }
 
 /** @internal */
-export function buildSplitWindowArgs(params: { splitFlag: '-h' | '-v'; encodedCommand: string; cwd?: string; splitTarget?: string | undefined }): string[] {
+export function buildSplitWindowArgs(params: { cwd?: string; encodedCommand: string; splitFlag: '-h' | '-v'; splitTarget?: string | undefined }): string[] {
   const args = ['split-window', params.splitFlag, '-P', '-F', '#{pane_id}']
   if (params.cwd) {
     args.push('-c', params.cwd)
   }
+
   if (params.splitTarget?.trim()) {
     args.push('-t', params.splitTarget.trim())
   }
+
   args.push(params.encodedCommand)
   return args
 }

@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, mock, beforeEach } from "bun:test";
+
 import type { ModelsConfig, PreflightCheckResult, PreflightReport } from "../../../lib-ts/types.js";
 
 // ---------------------------------------------------------------------------
@@ -13,16 +14,16 @@ import type { ModelsConfig, PreflightCheckResult, PreflightReport } from "../../
 // ---------------------------------------------------------------------------
 
 mock.module("../../../../_core/lib-ts/runtime/logger.js", () => ({
-  hookLog: () => {},
-  logDebug: () => {},
-  logInfo: () => {},
-  logWarn: () => {},
-  logError: () => {},
-  logBlocking: () => {},
-  logDiagnostic: () => {},
-  logHookError: () => {},
-  setSessionId: () => {},
-  setContextPath: () => {},
+  hookLog() {},
+  logDebug() {},
+  logInfo() {},
+  logWarn() {},
+  logError() {},
+  logBlocking() {},
+  logDiagnostic() {},
+  logHookError() {},
+  setSessionId() {},
+  setContextPath() {},
   getContextPath: () => null,
 }));
 
@@ -45,6 +46,7 @@ function makeModelsConfig(providers: Record<string, { enabled: boolean; models: 
 // collectPreflightChecks — pure, zero mocks
 // ---------------------------------------------------------------------------
 
+describe("preflight", () => {
 describe("collectPreflightChecks", () => {
   const knownProviders = new Set(["claude", "codex"]);
 
@@ -153,10 +155,10 @@ describe("buildPreflightReport", () => {
   it("reports allFailed when all results fail", () => {
     const results = [
       { provider: "claude", model: "sonnet", available: false, error: "Auth failed", latencyMs: 10 },
-      { provider: "codex", model: "codex-mini", available: false, error: "Timeout", latencyMs: 15000 },
+      { provider: "codex", model: "codex-mini", available: false, error: "Timeout", latencyMs: 15_000 },
     ];
 
-    const report = buildPreflightReport(results, 15000);
+    const report = buildPreflightReport(results, 15_000);
 
     expect(report.allFailed).toBe(true);
     expect(report.available.size).toBe(0);
@@ -338,4 +340,5 @@ describe("runPreflight", () => {
     expect(report.allFailed).toBe(true);
     expect(report.checks.length).toBe(0);
   });
+});
 });

@@ -11,9 +11,9 @@ import {
   buildCombinedJson,
   generateReviewIndex,
 } from "./format.js";
-import { atomicWrite } from "../../../_shared/lib-ts/base/atomic-write.js";
-import { sanitizeFilename } from "../../../_shared/lib-ts/base/constants.js";
-import { logDebug, logWarn, logError } from "../../../_shared/lib-ts/base/logger.js";
+import { atomicWrite } from "../../../_core/lib-ts/runtime/atomic-write.js";
+import { sanitizeFilename } from "../../../_core/lib-ts/runtime/constants.js";
+import { logDebug, logWarn, logError } from "../../../_core/lib-ts/runtime/logger.js";
 import { ENABLE_ROBUST_PLAN_WRITES } from "../../lib-ts/constants.js";
 import type { CombinedReviewResult, CorroborationResult } from "../../lib-ts/types.js";
 

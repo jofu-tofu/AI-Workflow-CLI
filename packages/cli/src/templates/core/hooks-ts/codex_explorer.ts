@@ -2,16 +2,79 @@
 /**
  * UserPromptSubmit hook: One-shot Codex codebase exploration for first plan-mode prompt.
  */
-import { getContextBySessionId, saveState } from "../lib-ts/context/context-store.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
+
 import {
   emitContext, loadHookInput, logDebug, logInfo, logWarn, runHookAsync,
 } from "../lib-ts/hooks/hook-utils.js";
-import { getProjectRoot } from "../lib-ts/runtime/constants.js";
+import { getOutputDir, getProjectRoot } from "../lib-ts/runtime/constants.js";
 import { codexInferAsync } from "../lib-ts/runtime/inference.js";
 import { CODEX_MODELS } from "../lib-ts/runtime/models.js";
 
 const MAX_PROMPT_CHARS = 8000;
 const SPARK_TIMEOUT_SECONDS = 50;
+const FIRED_FILENAME = ".codex-explorer-fired";
+const MAX_FIRED_LINES = 200;
+const PRUNE_KEEP = 100;
+
+function getCacheFilePath(projectRoot: string): string {
+  return path.join(getOutputDir(projectRoot), FIRED_FILENAME);
+}
+
+function hasSessionFired(sessionId: string, projectRoot: string): boolean {
+  const filePath = getCacheFilePath(projectRoot);
+  try {
+    const content = fs.readFileSync(filePath, "utf8");
+    return content.split("\n").includes(sessionId);
+  } catch {
+    return false;
+  }
+}
+
+function markSessionFired(sessionId: string, projectRoot: string): void {
+  const filePath = getCacheFilePath(projectRoot);
+  const outputDir = getOutputDir(projectRoot);
+
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+
+  fs.appendFileSync(filePath, sessionId + "\n");
+
+  // Prune if over limit
+  try {
+    const content = fs.readFileSync(filePath, "utf8");
+    const lines = content.split("\n").filter(Boolean);
+    if (lines.length > MAX_FIRED_LINES) {
+      const pruned = lines.slice(lines.length - PRUNE_KEEP);
+      fs.writeFileSync(filePath, pruned.join("\n") + "\n");
+      logDebug("codex_explorer", `Pruned fired cache from ${lines.length} to ${pruned.length} entries`);
+    }
+  } catch (error) {
+    logWarn("codex_explorer", `Failed to prune fired cache: ${error}`);
+  }
+}
+
+/**
+ * Parse Codex JSONL output into clean agent message text.
+ * Codex --json returns streaming events; we extract only agent_message text.
+ */
+function parseCodexOutput(raw: string): string {
+  const lines = raw.split("\n").filter(Boolean);
+  const parts: string[] = [];
+  for (const line of lines) {
+    try {
+      const event = JSON.parse(line);
+      if (event.type !== "item.completed") continue;
+      const item = event.item;
+      if (item?.type === "agent_message" && item.text) {
+        parts.push(item.text);
+      }
+    } catch { /* skip non-JSON lines */ }
+  }
+  return parts.join("\n\n") || raw;
+}
 
 function buildExplorerPrompt(userPrompt: string): string {
   const trimmed = userPrompt.trim();
@@ -63,12 +126,8 @@ async function main(): Promise<void> {
   }
 
   const projectRoot = getProjectRoot(payload.cwd);
-  const state = getContextBySessionId(sessionId, projectRoot);
 
-  if (
-    state?.last_session?.codex_explorer_fired === true &&
-    state.last_session.session_id === sessionId
-  ) {
+  if (hasSessionFired(sessionId, projectRoot)) {
     logDebug("codex_explorer", `Skip: already fired for session ${sessionId}`);
     return;
   }
@@ -90,27 +149,12 @@ async function main(): Promise<void> {
     return;
   }
 
-  emitContext(result.output);
+  const cleanOutput = parseCodexOutput(result.output);
+  emitContext(cleanOutput);
   logInfo("codex_explorer", `Explorer context emitted in ${elapsedMs}ms`);
 
-  if (!state) {
-    logWarn("codex_explorer", `No bound context for session ${sessionId}; cannot persist fired flag`);
-    return;
-  }
-
-  if (!state.last_session) {
-    state.last_session = {};
-  }
-  state.last_session.session_id = sessionId;
-  state.last_session.codex_explorer_fired = true;
-
-  const [ok, err] = saveState(state.id, state, projectRoot);
-  if (!ok) {
-    logWarn("codex_explorer", `Failed to persist codex_explorer_fired: ${err}`);
-    return;
-  }
-
-  logDebug("codex_explorer", `Marked codex_explorer_fired for ${state.id}`);
+  markSessionFired(sessionId, projectRoot);
+  logDebug("codex_explorer", `Marked session ${sessionId} as fired`);
 }
 
 runHookAsync(main, "codex_explorer");

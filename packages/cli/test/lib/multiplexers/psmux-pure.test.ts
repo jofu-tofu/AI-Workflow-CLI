@@ -1,6 +1,7 @@
 import {describe, expect, it, vi} from 'vitest'
 
 import {
+  type PsmuxVersion as _PsmuxVersion,
   buildAttachArgs,
   buildCommandArgs,
   buildCreateSessionArgs,
@@ -10,7 +11,6 @@ import {
   formatPromptPathForBootstrap,
   meetsMinVersion,
   parseVersionString,
-  type PsmuxVersion,
 } from '../../../src/lib/multiplexers/psmux.js'
 
 describe('psmux pure functions', () => {

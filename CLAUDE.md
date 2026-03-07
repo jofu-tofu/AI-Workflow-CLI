@@ -43,6 +43,7 @@ Read the relevant CLAUDE.md before working in these areas:
 - `.aiwcli/_core/skills/handoff-system/CLAUDE.md` — handoff lifecycle, restore paths, latest-wins design
 - `.aiwcli/_core/skills/meta-plan/CLAUDE.md` — prompt amplifier for complex problems
 - `.aiwcli/_core/skills/codex/CLAUDE.md` — Codex pane launcher skill
+- `.aiwcli/_core/skills/devin/CLAUDE.md` — Devin pane launcher skill
 - `.aiwcli/_cc-native/CLAUDE.md` — CC-native method overview, shared infrastructure map
 
 **`packages/cli/` (CLI package — installs templates into user projects):**
