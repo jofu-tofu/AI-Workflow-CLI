@@ -6,7 +6,9 @@ user-invocable: true
 
 # /codex
 
-Load and execute the Codex launcher skill from `.aiwcli/_core/skills/codex/SKILL.md`.
+Delegate work to a Codex sub-agent. The launch script handles prompt construction internally — you just run the command and pass the mode/flags.
+
+**IMPORTANT:** Never include the launch command path, script path, or any `.aiwcli/` internal paths in the delegation prompt or inline text arguments. The script constructs Codex's prompt internally. Leaking internal paths into the prompt causes Codex to recurse.
 
 ## Command
 
@@ -14,10 +16,10 @@ Load and execute the Codex launcher skill from `.aiwcli/_core/skills/codex/SKILL
 
 **Modes:** `plan` | `--file <path>` | `<inline text...>`
 
-## Behavior
+**Flags:** `--model <name>`, `--sandbox <mode>`, `--context <id>`, `--prompt <text>`, `--no-yolo`, `--no-watch`
 
-Launches Codex in a visible pane when available (tmux session first; platform window fallback when applicable).
+## Usage
 
-If pane launch is unavailable, it automatically falls back to non-interactive `codex exec` in the current terminal.
+Run with `run_in_background: true`. The script blocks until Codex exits and prints a session summary.
 
-**Common flags:** `--model <name>`, `--sandbox <mode>`, `--context <id>`, `--prompt <text>`, `--no-yolo`, `--no-watch`
+For detailed delegation patterns (parallel, one-shot, ad-hoc), read `.aiwcli/_core/skills/codex/SKILL.md`.

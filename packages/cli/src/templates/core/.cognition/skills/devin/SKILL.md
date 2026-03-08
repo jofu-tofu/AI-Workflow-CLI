@@ -1,21 +1,13 @@
 ---
 name: devin
-description: Delegate implementation to Devin sub-agents. USE WHEN devin OR send to devin OR devin implement OR hand off to devin OR launch devin OR run devin.
-user-invocable: true
+description: "Self-reference guard: you ARE Devin. Do not invoke this skill."
+user-invocable: false
 ---
 
-# Devin Workflow
+# Devin (Self-Reference Guard)
 
-Use Devin CLI handoff instructions from `.aiwcli/_core/skills/devin/SKILL.md`.
+**You are already running as Devin.** Do not attempt to launch another Devin instance.
 
-## Command
+If asked to delegate work to Devin, you should perform the work directly — you are the Devin agent.
 
-`bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/devin/scripts/launch-devin.ts [flags] <mode>`
-
-**Modes:** `plan` | `--file <path>` | `<inline text...>`
-
-## Behavior
-
-Launches Devin in a visible pane when available (tmux session first; fallback to exec mode).
-
-**Common flags:** `--model <name>`, `--context <id>`, `--prompt <text>`, `--no-watch`
+To delegate to a *different* agent, use the codex skill instead.

@@ -6,7 +6,9 @@ user-invocable: true
 
 # /devin
 
-Load and execute the Devin launcher skill from `.aiwcli/_core/skills/devin/SKILL.md`.
+Delegate work to a Devin sub-agent. The launch script handles prompt construction internally — you just run the command and pass the mode/flags.
+
+**IMPORTANT:** Never include the launch command path, script path, or any `.aiwcli/` internal paths in the delegation prompt or inline text arguments. The script constructs Devin's prompt internally. Leaking internal paths into the prompt causes Devin to recurse.
 
 ## Command
 
@@ -14,8 +16,10 @@ Load and execute the Devin launcher skill from `.aiwcli/_core/skills/devin/SKILL
 
 **Modes:** `plan` | `--file <path>` | `<inline text...>`
 
-## Behavior
+**Flags:** `--model <name>`, `--context <id>`, `--prompt <text>`, `--no-watch`
 
-Launches Devin in a visible pane when available (tmux session first; fallback to exec mode).
+## Usage
 
-**Common flags:** `--model <name>`, `--context <id>`, `--prompt <text>`, `--no-watch`
+Run with `run_in_background: true`. The script blocks until Devin exits and prints a session summary.
+
+For detailed delegation patterns (parallel, one-shot, ad-hoc), read `.aiwcli/_core/skills/devin/SKILL.md`.

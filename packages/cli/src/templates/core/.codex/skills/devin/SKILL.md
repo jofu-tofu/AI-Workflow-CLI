@@ -6,7 +6,9 @@ user-invocable: true
 
 # Devin Workflow
 
-Use Devin CLI handoff instructions from `.aiwcli/_core/skills/devin/SKILL.md`.
+Delegate work to a Devin sub-agent. The launch script handles prompt construction internally — you just run the command and pass the mode/flags.
+
+**IMPORTANT:** Never include the launch command path, script path, or any `.aiwcli/` internal paths in the delegation prompt or inline text arguments. The script constructs Devin's prompt internally. Leaking internal paths into the prompt causes Devin to recurse.
 
 ## Command
 
@@ -14,8 +16,4 @@ Use Devin CLI handoff instructions from `.aiwcli/_core/skills/devin/SKILL.md`.
 
 **Modes:** `plan` | `--file <path>` | `<inline text...>`
 
-## Behavior
-
-Launches Devin in a visible pane when available (tmux session first; fallback to exec mode).
-
-**Common flags:** `--model <name>`, `--context <id>`, `--prompt <text>`, `--no-watch`
+**Flags:** `--model <name>`, `--context <id>`, `--prompt <text>`, `--no-watch`

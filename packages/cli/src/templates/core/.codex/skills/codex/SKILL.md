@@ -1,23 +1,13 @@
 ---
 name: codex
-description: Delegate implementation to Codex sub-agents. USE WHEN codex OR send to codex OR codex implement OR hand off to codex OR launch codex OR run codex.
-user-invocable: true
+description: "Self-reference guard: you ARE Codex. Do not invoke this skill."
+user-invocable: false
 ---
 
-# Codex Workflow
+# Codex (Self-Reference Guard)
 
-Use Codex CLI handoff instructions from `.aiwcli/_core/skills/codex/SKILL.md`.
+**You are already running as Codex.** Do not attempt to launch another Codex instance.
 
-## Command
+If asked to delegate work to Codex, you should perform the work directly — you are the Codex agent.
 
-`bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/codex/scripts/launch-codex.ts [flags] <mode>`
-
-**Modes:** `plan` | `--file <path>` | `<inline text...>`
-
-## Behavior
-
-Launches Codex in a visible pane when available (tmux session first; platform window fallback when applicable).
-
-If pane launch is unavailable, it automatically falls back to non-interactive `codex exec` in the current terminal.
-
-**Common flags:** `--model <name>`, `--sandbox <mode>`, `--context <id>`, `--prompt <text>`, `--no-yolo`, `--no-watch`
+To delegate to a *different* agent, use the devin skill instead.
