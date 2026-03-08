@@ -163,7 +163,10 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
         host.logInfo('No multiplexer found — launching inline. Install tmux for session management.')
       }
 
-      exitCode = await spawnProcess(cliCommand, promptText ? [...cliArgs, promptText] : cliArgs)
+      const inlineArgs = useDevin && promptPath
+        ? [...cliArgs, '--prompt-file', promptPath]
+        : promptText ? [...cliArgs, promptText] : cliArgs
+      exitCode = await spawnProcess(cliCommand, inlineArgs)
     } else if (mux.isInsideSession()) {
       host.logInfo(`Inside ${mux.backend} session — splitting new pane`)
       if (mux.backend === 'tmux') {
@@ -176,13 +179,22 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
         writePromptFile(effectivePromptPath, promptText)
       }
 
+      // Devin CLI uses --prompt-file <path> instead of trailing positional prompt text.
+      // Pass the file as a CLI flag and don't forward promptPath to splitPane (which would
+      // read the file and append its content as a bare positional arg — unsupported by Devin).
+      let splitPromptPath = effectivePromptPath
+      if (useDevin && effectivePromptPath) {
+        cliArgs.push('--prompt-file', effectivePromptPath)
+        splitPromptPath = undefined
+      }
+
       const splitResult = await mux.splitPane({
         toolName: cliCommand,
         args: cliArgs,
         env: extraEnv,
         cwd,
         split: flags.split ?? 'auto',
-        promptPath: effectivePromptPath,
+        promptPath: splitPromptPath,
         sentinel: wantWait || wantJson,
       })
 
@@ -224,12 +236,18 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
           host.logInfo(`Launching in new ${mux.backend} session: ${sessionName}`)
         }
 
+        // Devin uses --prompt-file instead of trailing positional prompt text
+        const sessionToolArgs = useDevin && promptPath
+          ? [...cliArgs, '--prompt-file', promptPath]
+          : cliArgs
+        const sessionPromptText = useDevin ? undefined : promptText
+
         const result = await mux.createSession({
           sessionName,
           reattach,
           toolPath: resolvedPath,
-          toolArgs: cliArgs,
-          promptText,
+          toolArgs: sessionToolArgs,
+          promptText: sessionPromptText,
         })
 
         if (result.usedMux) {
