@@ -122,7 +122,7 @@ describe('session_end hook integration', () => {
 
     expect(result.exitCode).toBe(0)
     const state = fixture.getState()
-    expect(state.handoff_path).toBeUndefined()
+    expect(state.handoff_path).toBeNull()
     expect(state.next_artifact_type).toBe('plan')
   })
 

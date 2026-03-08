@@ -20,6 +20,14 @@ cd .aiwcli/_core/lib-ts && bunx tsc --noEmit 2>&1 | grep TS2307
 
 **Requires:** `bun-types` (installed as dev dependency at project root)
 
+## After Modifying Hook I/O Types
+
+When changing types in `types.ts` or schemas in `schemas.ts`, run these validation steps:
+1. `cd .aiwcli/_core/lib-ts && bunx tsc --noEmit` — verify no import errors
+2. `cd packages/cli && npx vitest run test/types/` — contract tests pass
+3. `cd packages/cli && npm run sync:shared-lib` — sync changes to template copies
+4. `node packages/cli/scripts/check-template-sync.mjs` — verify all 3 locations in sync
+
 ## Hook Development
 
 See `.aiwcli/_core/lib-ts/CLAUDE.md` for hook entry points, logging standard, import patterns, debugging, and blocking/output rules.
@@ -79,4 +87,4 @@ is stale — update or regenerate before relying on it.
 **Runtime mismatch check:**
 - If behavior differs between OpenCode and Claude Code, verify runtime-level config first (`opencode.json` + plugins/events vs `.claude/settings.json` hooks) before debugging hook code.
 
-<!-- context-layer: generated=2026-02-18 | last-audited=2026-03-05 | version=5 | dir-commits-at-audit=15 -->
+<!-- context-layer: generated=2026-02-18 | last-audited=2026-03-08 | version=6 | dir-commits-at-audit=15 -->

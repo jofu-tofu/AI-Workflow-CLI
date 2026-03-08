@@ -23,6 +23,7 @@ import {
 import { logInfo, logWarn, logError, setContextPath } from "../runtime/logger.js";
 import { readStateJson, writeStateJson } from "../runtime/state-io.js";
 import { nowIso, generateContextId } from "../runtime/utils.js";
+import { IndexFileSchema } from "../schemas.js";
 import type { ContextState, IndexFile, IndexEntry, Mode } from "../types.js";
 
 const INDEX_VERSION = "3.0";
@@ -81,8 +82,14 @@ function loadIndex(projectRoot?: string): IndexFile {
   if (fs.existsSync(indexPath)) {
     try {
       const raw = fs.readFileSync(indexPath, "utf8");
-      _indexCache = JSON.parse(raw) as IndexFile;
-      return _indexCache;
+      const data = JSON.parse(raw);
+      const validated = IndexFileSchema.safeParse(data);
+      if (!validated.success) {
+        logWarn("context_store", `Index schema validation failed, recreating: ${validated.error.message}`);
+      } else {
+        _indexCache = data as IndexFile;
+        return _indexCache;
+      }
     } catch (error: unknown) {
       logWarn("context_store", `Failed to read index, recreating: ${error}`);
     }

@@ -9,6 +9,7 @@ import * as fs from "node:fs";
 import { getContextBySessionId, maybeActivate } from "../context/context-store.js";
 import { getProjectRoot } from "../runtime/constants.js";
 import { logDebug,  logWarn,     hookLog, setSessionId,  getContextPath as _getContextPath } from "../runtime/logger.js";
+import { HookInputSchema } from "../schemas.js";
 import type { ContextState, HookInput, HookOutput, PermissionRequestOutput } from "../types.js";
 
 // Re-export logger functions for convenience (matches Python hook_utils re-exports)
@@ -161,6 +162,11 @@ export function loadHookInput(): HookInput | null {
     if (!inputData) return null;
 
     const result = JSON.parse(inputData) as Record<string, unknown>;
+    const validated = HookInputSchema.safeParse(result);
+    if (!validated.success) {
+      logWarn("hook_utils", `Hook input schema validation failed: ${validated.error.message}`);
+      return null;
+    }
     if (result && typeof result === "object") {
       _lastHookEvent = readStringField(result, "hook_event_name");
       _lastToolName = readStringField(result, "tool_name");
@@ -533,6 +539,11 @@ function _earlyReadInput(prefetchedInput?: Record<string, unknown>): void {
     const inputData = fs.readFileSync(0, "utf8").trim();
     if (inputData) {
       const parsed = JSON.parse(inputData) as Record<string, unknown>;
+      const validated = HookInputSchema.safeParse(parsed);
+      if (!validated.success) {
+        logWarn("hook_utils", `Early input schema validation failed: ${validated.error.message}`);
+        return;
+      }
       if (parsed && typeof parsed === "object") {
         _prefetchedInput = parsed;
         _lastHookEvent = readStringField(parsed, "hook_event_name");

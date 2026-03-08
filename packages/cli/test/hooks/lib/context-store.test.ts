@@ -335,4 +335,84 @@ describe('context-store', () => {
     expect(bindSession('ctx-bind-false', 'unknown', projectRoot)).toBe(false)
     expect(bindSession(`missing-${randomUUID()}`, 'session-real', projectRoot)).toBe(false)
   })
+
+  it('supports full lifecycle: create → bind → activate → stage → re-activate → idle', () => {
+    const projectRoot = createProjectRoot()
+    projectRoots.push(projectRoot)
+
+    // Create
+    const state = createContext('ctx-lifecycle', 'Lifecycle test', 'manual', projectRoot)
+    expect(state.mode).toBe('idle')
+
+    // Bind session
+    const bound = bindSession('ctx-lifecycle', 'session-lc', projectRoot)
+    expect(bound).toBe(true)
+
+    // Activate
+    const activated = maybeActivate('ctx-lifecycle', 'acceptEdits', projectRoot, 'test')
+    expect(activated).toBe(true)
+    expect(getContext('ctx-lifecycle', projectRoot)?.mode).toBe('active')
+
+    // Stage work
+    const staged = updateMode('ctx-lifecycle', 'has_staged_work', projectRoot, {
+      plan_path: 'plans/lifecycle.md',
+      plan_hash: 'abc123def456',
+      work_consumed: false,
+    })
+    expect(staged?.mode).toBe('has_staged_work')
+
+    // Re-activate (consumes work)
+    const reactivated = maybeActivate('ctx-lifecycle', 'acceptEdits', projectRoot, 'test')
+    expect(reactivated).toBe(true)
+    const afterReactivate = getContext('ctx-lifecycle', projectRoot)
+    expect(afterReactivate?.mode).toBe('active')
+    expect(afterReactivate?.work_consumed).toBe(true)
+
+    // Return to idle
+    const idled = updateMode('ctx-lifecycle', 'idle', projectRoot)
+    expect(idled?.mode).toBe('idle')
+    expect(idled?.plan_path).toBeNull()
+    expect(idled?.work_consumed).toBe(false)
+  })
+
+  it('handles corrupt index with phantom context entries gracefully', () => {
+    const projectRoot = createProjectRoot()
+    projectRoots.push(projectRoot)
+
+    // Create a real context
+    createContext('ctx-real', 'Real context', 'manual', projectRoot)
+
+    // Corrupt the index: add phantom context that has no directory
+    const indexPath = getIndexPath(projectRoot)
+    const index = readIndex(projectRoot)
+    index.contexts['ctx-phantom'] = {summary: 'phantom', mode: 'idle', last_active: '2026-01-01T00:00:00.000Z'}
+    writeFileSync(indexPath, JSON.stringify(index, null, 2), 'utf8')
+
+    // getContextBySessionId for unknown session should still work
+    const found = getContextBySessionId('session-unknown', projectRoot)
+    expect(found).toBeNull()
+
+    // Real context is still accessible
+    expect(getContext('ctx-real', projectRoot)?.summary).toBe('Real context')
+  })
+
+  it('supports multiple sessions bound to the same context', () => {
+    const projectRoot = createProjectRoot()
+    projectRoots.push(projectRoot)
+    createContext('ctx-multi-session', 'Multi session', 'manual', projectRoot)
+
+    expect(bindSession('ctx-multi-session', 'session-a', projectRoot)).toBe(true)
+    expect(bindSession('ctx-multi-session', 'session-b', projectRoot)).toBe(true)
+    expect(bindSession('ctx-multi-session', 'session-c', projectRoot)).toBe(true)
+
+    const state = getContext('ctx-multi-session', projectRoot)
+    expect(state?.session_ids).toContain('session-a')
+    expect(state?.session_ids).toContain('session-b')
+    expect(state?.session_ids).toContain('session-c')
+
+    // All sessions resolve to same context
+    expect(getContextBySessionId('session-a', projectRoot)?.id).toBe('ctx-multi-session')
+    expect(getContextBySessionId('session-b', projectRoot)?.id).toBe('ctx-multi-session')
+    expect(getContextBySessionId('session-c', projectRoot)?.id).toBe('ctx-multi-session')
+  })
 })

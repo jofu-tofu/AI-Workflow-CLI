@@ -10,6 +10,7 @@ import path from "node:path";
 import { atomicWrite } from "./atomic-write.js";
 import { getContextDir } from "./constants.js";
 import { logWarn } from "./logger.js";
+import { ContextStateSchema } from "../schemas.js";
 import type { ContextState, Mode } from "../types.js";
 
 /** Mode migration from legacy context_manager values. */
@@ -34,12 +35,13 @@ interface LegacyStateData {
 
 /**
  * Serialize a ContextState for JSON output.
- * Omits null/undefined keys but keeps false, 0, empty string, and empty arrays.
+ * Omits undefined keys but preserves null (semantically meaningful in the schema).
+ * Keeps false, 0, empty string, and empty arrays.
  */
 export function toDict(state: ContextState): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(state)) {
-    if (value !== null && value !== undefined) {
+    if (value !== undefined) {
       result[key] = value;
     }
   }
@@ -121,6 +123,11 @@ export function readStateJson(
     const raw = fs.readFileSync(sp, "utf8");
     const data = JSON.parse(raw) as Record<string, unknown>;
     migrateConsumedFlags(data); // Migrate before dictToState
+    const parsed = ContextStateSchema.safeParse(data);
+    if (!parsed.success) {
+      logWarn("state_io", `Schema validation failed for '${contextId}': ${parsed.error.message}`);
+      // Fail-open: still attempt to reconstruct state from raw data
+    }
     return dictToState(data);
   } catch (error: unknown) {
     logWarn("state_io", `Failed to read state.json for '${contextId}': ${error}`);

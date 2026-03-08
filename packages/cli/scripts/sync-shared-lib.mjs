@@ -12,6 +12,7 @@ const mappings = [
   { source: join(canonicalLib, 'context'), destination: join(templateLib, 'context') },
   { source: join(canonicalLib, 'hooks'), destination: join(templateLib, 'hooks') },
   { source: join(canonicalLib, 'types.ts'), destination: join(templateLib, 'types.ts') },
+  { source: join(canonicalLib, 'schemas.ts'), destination: join(templateLib, 'schemas.ts') },
 ]
 
 for (const {source, destination} of mappings) {

@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "test": "npm --prefix packages/cli test"
+    "test": "npm --prefix packages/cli test",
+    "prepare": "bash scripts/install-hooks.sh"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.3",
