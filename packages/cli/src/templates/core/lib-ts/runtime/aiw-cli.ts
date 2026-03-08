@@ -27,6 +27,8 @@ function resolveAiwBin(cwd?: string): string {
 export interface AiwLaunchOptions {
   /** Launch codex instead of claude. */
   codex?: boolean;
+  /** Launch devin instead of claude. */
+  devin?: boolean;
   /** Working directory. */
   cwd?: string;
   /** Extra env vars to inject. */
@@ -61,6 +63,7 @@ export async function aiwLaunch(options: AiwLaunchOptions): Promise<AiwLaunchRes
   const args = ["launch"];
 
   if (options.codex) args.push("--codex");
+  if (options.devin) args.push("--devin");
   if (options.wait) args.push("--wait");
   args.push("--json");
   if (options.split) args.push("--split", options.split);
@@ -103,4 +106,3 @@ function parseJsonResult(result: ExecResult): AiwLaunchResult {
     };
   }
 }
-
