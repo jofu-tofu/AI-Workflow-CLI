@@ -313,11 +313,31 @@ export function getAllContexts(
   const ctxMap = index.contexts;
 
   if (ctxMap && typeof ctxMap === "object" && Object.keys(ctxMap).length > 0) {
+    const orphanIds: string[] = [];
     for (const cid of Object.keys(ctxMap)) {
       const state = loadState(cid, projectRoot);
       if (state && (!status || state.status === status)) {
         results.push(state);
+      } else if (!state) {
+        orphanIds.push(cid);
       }
+    }
+
+    if (orphanIds.length > 0) {
+      logWarn(
+        "context_store",
+        `Index references ${orphanIds.length} missing context(s): ${orphanIds.join(", ")}. Auto-repairing index.`
+      );
+      const idx = loadIndex(projectRoot);
+      for (const cid of orphanIds) {
+        delete idx.contexts[cid];
+        if (idx.sessions) {
+          for (const [sid, target] of Object.entries(idx.sessions)) {
+            if (target === cid) delete idx.sessions[sid];
+          }
+        }
+      }
+      saveIndex(idx, projectRoot);
     }
   } else {
     // Fallback: scan folders

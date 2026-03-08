@@ -7,6 +7,7 @@
 import {expect} from 'chai'
 import {describe, it} from 'vitest'
 
+import {PROTECTED_OUTPUT_DIRS} from '../../src/capabilities/installation/control-plane/clear-command.js'
 import ClearCommand from '../../src/commands/clear.js'
 
 describe('clear command', () => {
@@ -67,6 +68,24 @@ describe('clear command', () => {
       const {examples} = ClearCommand
       const hasOutputExample = examples.some((ex: string) => ex.includes('--output'))
       expect(hasOutputExample).to.be.true
+    })
+  })
+
+  describe('PROTECTED_OUTPUT_DIRS', () => {
+    it('should exclude contexts from output folders', () => {
+      expect(PROTECTED_OUTPUT_DIRS.has('contexts')).to.be.true
+    })
+
+    it('should exclude cache from output folders', () => {
+      expect(PROTECTED_OUTPUT_DIRS.has('cache')).to.be.true
+    })
+
+    it('should exclude _archive from output folders', () => {
+      expect(PROTECTED_OUTPUT_DIRS.has('_archive')).to.be.true
+    })
+
+    it('should not exclude actual method directories like cc-native', () => {
+      expect(PROTECTED_OUTPUT_DIRS.has('cc-native')).to.be.false
     })
   })
 

@@ -26,6 +26,7 @@ const OUTPUT_FOLDER_NAME = '_output'
 const CORE_TEMPLATE_NAME = 'core'
 const SETTINGS_FILES_TO_SKIP = new Set(['hooks.json', 'settings.json'])
 const CORE_RUNTIME_FOLDERS = ['_core']
+export const PROTECTED_OUTPUT_DIRS = new Set(['contexts', 'cache', '_archive'])
 
 interface IdeFolderConfig {
   root: string
@@ -508,6 +509,23 @@ export default class ClearCommand extends BaseCommand {
       const deleteCounts = await this.executeFolderDeletion(
         methodRuntimeFolders, outputMethodFolders, ideMethodFolders, coreRuntimeFolders,
       )
+
+      // Audit log for aiw clear operations (only if _output/ will survive — don't create orphan files)
+      try {
+        const outputDir = join(targetDir, OUTPUT_FOLDER_NAME)
+        if (await pathExists(outputDir) && !await isDirectoryEmpty(outputDir)) {
+          const hookLogPath = join(outputDir, 'hook-log.jsonl')
+          const logEntry = JSON.stringify({
+            ts: new Date().toISOString(),
+            level: 'warn',
+            hook: 'aiw_clear',
+            msg: `aiw clear: deleted ${deleteCounts.deletedMethodRuntime + deleteCounts.deletedOutput + deleteCounts.deletedIde + deleteCounts.deletedCoreRuntime} folder(s)`,
+            data: { methodRuntime: deleteCounts.deletedMethodRuntime, output: deleteCounts.deletedOutput, ide: deleteCounts.deletedIde, coreRuntime: deleteCounts.deletedCoreRuntime }
+          })
+          await fs.appendFile(hookLogPath, logEntry + '\n')
+        }
+      } catch { /* non-critical */ }
+
       const cleanupResult = await this.performPostDeleteCleanup(targetDir, methodsToRemove, !isTemplateScoped)
       this.reportClearResults(deleteCounts, cleanupResult)
     } catch (error) {
@@ -1124,7 +1142,7 @@ export default class ClearCommand extends BaseCommand {
       const entries = await fs.readdir(outputDir, {withFileTypes: true})
 
       for (const entry of entries) {
-        if (entry.isDirectory()) {
+        if (entry.isDirectory() && !PROTECTED_OUTPUT_DIRS.has(entry.name)) {
           foundFolders.push(join(outputDir, entry.name))
         }
       }
