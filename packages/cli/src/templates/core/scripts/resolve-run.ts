@@ -54,6 +54,11 @@ if (fullPath.endsWith("status_line.ts")) {
   process.env.FORCE_COLOR ??= "2";
 }
 
+// Strip the consumed target-script argument so the imported script sees only
+// its own flags in process.argv.slice(2).  Without this, the script path
+// leaks into the args and can end up as literal prompt text sent to agents.
+process.argv.splice(2, 1);
+
 process.chdir(root);
 await import(fullPath);
 

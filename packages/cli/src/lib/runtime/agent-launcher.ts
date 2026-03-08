@@ -43,10 +43,29 @@ export function sleep(ms: number): Promise<void> {
   });
 }
 
+/**
+ * Return a deterministic summary file path for a given agent prefix + task ID.
+ * Callers can advertise this path before the session finishes so consumers
+ * know where to look for the summary once it's written.
+ */
+export function getWellKnownSummaryPath(
+  prefix: string,
+  taskId: string,
+  projectRoot?: string,
+): string {
+  const sessionKey = projectRoot
+    ? path.basename(projectRoot)
+    : "unknown";
+  const dir = path.join(os.tmpdir(), "aiw-agent-output", sessionKey);
+  return path.join(dir, `${prefix}-${taskId}.md`).replaceAll("\\", "/");
+}
+
 export function persistSummary(
   summary: string,
   prefix: string,
   sessionId?: string,
+  taskId?: string,
+  projectRoot?: string,
 ): string | null {
   try {
     const suffix = sessionId
@@ -57,6 +76,18 @@ export function persistSummary(
       `${prefix}-summary-${Date.now()}-${suffix}.md`,
     );
     fs.writeFileSync(filePath, summary, "utf8");
+
+    // Also write to the well-known path for deterministic discovery.
+    if (taskId) {
+      try {
+        const wkPath = getWellKnownSummaryPath(prefix, taskId, projectRoot);
+        fs.mkdirSync(path.dirname(wkPath), { recursive: true });
+        fs.writeFileSync(wkPath, summary, "utf8");
+      } catch {
+        logWarn("agent-launcher", "Failed to write well-known summary path");
+      }
+    }
+
     return filePath.replaceAll("\\", "/");
   } catch (error) {
     logWarn("agent-launcher", `Failed to persist summary: ${String(error)}`);
