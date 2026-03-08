@@ -2,9 +2,9 @@
  * Devin session discovery and summarization.
  *
  * Session discovery strategy (priority order):
- * 1. `devin list --format json` — parse session metadata, match by cwd + timestamp
- * 2. File scan of `~/.config/cognition/cli/` for session files
- * 3. Tmux pane scrollback capture (`tmux capture-pane -p -t <paneId>`)
+ * 1. `devin list --format json` → match session by cwd + timestamp, then
+ *    extract transcript from SQLite `message_nodes` table
+ * 2. Tmux pane scrollback capture (`tmux capture-pane -p -t <paneId>`)
  *
  * If no session transcript is found, falls back to SUMMARY_UNAVAILABLE_MESSAGE.
  */
@@ -30,6 +30,11 @@ const DEVIN_LIST_TIMEOUT_MS = 10_000;
 const SUMMARY_TIMEOUT_SEC = 10;
 const MAX_SCROLLBACK_LINES = 300;
 const MAX_LINE_LENGTH = 500;
+const MAX_TRANSCRIPT_LINES = 220;
+
+const SESSIONS_DB_PATH = path.join(
+  os.homedir(), ".local", "share", "cognition", "cli", "sessions.db",
+);
 
 const TRANSCRIPT_SUMMARY_PROMPT = `Summarize this Devin session transcript excerpt.
 Return 3-5 concise bullet points.
@@ -45,14 +50,15 @@ If information is partial, provide best-effort summary from available text.`;
 // Session Discovery via `devin list`
 // ---------------------------------------------------------------------------
 
+/** Matches the actual `devin list --format json` output schema. */
 interface DevinSession {
   id?: string;
-  session_id?: string;
-  cwd?: string;
-  created_at?: string;
-  status?: string;
+  short_id?: string;
   title?: string;
-  model?: string;
+  working_directory?: string;
+  working_directory_display?: string;
+  last_activity_at?: number;
+  last_activity_ago?: string;
 }
 
 async function getDevinSessions(): Promise<DevinSession[]> {
@@ -91,62 +97,108 @@ async function findDevinSessionViaList(
   const sessions = await getDevinSessions();
   if (sessions.length === 0) return null;
 
-  // Find sessions matching cwd and started after launch
+  const launchStartedAtSec = Math.floor(launchStartedAtMs / 1000);
+
   const candidates = sessions.filter((s) => {
-    if (s.cwd && !samePath(s.cwd, projectRoot)) return false;
-    if (s.created_at) {
-      const createdMs = Date.parse(s.created_at);
-      if (createdMs > 0 && createdMs < launchStartedAtMs - 5000) return false;
+    if (s.working_directory && !samePath(s.working_directory, projectRoot)) return false;
+    if (s.last_activity_at) {
+      // last_activity_at is unix timestamp in seconds
+      if (s.last_activity_at < launchStartedAtSec - 5) return false;
     }
     return true;
   });
 
-  // Return the most recent matching session
   if (candidates.length === 0) return null;
 
-  candidates.sort((a, b) => {
-    const aMs = a.created_at ? Date.parse(a.created_at) : 0;
-    const bMs = b.created_at ? Date.parse(b.created_at) : 0;
-    return bMs - aMs;
-  });
+  // Most recent first
+  candidates.sort((a, b) => (b.last_activity_at ?? 0) - (a.last_activity_at ?? 0));
 
   return candidates[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------
-// Session Discovery via File System
+// Session Transcript Extraction via SQLite
 // ---------------------------------------------------------------------------
 
-function findDevinSessionFiles(launchStartedAtMs: number): string[] {
-  const cliDir = path.join(os.homedir(), ".config", "cognition", "cli");
-  if (!fs.existsSync(cliDir)) return [];
-
-  const files: string[] = [];
-  try {
-    const entries = fs.readdirSync(cliDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isFile()) continue;
-      const fullPath = path.join(cliDir, entry.name);
-      try {
-        const stat = fs.statSync(fullPath);
-        // Only consider files modified after launch
-        if (stat.mtimeMs >= launchStartedAtMs - 5000) {
-          files.push(fullPath);
-        }
-      } catch { /* skip */ }
-    }
-  } catch {
-    logDebug("devin-watcher", "Failed to read ~/.config/cognition/cli/");
+/**
+ * Extract user and assistant message text from the Devin session's
+ * `message_nodes` table in `~/.local/share/cognition/cli/sessions.db`.
+ *
+ * Uses `python3 -c` to query SQLite (avoids native module dependency).
+ * Returns tagged transcript lines like `collectTranscriptLines` in
+ * the Codex watcher.
+ */
+async function collectTranscriptFromDb(sessionId: string): Promise<string[]> {
+  if (!fs.existsSync(SESSIONS_DB_PATH)) {
+    logDebug("devin-watcher", "sessions.db not found");
+    return [];
   }
 
-  return files;
-}
+  const script = `
+import sqlite3, json, sys
+conn = sqlite3.connect(sys.argv[1])
+cur = conn.cursor()
+cur.execute(
+    "SELECT chat_message FROM message_nodes WHERE session_id = ? ORDER BY node_id",
+    (sys.argv[2],),
+)
+for (raw,) in cur.fetchall():
+    try:
+        msg = json.loads(raw)
+    except Exception:
+        continue
+    role = msg.get("role", "")
+    if role not in ("user", "assistant"):
+        continue
+    content = msg.get("content", "")
+    if isinstance(content, list):
+        content = " ".join(
+            c.get("text", "") for c in content if isinstance(c, dict)
+        )
+    if not isinstance(content, str) or not content.strip():
+        continue
+    print(json.dumps({"role": role, "text": content.strip()}))
+conn.close()
+`.trim();
 
-function readSessionFileContent(filePath: string): string {
   try {
-    return fs.readFileSync(filePath, "utf8").trim();
-  } catch {
-    return "";
+    const result = await execFileAsync(
+      "python3", ["-c", script, SESSIONS_DB_PATH, sessionId],
+      { timeout: 10_000 },
+    );
+
+    if (result.exitCode !== 0) {
+      logDebug("devin-watcher", `SQLite transcript query failed: exit=${result.exitCode}`);
+      return [];
+    }
+
+    const out: string[] = [];
+    const seen = new Set<string>();
+
+    for (const line of result.stdout.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        const { role, text } = JSON.parse(line) as { role: string; text: string };
+        const normalized = text
+          .replaceAll("\r", "")
+          .replaceAll(/\p{Cc}/gu, "")
+          .replaceAll(/\s+/g, " ")
+          .trim();
+        if (!normalized) continue;
+        const truncated = normalized.length > MAX_LINE_LENGTH
+          ? `${normalized.slice(0, MAX_LINE_LENGTH)}...`
+          : normalized;
+        const tagged = `${role}: ${truncated}`;
+        if (seen.has(tagged)) continue;
+        seen.add(tagged);
+        out.push(tagged);
+      } catch { /* skip malformed lines */ }
+    }
+
+    return out.slice(-MAX_TRANSCRIPT_LINES);
+  } catch (error) {
+    logDebug("devin-watcher", `SQLite transcript extraction failed: ${String(error)}`);
+    return [];
   }
 }
 
@@ -196,15 +248,6 @@ function looksLikeBadSummary(output: string): boolean {
   );
 }
 
-function buildTranscriptFromSession(session: DevinSession): string | null {
-  const parts: string[] = [];
-  if (session.title) parts.push(`Title: ${session.title}`);
-  if (session.status) parts.push(`Status: ${session.status}`);
-  if (session.model) parts.push(`Model: ${session.model}`);
-  if (session.id || session.session_id) parts.push(`Session: ${session.id ?? session.session_id}`);
-  return parts.length > 0 ? parts.join("\n") : null;
-}
-
 async function summarizeTranscript(transcript: string): Promise<string | null> {
   const result = inference(
     TRANSCRIPT_SUMMARY_PROMPT,
@@ -228,40 +271,29 @@ async function summarizeTranscript(transcript: string): Promise<string | null> {
 /**
  * Discover and summarize a Devin session.
  * Tries multiple sources in priority order:
- * 1. devin list --format json → session metadata summary
- * 2. ~/.config/cognition/cli/ session files → parse transcript
- * 3. tmux pane scrollback → raw text summary
+ * 1. devin list → match session → extract transcript from SQLite message_nodes
+ * 2. tmux pane scrollback → raw text summary
  */
 export async function summarizeDevinSession(
   projectRoot: string,
   launchStartedAtMs: number,
   paneId?: string | null,
 ): Promise<string | null> {
-  // Source 1: devin list metadata
+  // Source 1: devin list → session ID → SQLite transcript
   const session = await findDevinSessionViaList(projectRoot, launchStartedAtMs);
-  if (session) {
-    logDebug("devin-watcher", `Found session via devin list: ${session.id ?? session.session_id ?? "unknown"}`);
-    const sessionMeta = buildTranscriptFromSession(session);
-    if (sessionMeta) {
-      const summary = await summarizeTranscript(sessionMeta);
+  if (session?.id) {
+    logDebug("devin-watcher", `Found session via devin list: ${session.id}`);
+
+    const transcriptLines = await collectTranscriptFromDb(session.id);
+    if (transcriptLines.length > 0) {
+      logDebug("devin-watcher", `Extracted ${transcriptLines.length} transcript lines from SQLite`);
+      const transcript = transcriptLines.join("\n");
+      const summary = await summarizeTranscript(transcript);
       if (summary) return summary;
     }
   }
 
-  // Source 2: session files in ~/.config/cognition/cli/
-  const sessionFiles = findDevinSessionFiles(launchStartedAtMs);
-  if (sessionFiles.length > 0) {
-    logDebug("devin-watcher", `Found ${sessionFiles.length} session file(s) in cognition cli dir`);
-    for (const filePath of sessionFiles) {
-      const content = readSessionFileContent(filePath);
-      if (content.length > 50) {
-        const summary = await summarizeTranscript(content);
-        if (summary) return summary;
-      }
-    }
-  }
-
-  // Source 3: tmux pane scrollback
+  // Source 2: tmux pane scrollback
   const scrollback = await capturePaneScrollback(paneId);
   if (scrollback) {
     logDebug("devin-watcher", `Using tmux scrollback (${scrollback.length} chars)`);

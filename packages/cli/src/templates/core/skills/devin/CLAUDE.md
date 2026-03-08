@@ -14,6 +14,45 @@ devin/
     └── launch-devin.ts   <- Single entry point (launch + optional watch)
 ```
 
+## Devin CLI Contract (verified 2026-03-08)
+
+**Always re-verify against the real CLI before changing assumptions.**
+Run `devin list --format json`, `devin --help`, and inspect `~/.local/share/cognition/cli/sessions.db` to confirm.
+
+### `devin list --format json` output schema
+
+```jsonc
+{
+  "id": "uuid",                  // full session UUID
+  "short_id": "8-char-hex",
+  "title": "string",            // user prompt or session title
+  "working_directory": "/abs/path",   // NOT "cwd"
+  "working_directory_display": "~/relative",
+  "last_activity_at": 1772942203,     // unix timestamp SECONDS — NOT ISO string, NOT "created_at"
+  "last_activity_ago": "10h ago"
+}
+```
+
+Fields that do **NOT** exist: `cwd`, `created_at`, `status`, `model`, `session_id`.
+
+### Session data storage
+
+- **SQLite DB:** `~/.local/share/cognition/cli/sessions.db`
+  - `sessions` table: `id`, `working_directory`, `model`, `created_at` (integer), `last_activity_at`, `title`, `main_chain_id`, `cogs_json`
+  - `message_nodes` table: `session_id`, `node_id`, `chat_message` (JSON with `{role, content}`)
+  - Full conversation transcript (user, assistant, system, tool messages) stored in `message_nodes`
+- **Summary files:** `~/.local/share/cognition/cli/summaries/history_<hex>.md` — full session transcripts, NOT Devin-specific (shared with Claude Code sessions). No reliable session-to-file mapping exists.
+- **NOT stored at:** `~/.config/cognition/cli/` (only has `config.json`, no session data)
+
+### Devin CLI flags
+
+- `--prompt-file <FILE>` — load prompt from file (NOT positional arg)
+- `--model <MODEL>` — short names: `opus`, `sonnet`, `swe`, `gpt` (server-resolved)
+- `--permission-mode <MODE>` — `auto` (default) or `dangerous`
+- `-p, --print` — non-interactive mode
+- `-r, --resume [SESSION_ID]` — resume session
+- No `--sandbox` or `--yolo` flags (unlike Codex)
+
 ## Script: launch-devin.ts
 
 **Usage:**
@@ -45,7 +84,7 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/devin/scripts/launch-devin
 **Watch behavior:**
 - Watch is enabled by default
 - Uses `waitForPaneClose` from shared agent-launcher
-- Summary cascade: (1) `devin list --format json` metadata, (2) tmux pane scrollback capture, (3) static unavailable message
+- Summary cascade: (1) `devin list` -> session ID -> SQLite `message_nodes` transcript, (2) tmux pane scrollback capture, (3) static unavailable message
 - Summary persisted to temp file via `persistSummary("devin", ...)` (unique per run)
 - Also writes to well-known path: `$TMPDIR/aiw-agent-output/<session-key>/devin-<taskId>.md`
 - Task ID is caller-provided via `--task-id` or auto-generated as `<timestamp>-<pid>`
@@ -58,15 +97,26 @@ bun ~/.aiwcli/bin/resolve-run.ts .aiwcli/_core/skills/devin/scripts/launch-devin
 - No sandbox/YOLO flags (Devin uses `--permission-mode` instead, defaulting to `auto`)
 - Devin model short names are server-resolved (we store just the short names)
 - Shared helpers from `agent-launcher.ts` (plan discovery, prompt files, pane watching)
-- Session discovery uses `devin list --format json` + `~/.config/cognition/cli/` file scanning
 
 ## Library: lib/devin-watcher.ts
 
 Session discovery and summarization:
-- `findDevinSession(projectRoot, launchStartedAtMs)` -- discover session via `devin list` or file scanning
-- `summarizeDevinSession(transcript)` -- AI inference summary
+- `summarizeDevinSession(projectRoot, launchStartedAtMs, paneId?)` -- full discovery + summary pipeline
+- `collectTranscriptFromDb(sessionId)` -- extract user/assistant messages from SQLite `message_nodes` (uses `python3 -c` to avoid native module dependency)
+- `findDevinSessionViaList(projectRoot, launchStartedAtMs)` -- match session via `devin list --format json` using `working_directory` + `last_activity_at`
 - `capturePaneScrollback(paneId)` -- tmux pane capture fallback
 
 Re-exports `persistSummary`, `waitForPaneClose` from agent-launcher.
 
-<!-- context-layer: generated=2026-03-06 | last-audited=2026-03-07 | version=2 -->
+---
+## Context Maintenance
+
+**After modifying files in this directory:** scan the entries above -- if any claim is now
+false or incomplete, update this file before ending the task. Do not defer.
+
+**Verification rule:** When changing code that depends on external CLI output formats (field names,
+data types, storage paths), **always verify against the real CLI** before committing. Run the
+actual command and inspect the output. Do not assume field names or paths from memory or from
+other similar tools.
+
+<!-- context-layer: generated=2026-03-06 | last-audited=2026-03-08 | version=3 -->
