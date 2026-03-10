@@ -4,7 +4,7 @@
  * Factory: detectMultiplexer() → Multiplexer | null
  */
 
-export type MultiplexerBackend = 'psmux' | 'tmux'
+export type MultiplexerBackend = 'psmux' | 'tmux' | 'wezterm'
 export type SplitDirection = 'auto' | 'h' | 'v'
 
 export interface SplitPaneOptions {
@@ -57,7 +57,7 @@ export interface Multiplexer {
 
 /**
  * Detect the best available multiplexer for the current platform.
- * Windows → PsmuxMultiplexer (if installed and meets version requirement)
+ * Windows → WeztermMultiplexer (if inside WezTerm) → PsmuxMultiplexer (fallback)
  * Unix → TmuxMultiplexer (if tmux binary on PATH)
  * Returns null if no multiplexer is available.
  */
@@ -65,6 +65,12 @@ export async function detectMultiplexer(
   platform: NodeJS.Platform = process.platform,
 ): Promise<Multiplexer | null> {
   if (platform === 'win32') {
+    // Prefer WezTerm when running inside a WezTerm terminal
+    const {WeztermMultiplexer} = await import('./multiplexers/wezterm.js')
+    const wezterm = WeztermMultiplexer.create()
+    if (wezterm) return wezterm
+
+    // Fall back to psmux
     const {PsmuxMultiplexer} = await import('./multiplexers/psmux.js')
     return PsmuxMultiplexer.create()
   }

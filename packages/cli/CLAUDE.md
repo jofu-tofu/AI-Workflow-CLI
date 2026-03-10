@@ -26,6 +26,7 @@ oclif-based CLI (`aiw`). Installs the core runtime (`.aiwcli/_core`) plus option
 | `src/lib/multiplexer.ts` | Unified multiplexer interface + `detectMultiplexer()` factory |
 | `src/lib/multiplexers/tmux.ts` | TmuxMultiplexer — tmux split/session (Unix) |
 | `src/lib/multiplexers/psmux.ts` | PsmuxMultiplexer — psmux split/session (Windows) |
+| `src/lib/multiplexers/wezterm.ts` | WeztermMultiplexer — WezTerm split/session (Windows, preferred over psmux) |
 | `src/lib/tmux-session.ts` | Tmux bootstrap commands, color/mouse config, `findToolPath()` |
 | `src/lib/runtime/sentinel-ipc.ts` | Temp file IPC for pane-launched process results |
 | `src/templates/` | Template source files (`core` synced from `.aiwcli/_core`; method templates may be canonical here) |
@@ -52,7 +53,7 @@ sessions, pane splitting, and scrollback. The unified flow is:
 
 ```
 detectMultiplexer() → Multiplexer | null
-  ├─ win32 → PsmuxMultiplexer (native ConPTY, install: winget install psmux)
+  ├─ win32 → WeztermMultiplexer (if inside WezTerm) → PsmuxMultiplexer (fallback)
   └─ unix  → TmuxMultiplexer  (install: apt/brew install tmux)
 
 if (--no-tmux || !mux)     → inline (direct spawn in current terminal)
@@ -64,6 +65,8 @@ else                        → create new multiplexer session with REPL
 - tmux: `Boolean(process.env.TMUX)`
 - psmux: `Boolean(process.env.PSMUX_PANE)` — injected by `createSession()`;
   only detects sessions we created (acceptable until psmux natively sets an env var)
+- wezterm: `Boolean(process.env.AIW_MUX_SESSION)` — injected by `createSession()`/`splitPane()`;
+  `WEZTERM_PANE` is always set by WezTerm for ALL child processes and cannot be used
 
 **Windows-specific tmux overrides (`tmux-session.ts`):**
 - `Ss@:Se@:Cs@:Cr@` — suppress cursor shape/color churn

@@ -158,7 +158,7 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
       } else if (!interactiveTty) {
         host.logInfo('Non-interactive terminal — launching inline')
       } else if (platform === 'win32') {
-        host.logInfo('No multiplexer found — launching inline. Install psmux for session management: winget install psmux')
+        host.logInfo('No multiplexer found — launching inline. Run inside WezTerm or install psmux for session management.')
       } else {
         host.logInfo('No multiplexer found — launching inline. Install tmux for session management.')
       }
@@ -222,7 +222,7 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
       host.logWarning(`Pane split failed (${splitResult.reason}), launching directly`)
       exitCode = await spawnProcess(cliCommand, promptText ? [...cliArgs, promptText] : cliArgs)
     } else {
-      const resolvedPath = mux.backend === 'psmux' ? findExecutable(cliCommand) : findToolPath(cliCommand)
+      const resolvedPath = mux.backend === 'tmux' ? findToolPath(cliCommand) : findExecutable(cliCommand)
       if (resolvedPath) {
         const sessionFromFlag = flags['tmux-session']?.trim()
         const reattach = Boolean(sessionFromFlag && sessionFromFlag.length > 0)
@@ -252,6 +252,19 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
 
         if (result.usedMux) {
           exitCode = result.exitCode
+
+          if (wantJson) {
+            // createSession has no paneId/sentinel — synthesize a JSON result
+            host.log(JSON.stringify({
+              launched: true,
+              backend: mux.backend,
+              paneId: null,
+              sentinelPath: null,
+              exitCode,
+              reason: null,
+            }))
+            host.exit(exitCode)
+          }
         } else {
           if (result.reason) {
             if (result.reason.includes('not found') || result.reason.includes('unavailable')) {

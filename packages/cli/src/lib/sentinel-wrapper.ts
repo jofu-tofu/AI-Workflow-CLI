@@ -2,6 +2,7 @@ import {quoteForPowerShell, quoteForSh} from './shell-quoting.js'
 
 export interface SentinelWrapParams {
   autoClose: boolean
+  autoCloseCommand?: string | undefined
   command: string
   holdMessage: string
   holdPane: boolean
@@ -13,7 +14,9 @@ export function wrapSentinelSh(params: SentinelWrapParams): string {
   const base = `${command}; code=$?; printf '%s' "$code" > ${quoteForSh(sentinelPath)}`
 
   if (autoClose) {
-    return `${base}; tmux kill-pane -t "$TMUX_PANE" >/dev/null 2>&1 || true; exit $code`
+    const killCmd = params.autoCloseCommand
+      ?? 'tmux kill-pane -t "$TMUX_PANE" >/dev/null 2>&1 || true'
+    return `${base}; ${killCmd}; exit $code`
   }
 
   if (holdPane) {

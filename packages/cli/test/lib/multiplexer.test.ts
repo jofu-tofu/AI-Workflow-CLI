@@ -111,7 +111,7 @@ describe('multiplexer', () => {
       if (mux === null) {
         expect(mux).to.equal(null)
       } else {
-        expect(mux.backend).to.be.oneOf(['tmux', 'psmux'])
+        expect(mux.backend).to.be.oneOf(['tmux', 'psmux', 'wezterm'])
         expect(mux.isInsideSession).to.be.a('function')
         expect(mux.splitPane).to.be.a('function')
         expect(mux.createSession).to.be.a('function')
