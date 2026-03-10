@@ -164,8 +164,8 @@ export class WeztermMultiplexer implements Multiplexer {
   }
 
   static create(): null | WeztermMultiplexer {
-    // WEZTERM_PANE is only set in panes created via `wezterm cli`;
-    // TERM_PROGRAM is always set by WezTerm for all child processes.
+    // WEZTERM_PANE is set by WezTerm for all child processes inside a pane.
+    // TERM_PROGRAM is set to 'WezTerm' for all child processes regardless.
     if (!process.env.WEZTERM_PANE && process.env.TERM_PROGRAM !== 'WezTerm') return null
     const weztermPath = findExecutable('wezterm')
     if (!weztermPath) return null
@@ -173,9 +173,11 @@ export class WeztermMultiplexer implements Multiplexer {
   }
 
   isInsideSession(): boolean {
-    // WEZTERM_PANE is always set by WezTerm for every child process,
-    // so we check for AIW_MUX_SESSION instead — only set by createSession()/splitPane().
-    return Boolean(process.env[AIW_SESSION_ENV])
+    // If we're inside WezTerm at all (WEZTERM_PANE or TERM_PROGRAM), we can
+    // split panes directly — no need for the AIW_MUX_SESSION marker.
+    // Falling through to createSession() would spawn --new-window, which
+    // is almost never what the user wants when already inside WezTerm.
+    return Boolean(process.env.WEZTERM_PANE || process.env.TERM_PROGRAM === 'WezTerm')
   }
 
   async kill(paneId: string): Promise<void> {

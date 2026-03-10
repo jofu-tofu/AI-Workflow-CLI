@@ -132,23 +132,23 @@ describe('wezterm multiplexer unit', () => {
     expect(mux?.backend).toBe('wezterm')
   })
 
-  it('isInsideSession returns false when only TERM_PROGRAM is set', () => {
+  it('isInsideSession returns true when TERM_PROGRAM=WezTerm (enables split over new-window)', () => {
     delete process.env.WEZTERM_PANE
     process.env.TERM_PROGRAM = 'WezTerm'
     const mux = WeztermMultiplexer.create()
     expect(mux).not.toBeNull()
-    expect(mux?.isInsideSession()).toBe(false)
+    expect(mux?.isInsideSession()).toBe(true)
   })
 
-  it('isInsideSession returns false with WEZTERM_PANE alone (no AIW session)', () => {
+  it('isInsideSession returns true with WEZTERM_PANE (enables split over new-window)', () => {
     process.env.WEZTERM_PANE = '0'
     const mux = WeztermMultiplexer.create()
     expect(mux).not.toBeNull()
-    // WEZTERM_PANE is always set by WezTerm — it does NOT indicate an AIW session
-    expect(mux?.isInsideSession()).toBe(false)
+    // Being inside WezTerm means we can split panes directly
+    expect(mux?.isInsideSession()).toBe(true)
   })
 
-  it('isInsideSession reflects AIW_MUX_SESSION env variable', () => {
+  it('isInsideSession returns true regardless of AIW_MUX_SESSION when in WezTerm', () => {
     process.env.WEZTERM_PANE = '0'
     process.env[AIW_SESSION_ENV] = '1'
     const mux = WeztermMultiplexer.create()
@@ -156,8 +156,18 @@ describe('wezterm multiplexer unit', () => {
 
     expect(mux?.isInsideSession()).toBe(true)
 
+    // Still true after removing AIW_MUX_SESSION — WEZTERM_PANE is sufficient
     delete process.env[AIW_SESSION_ENV]
-    expect(mux?.isInsideSession()).toBe(false)
+    expect(mux?.isInsideSession()).toBe(true)
+  })
+
+  it('isInsideSession returns false when neither WezTerm env var is set', () => {
+    delete process.env.WEZTERM_PANE
+    delete process.env.TERM_PROGRAM
+    // Can't create a multiplexer without env vars, but verify the logic
+    // by testing directly that create() returns null
+    const mux = WeztermMultiplexer.create()
+    expect(mux).toBeNull()
   })
 
   it('kill sends kill-pane command with pane id', async () => {
