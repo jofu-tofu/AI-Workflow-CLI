@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest'
 
-import {cleanClaudeEnv, getLastLine, splitFlagFromDimensions} from '../../src/lib/mux-utils.js'
+import {getLastLine, splitFlagFromDimensions} from '../../src/lib/mux-utils.js'
 
 describe('mux-utils', () => {
   describe('getLastLine', () => {
@@ -30,27 +30,6 @@ describe('mux-utils', () => {
 
     it('uses horizontal split at the width/height*2 boundary', () => {
       expect(splitFlagFromDimensions(200, 100)).toBe('-h')
-    })
-  })
-
-  describe('cleanClaudeEnv', () => {
-    it('removes CLAUDE env vars while preserving extra vars', () => {
-      const env = cleanClaudeEnv({
-        CLAUDECODE: 'remove-me',
-        CLAUDE_CODE_ENTRYPOINT: 'remove-me-too',
-        TEST_KEEP: 'value',
-      })
-
-      expect(env.CLAUDECODE).toBeUndefined()
-      expect(env.CLAUDE_CODE_ENTRYPOINT).toBeUndefined()
-      expect(env.TEST_KEEP).toBe('value')
-    })
-
-    it('strips AIWCLI_INTERNAL_CALL so launched sessions are not marked internal', () => {
-      process.env.AIWCLI_INTERNAL_CALL = 'true'
-      const env = cleanClaudeEnv()
-      expect(env.AIWCLI_INTERNAL_CALL).toBeUndefined()
-      delete process.env.AIWCLI_INTERNAL_CALL
     })
   })
 })

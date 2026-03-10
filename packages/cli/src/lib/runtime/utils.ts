@@ -110,7 +110,7 @@ export function generateSlug(
   // Tier 1: AI inference via generateContextIdSlug (sync — uses execFileSync)
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef
-    const { generateContextIdSlug } = require("./inference.js");
+    const { generateContextIdSlug } = require("./inference");
     const aiSlug = generateContextIdSlug(text);
     if (aiSlug) {
       const filteredWords = aiSlug

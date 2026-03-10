@@ -32,8 +32,8 @@ vi.mock('node:os', () => ({
   tmpdir: mocks.tmpdir,
 }))
 
-vi.mock('../../src/lib/mux-utils.js', () => ({
-  cleanClaudeEnv: mocks.cleanClaudeEnv,
+vi.mock('../../src/lib/env-sanitizer.js', () => ({
+  sanitizedProcessEnv: mocks.cleanClaudeEnv,
 }))
 
 vi.mock('../../src/lib/runtime/executable-policy.js', () => ({

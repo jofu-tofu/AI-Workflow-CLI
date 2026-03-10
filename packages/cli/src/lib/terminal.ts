@@ -33,7 +33,7 @@ import {existsSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import path from 'node:path'
 
-import {cleanClaudeEnv} from './mux-utils.js'
+import {sanitizedProcessEnv as cleanClaudeEnv} from './env-sanitizer.js'
 import {isCommandAvailable} from './runtime/executable-policy.js'
 import {isWindowsPlatform} from './runtime/platform-adapter.js'
 import {findMsysBash} from './runtime/tmux-preflight.js'

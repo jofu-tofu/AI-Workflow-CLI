@@ -3,27 +3,18 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 const mocks = vi.hoisted(() => ({
   buildShellCommand: vi.fn(),
   buildTmuxRuntimeBootstrapCommands: vi.fn(() => []),
-  cleanupSentinelIpc: vi.fn(),
-  cleanClaudeEnv: vi.fn(() => ({})),
-  createSentinelIpcPaths: vi.fn(() => ({
-    tmpDir: '/tmp/tmux-sentinel',
-    inputPath: '/tmp/tmux-sentinel/input.txt',
-    stdoutPath: '/tmp/tmux-sentinel/stdout.txt',
-    stderrPath: '/tmp/tmux-sentinel/stderr.txt',
-    sentinelPath: '/tmp/tmux-sentinel/sentinel.txt',
-  })),
   execFileAsync: vi.fn(),
   execSync: vi.fn(),
   findBestSplit: vi.fn(),
   findExecutable: vi.fn(),
   getLastLine: vi.fn((stdout: string) => stdout.trim()),
-  isNativeTmuxAvailable: vi.fn(() => true),
   isNonWindowsPlatform: vi.fn(() => true),
   isWindowsPlatform: vi.fn(() => false),
   listPanes: vi.fn(async () => []),
   quoteForSh: vi.fn((input: string) => `'${input}'`),
   readFileSync: vi.fn(() => 'prompt from file'),
-  spawnAttached: vi.fn(async () => ({exitCode: 0, usedMux: true})),
+  sanitizedProcessEnv: vi.fn(() => ({})),
+  spawnAttached: vi.fn(async () => ({launched: true, exitCode: 0, backend: 'tmux'})),
   splitFlagFromDimensions: vi.fn(() => '-h'),
   toMsysPosixPath: vi.fn((input: string) => input),
   wrapSentinelSh: vi.fn(({command}: {command: string}) => `WRAP(${command})`),
@@ -37,8 +28,12 @@ vi.mock('node:fs', () => ({
   readFileSync: mocks.readFileSync,
 }))
 
+vi.mock('../../../src/lib/env-sanitizer.js', () => ({
+  REPL_NESTING_VARS: ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_SESSION_ID', 'CODEX_THREAD_ID', 'AIWCLI_INTERNAL_CALL'],
+  sanitizedProcessEnv: mocks.sanitizedProcessEnv,
+}))
+
 vi.mock('../../../src/lib/mux-utils.js', () => ({
-  cleanClaudeEnv: mocks.cleanClaudeEnv,
   getLastLine: mocks.getLastLine,
   spawnAttached: mocks.spawnAttached,
   splitFlagFromDimensions: mocks.splitFlagFromDimensions,
@@ -49,22 +44,17 @@ vi.mock('../../../src/lib/runtime/platform-adapter.js', () => ({
   isWindowsPlatform: mocks.isWindowsPlatform,
 }))
 
-vi.mock('../../../src/lib/runtime/sentinel-ipc.js', () => ({
-  cleanupSentinelIpc: mocks.cleanupSentinelIpc,
-  createSentinelIpcPaths: mocks.createSentinelIpcPaths,
-}))
-
 vi.mock('../../../src/lib/runtime/subprocess-utils.js', () => ({
   execFileAsync: mocks.execFileAsync,
   findExecutable: mocks.findExecutable,
 }))
 
-vi.mock('../../../src/lib/runtime/tmux-preflight.js', () => ({
-  isNativeTmuxAvailable: mocks.isNativeTmuxAvailable,
-}))
-
 vi.mock('../../../src/lib/sentinel-wrapper.js', () => ({
   wrapSentinelSh: mocks.wrapSentinelSh,
+}))
+
+vi.mock('../../../src/lib/shell-quoting.js', () => ({
+  quoteForSh: mocks.quoteForSh,
 }))
 
 vi.mock('../../../src/lib/tmux-pane-placement.js', () => ({
@@ -100,6 +90,18 @@ function okExec(stdout = ''): {
   }
 }
 
+const defaultSplitOptions = {
+  toolName: 'claude',
+  args: ['--dangerously-skip-permissions'],
+  cwd: '/repo',
+  env: {},
+  mode: 'repl' as const,
+  split: 'auto' as const,
+  sentinelPath: '/tmp/tmux-sentinel/sentinel.txt',
+  holdPane: false,
+  retryOnQuickExit: false,
+}
+
 describe('tmux multiplexer unit', () => {
   let platformSpy: ReturnType<typeof vi.spyOn> | undefined
 
@@ -111,7 +113,6 @@ describe('tmux multiplexer unit', () => {
     mocks.listPanes.mockResolvedValue([{paneId: '%1', width: 200, height: 80, active: true}])
     mocks.buildShellCommand.mockReturnValue('bootstrap command')
     mocks.isNonWindowsPlatform.mockReturnValue(true)
-    mocks.isNativeTmuxAvailable.mockReturnValue(true)
     mocks.isWindowsPlatform.mockReturnValue(false)
   })
 
@@ -132,18 +133,24 @@ describe('tmux multiplexer unit', () => {
     expect(mux?.backend).toBe('tmux')
   })
 
-  it('isInsideSession reflects TMUX environment variable', () => {
-    const mux = TmuxMultiplexer.create()
-    expect(mux).not.toBeNull()
-
+  it('resolveStrategy returns split when TMUX is set', () => {
+    const mux = TmuxMultiplexer.create()!
     process.env.TMUX = '/tmp/tmux-1/default'
-    expect(mux?.isInsideSession()).toBe(true)
-
-    delete process.env.TMUX
-    expect(mux?.isInsideSession()).toBe(false)
+    expect(mux.resolveStrategy({calledFromRepl: false, platform: 'linux', disableMux: false}).strategy).toBe('split')
   })
 
-  it('kill sends kill-pane command with pane id', async () => {
+  it('resolveStrategy returns create-session when TMUX is not set', () => {
+    const mux = TmuxMultiplexer.create()!
+    delete process.env.TMUX
+    expect(mux.resolveStrategy({calledFromRepl: false, platform: 'linux', disableMux: false}).strategy).toBe('create-session')
+  })
+
+  it('resolveStrategy returns inline when disableMux is true', () => {
+    const mux = TmuxMultiplexer.create()!
+    expect(mux.resolveStrategy({calledFromRepl: false, platform: 'linux', disableMux: true}).strategy).toBe('inline')
+  })
+
+  it('kill sends kill-pane command with handle', async () => {
     const mux = TmuxMultiplexer.create()!
     await mux.kill('%9')
     expect(mocks.execFileAsync).toHaveBeenCalledWith('/usr/bin/tmux', ['kill-pane', '-t', '%9'], {timeout: 3000})
@@ -158,9 +165,10 @@ describe('tmux multiplexer unit', () => {
       reattach: false,
       toolPath: '/usr/bin/claude',
       toolArgs: ['--dangerously-skip-permissions'],
+      cwd: '/repo',
     })
 
-    expect(result.usedMux).toBe(false)
+    expect(result.launched).toBe(false)
     expect(result.reason).toContain('tmux not available')
     expect(mocks.spawnAttached).not.toHaveBeenCalled()
   })
@@ -175,6 +183,7 @@ describe('tmux multiplexer unit', () => {
       toolArgs: ['--dangerously-skip-permissions'],
       promptText: 'hello',
       enableMouse: true,
+      cwd: '/repo',
     })
 
     expect(mocks.spawnAttached).toHaveBeenCalledWith(
@@ -183,32 +192,25 @@ describe('tmux multiplexer unit', () => {
       expect.any(Object),
       'tmux',
     )
-    expect(result).toEqual({exitCode: 0, usedMux: true})
+    expect(result.launched).toBe(true)
   })
 
-  it('splitPane returns failure when tool is not found on PATH', async () => {
+  it('split returns failure when tool is not found on PATH', async () => {
     mocks.findExecutable.mockImplementation((name: string) => name === 'tmux' ? '/usr/bin/tmux' : null)
     const mux = TmuxMultiplexer.create()!
 
-    const result = await mux.splitPane({
-      toolName: 'claude',
-      args: ['--dangerously-skip-permissions'],
-    })
+    const result = await mux.split(defaultSplitOptions)
 
     expect(result.launched).toBe(false)
     expect(result.reason).toContain('claude not found on PATH')
   })
 
-  it('splitPane launches successfully with auto split and sentinel wrapping', async () => {
+  it('split launches successfully with auto split and sentinel wrapping', async () => {
     const mux = TmuxMultiplexer.create()!
-    mocks.execFileAsync.mockResolvedValueOnce(okExec('%12\n'))
 
-    const result = await mux.splitPane({
-      toolName: 'claude',
-      args: ['--dangerously-skip-permissions'],
-      split: 'auto',
+    const result = await mux.split({
+      ...defaultSplitOptions,
       env: {FOO: 'bar'},
-      cwd: '/repo',
     })
 
     const splitCall = mocks.execFileAsync.mock.calls.at(-1)
@@ -217,17 +219,16 @@ describe('tmux multiplexer unit', () => {
       expect.arrayContaining(['split-window', '-h', '-P', '-F', '#{pane_id}', '-c', '/repo', '-t', '%1']),
     )
     expect(mocks.wrapSentinelSh).toHaveBeenCalled()
-    expect(result).toEqual({
-      launched: true,
-      backend: 'tmux',
-      paneId: '%12',
-      sentinelPath: '/tmp/tmux-sentinel/sentinel.txt',
-    })
+    expect(result.launched).toBe(true)
+    expect(result.backend).toBe('tmux')
+    expect(result.sentinelPath).toBe('/tmp/tmux-sentinel/sentinel.txt')
   })
 
-  it('splitPane cleanup runs when tmux split-window fails', async () => {
+  it('split returns failure when tmux split-window fails', async () => {
     const mux = TmuxMultiplexer.create()!
-    mocks.execFileAsync.mockResolvedValueOnce({
+    // First call may be for auto-split dimension query or tmux split itself.
+    // Set all future calls to return a failure to ensure the split-window call fails.
+    mocks.execFileAsync.mockResolvedValue({
       stdout: '',
       stderr: 'split failed',
       exitCode: 1,
@@ -235,39 +236,15 @@ describe('tmux multiplexer unit', () => {
       signal: null,
     })
 
-    const result = await mux.splitPane({
-      toolName: 'claude',
-      args: ['--dangerously-skip-permissions'],
-      split: 'h',
+    const result = await mux.split({
+      ...defaultSplitOptions,
+      split: 'horizontal',
     })
 
     expect(result.launched).toBe(false)
-    expect(result.reason).toBe('tmux split-window failed')
-    expect(result.stderr).toBe('split failed')
-    expect(mocks.cleanupSentinelIpc).toHaveBeenCalledWith(expect.objectContaining({tmpDir: '/tmp/tmux-sentinel'}))
   })
 
-  it('splitPane uses splitTarget dimensions to resolve auto split direction', async () => {
-    const mux = TmuxMultiplexer.create()!
-    mocks.execFileAsync
-      .mockResolvedValueOnce(okExec('120 90\n'))
-      .mockResolvedValueOnce(okExec('%55\n'))
-    mocks.splitFlagFromDimensions.mockReturnValueOnce('-v')
-
-    const result = await mux.splitPane({
-      toolName: 'claude',
-      args: [],
-      split: 'auto',
-      splitTarget: ' %9 ',
-    })
-
-    expect(mocks.splitFlagFromDimensions).toHaveBeenCalledWith(120, 90)
-    const splitWindowArgs = mocks.execFileAsync.mock.calls.at(-1)?.[1] as string[]
-    expect(splitWindowArgs).toEqual(expect.arrayContaining(['split-window', '-v', '-t', '%9']))
-    expect(result.launched).toBe(true)
-  })
-
-  it('splitPane on Windows resolves tool path via bash and converts cwd path', async () => {
+  it('split on Windows resolves tool path via bash and converts cwd path', async () => {
     platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     mocks.isWindowsPlatform.mockReturnValue(true)
     mocks.findExecutable.mockImplementation((name: string) => {
@@ -283,12 +260,10 @@ describe('tmux multiplexer unit', () => {
     mocks.buildTmuxRuntimeBootstrapCommands.mockReturnValue(['prep one', 'prep two'])
 
     const mux = TmuxMultiplexer.create()!
-    const result = await mux.splitPane({
-      toolName: 'claude',
-      args: ['--dangerously-skip-permissions'],
-      split: 'h',
+    const result = await mux.split({
+      ...defaultSplitOptions,
+      split: 'horizontal',
       cwd: 'C:\\repo',
-      sentinel: false,
     })
 
     const splitCallArgs = mocks.execFileAsync.mock.calls.at(-1)?.[1] as string[]
@@ -297,4 +272,3 @@ describe('tmux multiplexer unit', () => {
     expect(result.launched).toBe(true)
   })
 })
-

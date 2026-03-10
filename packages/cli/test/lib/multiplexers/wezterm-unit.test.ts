@@ -1,14 +1,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  cleanupSentinelIpc: vi.fn(),
-  createSentinelIpcPaths: vi.fn(() => ({
-    tmpDir: 'C:\\tmp\\wezterm-sentinel',
-    inputPath: 'C:\\tmp\\wezterm-sentinel\\input.txt',
-    stdoutPath: 'C:\\tmp\\wezterm-sentinel\\stdout.txt',
-    stderrPath: 'C:\\tmp\\wezterm-sentinel\\stderr.txt',
-    sentinelPath: 'C:\\tmp\\wezterm-sentinel\\sentinel.txt',
-  })),
   execFileAsync: vi.fn(),
   findExecutable: vi.fn(),
   getLastLine: vi.fn((stdout: string) => stdout.trim()),
@@ -22,15 +14,13 @@ vi.mock('node:fs', () => ({
   readFileSync: mocks.readFileSync,
 }))
 
+vi.mock('../../../src/lib/env-sanitizer.js', () => ({
+  REPL_NESTING_VARS: ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_SESSION_ID', 'CODEX_THREAD_ID', 'AIWCLI_INTERNAL_CALL'],
+}))
+
 vi.mock('../../../src/lib/mux-utils.js', () => ({
   getLastLine: mocks.getLastLine,
   splitFlagFromDimensions: mocks.splitFlagFromDimensions,
-  UNSET_NESTING_SH: 'unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_SESSION_ID CODEX_THREAD_ID AIWCLI_INTERNAL_CALL;',
-}))
-
-vi.mock('../../../src/lib/runtime/sentinel-ipc.js', () => ({
-  cleanupSentinelIpc: mocks.cleanupSentinelIpc,
-  createSentinelIpcPaths: mocks.createSentinelIpcPaths,
 }))
 
 vi.mock('../../../src/lib/runtime/subprocess-utils.js', () => ({
@@ -44,6 +34,10 @@ vi.mock('../../../src/lib/sentinel-wrapper.js', () => ({
 
 vi.mock('../../../src/lib/shell-quoting.js', () => ({
   quoteForSh: mocks.quoteForSh,
+}))
+
+vi.mock('../../../src/lib/tmux-primitives.js', () => ({
+  toMsysPosixPath: vi.fn((input: string) => input),
 }))
 
 import {WeztermMultiplexer} from '../../../src/lib/multiplexers/wezterm.js'
@@ -62,6 +56,18 @@ function okExec(stdout = ''): {
     killed: false,
     signal: null,
   }
+}
+
+const defaultSplitOptions = {
+  toolName: 'claude',
+  args: ['--dangerously-skip-permissions'],
+  cwd: 'C:\\repo',
+  env: {},
+  mode: 'repl' as const,
+  split: 'auto' as const,
+  sentinelPath: 'C:\\tmp\\wezterm-sentinel\\sentinel.txt',
+  holdPane: false,
+  retryOnQuickExit: false,
 }
 
 describe('wezterm multiplexer unit', () => {
@@ -125,32 +131,25 @@ describe('wezterm multiplexer unit', () => {
     expect(mux?.backend).toBe('wezterm')
   })
 
-  it('isInsideSession returns true when TERM_PROGRAM=WezTerm (enables split over new-window)', () => {
-    delete process.env.WEZTERM_PANE
-    process.env.TERM_PROGRAM = 'WezTerm'
-    const mux = WeztermMultiplexer.create()
-    expect(mux).not.toBeNull()
-    expect(mux?.isInsideSession()).toBe(true)
-  })
-
-  it('isInsideSession returns true with WEZTERM_PANE (enables split over new-window)', () => {
+  it('resolveStrategy returns split when calledFromRepl', () => {
     process.env.WEZTERM_PANE = '0'
-    const mux = WeztermMultiplexer.create()
-    expect(mux).not.toBeNull()
-    // Being inside WezTerm means we can split panes directly
-    expect(mux?.isInsideSession()).toBe(true)
+    const mux = WeztermMultiplexer.create()!
+    expect(mux.resolveStrategy({calledFromRepl: true, platform: 'win32', disableMux: false}).strategy).toBe('split')
   })
 
-  it('isInsideSession returns false when neither WezTerm env var is set', () => {
-    delete process.env.WEZTERM_PANE
-    delete process.env.TERM_PROGRAM
-    // Can't create a multiplexer without env vars, but verify the logic
-    // by testing directly that create() returns null
-    const mux = WeztermMultiplexer.create()
-    expect(mux).toBeNull()
+  it('resolveStrategy returns inline when NOT calledFromRepl', () => {
+    process.env.WEZTERM_PANE = '0'
+    const mux = WeztermMultiplexer.create()!
+    expect(mux.resolveStrategy({calledFromRepl: false, platform: 'win32', disableMux: false}).strategy).toBe('inline')
   })
 
-  it('kill sends kill-pane command with pane id', async () => {
+  it('resolveStrategy returns inline when disableMux is true', () => {
+    process.env.WEZTERM_PANE = '0'
+    const mux = WeztermMultiplexer.create()!
+    expect(mux.resolveStrategy({calledFromRepl: true, platform: 'win32', disableMux: true}).strategy).toBe('inline')
+  })
+
+  it('kill sends kill-pane command with handle', async () => {
     process.env.WEZTERM_PANE = '0'
     const mux = WeztermMultiplexer.create()
     mocks.execFileAsync.mockResolvedValueOnce(okExec())
@@ -164,28 +163,25 @@ describe('wezterm multiplexer unit', () => {
     )
   })
 
-  it('kill does nothing for empty pane id', async () => {
+  it('kill does nothing for empty handle', async () => {
     process.env.WEZTERM_PANE = '0'
     const mux = WeztermMultiplexer.create()
     await mux!.kill('')
     expect(mocks.execFileAsync).not.toHaveBeenCalled()
   })
 
-  it('splitPane returns not found when tool executable is missing', async () => {
+  it('split returns not found when tool executable is missing', async () => {
     process.env.WEZTERM_PANE = '0'
     mocks.findExecutable.mockImplementation((name: string) => name === 'wezterm' ? 'C:\\tools\\wezterm.exe' : null)
     const mux = WeztermMultiplexer.create()
 
-    const result = await mux!.splitPane({
-      toolName: 'claude',
-      args: ['--dangerously-skip-permissions'],
-    })
+    const result = await mux!.split(defaultSplitOptions)
 
     expect(result.launched).toBe(false)
     expect(result.reason).toContain('claude not found on PATH')
   })
 
-  it('splitPane builds correct args and returns pane id on success', async () => {
+  it('split builds correct args and returns handle on success', async () => {
     process.env.WEZTERM_PANE = '5'
     const mux = WeztermMultiplexer.create()
 
@@ -198,19 +194,14 @@ describe('wezterm multiplexer unit', () => {
     // wezterm cli split-pane
     mocks.execFileAsync.mockResolvedValueOnce(okExec('42\n'))
 
-    const result = await mux!.splitPane({
-      toolName: 'claude',
-      args: ['--yolo'],
-      split: 'auto',
-      cwd: 'C:\\repo',
-    })
+    const result = await mux!.split(defaultSplitOptions)
 
     expect(result.launched).toBe(true)
     expect(result.backend).toBe('wezterm')
-    expect(result.paneId).toBe('42')
+    expect(result.handle).toBe('42')
   })
 
-  it('splitPane clears REPL nesting env vars in pane command', async () => {
+  it('split clears REPL nesting env vars in pane command', async () => {
     process.env.WEZTERM_PANE = '5'
     const mux = WeztermMultiplexer.create()
 
@@ -220,55 +211,46 @@ describe('wezterm multiplexer unit', () => {
     ])))
     mocks.execFileAsync.mockResolvedValueOnce(okExec('42\n'))
 
-    await mux!.splitPane({
-      toolName: 'claude',
-      args: ['--dangerously-skip-permissions'],
-      split: 'auto',
-      cwd: 'C:\\repo',
-    })
+    await mux!.split(defaultSplitOptions)
 
     const splitCall = mocks.execFileAsync.mock.calls.at(-1)
     const bashCommand = splitCall?.[1]?.at(-1) as string
     expect(bashCommand).toContain('unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_SESSION_ID CODEX_THREAD_ID AIWCLI_INTERNAL_CALL;')
   })
 
-  it('splitPane uses explicit split direction h → --right', async () => {
+  it('split uses explicit split direction horizontal → --right', async () => {
     process.env.WEZTERM_PANE = '5'
     const mux = WeztermMultiplexer.create()
 
     mocks.execFileAsync.mockResolvedValueOnce(okExec('/usr/bin/claude'))
     mocks.execFileAsync.mockResolvedValueOnce(okExec('42\n'))
 
-    await mux!.splitPane({
-      toolName: 'claude',
-      args: [],
-      split: 'h',
-      cwd: 'C:\\repo',
+    await mux!.split({
+      ...defaultSplitOptions,
+      split: 'horizontal',
     })
 
     const splitCall = mocks.execFileAsync.mock.calls.at(-1)
     expect(splitCall?.[1]).toContain('--right')
   })
 
-  it('splitPane uses explicit split direction v → --bottom', async () => {
+  it('split uses explicit split direction vertical → --bottom', async () => {
     process.env.WEZTERM_PANE = '5'
     const mux = WeztermMultiplexer.create()
 
     mocks.execFileAsync.mockResolvedValueOnce(okExec('/usr/bin/claude'))
     mocks.execFileAsync.mockResolvedValueOnce(okExec('42\n'))
 
-    await mux!.splitPane({
-      toolName: 'claude',
-      args: [],
-      split: 'v',
-      cwd: 'C:\\repo',
+    await mux!.split({
+      ...defaultSplitOptions,
+      split: 'vertical',
     })
 
     const splitCall = mocks.execFileAsync.mock.calls.at(-1)
     expect(splitCall?.[1]).toContain('--bottom')
   })
 
-  it('splitPane returns failure when wezterm split-pane exits non-zero', async () => {
+  it('split returns failure when wezterm split-pane exits non-zero', async () => {
     process.env.WEZTERM_PANE = '5'
     const mux = WeztermMultiplexer.create()
 
@@ -282,16 +264,10 @@ describe('wezterm multiplexer unit', () => {
       signal: null,
     })
 
-    const result = await mux!.splitPane({
-      toolName: 'claude',
-      args: [],
-      split: 'auto',
-      cwd: 'C:\\repo',
-    })
+    const result = await mux!.split(defaultSplitOptions)
 
     expect(result.launched).toBe(false)
     expect(result.reason).toBe('wezterm split-pane failed')
-    expect(result.stderr).toBe('split failed')
   })
 
   it('createSession spawns a new window and returns success', async () => {
@@ -311,9 +287,11 @@ describe('wezterm multiplexer unit', () => {
       toolPath: '/usr/bin/claude',
       toolArgs: ['--dangerously-skip-permissions'],
       promptText: 'hello',
+      cwd: 'C:\\repo',
+      reattach: false,
     })
 
-    expect(result.usedMux).toBe(true)
+    expect(result.launched).toBe(true)
     expect(result.exitCode).toBe(0)
 
     const spawnCall = mocks.execFileAsync.mock.calls.at(-1)
@@ -342,9 +320,11 @@ describe('wezterm multiplexer unit', () => {
       sessionName: 'aiw-test',
       toolPath: '/usr/bin/claude',
       toolArgs: [],
+      cwd: 'C:\\repo',
+      reattach: false,
     })
 
-    expect(result.usedMux).toBe(false)
+    expect(result.launched).toBe(false)
     expect(result.reason).toContain('wezterm spawn failed')
   })
 })

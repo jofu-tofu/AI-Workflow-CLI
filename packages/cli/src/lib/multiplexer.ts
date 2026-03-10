@@ -1,58 +1,63 @@
 /**
  * Unified multiplexer abstraction.
- * Single interface for tmux (Unix) and psmux (Windows) backends.
+ * Backends implement the Multiplexer interface: resolveStrategy() for context-aware
+ * decision making, split()/createSession() for pane management.
  * Factory: detectMultiplexer() → Multiplexer | null
  */
 
-export type MultiplexerBackend = 'psmux' | 'tmux' | 'wezterm'
-export type SplitDirection = 'auto' | 'h' | 'v'
+export type LaunchStrategy = 'split' | 'create-session' | 'inline' | 'unavailable'
 
-export interface SplitPaneOptions {
-  args: string[]
-  autoClose?: boolean | undefined
-  cwd?: string | undefined
-  env?: Record<string, string> | undefined
-  holdMessage?: string | undefined
-  holdPane?: boolean | undefined
-  mode?: 'exec' | 'repl' | undefined
-  promptPath?: string | undefined
-  sentinel?: boolean | undefined
-  split?: SplitDirection | undefined
-  splitTarget?: string | undefined
-  toolName: string
+export interface StrategyContext {
+  calledFromRepl: boolean
+  platform: NodeJS.Platform
+  disableMux: boolean
 }
 
-export interface SplitPaneResult {
-  backend: MultiplexerBackend
-  exitCode?: number | undefined
+export interface ResolvedStrategy {
+  strategy: LaunchStrategy
+  reason: string
+}
+
+export type SplitDirection = 'auto' | 'horizontal' | 'vertical'
+
+export interface SplitOptions {
+  toolName: string
+  args: string[]
+  cwd: string
+  env: Record<string, string>
+  mode: 'exec' | 'repl'
+  split: SplitDirection
+  promptPath?: string | undefined
+  sentinelPath: string
+  holdPane: boolean
+  retryOnQuickExit: boolean
+}
+
+export interface LaunchResult {
   launched: boolean
-  paneId?: string | undefined
-  reason?: string | undefined
+  backend: string
+  handle?: string | undefined
   sentinelPath?: string | undefined
-  stderr?: string | undefined
+  exitCode?: number | undefined
+  reason?: string | undefined
 }
 
 export interface CreateSessionOptions {
-  enableMouse?: boolean | undefined
-  promptText?: string | undefined
-  reattach?: boolean | undefined
   sessionName: string
-  toolArgs: string[]
   toolPath: string
-}
-
-export interface CreateSessionResult {
-  exitCode: number
-  reason?: string | undefined
-  usedMux: boolean
+  toolArgs: string[]
+  cwd: string
+  promptText?: string | undefined
+  reattach: boolean
+  enableMouse?: boolean | undefined
 }
 
 export interface Multiplexer {
-  readonly backend: MultiplexerBackend
-  createSession(options: CreateSessionOptions): Promise<CreateSessionResult>
-  isInsideSession(): boolean
-  kill(paneId: string): Promise<void>
-  splitPane(options: SplitPaneOptions): Promise<SplitPaneResult>
+  readonly backend: string
+  resolveStrategy(ctx: StrategyContext): ResolvedStrategy
+  split(options: SplitOptions): Promise<LaunchResult>
+  createSession(options: CreateSessionOptions): Promise<LaunchResult>
+  kill(handle: string): Promise<void>
 }
 
 /**
@@ -65,12 +70,10 @@ export async function detectMultiplexer(
   platform: NodeJS.Platform = process.platform,
 ): Promise<Multiplexer | null> {
   if (platform === 'win32') {
-    // Prefer WezTerm when running inside a WezTerm terminal
     const {WeztermMultiplexer} = await import('./multiplexers/wezterm.js')
     const wezterm = WeztermMultiplexer.create()
     if (wezterm) return wezterm
 
-    // Fall back to psmux
     const {PsmuxMultiplexer} = await import('./multiplexers/psmux.js')
     return PsmuxMultiplexer.create()
   }

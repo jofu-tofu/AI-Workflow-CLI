@@ -193,7 +193,7 @@ Respond with ONLY a JSON object: {"slug": "your 8-12 word phrase here"}`;
  */
 export function generateContextIdSlug(
   prompt: string,
-  timeout = 3,
+  timeout = 8,
 ): string | null {
   const truncated = prompt.slice(0, 500);
 

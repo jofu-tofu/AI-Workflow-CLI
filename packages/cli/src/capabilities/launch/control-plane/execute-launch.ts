@@ -2,7 +2,6 @@ import path from 'node:path'
 
 import {
   checkVersionCompatibility,
-  configureTmuxSession,
   detectMultiplexer,
   ensureLspPatch,
   findExecutable,
@@ -11,13 +10,13 @@ import {
   launchTerminal,
   ProcessSpawnError,
   quoteForSh,
-  readSentinelExitCode,
-  REPL_NESTING_VARS,
   spawnProcess,
-  type SplitPaneResult,
-  waitForSentinelFile,
+  type LaunchResult,
 } from '../../../platform/launch.js'
 import {EXIT_CODES} from '../../../types/index.js'
+import {clearProcessNestingVars, isCalledFromRepl} from '../../../lib/env-sanitizer.js'
+import {PromptFileManager} from '../../../lib/prompt-file-manager.js'
+import {SentinelManager} from '../../../lib/sentinel-manager.js'
 import type {JsonLaunchResult, LaunchDependencies, LaunchRequest} from '../contracts.js'
 import {
   buildSpawnedWindowArgs,
@@ -36,37 +35,55 @@ function buildDevinArgs(): string[] {
   return ['--permission-mode', 'dangerous']
 }
 
-function toJsonLaunchResult(result: SplitPaneResult, exitCode: null | number): JsonLaunchResult {
+const QUICK_EXIT_THRESHOLD_MS = 10_000
+
+async function runPreflightWarmup(command: string, host: LaunchDependencies['host']): Promise<void> {
+  try {
+    const result = await spawnProcess(command, ['--version'], {stdio: 'pipe'})
+    host.debug(`${command} preflight: exit=${result}`)
+  } catch {
+    host.debug(`${command} preflight failed (non-fatal)`)
+  }
+}
+
+async function spawnInlineWithRetry(
+  command: string,
+  args: string[],
+  retryOnQuickExit: boolean,
+  host: LaunchDependencies['host'],
+): Promise<number> {
+  if (retryOnQuickExit) {
+    await runPreflightWarmup(command, host)
+  }
+
+  const start = Date.now()
+  let exitCode = await spawnProcess(command, args)
+  if (retryOnQuickExit && Date.now() - start < QUICK_EXIT_THRESHOLD_MS) {
+    host.debug(`${command} exited in <${QUICK_EXIT_THRESHOLD_MS}ms — retrying (first-run init behavior)`)
+    exitCode = await spawnProcess(command, args)
+  }
+
+  return exitCode
+}
+
+function toJsonLaunchResult(result: LaunchResult, exitCode: null | number): JsonLaunchResult {
   return {
     launched: result.launched,
     backend: result.backend,
-    paneId: result.paneId ?? null,
+    handle: result.handle ?? null,
     sentinelPath: result.sentinelPath ?? null,
     exitCode,
     reason: result.reason ?? null,
   }
 }
 
-async function resolveWaitExitCode(result: SplitPaneResult, wait: boolean): Promise<null | number> {
-  if (!wait || !result.launched || !result.sentinelPath) {
-    return result.exitCode ?? null
-  }
-
-  const finished = await waitForSentinelFile(result.sentinelPath, 14_400_000)
-  return finished ? readSentinelExitCode(result.sentinelPath, 1) : -1
-}
-
 export async function executeLaunch(request: LaunchRequest, dependencies: LaunchDependencies): Promise<void> {
   const {cwd, flags, interactiveTty, platform, readPromptFile} = request
   const {host, now, pid, tempDir, writePromptFile} = dependencies
 
-  // Capture REPL context BEFORE clearing env vars — used by WezTerm gating below.
-  const calledFromRepl = REPL_NESTING_VARS.some((v) => Boolean(process.env[v]))
-
-  // Clear nesting vars from current process so inline launches don't see them.
-  for (const v of REPL_NESTING_VARS) {
-    delete process.env[v]
-  }
+  // 1. Capture REPL context BEFORE clearing env vars
+  const calledFromRepl = isCalledFromRepl()
+  clearProcessNestingVars()
 
   const useCodex = flags.codex
   const useDevin = flags.devin
@@ -83,7 +100,7 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
   const cliCommand = useDevin ? 'devin' : useCodex ? 'codex' : 'claude'
   const cliArgs = useDevin ? buildDevinArgs() : useCodex ? buildCodexArgs(platform) : ['--dangerously-skip-permissions']
   const launchFlag = useDevin ? '--devin' : useCodex ? '--codex' : ''
-  const disableTmux = flags['no-tmux']
+  const disableMux = flags['no-tmux']
   const wantJson = flags.json
   const wantWait = flags.wait
 
@@ -99,6 +116,7 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
   const promptPath = flags['prompt-path']?.trim() || undefined
   const promptText = resolvePromptText(flags.prompt, flags['prompt-file'], readPromptFile)
 
+  // 2. Handle --new (terminal window) — unchanged
   if (flags.new) {
     host.debug(`Launching new terminal in: ${cwd}`)
 
@@ -111,7 +129,7 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
     const launchArgs = buildSpawnedWindowArgs({
       useCodex,
       useDevin,
-      disableTmux,
+      disableTmux: disableMux,
       ...(promptPath ? {promptPath} : {}),
       ...(promptFilePath ? {promptFilePath} : {}),
       ...(flags.env ? {rawEnvJson: flags.env} : {}),
@@ -140,11 +158,12 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
     host.debug('Launching Devin with --permission-mode dangerous')
   }
 
+  // 3. Detect multiplexer
   const [versionCheck, mux] = await Promise.all([
     useCodex || useDevin
       ? null
       : getClaudeCodeVersion().then((v) => checkVersionCompatibility(v)),
-    disableTmux ? null : detectMultiplexer(platform),
+    disableMux ? null : detectMultiplexer(platform),
   ])
 
   if (versionCheck) {
@@ -155,11 +174,13 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
     }
   }
 
-  let exitCode = 0
+  // 4. Resolve strategy — backend decides
+  const resolved = mux?.resolveStrategy({calledFromRepl, platform, disableMux})
+    ?? {strategy: 'inline' as const, reason: 'No multiplexer available'}
 
-  try {
+  if (!mux || resolved.strategy === 'inline' || resolved.strategy === 'unavailable') {
     if (!mux) {
-      if (disableTmux) {
+      if (disableMux) {
         host.logInfo('Multiplexer disabled via --no-tmux — launching inline')
       } else if (!interactiveTty) {
         host.logInfo('Non-interactive terminal — launching inline')
@@ -168,64 +189,83 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
       } else {
         host.logInfo('No multiplexer found — launching inline. Install tmux for session management.')
       }
+    } else {
+      host.logInfo(resolved.reason)
+    }
 
+    try {
       const inlineArgs = useDevin && promptPath
         ? [...cliArgs, '--prompt-file', promptPath]
         : promptText ? [...cliArgs, promptText] : cliArgs
-      exitCode = await spawnProcess(cliCommand, inlineArgs)
-    } else if (mux.backend === 'wezterm' && !calledFromRepl) {
-      host.logInfo('WezTerm shell — launching inline (split from REPL context)')
-      const inlineArgs = useDevin && promptPath
-        ? [...cliArgs, '--prompt-file', promptPath]
-        : promptText ? [...cliArgs, promptText] : cliArgs
-      exitCode = await spawnProcess(cliCommand, inlineArgs)
-    } else if (mux.isInsideSession()) {
-      host.logInfo(`Inside ${mux.backend} session — splitting new pane`)
-      if (mux.backend === 'tmux') {
-        configureTmuxSession()
+      const exitCode = await spawnInlineWithRetry(cliCommand, inlineArgs, useDevin, host)
+      host.exit(exitCode)
+    } catch (error) {
+      if (error instanceof ProcessSpawnError) {
+        host.error(error.message, {exit: EXIT_CODES.ENVIRONMENT_ERROR})
       }
+      host.error('Unexpected launch failure.', {exit: EXIT_CODES.GENERAL_ERROR})
+    }
+
+    return // unreachable but narrows mux to non-null below
+  }
+
+  // Lifecycle managers
+  const sentinelMgr = new SentinelManager()
+  const promptMgr = new PromptFileManager({tempDir, now, pid})
+
+  let exitCode = 0
+
+  try {
+    const strategy = resolved.strategy
+
+    if (strategy === 'split') {
+      // 5a. Split pane
+      host.logInfo(`Inside ${mux.backend} session — splitting new pane`)
+
+      const sentinelPath = sentinelMgr.create(cliCommand)!
 
       let effectivePromptPath = promptPath
       if (!effectivePromptPath && promptText) {
-        effectivePromptPath = path.join(tempDir, `aiwcli-prompt-${now()}-${pid}.txt`)
-        writePromptFile(effectivePromptPath, promptText)
+        effectivePromptPath = promptMgr.materialize(promptText)
       }
 
-      // Devin CLI uses --prompt-file <path> instead of trailing positional prompt text.
-      // Pass the file as a CLI flag and don't forward promptPath to splitPane (which would
-      // read the file and append its content as a bare positional arg — unsupported by Devin).
+      // Devin CLI uses --prompt-file <path> instead of trailing positional prompt text
       let splitPromptPath = effectivePromptPath
       if (useDevin && effectivePromptPath) {
         cliArgs.push('--prompt-file', effectivePromptPath)
         splitPromptPath = undefined
       }
 
-      const splitResult = await mux.splitPane({
+      const splitResult = await mux.split({
         toolName: cliCommand,
         args: cliArgs,
         env: extraEnv,
         cwd,
+        mode: 'repl',
         split: flags.split ?? 'auto',
         promptPath: splitPromptPath,
-        sentinel: wantWait || wantJson || mux.backend === 'wezterm',
-        holdPane: mux.backend === 'wezterm',
+        sentinelPath,
+        holdPane: false,
+        retryOnQuickExit: useDevin,
       })
 
       if (wantJson) {
-        const jsonExitCode = await resolveWaitExitCode(splitResult, wantWait)
+        const jsonExitCode = wantWait && splitResult.launched && splitResult.sentinelPath
+          ? await sentinelMgr.waitForExit(splitResult.sentinelPath)
+          : splitResult.exitCode ?? null
         host.log(JSON.stringify(toJsonLaunchResult(splitResult, jsonExitCode)))
         host.exit(jsonExitCode ?? 0)
       }
 
       if (splitResult.launched) {
-        if (splitResult.paneId) {
-          host.logInfo(`Launched in ${mux.backend} pane: ${splitResult.paneId}`)
+        if (splitResult.handle) {
+          host.logInfo(`Launched in ${mux.backend} pane: ${splitResult.handle}`)
         } else {
           host.logInfo(`Launched in ${mux.backend}`)
         }
 
         if (wantWait && splitResult.sentinelPath) {
-          const waitedExitCode = await resolveWaitExitCode(splitResult, true)
+          const waitedExitCode = await sentinelMgr.waitForExit(splitResult.sentinelPath)
           host.exit(waitedExitCode ?? 1)
         }
 
@@ -233,9 +273,10 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
       }
 
       host.logWarning(`Pane split failed (${splitResult.reason}), launching directly`)
-      exitCode = await spawnProcess(cliCommand, promptText ? [...cliArgs, promptText] : cliArgs)
+      exitCode = await spawnInlineWithRetry(cliCommand, promptText ? [...cliArgs, promptText] : cliArgs, useDevin, host)
     } else {
-      const resolvedPath = mux.backend === 'tmux' ? findToolPath(cliCommand) : findExecutable(cliCommand)
+      // 5b. Create session
+      const resolvedPath = findToolPath(cliCommand) ?? findExecutable(cliCommand)
       if (resolvedPath) {
         const sessionFromFlag = flags['tmux-session']?.trim()
         const reattach = Boolean(sessionFromFlag && sessionFromFlag.length > 0)
@@ -249,7 +290,6 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
           host.logInfo(`Launching in new ${mux.backend} session: ${sessionName}`)
         }
 
-        // Devin uses --prompt-file instead of trailing positional prompt text
         const sessionToolArgs = useDevin && promptPath
           ? [...cliArgs, '--prompt-file', promptPath]
           : cliArgs
@@ -260,18 +300,18 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
           reattach,
           toolPath: resolvedPath,
           toolArgs: sessionToolArgs,
+          cwd,
           promptText: sessionPromptText,
         })
 
-        if (result.usedMux) {
-          exitCode = result.exitCode
+        if (result.launched) {
+          exitCode = result.exitCode ?? 0
 
           if (wantJson) {
-            // createSession has no paneId/sentinel — synthesize a JSON result
             host.log(JSON.stringify({
               launched: true,
               backend: mux.backend,
-              paneId: null,
+              handle: null,
               sentinelPath: null,
               exitCode,
               reason: null,
@@ -291,11 +331,11 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
             }
           }
 
-          exitCode = await spawnProcess(cliCommand, promptText ? [...cliArgs, promptText] : cliArgs)
+          exitCode = await spawnInlineWithRetry(cliCommand, promptText ? [...cliArgs, promptText] : cliArgs, useDevin, host)
         }
       } else {
         host.logWarning(`${cliCommand} not found on PATH (install from https://claude.ai/download)`)
-        exitCode = await spawnProcess(cliCommand, promptText ? [...cliArgs, promptText] : cliArgs)
+        exitCode = await spawnInlineWithRetry(cliCommand, promptText ? [...cliArgs, promptText] : cliArgs, useDevin, host)
       }
     }
   } catch (error) {
@@ -304,6 +344,9 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
     }
 
     host.error('Unexpected launch failure.', {exit: EXIT_CODES.GENERAL_ERROR})
+  } finally {
+    sentinelMgr.cleanupAll()
+    promptMgr.cleanup()
   }
 
   host.exit(exitCode)

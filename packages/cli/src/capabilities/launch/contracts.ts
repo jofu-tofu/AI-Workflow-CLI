@@ -1,4 +1,4 @@
-import type {SplitPaneResult} from '../../platform/launch.js'
+import type {LaunchResult} from '../../platform/launch.js'
 
 export interface LaunchFlags {
   codex: boolean
@@ -11,7 +11,7 @@ export interface LaunchFlags {
   'prompt-file'?: string | undefined
   'prompt-path'?: string | undefined
   'spawned-window': boolean
-  split?: 'auto' | 'h' | 'v' | undefined
+  split?: 'auto' | 'horizontal' | 'vertical' | undefined
   'tmux-session'?: string | undefined
   wait: boolean
 }
@@ -43,10 +43,10 @@ export interface LaunchDependencies {
 }
 
 export interface JsonLaunchResult {
-  backend: SplitPaneResult['backend']
+  backend: string
   exitCode: null | number
+  handle: null | string
   launched: boolean
-  paneId: null | string
   reason: null | string
   sentinelPath: null | string
 }

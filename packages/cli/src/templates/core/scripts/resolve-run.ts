@@ -7,19 +7,46 @@
  *
  * Root detection strategy (fastest first):
  *   1. Derive from this script's own location (O(1) — no I/O)
- *   2. Walk up from cwd to find .aiwcli/ anchor (O(depth) — a few stat calls)
+ *   2. git rev-parse --show-toplevel (works from any subdirectory)
+ *   3. Walk up from cwd to find .aiwcli/ anchor (O(depth) — a few stat calls)
+ *
+ * Strategy 2 is critical when this script is installed globally at ~/.aiwcli/bin/
+ * (strategy 1 fails) and the cwd is a subdirectory that has its own .aiwcli/
+ * (strategy 3 finds the wrong root).
  *
  * Usage:    bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/hook.ts
  */
+import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import path from "node:path";
+
+/**
+ * Convert MSYS2/Git-Bash POSIX path to native Windows path.
+ * /c/Users/foo → C:/Users/foo
+ */
+function fromMsysPosixPath(p: string): string {
+  if (process.platform !== "win32") return p;
+  const m = p.match(/^\/([a-zA-Z])\/(.*)/);
+  return m ? `${m[1]!.toUpperCase()}:/${m[2]!}` : p;
+}
 
 function findProjectRoot(): string {
   // 1. Derive from script location: .aiwcli/_core/scripts/resolve-run.ts → 3 levels up
   const derived = path.resolve(import.meta.dir, "..", "..", "..");
   if (fs.existsSync(path.join(derived, ".aiwcli"))) return derived;
 
-  // 2. Walk up from cwd to find .aiwcli/ anchor
+  // 2. git rev-parse (works from any subdirectory, even when cwd has its own .aiwcli/)
+  try {
+    let root = execSync("git rev-parse --show-toplevel", {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 2000,
+    }).trim();
+    root = fromMsysPosixPath(root);
+    if (root && fs.existsSync(path.join(root, ".aiwcli"))) return root;
+  } catch { /* not a git repo or git not available */ }
+
+  // 3. Walk up from cwd to find .aiwcli/ anchor
   let dir = process.cwd();
   while (true) {
     if (fs.existsSync(path.join(dir, ".aiwcli"))) return dir;

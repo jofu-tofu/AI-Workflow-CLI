@@ -7,7 +7,7 @@ import type {LaunchFlags} from '../capabilities/launch/contracts.js'
 import {executeLaunch} from '../capabilities/launch/control-plane/execute-launch.js'
 import {buildUniqueSessionName, sanitizeSessionName} from '../capabilities/launch/runtime-core/launch-options.js'
 import BaseCommand from '../cli/base-command.js'
-import {quoteForSh, readSentinelExitCode, type SplitPaneResult, waitForSentinelFile} from '../platform/launch.js'
+import {quoteForSh, readSentinelExitCode, type LaunchResult, waitForSentinelFile} from '../platform/launch.js'
 
 /**
  * Launch Claude Code, Codex, or Devin with AIW configuration.
@@ -120,8 +120,8 @@ export default class LaunchCommand extends BaseCommand {
       required: false,
     }),
     split: Flags.string({
-      description: 'Split direction when in tmux (auto|h|v, default: auto)',
-      options: ['auto', 'h', 'v'],
+      description: 'Split direction when in multiplexer (auto|horizontal|vertical, default: auto)',
+      options: ['auto', 'horizontal', 'vertical'],
       required: false,
     }),
     'tmux-session': Flags.string({
@@ -172,7 +172,7 @@ export default class LaunchCommand extends BaseCommand {
     return buildUniqueSessionName(base)
   }
 
-  private async handleJsonOutput(result: SplitPaneResult, wait: boolean): Promise<void> {
+  private async handleJsonOutput(result: LaunchResult, wait: boolean): Promise<void> {
     let {exitCode} = result
 
     if (wait && result.launched && result.sentinelPath) {
@@ -183,7 +183,7 @@ export default class LaunchCommand extends BaseCommand {
     this.log(JSON.stringify({
       launched: result.launched,
       backend: result.backend,
-      paneId: result.paneId ?? null,
+      handle: result.handle ?? null,
       sentinelPath: result.sentinelPath ?? null,
       exitCode: exitCode ?? null,
       reason: result.reason ?? null,
@@ -199,7 +199,7 @@ export default class LaunchCommand extends BaseCommand {
     return quoteForSh(input)
   }
 
-  private async waitForSentinel(result: SplitPaneResult): Promise<void> {
+  private async waitForSentinel(result: LaunchResult): Promise<void> {
     if (!result.sentinelPath) return
     const finished = await waitForSentinelFile(result.sentinelPath, 14_400_000)
     this.exit(finished ? readSentinelExitCode(result.sentinelPath, 1) : 1)

@@ -1,19 +1,27 @@
-import {describe, expect, it, vi} from 'vitest'
+import {describe, expect, it} from 'vitest'
 
 import {
   type PsmuxVersion as _PsmuxVersion,
   buildAttachArgs,
-  buildCommandArgs,
   buildCreateSessionArgs,
-  buildPowerShellToolCommand,
   buildPsmuxBootstrapCommands,
   buildSplitWindowArgs,
-  formatPromptPathForBootstrap,
   meetsMinVersion,
   parseVersionString,
+  toPsmuxSplitFlag,
 } from '../../../src/lib/multiplexers/psmux.js'
 
 describe('psmux pure functions', () => {
+  describe('toPsmuxSplitFlag', () => {
+    it('maps horizontal to -h', () => {
+      expect(toPsmuxSplitFlag('horizontal')).toBe('-h')
+    })
+
+    it('maps vertical to -v', () => {
+      expect(toPsmuxSplitFlag('vertical')).toBe('-v')
+    })
+  })
+
   describe('meetsMinVersion', () => {
     it('rejects version below minimum (0.3.9)', () => {
       expect(meetsMinVersion({major: 0, minor: 3, patch: 9})).toBe(false)
@@ -36,8 +44,6 @@ describe('psmux pure functions', () => {
     })
 
     it('rejects lower major version', () => {
-      // MIN_VERSION major is 0, so no lower major exists (negative not valid)
-      // but test that minor/patch don't matter when major is lower
       expect(meetsMinVersion({major: 0, minor: 3, patch: 99})).toBe(false)
     })
   })
@@ -68,85 +74,6 @@ describe('psmux pure functions', () => {
     })
   })
 
-  describe('buildCommandArgs', () => {
-    it('returns args unchanged in exec mode', () => {
-      expect(buildCommandArgs(['--flag'], 'exec', '/some/path')).toEqual(['--flag'])
-    })
-
-    it('returns args unchanged in repl mode without promptPath', () => {
-      expect(buildCommandArgs(['--flag'], 'repl')).toEqual(['--flag'])
-    })
-
-    it('appends bootstrap instruction in repl mode with promptPath', () => {
-      const result = buildCommandArgs(['--flag'], 'repl', '/tmp/prompt.md')
-      expect(result).toHaveLength(2)
-      expect(result[0]).toBe('--flag')
-      expect(result[1]).toContain('Read startup instructions from this file path before taking action:')
-      expect(result[1]).toContain('Use that file as the initial context.')
-    })
-
-    it('returns empty array when args is empty and mode is exec', () => {
-      expect(buildCommandArgs([], 'exec')).toEqual([])
-    })
-  })
-
-  describe('buildPowerShellToolCommand', () => {
-    it('builds command with env vars and tool path', () => {
-      const result = buildPowerShellToolCommand({
-        toolPath: 'C:\\tools\\claude.exe',
-        args: [],
-        env: {FOO: 'bar'},
-        mode: 'repl',
-      })
-      expect(result).toContain("$env:FOO='bar'")
-      expect(result).toContain("& 'C:\\tools\\claude.exe'")
-    })
-
-    it('builds command without env vars', () => {
-      const result = buildPowerShellToolCommand({
-        toolPath: 'C:\\tools\\claude.exe',
-        args: [],
-        env: {},
-        mode: 'repl',
-      })
-      expect(result).not.toContain('$env:')
-      expect(result).toContain("& 'C:\\tools\\claude.exe'")
-    })
-
-    it('includes args in the invocation', () => {
-      const result = buildPowerShellToolCommand({
-        toolPath: 'C:\\tools\\claude.exe',
-        args: ['--dangerously-skip-permissions'],
-        env: {},
-        mode: 'repl',
-      })
-      expect(result).toContain("@('--dangerously-skip-permissions')")
-    })
-
-    it('pipes prompt content in exec mode with promptPath', () => {
-      const result = buildPowerShellToolCommand({
-        toolPath: 'C:\\tools\\claude.exe',
-        args: [],
-        env: {},
-        mode: 'exec',
-        promptPath: 'C:\\tmp\\prompt.md',
-      })
-      expect(result).toContain('Get-Content -Raw -Path')
-      expect(result).toContain("'C:\\tmp\\prompt.md'")
-    })
-
-    it('does not pipe in repl mode even with promptPath', () => {
-      const result = buildPowerShellToolCommand({
-        toolPath: 'C:\\tools\\claude.exe',
-        args: [],
-        env: {},
-        mode: 'repl',
-        promptPath: 'C:\\tmp\\prompt.md',
-      })
-      expect(result).not.toContain('Get-Content')
-    })
-  })
-
   describe('buildPsmuxBootstrapCommands', () => {
     it('includes mouse option when enabled', () => {
       const commands = buildPsmuxBootstrapCommands(true)
@@ -173,26 +100,6 @@ describe('psmux pure functions', () => {
     it('has 6 commands when mouse enabled, 5 when disabled', () => {
       expect(buildPsmuxBootstrapCommands(true)).toHaveLength(6)
       expect(buildPsmuxBootstrapCommands(false)).toHaveLength(5)
-    })
-  })
-
-  describe('formatPromptPathForBootstrap', () => {
-    it('returns path unchanged on non-win32 platforms', () => {
-      const spy = vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
-      try {
-        expect(formatPromptPathForBootstrap('/tmp/prompt.md')).toBe('/tmp/prompt.md')
-      } finally {
-        spy.mockRestore()
-      }
-    })
-
-    it('replaces backslashes with forward slashes on win32', () => {
-      const spy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-      try {
-        expect(formatPromptPathForBootstrap('C:\\tmp\\prompt.md')).toBe('C:/tmp/prompt.md')
-      } finally {
-        spy.mockRestore()
-      }
     })
   })
 

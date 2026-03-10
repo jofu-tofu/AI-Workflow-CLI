@@ -1,100 +1,20 @@
 import {describe, expect, it} from 'vitest'
 
 import {
-  buildCommandArgs,
-  buildEnvPrefix,
-  buildShToolCommand,
   buildTmuxCreateSessionArgs,
   buildTmuxSplitWindowArgs,
+  toTmuxSplitFlag,
   withWindowsTmuxBootstrap,
 } from '../../../src/lib/multiplexers/tmux.js'
 
 describe('tmux pure functions', () => {
-  describe('buildEnvPrefix', () => {
-    it('returns empty string for empty env', () => {
-      expect(buildEnvPrefix({})).toBe('')
+  describe('toTmuxSplitFlag', () => {
+    it('maps horizontal to -h', () => {
+      expect(toTmuxSplitFlag('horizontal')).toBe('-h')
     })
 
-    it('builds single env var assignment', () => {
-      const result = buildEnvPrefix({FOO: 'bar'})
-      expect(result).toContain('FOO=')
-      expect(result).toContain('bar')
-    })
-
-    it('builds multiple env vars space-separated', () => {
-      const result = buildEnvPrefix({FOO: 'bar', BAZ: 'qux'})
-      expect(result).toContain('FOO=')
-      expect(result).toContain('BAZ=')
-    })
-  })
-
-  describe('buildShToolCommand', () => {
-    it('builds basic repl command with env and tool path', () => {
-      const result = buildShToolCommand({
-        toolPath: '/usr/bin/claude',
-        args: ['--flag'],
-        env: {COLORTERM: 'truecolor'},
-        mode: 'repl',
-      })
-      expect(result).toContain('COLORTERM=')
-      expect(result).toContain('/usr/bin/claude')
-      expect(result).toContain('--flag')
-    })
-
-    it('builds exec command with prompt redirect', () => {
-      const result = buildShToolCommand({
-        toolPath: '/usr/bin/claude',
-        args: [],
-        env: {},
-        mode: 'exec',
-        promptPath: '/tmp/prompt.md',
-      })
-      expect(result).toContain('< ')
-      expect(result).toContain('/tmp/prompt.md')
-    })
-
-    it('does not redirect in repl mode even with promptPath', () => {
-      const result = buildShToolCommand({
-        toolPath: '/usr/bin/claude',
-        args: [],
-        env: {},
-        mode: 'repl',
-        promptPath: '/tmp/prompt.md',
-      })
-      expect(result).not.toContain('< ')
-    })
-
-    it('appends prompt text as argument in repl mode', () => {
-      const result = buildShToolCommand({
-        toolPath: '/usr/bin/claude',
-        args: [],
-        env: {},
-        mode: 'repl',
-        promptText: 'hello world',
-      })
-      expect(result).toContain('hello world')
-    })
-  })
-
-  describe('buildCommandArgs', () => {
-    it('returns args unchanged in exec mode', () => {
-      expect(buildCommandArgs(['--flag'], 'exec', 'some text')).toEqual(['--flag'])
-    })
-
-    it('returns args unchanged in repl mode without promptText', () => {
-      expect(buildCommandArgs(['--flag'], 'repl')).toEqual(['--flag'])
-    })
-
-    it('returns args unchanged in repl mode with undefined promptText', () => {
-      expect(buildCommandArgs(['--flag'], 'repl', undefined)).toEqual(['--flag'])
-    })
-
-    it('appends promptText in repl mode', () => {
-      expect(buildCommandArgs(['--flag'], 'repl', 'hello')).toEqual(['--flag', 'hello'])
-    })
-
-    it('appends even empty string promptText in repl mode', () => {
-      expect(buildCommandArgs([], 'repl', '')).toEqual([''])
+    it('maps vertical to -v', () => {
+      expect(toTmuxSplitFlag('vertical')).toBe('-v')
     })
   })
 
@@ -110,7 +30,6 @@ describe('tmux pure functions', () => {
     it('prepends bootstrap commands on win32 platform', () => {
       const result = withWindowsTmuxBootstrap('my-command', 'win32')
       expect(result).toContain('my-command')
-      // The bootstrap prefix should come before the original command
       expect(result.indexOf('my-command')).toBeGreaterThan(0)
       expect(result).toContain('; my-command')
     })

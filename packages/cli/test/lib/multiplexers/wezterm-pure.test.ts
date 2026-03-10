@@ -1,100 +1,20 @@
 import {describe, expect, it} from 'vitest'
 
 import {
-  buildCommandArgs,
-  buildEnvPrefix,
-  buildShToolCommand,
   buildWeztermKillArgs,
   buildWeztermSpawnArgs,
   buildWeztermSplitArgs,
-  weztermSplitFlagFromDirection,
+  toWeztermSplitFlag,
 } from '../../../src/lib/multiplexers/wezterm.js'
 
 describe('wezterm pure functions', () => {
-  describe('buildEnvPrefix', () => {
-    it('builds space-separated KEY=value pairs with sh quoting', () => {
-      const result = buildEnvPrefix({FOO: 'bar', BAZ: 'qux'})
-      expect(result).toContain("FOO='bar'")
-      expect(result).toContain("BAZ='qux'")
+  describe('toWeztermSplitFlag', () => {
+    it('maps horizontal to --right', () => {
+      expect(toWeztermSplitFlag('horizontal')).toBe('--right')
     })
 
-    it('returns empty string for empty env', () => {
-      expect(buildEnvPrefix({})).toBe('')
-    })
-  })
-
-  describe('buildCommandArgs', () => {
-    it('returns args unchanged in exec mode', () => {
-      expect(buildCommandArgs(['--flag'], 'exec', 'some text')).toEqual(['--flag'])
-    })
-
-    it('returns args unchanged in repl mode without promptText', () => {
-      expect(buildCommandArgs(['--flag'], 'repl')).toEqual(['--flag'])
-    })
-
-    it('appends promptText in repl mode', () => {
-      const result = buildCommandArgs(['--flag'], 'repl', 'hello')
-      expect(result).toEqual(['--flag', 'hello'])
-    })
-
-    it('returns empty array when args is empty and mode is exec', () => {
-      expect(buildCommandArgs([], 'exec')).toEqual([])
-    })
-  })
-
-  describe('buildShToolCommand', () => {
-    it('builds command with env vars and tool path', () => {
-      const result = buildShToolCommand({
-        toolPath: '/usr/bin/claude',
-        args: [],
-        env: {FOO: 'bar'},
-        mode: 'repl',
-      })
-      expect(result).toContain("FOO='bar'")
-      expect(result).toContain("'/usr/bin/claude'")
-    })
-
-    it('builds command without env vars', () => {
-      const result = buildShToolCommand({
-        toolPath: '/usr/bin/claude',
-        args: [],
-        env: {},
-        mode: 'repl',
-      })
-      expect(result).not.toContain('FOO=')
-      expect(result).toContain("'/usr/bin/claude'")
-    })
-
-    it('includes args in the invocation', () => {
-      const result = buildShToolCommand({
-        toolPath: '/usr/bin/claude',
-        args: ['--dangerously-skip-permissions'],
-        env: {},
-        mode: 'repl',
-      })
-      expect(result).toContain("'--dangerously-skip-permissions'")
-    })
-
-    it('pipes prompt content in exec mode with promptPath', () => {
-      const result = buildShToolCommand({
-        toolPath: '/usr/bin/claude',
-        args: [],
-        env: {},
-        mode: 'exec',
-        promptPath: '/tmp/prompt.md',
-      })
-      expect(result).toContain("< '/tmp/prompt.md'")
-    })
-
-    it('does not pipe in repl mode even with promptPath', () => {
-      const result = buildShToolCommand({
-        toolPath: '/usr/bin/claude',
-        args: [],
-        env: {},
-        mode: 'repl',
-        promptPath: '/tmp/prompt.md',
-      })
-      expect(result).not.toContain('<')
+    it('maps vertical to --bottom', () => {
+      expect(toWeztermSplitFlag('vertical')).toBe('--bottom')
     })
   })
 
@@ -104,7 +24,7 @@ describe('wezterm pure functions', () => {
         splitFlag: '--right',
         command: 'echo hello',
       })
-      expect(result).toEqual(['cli', 'split-pane', '--right', '--', 'bash', '-lc', 'echo hello'])
+      expect(result).toEqual(['cli', 'split-pane', '--right', '--', 'bash', '-c', 'echo hello'])
     })
 
     it('builds vertical split (--bottom) with command', () => {
@@ -112,7 +32,7 @@ describe('wezterm pure functions', () => {
         splitFlag: '--bottom',
         command: 'echo hello',
       })
-      expect(result).toEqual(['cli', 'split-pane', '--bottom', '--', 'bash', '-lc', 'echo hello'])
+      expect(result).toEqual(['cli', 'split-pane', '--bottom', '--', 'bash', '-c', 'echo hello'])
     })
 
     it('includes --cwd when provided', () => {
@@ -146,7 +66,7 @@ describe('wezterm pure functions', () => {
         'cli', 'split-pane', '--bottom',
         '--cwd', '/repo',
         '--pane-id', '7',
-        '--', 'bash', '-lc', 'my-cmd',
+        '--', 'bash', '-c', 'my-cmd',
       ])
     })
   })
@@ -156,7 +76,7 @@ describe('wezterm pure functions', () => {
       const result = buildWeztermSpawnArgs({
         command: 'echo hello',
       })
-      expect(result).toEqual(['cli', 'spawn', '--new-window', '--', 'bash', '-lc', 'echo hello'])
+      expect(result).toEqual(['cli', 'spawn', '--new-window', '--', 'bash', '-c', 'echo hello'])
     })
 
     it('includes --cwd when provided', () => {
@@ -167,7 +87,7 @@ describe('wezterm pure functions', () => {
       expect(result).toEqual([
         'cli', 'spawn', '--new-window',
         '--cwd', '/home/user/repo',
-        '--', 'bash', '-lc', 'echo hello',
+        '--', 'bash', '-c', 'echo hello',
       ])
     })
   })
@@ -175,16 +95,6 @@ describe('wezterm pure functions', () => {
   describe('buildWeztermKillArgs', () => {
     it('builds kill-pane with --pane-id', () => {
       expect(buildWeztermKillArgs('42')).toEqual(['cli', 'kill-pane', '--pane-id', '42'])
-    })
-  })
-
-  describe('weztermSplitFlagFromDirection', () => {
-    it('maps h to --right', () => {
-      expect(weztermSplitFlagFromDirection('h')).toBe('--right')
-    })
-
-    it('maps v to --bottom', () => {
-      expect(weztermSplitFlagFromDirection('v')).toBe('--bottom')
     })
   })
 })

@@ -3,22 +3,14 @@ import path from 'node:path'
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  cleanupSentinelIpc: vi.fn(),
-  cleanClaudeEnv: vi.fn(() => ({})),
-  createSentinelIpcPaths: vi.fn(() => ({
-    tmpDir: 'C:\\tmp\\psmux-sentinel',
-    inputPath: 'C:\\tmp\\psmux-sentinel\\input.txt',
-    stdoutPath: 'C:\\tmp\\psmux-sentinel\\stdout.txt',
-    stderrPath: 'C:\\tmp\\psmux-sentinel\\stderr.txt',
-    sentinelPath: 'C:\\tmp\\psmux-sentinel\\sentinel.txt',
-  })),
   execFileAsync: vi.fn(),
   existsSync: vi.fn(() => false),
   findExecutable: vi.fn(),
   getLastLine: vi.fn((stdout: string) => stdout.trim()),
   quoteForPowerShell: vi.fn((input: string) => `'${input}'`),
   readdirSync: vi.fn(() => []),
-  spawnAttached: vi.fn(async () => ({exitCode: 0, usedMux: true})),
+  sanitizedProcessEnv: vi.fn(() => ({})),
+  spawnAttached: vi.fn(async () => ({launched: true, exitCode: 0, backend: 'psmux'})),
   splitFlagFromDimensions: vi.fn(() => '-h'),
   tmpdir: vi.fn(() => 'C:\\tmp'),
   toEncodedPowerShell: vi.fn((command: string) => `ENC(${command})`),
@@ -36,16 +28,15 @@ vi.mock('node:os', () => ({
   tmpdir: mocks.tmpdir,
 }))
 
+vi.mock('../../../src/lib/env-sanitizer.js', () => ({
+  REPL_NESTING_VARS: ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_SESSION_ID', 'CODEX_THREAD_ID', 'AIWCLI_INTERNAL_CALL'],
+  sanitizedProcessEnv: mocks.sanitizedProcessEnv,
+}))
+
 vi.mock('../../../src/lib/mux-utils.js', () => ({
-  cleanClaudeEnv: mocks.cleanClaudeEnv,
   getLastLine: mocks.getLastLine,
   spawnAttached: mocks.spawnAttached,
   splitFlagFromDimensions: mocks.splitFlagFromDimensions,
-}))
-
-vi.mock('../../../src/lib/runtime/sentinel-ipc.js', () => ({
-  cleanupSentinelIpc: mocks.cleanupSentinelIpc,
-  createSentinelIpcPaths: mocks.createSentinelIpcPaths,
 }))
 
 vi.mock('../../../src/lib/runtime/subprocess-utils.js', () => ({
@@ -78,6 +69,18 @@ function okExec(stdout = ''): {
     killed: false,
     signal: null,
   }
+}
+
+const defaultSplitOptions = {
+  toolName: 'claude',
+  args: ['--dangerously-skip-permissions'],
+  cwd: 'C:\\repo',
+  env: {},
+  mode: 'repl' as const,
+  split: 'auto' as const,
+  sentinelPath: 'C:\\tmp\\psmux-sentinel\\sentinel.txt',
+  holdPane: false,
+  retryOnQuickExit: false,
 }
 
 describe('psmux multiplexer unit', () => {
@@ -160,19 +163,25 @@ describe('psmux multiplexer unit', () => {
     expect(mux?.backend).toBe('psmux')
   })
 
-  it('isInsideSession reflects PSMUX_PANE env variable', async () => {
+  it('resolveStrategy returns split when PSMUX_PANE is set', async () => {
     platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const mux = await PsmuxMultiplexer.create()
     expect(mux).not.toBeNull()
 
     process.env.PSMUX_PANE = '1'
-    expect(mux?.isInsideSession()).toBe(true)
+    expect(mux!.resolveStrategy({calledFromRepl: false, platform: 'win32', disableMux: false}).strategy).toBe('split')
 
     delete process.env.PSMUX_PANE
-    expect(mux?.isInsideSession()).toBe(false)
+    expect(mux!.resolveStrategy({calledFromRepl: false, platform: 'win32', disableMux: false}).strategy).toBe('create-session')
   })
 
-  it('kill sends kill-pane command with pane id', async () => {
+  it('resolveStrategy returns inline when disableMux is true', async () => {
+    platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const mux = await PsmuxMultiplexer.create()
+    expect(mux!.resolveStrategy({calledFromRepl: false, platform: 'win32', disableMux: true}).strategy).toBe('inline')
+  })
+
+  it('kill sends kill-pane command with handle', async () => {
     platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const mux = await PsmuxMultiplexer.create()
     await mux!.kill('%12')
@@ -180,21 +189,18 @@ describe('psmux multiplexer unit', () => {
     expect(mocks.execFileAsync).toHaveBeenCalledWith('C:\\tools\\psmux.exe', ['kill-pane', '-t', '%12'], {timeout: 3000})
   })
 
-  it('splitPane returns not found when tool executable is missing', async () => {
+  it('split returns not found when tool executable is missing', async () => {
     platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     mocks.findExecutable.mockImplementation((name: string) => name === 'psmux' ? 'C:\\tools\\psmux.exe' : null)
     const mux = await PsmuxMultiplexer.create()
 
-    const result = await mux!.splitPane({
-      toolName: 'claude',
-      args: ['--dangerously-skip-permissions'],
-    })
+    const result = await mux!.split(defaultSplitOptions)
 
     expect(result.launched).toBe(false)
     expect(result.reason).toContain('claude not found on PATH')
   })
 
-  it('splitPane auto mode chooses split flag from current pane dimensions', async () => {
+  it('split auto mode chooses split flag from current pane dimensions', async () => {
     platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const mux = await PsmuxMultiplexer.create()
     mocks.execFileAsync
@@ -208,18 +214,13 @@ describe('psmux multiplexer unit', () => {
       .mockResolvedValueOnce(okExec('%22\n'))
     mocks.splitFlagFromDimensions.mockReturnValueOnce('-h')
 
-    const result = await mux!.splitPane({
-      toolName: 'claude',
-      args: [],
-      split: 'auto',
-      cwd: 'C:\\repo',
-    })
+    const result = await mux!.split(defaultSplitOptions)
 
     expect(mocks.splitFlagFromDimensions).toHaveBeenCalledWith(220, 90)
     expect(result.launched).toBe(true)
   })
 
-  it('splitPane repl mode with promptPath injects startup bootstrap argument', async () => {
+  it('split repl mode with promptPath injects startup bootstrap argument', async () => {
     platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const mux = await PsmuxMultiplexer.create()
     mocks.execFileAsync
@@ -232,10 +233,9 @@ describe('psmux multiplexer unit', () => {
       .mockResolvedValueOnce(okExec())
       .mockResolvedValueOnce(okExec('%31\n'))
 
-    await mux!.splitPane({
-      toolName: 'claude',
+    await mux!.split({
+      ...defaultSplitOptions,
       args: ['--yolo'],
-      split: 'auto',
       promptPath: '.\\prompt.md',
       env: {FOO: 'bar'},
     })
@@ -266,6 +266,7 @@ describe('psmux multiplexer unit', () => {
       toolArgs: ['--dangerously-skip-permissions'],
       promptText: 'hello from test',
       enableMouse: true,
+      cwd: process.cwd(),
     })
 
     expect(mocks.writeFileSync).toHaveBeenCalled()
@@ -306,41 +307,12 @@ describe('psmux multiplexer unit', () => {
       toolPath: 'C:\\tools\\claude.exe',
       toolArgs: [],
       enableMouse: true,
+      cwd: process.cwd(),
     })
 
     const callArgs = mocks.execFileAsync.mock.calls.map((call) => call[1] as string[])
     expect(callArgs.some((args) => args[0] === 'new-session')).toBe(false)
     expect(callArgs.filter((args) => args[0] === 'has-session').length).toBe(2)
-  })
-
-  it('createSession creates detached session in reattach mode when session is missing', async () => {
-    platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    const mux = await PsmuxMultiplexer.create()
-    mocks.execFileAsync.mockReset()
-    mocks.execFileAsync
-      .mockResolvedValueOnce({ ...okExec(), exitCode: 1 }) // has-session exists check (missing)
-      .mockResolvedValueOnce(okExec()) // new-session -d
-      .mockResolvedValueOnce(okExec()) // has-session ready check
-      .mockResolvedValueOnce(okExec()) // set-option mouse
-      .mockResolvedValueOnce(okExec()) // set-option history
-      .mockResolvedValueOnce(okExec()) // set-option cursor-blink
-      .mockResolvedValueOnce(okExec()) // set-option cursor-style
-      .mockResolvedValueOnce(okExec()) // set-option status-interval
-      .mockResolvedValueOnce(okExec()) // set-option terminal-overrides
-
-    await mux!.createSession({
-      sessionName: 'aiw-main',
-      reattach: true,
-      toolPath: 'C:\\tools\\claude.exe',
-      toolArgs: [],
-      enableMouse: true,
-    })
-
-    expect(mocks.execFileAsync).toHaveBeenCalledWith(
-      'C:\\tools\\psmux.exe',
-      expect.arrayContaining(['new-session', '-d', '-c', process.cwd(), '-s', 'aiw-main']),
-      {timeout: 5000},
-    )
   })
 
   it('createSession retries attach once on exit code 1 and succeeds', async () => {
@@ -358,8 +330,8 @@ describe('psmux multiplexer unit', () => {
       .mockResolvedValueOnce(okExec()) // set-option terminal-overrides
 
     mocks.spawnAttached
-      .mockResolvedValueOnce({exitCode: 1, usedMux: false, reason: 'psmux exited with code 1'})
-      .mockResolvedValueOnce({exitCode: 0, usedMux: true})
+      .mockResolvedValueOnce({launched: false, exitCode: 1, backend: 'psmux', reason: 'psmux exited with code 1'})
+      .mockResolvedValueOnce({launched: true, exitCode: 0, backend: 'psmux'})
 
     const result = await mux!.createSession({
       sessionName: 'aiw-main',
@@ -367,13 +339,14 @@ describe('psmux multiplexer unit', () => {
       toolPath: 'C:\\tools\\claude.exe',
       toolArgs: [],
       enableMouse: true,
+      cwd: process.cwd(),
     })
 
     expect(mocks.spawnAttached).toHaveBeenCalledTimes(2)
-    expect(result).toEqual({exitCode: 0, usedMux: true})
+    expect(result.launched).toBe(true)
   })
 
-  it('createSession returns usedMux=false after attach retry fails with exit code 1', async () => {
+  it('createSession returns launched=false after attach retry fails with exit code 1', async () => {
     platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const mux = await PsmuxMultiplexer.create()
     mocks.execFileAsync.mockReset()
@@ -388,8 +361,8 @@ describe('psmux multiplexer unit', () => {
       .mockResolvedValueOnce(okExec()) // set-option terminal-overrides
 
     mocks.spawnAttached
-      .mockResolvedValueOnce({exitCode: 1, usedMux: false, reason: 'psmux exited with code 1'})
-      .mockResolvedValueOnce({exitCode: 1, usedMux: false, reason: 'psmux exited with code 1'})
+      .mockResolvedValueOnce({launched: false, exitCode: 1, backend: 'psmux', reason: 'psmux exited with code 1'})
+      .mockResolvedValueOnce({launched: false, exitCode: 1, backend: 'psmux', reason: 'psmux exited with code 1'})
 
     const result = await mux!.createSession({
       sessionName: 'aiw-main',
@@ -397,10 +370,10 @@ describe('psmux multiplexer unit', () => {
       toolPath: 'C:\\tools\\claude.exe',
       toolArgs: [],
       enableMouse: true,
+      cwd: process.cwd(),
     })
 
-    expect(result.usedMux).toBe(false)
+    expect(result.launched).toBe(false)
     expect(result.reason).toContain('attach failed after retry')
   })
 })
-

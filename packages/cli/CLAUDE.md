@@ -46,31 +46,46 @@ oclif-based CLI (`aiw`). Installs the core runtime (`.aiwcli/_core`) plus option
 - Installation ownership lives in `.aiwcli/state/install-state.json`; IDE settings are reconstructed outputs, not registries
 - Template-specific IDE dirs use method-namespaced subdirectory layout
 
-## Launch Architecture (Multiplexer-First)
+## Launch Architecture (Strategy Pattern)
 
-`aiw launch` prefers running the REPL inside a terminal multiplexer for persistent
-sessions, pane splitting, and scrollback. The unified flow is:
+`aiw launch` uses a backend-decides strategy pattern. The orchestrator is a thin
+executor; each multiplexer backend owns its context-awareness via `resolveStrategy()`.
 
 ```
 detectMultiplexer() → Multiplexer | null
   ├─ win32 → WeztermMultiplexer (if inside WezTerm) → PsmuxMultiplexer (fallback)
   └─ unix  → TmuxMultiplexer  (install: apt/brew install tmux)
 
-if (--no-tmux || !mux)     → inline (direct spawn in current terminal)
-else if (mux.isInsideSession()) → split pane in current session
-else                        → create new multiplexer session with REPL
+strategy = mux?.resolveStrategy({calledFromRepl, platform, disableMux})
+  ├─ 'inline'         → spawnInlineWithRetry()
+  ├─ 'split'          → sentinelMgr.create() + mux.split()
+  └─ 'create-session' → mux.createSession()
 ```
 
-**Inside-session detection:**
-- tmux: `Boolean(process.env.TMUX)`
-- psmux: `Boolean(process.env.PSMUX_PANE)` — injected by `createSession()`;
-  only detects sessions we created (acceptable until psmux natively sets an env var)
-- wezterm: `Boolean(process.env.AIW_MUX_SESSION)` — injected by `createSession()`/`splitPane()`;
-  `WEZTERM_PANE` is always set by WezTerm for ALL child processes and cannot be used
+**Strategy resolution (per backend):**
+- tmux: `TMUX` env → split; else → create-session
+- psmux: `PSMUX_PANE` env → split; else → create-session
+- wezterm: `calledFromRepl` → split; else → inline (REPL-context gating)
+- All: `disableMux` → inline
 
-**Windows-specific tmux overrides (`tmux-session.ts`):**
-- `Ss@:Se@:Cs@:Cr@` — suppress cursor shape/color churn
-- `kmous=\E[<` — SGR extended mouse mode for mintty/WT
+**Shell Adapter layer** (`src/lib/shell-adapters/`):
+- `BashAdapter`: command building for bash-based backends (tmux, wezterm)
+- `PowerShellAdapter`: command building for PowerShell (psmux)
+- Backends compose with adapters — no duplicated shell command building
+
+**Lifecycle managers** (orchestrator-owned):
+- `SentinelManager`: creates/waits/cleans sentinel IPC files
+- `PromptFileManager`: materializes prompt text to temp files with cleanup
+- `EnvSanitizer` (`env-sanitizer.ts`): centralizes REPL nesting var management
+
+**Key files:**
+| File | Role |
+|------|------|
+| `src/lib/multiplexer.ts` | Multiplexer interface, types, `detectMultiplexer()` factory |
+| `src/lib/shell-adapters/` | ShellAdapter interface + BashAdapter + PowerShellAdapter |
+| `src/lib/env-sanitizer.ts` | `REPL_NESTING_VARS`, `sanitizedProcessEnv()`, `isCalledFromRepl()` |
+| `src/lib/sentinel-manager.ts` | Sentinel lifecycle (create, wait, cleanup) |
+| `src/lib/prompt-file-manager.ts` | Prompt file lifecycle (materialize, cleanup) |
 
 ## Context Tree
 

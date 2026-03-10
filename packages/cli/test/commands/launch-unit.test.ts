@@ -3,7 +3,23 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 import type {LaunchDependencies, LaunchRequest} from '../../src/capabilities/launch/contracts.js'
 import {EXIT_CODES} from '../../src/types/exit-codes.js'
 
-// --- Single barrel mock: replaces 11 separate module mocks ---
+const envMocks = vi.hoisted(() => ({
+  clearProcessNestingVars: vi.fn(),
+  isCalledFromRepl: vi.fn(() => false),
+}))
+
+const sentinelMocks = vi.hoisted(() => ({
+  cleanupSentinelIpc: vi.fn(),
+  createSentinelIpcPaths: vi.fn(() => ({
+    tmpDir: '/tmp/sentinel',
+    inputPath: '/tmp/sentinel/input.txt',
+    stdoutPath: '/tmp/sentinel/stdout.txt',
+    stderrPath: '/tmp/sentinel/stderr.txt',
+    sentinelPath: '/tmp/sentinel/sentinel.txt',
+  })),
+  readSentinelExitCode: vi.fn(() => 0),
+  waitForSentinelFile: vi.fn(async () => true),
+}))
 
 const platformMocks = vi.hoisted(() => ({
   checkVersionCompatibility: vi.fn(() => ({compatible: true, version: '1.2.3'})),
@@ -22,7 +38,7 @@ const platformMocks = vi.hoisted(() => ({
     }
   },
   quoteForSh: vi.fn((s: string) => `'${s}'`),
-  readSentinelExitCode: vi.fn(() => 0),
+  readSentinelExitCode: sentinelMocks.readSentinelExitCode,
   spawnProcess: vi.fn(async () => 0),
   REPL_NESTING_VARS: [
     'CLAUDECODE',
@@ -31,10 +47,27 @@ const platformMocks = vi.hoisted(() => ({
     'CODEX_THREAD_ID',
     'AIWCLI_INTERNAL_CALL',
   ],
-  waitForSentinelFile: vi.fn(async () => true),
+  waitForSentinelFile: sentinelMocks.waitForSentinelFile,
 }))
 
 vi.mock('../../src/platform/launch.js', () => platformMocks)
+
+vi.mock('../../src/lib/env-sanitizer.js', () => ({
+  REPL_NESTING_VARS: platformMocks.REPL_NESTING_VARS,
+  clearProcessNestingVars: envMocks.clearProcessNestingVars,
+  isCalledFromRepl: envMocks.isCalledFromRepl,
+}))
+
+vi.mock('../../src/lib/runtime/sentinel-ipc.js', () => sentinelMocks)
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>
+  return {
+    ...actual,
+    writeFileSync: vi.fn(),
+    unlinkSync: vi.fn(),
+  }
+})
 
 import {executeLaunch} from '../../src/capabilities/launch/control-plane/execute-launch.js'
 
@@ -106,18 +139,18 @@ function makeDeps(overrides: Partial<LaunchDependencies> = {}): LaunchDependenci
 }
 
 function createMux(overrides: Partial<{
-  backend: 'psmux' | 'tmux' | 'wezterm'
-  createSession: (options: unknown) => Promise<{exitCode: number; reason?: string; usedMux: boolean}>
-  isInsideSession: () => boolean
-  kill: (paneId: string) => Promise<void>
-  splitPane: (options: unknown) => Promise<{backend: 'psmux' | 'tmux' | 'wezterm'; exitCode?: number; launched: boolean; paneId?: string; reason?: string; sentinelPath?: string}>
+  backend: string
+  createSession: (options: unknown) => Promise<{backend: string; exitCode?: number; launched: boolean; reason?: string}>
+  kill: (handle: string) => Promise<void>
+  resolveStrategy: (ctx: unknown) => {reason: string; strategy: string}
+  split: (options: unknown) => Promise<{backend: string; exitCode?: number; handle?: string; launched: boolean; reason?: string; sentinelPath?: string}>
 }> = {}) {
   return {
     backend: 'tmux' as const,
-    createSession: vi.fn(async () => ({exitCode: 0, usedMux: true})),
-    isInsideSession: vi.fn(() => true),
+    createSession: vi.fn(async () => ({launched: true, exitCode: 0, backend: 'tmux'})),
     kill: vi.fn(async () => {}),
-    splitPane: vi.fn(async () => ({backend: 'tmux' as const, launched: true, paneId: '%9'})),
+    resolveStrategy: vi.fn(() => ({strategy: 'split', reason: 'Inside tmux session'})),
+    split: vi.fn(async () => ({backend: 'tmux' as const, launched: true, handle: '%9', sentinelPath: '/tmp/sentinel/sentinel.txt'})),
     ...overrides,
   }
 }
@@ -130,12 +163,13 @@ describe('executeLaunch', () => {
     platformMocks.spawnProcess.mockResolvedValue(0)
     platformMocks.detectMultiplexer.mockResolvedValue(null)
     platformMocks.launchTerminal.mockResolvedValue({success: true})
-    platformMocks.waitForSentinelFile.mockResolvedValue(true)
-    platformMocks.readSentinelExitCode.mockReturnValue(0)
+    sentinelMocks.waitForSentinelFile.mockResolvedValue(true)
+    sentinelMocks.readSentinelExitCode.mockReturnValue(0)
     platformMocks.findExecutable.mockImplementation((name: string) => `/usr/bin/${name}`)
     platformMocks.findToolPath.mockImplementation((name: string) => `/usr/bin/${name}`)
     platformMocks.checkVersionCompatibility.mockReturnValue({compatible: true, version: '1.2.3'})
     platformMocks.getClaudeCodeVersion.mockResolvedValue('1.2.3')
+    envMocks.isCalledFromRepl.mockReturnValue(false)
   })
 
   describe('Windows prelaunch patching', () => {
@@ -239,8 +273,8 @@ describe('executeLaunch', () => {
   describe('split pane (inside mux session)', () => {
     it('reports successful pane launch via logInfo', async () => {
       const mux = createMux({
-        isInsideSession: vi.fn(() => true),
-        splitPane: vi.fn(async () => ({backend: 'tmux' as const, launched: true, paneId: '%22'})),
+        resolveStrategy: vi.fn(() => ({strategy: 'split', reason: 'Inside tmux session'})),
+        split: vi.fn(async () => ({backend: 'tmux' as const, launched: true, handle: '%22', sentinelPath: '/tmp/sentinel/sentinel.txt'})),
       })
       platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
       const request = makeRequest()
@@ -253,10 +287,10 @@ describe('executeLaunch', () => {
       expect(infoMessages).toContain('%22')
     })
 
-    it('falls back to inline spawn and warns when splitPane fails', async () => {
+    it('falls back to inline spawn and warns when split fails', async () => {
       const mux = createMux({
-        isInsideSession: vi.fn(() => true),
-        splitPane: vi.fn(async () => ({backend: 'tmux' as const, launched: false, reason: 'split failed'})),
+        resolveStrategy: vi.fn(() => ({strategy: 'split', reason: 'Inside tmux session'})),
+        split: vi.fn(async () => ({backend: 'tmux' as const, launched: false, reason: 'split failed'})),
       })
       platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
       platformMocks.spawnProcess.mockResolvedValueOnce(0)
@@ -273,8 +307,8 @@ describe('executeLaunch', () => {
 
     it('includes prompt text in inline fallback after split failure', async () => {
       const mux = createMux({
-        isInsideSession: vi.fn(() => true),
-        splitPane: vi.fn(async () => ({backend: 'tmux' as const, launched: false, reason: 'err'})),
+        resolveStrategy: vi.fn(() => ({strategy: 'split', reason: 'Inside tmux session'})),
+        split: vi.fn(async () => ({backend: 'tmux' as const, launched: false, reason: 'err'})),
       })
       platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
       platformMocks.spawnProcess.mockResolvedValueOnce(0)
@@ -288,10 +322,10 @@ describe('executeLaunch', () => {
   })
 
   describe('create session (outside mux session)', () => {
-    it('exits 0 when createSession reports usedMux with exitCode 0', async () => {
+    it('exits 0 when createSession reports launched with exitCode 0', async () => {
       const mux = createMux({
-        isInsideSession: vi.fn(() => false),
-        createSession: vi.fn(async () => ({exitCode: 0, usedMux: true})),
+        resolveStrategy: vi.fn(() => ({strategy: 'create-session', reason: 'Outside tmux'})),
+        createSession: vi.fn(async () => ({launched: true, exitCode: 0, backend: 'tmux'})),
       })
       platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
       const request = makeRequest()
@@ -304,8 +338,8 @@ describe('executeLaunch', () => {
 
     it('forwards mux session exit code to host.exit', async () => {
       const mux = createMux({
-        isInsideSession: vi.fn(() => false),
-        createSession: vi.fn(async () => ({exitCode: 7, usedMux: true})),
+        resolveStrategy: vi.fn(() => ({strategy: 'create-session', reason: 'Outside tmux'})),
+        createSession: vi.fn(async () => ({launched: true, exitCode: 7, backend: 'tmux'})),
       })
       platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
       const request = makeRequest()
@@ -316,10 +350,10 @@ describe('executeLaunch', () => {
       expect(deps.host.exit).toHaveBeenCalledWith(7)
     })
 
-    it('falls back to inline spawn when createSession reports usedMux=false', async () => {
+    it('falls back to inline spawn when createSession reports launched=false', async () => {
       const mux = createMux({
-        isInsideSession: vi.fn(() => false),
-        createSession: vi.fn(async () => ({exitCode: -1, usedMux: false, reason: 'tmux not available'})),
+        resolveStrategy: vi.fn(() => ({strategy: 'create-session', reason: 'Outside tmux'})),
+        createSession: vi.fn(async () => ({launched: false, exitCode: -1, backend: 'tmux', reason: 'tmux not available'})),
       })
       platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
       platformMocks.spawnProcess.mockResolvedValueOnce(0)
@@ -334,10 +368,11 @@ describe('executeLaunch', () => {
     it('shows psmux recovery hint for attach-failed createSession fallback', async () => {
       const mux = createMux({
         backend: 'psmux',
-        isInsideSession: vi.fn(() => false),
+        resolveStrategy: vi.fn(() => ({strategy: 'create-session', reason: 'Outside psmux'})),
         createSession: vi.fn(async () => ({
+          launched: false,
           exitCode: 1,
-          usedMux: false,
+          backend: 'psmux',
           reason: 'psmux attach failed after retry (auth/session readiness race)',
         })),
       })
@@ -354,10 +389,11 @@ describe('executeLaunch', () => {
 
     it('warns about unavailable mux when reason contains "not found"', async () => {
       const mux = createMux({
-        isInsideSession: vi.fn(() => false),
+        resolveStrategy: vi.fn(() => ({strategy: 'create-session', reason: 'Outside tmux'})),
         createSession: vi.fn(async () => ({
+          launched: false,
           exitCode: 1,
-          usedMux: false,
+          backend: 'tmux',
           reason: 'tmux not found',
         })),
       })
@@ -374,10 +410,11 @@ describe('executeLaunch', () => {
 
     it('warns when tool path not found on PATH', async () => {
       const mux = createMux({
-        isInsideSession: vi.fn(() => false),
+        resolveStrategy: vi.fn(() => ({strategy: 'create-session', reason: 'Outside tmux'})),
       })
       platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
       platformMocks.findToolPath.mockReturnValueOnce(null)
+      platformMocks.findExecutable.mockReturnValueOnce(null)
       platformMocks.spawnProcess.mockResolvedValueOnce(0)
       const request = makeRequest()
       const deps = makeDeps()
@@ -418,17 +455,17 @@ describe('executeLaunch', () => {
   describe('--wait mode', () => {
     it('exits with sentinel exit code when --wait is set and pane launches', async () => {
       const mux = createMux({
-        isInsideSession: vi.fn(() => true),
-        splitPane: vi.fn(async () => ({
+        resolveStrategy: vi.fn(() => ({strategy: 'split', reason: 'Inside tmux session'})),
+        split: vi.fn(async () => ({
           backend: 'tmux' as const,
           launched: true,
-          paneId: '%77',
-          sentinelPath: '/tmp/sentinel.txt',
+          handle: '%77',
+          sentinelPath: '/tmp/sentinel/sentinel.txt',
         })),
       })
       platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
-      platformMocks.waitForSentinelFile.mockResolvedValueOnce(true)
-      platformMocks.readSentinelExitCode.mockReturnValueOnce(23)
+      sentinelMocks.waitForSentinelFile.mockResolvedValueOnce(true)
+      sentinelMocks.readSentinelExitCode.mockReturnValueOnce(23)
       const request = makeRequest({flags: {wait: true}})
       const deps = makeDeps()
 
@@ -441,12 +478,12 @@ describe('executeLaunch', () => {
   describe('--json mode', () => {
     it('emits valid JSON with launched and backend fields', async () => {
       const mux = createMux({
-        isInsideSession: vi.fn(() => true),
-        splitPane: vi.fn(async () => ({
+        resolveStrategy: vi.fn(() => ({strategy: 'split', reason: 'Inside tmux session'})),
+        split: vi.fn(async () => ({
           backend: 'tmux' as const,
           launched: true,
-          paneId: '%88',
-          sentinelPath: '/tmp/sentinel.txt',
+          handle: '%88',
+          sentinelPath: '/tmp/sentinel/sentinel.txt',
         })),
       })
       platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
@@ -461,24 +498,24 @@ describe('executeLaunch', () => {
       expect(parsed).toEqual(expect.objectContaining({
         launched: true,
         backend: 'tmux',
-        paneId: '%88',
+        handle: '%88',
       }))
       expect(deps.host.exit).toHaveBeenCalledWith(0)
     })
 
     it('includes exit code in JSON when combined with --wait', async () => {
       const mux = createMux({
-        isInsideSession: vi.fn(() => true),
-        splitPane: vi.fn(async () => ({
+        resolveStrategy: vi.fn(() => ({strategy: 'split', reason: 'Inside tmux session'})),
+        split: vi.fn(async () => ({
           backend: 'tmux' as const,
           launched: true,
-          paneId: '%89',
-          sentinelPath: '/tmp/sentinel.txt',
+          handle: '%89',
+          sentinelPath: '/tmp/sentinel/sentinel.txt',
         })),
       })
       platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
-      platformMocks.waitForSentinelFile.mockResolvedValueOnce(true)
-      platformMocks.readSentinelExitCode.mockReturnValueOnce(9)
+      sentinelMocks.waitForSentinelFile.mockResolvedValueOnce(true)
+      sentinelMocks.readSentinelExitCode.mockReturnValueOnce(9)
       const request = makeRequest({flags: {json: true, wait: true}})
       const deps = makeDeps()
 
@@ -536,11 +573,12 @@ describe('executeLaunch', () => {
       delete process.env.CODEX_THREAD_ID
     })
 
-    it('launches inline when wezterm detected but NOT in REPL', async () => {
+    it('launches inline when wezterm resolveStrategy returns inline (not in REPL)', async () => {
+      envMocks.isCalledFromRepl.mockReturnValueOnce(false)
       const mux = createMux({
         backend: 'wezterm',
-        isInsideSession: vi.fn(() => true),
-        splitPane: vi.fn(async () => ({backend: 'wezterm' as const, launched: true, paneId: '42'})),
+        resolveStrategy: vi.fn(() => ({strategy: 'inline', reason: 'WezTerm shell — no REPL context'})),
+        split: vi.fn(async () => ({backend: 'wezterm' as const, launched: true, handle: '42'})),
       })
       platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
       const request = makeRequest()
@@ -548,18 +586,18 @@ describe('executeLaunch', () => {
 
       await executeLaunch(request, deps)
 
-      expect(mux.splitPane).not.toHaveBeenCalled()
+      expect(mux.split).not.toHaveBeenCalled()
       expect(platformMocks.spawnProcess).toHaveBeenCalled()
       const infoMessages = deps.host.logInfo.mock.calls.map((c: unknown[]) => String(c[0])).join('\n')
       expect(infoMessages).toContain('WezTerm shell')
     })
 
-    it('splits pane when wezterm detected AND inside REPL', async () => {
-      process.env.CLAUDECODE = '1'
+    it('splits pane when wezterm resolveStrategy returns split (inside REPL)', async () => {
+      envMocks.isCalledFromRepl.mockReturnValueOnce(true)
       const mux = createMux({
         backend: 'wezterm',
-        isInsideSession: vi.fn(() => true),
-        splitPane: vi.fn(async () => ({backend: 'wezterm' as const, launched: true, paneId: '42'})),
+        resolveStrategy: vi.fn(() => ({strategy: 'split', reason: 'Inside WezTerm REPL'})),
+        split: vi.fn(async () => ({backend: 'wezterm' as const, launched: true, handle: '42', sentinelPath: '/tmp/sentinel/sentinel.txt'})),
       })
       platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
       const request = makeRequest()
@@ -567,23 +605,7 @@ describe('executeLaunch', () => {
 
       await executeLaunch(request, deps)
 
-      expect(mux.splitPane).toHaveBeenCalled()
-    })
-
-    it('passes holdPane: true for wezterm splits', async () => {
-      process.env.CLAUDECODE = '1'
-      const mux = createMux({
-        backend: 'wezterm',
-        isInsideSession: vi.fn(() => true),
-        splitPane: vi.fn(async () => ({backend: 'wezterm' as const, launched: true, paneId: '42'})),
-      })
-      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
-      const request = makeRequest()
-      const deps = makeDeps()
-
-      await executeLaunch(request, deps)
-
-      expect(mux.splitPane).toHaveBeenCalledWith(expect.objectContaining({holdPane: true}))
+      expect(mux.split).toHaveBeenCalled()
     })
   })
 
