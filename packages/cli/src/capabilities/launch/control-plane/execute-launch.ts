@@ -12,6 +12,7 @@ import {
   ProcessSpawnError,
   quoteForSh,
   readSentinelExitCode,
+  REPL_NESTING_VARS,
   spawnProcess,
   type SplitPaneResult,
   waitForSentinelFile,
@@ -59,8 +60,13 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
   const {cwd, flags, interactiveTty, platform, readPromptFile} = request
   const {host, now, pid, tempDir, writePromptFile} = dependencies
 
-  delete process.env['CLAUDECODE']
-  delete process.env['CLAUDE_CODE_ENTRYPOINT']
+  // Capture REPL context BEFORE clearing env vars — used by WezTerm gating below.
+  const calledFromRepl = REPL_NESTING_VARS.some((v) => Boolean(process.env[v]))
+
+  // Clear nesting vars from current process so inline launches don't see them.
+  for (const v of REPL_NESTING_VARS) {
+    delete process.env[v]
+  }
 
   const useCodex = flags.codex
   const useDevin = flags.devin
@@ -167,6 +173,12 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
         ? [...cliArgs, '--prompt-file', promptPath]
         : promptText ? [...cliArgs, promptText] : cliArgs
       exitCode = await spawnProcess(cliCommand, inlineArgs)
+    } else if (mux.backend === 'wezterm' && !calledFromRepl) {
+      host.logInfo('WezTerm shell — launching inline (split from REPL context)')
+      const inlineArgs = useDevin && promptPath
+        ? [...cliArgs, '--prompt-file', promptPath]
+        : promptText ? [...cliArgs, promptText] : cliArgs
+      exitCode = await spawnProcess(cliCommand, inlineArgs)
     } else if (mux.isInsideSession()) {
       host.logInfo(`Inside ${mux.backend} session — splitting new pane`)
       if (mux.backend === 'tmux') {
@@ -195,7 +207,8 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
         cwd,
         split: flags.split ?? 'auto',
         promptPath: splitPromptPath,
-        sentinel: wantWait || wantJson,
+        sentinel: wantWait || wantJson || mux.backend === 'wezterm',
+        holdPane: mux.backend === 'wezterm',
       })
 
       if (wantJson) {

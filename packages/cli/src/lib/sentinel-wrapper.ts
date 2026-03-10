@@ -20,7 +20,11 @@ export function wrapSentinelSh(params: SentinelWrapParams): string {
   }
 
   if (holdPane) {
-    return `${base}; echo; echo ${quoteForSh(holdMessage)}; exec bash`
+    // Launch an interactive login shell to hold the pane open.
+    // Use "$BASH" (current bash) to avoid resolving to WSL's bash.
+    // Do NOT use 'exec' — on MSYS2/Windows exec emulates by spawning a new
+    // process and exiting the original, which causes WezTerm to close the pane.
+    return `${base}; echo; echo ${quoteForSh(holdMessage)}; "$BASH" -li`
   }
 
   return `${base}; exit $code`

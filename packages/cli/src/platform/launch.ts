@@ -1,6 +1,7 @@
 export {ProcessSpawnError} from '../lib/errors.js'
 export {ensureLspPatch} from '../lib/lsp-patch.js'
 export {detectMultiplexer, type SplitPaneResult} from '../lib/multiplexer.js'
+export {REPL_NESTING_VARS} from '../lib/mux-utils.js'
 export {readSentinelExitCode, waitForSentinelFile} from '../lib/runtime/sentinel-ipc.js'
 export {findExecutable} from '../lib/runtime/subprocess-utils.js'
 export {quoteForSh} from '../lib/shell-quoting.js'

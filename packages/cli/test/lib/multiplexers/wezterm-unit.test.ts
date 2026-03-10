@@ -25,6 +25,7 @@ vi.mock('node:fs', () => ({
 vi.mock('../../../src/lib/mux-utils.js', () => ({
   getLastLine: mocks.getLastLine,
   splitFlagFromDimensions: mocks.splitFlagFromDimensions,
+  UNSET_NESTING_SH: 'unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_SESSION_ID CODEX_THREAD_ID AIWCLI_INTERNAL_CALL;',
 }))
 
 vi.mock('../../../src/lib/runtime/sentinel-ipc.js', () => ({
@@ -45,7 +46,7 @@ vi.mock('../../../src/lib/shell-quoting.js', () => ({
   quoteForSh: mocks.quoteForSh,
 }))
 
-import {AIW_SESSION_ENV, WeztermMultiplexer} from '../../../src/lib/multiplexers/wezterm.js'
+import {WeztermMultiplexer} from '../../../src/lib/multiplexers/wezterm.js'
 
 function okExec(stdout = ''): {
   exitCode: number
@@ -66,16 +67,13 @@ function okExec(stdout = ''): {
 describe('wezterm multiplexer unit', () => {
   let weztermPaneBackup: string | undefined
   let termProgramBackup: string | undefined
-  let aiwSessionBackup: string | undefined
 
   beforeEach(() => {
     vi.clearAllMocks()
     weztermPaneBackup = process.env.WEZTERM_PANE
     termProgramBackup = process.env.TERM_PROGRAM
-    aiwSessionBackup = process.env[AIW_SESSION_ENV]
     delete process.env.WEZTERM_PANE
     delete process.env.TERM_PROGRAM
-    delete process.env[AIW_SESSION_ENV]
 
     mocks.findExecutable.mockImplementation((name: string) => {
       if (name === 'wezterm') return 'C:\\tools\\wezterm.exe'
@@ -95,11 +93,6 @@ describe('wezterm multiplexer unit', () => {
       delete process.env.TERM_PROGRAM
     } else {
       process.env.TERM_PROGRAM = termProgramBackup
-    }
-    if (aiwSessionBackup === undefined) {
-      delete process.env[AIW_SESSION_ENV]
-    } else {
-      process.env[AIW_SESSION_ENV] = aiwSessionBackup
     }
   })
 
@@ -145,19 +138,6 @@ describe('wezterm multiplexer unit', () => {
     const mux = WeztermMultiplexer.create()
     expect(mux).not.toBeNull()
     // Being inside WezTerm means we can split panes directly
-    expect(mux?.isInsideSession()).toBe(true)
-  })
-
-  it('isInsideSession returns true regardless of AIW_MUX_SESSION when in WezTerm', () => {
-    process.env.WEZTERM_PANE = '0'
-    process.env[AIW_SESSION_ENV] = '1'
-    const mux = WeztermMultiplexer.create()
-    expect(mux).not.toBeNull()
-
-    expect(mux?.isInsideSession()).toBe(true)
-
-    // Still true after removing AIW_MUX_SESSION — WEZTERM_PANE is sufficient
-    delete process.env[AIW_SESSION_ENV]
     expect(mux?.isInsideSession()).toBe(true)
   })
 
@@ -228,6 +208,28 @@ describe('wezterm multiplexer unit', () => {
     expect(result.launched).toBe(true)
     expect(result.backend).toBe('wezterm')
     expect(result.paneId).toBe('42')
+  })
+
+  it('splitPane clears REPL nesting env vars in pane command', async () => {
+    process.env.WEZTERM_PANE = '5'
+    const mux = WeztermMultiplexer.create()
+
+    mocks.execFileAsync.mockResolvedValueOnce(okExec('/usr/bin/claude'))
+    mocks.execFileAsync.mockResolvedValueOnce(okExec(JSON.stringify([
+      {pane_id: 5, size: {cols: 200, rows: 50}},
+    ])))
+    mocks.execFileAsync.mockResolvedValueOnce(okExec('42\n'))
+
+    await mux!.splitPane({
+      toolName: 'claude',
+      args: ['--dangerously-skip-permissions'],
+      split: 'auto',
+      cwd: 'C:\\repo',
+    })
+
+    const splitCall = mocks.execFileAsync.mock.calls.at(-1)
+    const bashCommand = splitCall?.[1]?.at(-1) as string
+    expect(bashCommand).toContain('unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_SESSION_ID CODEX_THREAD_ID AIWCLI_INTERNAL_CALL;')
   })
 
   it('splitPane uses explicit split direction h → --right', async () => {

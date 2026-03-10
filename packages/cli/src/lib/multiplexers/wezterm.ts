@@ -14,19 +14,11 @@ import type {
   SplitPaneOptions,
   SplitPaneResult,
 } from '../multiplexer.js'
-import {getLastLine, splitFlagFromDimensions} from '../mux-utils.js'
+import {getLastLine, splitFlagFromDimensions, UNSET_NESTING_SH} from '../mux-utils.js'
 import {cleanupSentinelIpc, createSentinelIpcPaths} from '../runtime/sentinel-ipc.js'
 import {execFileAsync, findExecutable} from '../runtime/subprocess-utils.js'
 import {wrapSentinelSh} from '../sentinel-wrapper.js'
 import {quoteForSh} from '../shell-quoting.js'
-
-/**
- * Env var injected by createSession()/splitPane() so isInsideSession()
- * can distinguish an AIW-managed WezTerm session from a plain WezTerm window.
- * WEZTERM_PANE is always set by WezTerm for every child process, so it cannot
- * be used to detect AIW sessions (unlike tmux's TMUX or psmux's PSMUX_PANE).
- */
-export const AIW_SESSION_ENV = 'AIW_MUX_SESSION'
 
 type WeztermSplitFlag = '--bottom' | '--right'
 
@@ -73,6 +65,7 @@ export function buildCommandArgs(
 
 /** @internal */
 export function buildWeztermSplitArgs(params: {
+  bashPath?: string | undefined;
   command: string;
   cwd?: string | undefined;
   paneId?: string | undefined;
@@ -85,12 +78,15 @@ export function buildWeztermSplitArgs(params: {
   if (params.paneId) {
     args.push('--pane-id', params.paneId)
   }
-  args.push('--', 'bash', '-lc', params.command)
+  // Use -c (not -lc): login shell profiles may exec another shell (e.g. zsh),
+  // preventing the command from running. Tool paths are already absolute.
+  args.push('--', params.bashPath ?? 'bash', '-c', params.command)
   return args
 }
 
 /** @internal */
 export function buildWeztermSpawnArgs(params: {
+  bashPath?: string | undefined;
   command: string;
   cwd?: string | undefined;
 }): string[] {
@@ -98,7 +94,7 @@ export function buildWeztermSpawnArgs(params: {
   if (params.cwd) {
     args.push('--cwd', params.cwd)
   }
-  args.push('--', 'bash', '-lc', params.command)
+  args.push('--', params.bashPath ?? 'bash', '-c', params.command)
   return args
 }
 
@@ -112,8 +108,17 @@ export function weztermSplitFlagFromDirection(direction: 'h' | 'v'): WeztermSpli
   return direction === 'h' ? '--right' : '--bottom'
 }
 
+/**
+ * Resolve Git Bash path on Windows. WezTerm may resolve bare `bash` to
+ * WSL's bash.exe (C:\Windows\System32\bash.exe) instead of Git Bash.
+ * We need the Git Bash path to ensure consistent MSYS2 path handling.
+ */
+function resolveGitBash(): string | null {
+  return findExecutable('bash')
+}
+
 async function resolveToolForBash(toolName: string): Promise<null | string> {
-  const bash = findExecutable('bash')
+  const bash = resolveGitBash()
   if (!bash) return null
   const result = await execFileAsync(bash, ['-lc', `command -v ${toolName}`], {
     timeout: 3000,
@@ -173,10 +178,10 @@ export class WeztermMultiplexer implements Multiplexer {
   }
 
   isInsideSession(): boolean {
-    // If we're inside WezTerm at all (WEZTERM_PANE or TERM_PROGRAM), we can
-    // split panes directly — no need for the AIW_MUX_SESSION marker.
-    // Falling through to createSession() would spawn --new-window, which
-    // is almost never what the user wants when already inside WezTerm.
+    // WezTerm sets WEZTERM_PANE / TERM_PROGRAM for ALL child processes,
+    // so this always returns true inside WezTerm. The orchestrator
+    // (execute-launch.ts) gates on REPL context to decide split vs inline —
+    // no custom env var needed.
     return Boolean(process.env.WEZTERM_PANE || process.env.TERM_PROGRAM === 'WezTerm')
   }
 
@@ -188,7 +193,7 @@ export class WeztermMultiplexer implements Multiplexer {
   async splitPane(options: SplitPaneOptions): Promise<SplitPaneResult> {
     const mode = options.mode ?? 'repl'
     const args = options.args ?? []
-    const envVars = {[AIW_SESSION_ENV]: '1', ...(options.env ?? {})}
+    const envVars = options.env ?? {}
     const cwd = options.cwd ?? process.cwd()
 
     // Resolve tool path — on Windows, resolve from bash's perspective
@@ -225,6 +230,8 @@ export class WeztermMultiplexer implements Multiplexer {
         ...(options.promptPath ? {promptPath: options.promptPath} : {}),
       })
 
+      const gitBash = process.platform === 'win32' ? resolveGitBash() ?? undefined : undefined
+
       let paneCommand = baseCommand
       if (sentinel) {
         const holdMessage = options.holdMessage ?? '[aiwcli] Driver exited. Pane held open.'
@@ -238,6 +245,14 @@ export class WeztermMultiplexer implements Multiplexer {
         })
       }
 
+      // Clear REPL nesting-detection env vars so the spawned REPL starts fresh.
+      // WezTerm panes inherit the mux server's environment, which may still have
+      // these set from the parent REPL session.
+      // Also ensure MSYS2/Git Bash bin dirs are in PATH — bash -c (non-login)
+      // skips the login profile, so npm shim scripts may miss /usr/bin tools.
+      const pathFix = 'export PATH="/usr/bin:/usr/local/bin:/mingw64/bin:$PATH";'
+      paneCommand = `${pathFix} ${UNSET_NESTING_SH} ${paneCommand}`
+
       // Resolve split direction
       const splitDirection = options.split ?? 'auto'
       let splitFlag: WeztermSplitFlag
@@ -247,12 +262,12 @@ export class WeztermMultiplexer implements Multiplexer {
       } else {
         splitFlag = weztermSplitFlagFromDirection(splitDirection === 'v' ? 'v' : 'h')
       }
-
       const weztermArgs = buildWeztermSplitArgs({
         splitFlag,
         command: paneCommand,
         cwd,
         paneId: options.splitTarget?.trim() || process.env.WEZTERM_PANE,
+        bashPath: gitBash,
       })
 
       const split = await execFileAsync(this.weztermPath, weztermArgs, {timeout: 5000})
@@ -301,14 +316,19 @@ export class WeztermMultiplexer implements Multiplexer {
     const baseCommand = buildShToolCommand({
       toolPath: effectiveToolPath,
       args: toolArgs,
-      env: {[AIW_SESSION_ENV]: '1'},
+      env: {},
       mode: 'repl',
       promptText: options.promptText,
     })
 
+    // Clear REPL nesting-detection env vars and ensure MSYS2 PATH (same as splitPane).
+    const pathFix = 'export PATH="/usr/bin:/usr/local/bin:/mingw64/bin:$PATH";'
+    const spawnCommand = `${pathFix} ${UNSET_NESTING_SH} ${baseCommand}`
+
     const weztermArgs = buildWeztermSpawnArgs({
-      command: baseCommand,
+      command: spawnCommand,
       cwd: process.cwd(),
+      bashPath: process.platform === 'win32' ? resolveGitBash() ?? undefined : undefined,
     })
 
     try {

@@ -42,14 +42,30 @@ export function splitFlagFromDimensions(width: number, height: number): '-h' | '
   return width >= height * CELL_ASPECT_RATIO ? '-h' : '-v'
 }
 
+/**
+ * Env vars set by REPL tools (Claude Code, Codex, Devin) that trigger
+ * nesting detection. Must be cleared when spawning a new REPL pane so
+ * the child tool starts fresh instead of refusing to launch.
+ */
+export const REPL_NESTING_VARS = [
+  'CLAUDECODE',
+  'CLAUDE_CODE_ENTRYPOINT',
+  'CLAUDE_SESSION_ID',
+  'CODEX_THREAD_ID',
+  'AIWCLI_INTERNAL_CALL',
+] as const
+
+/** Shell snippet that unsets all REPL nesting vars (for bash -lc commands). */
+export const UNSET_NESTING_SH = `unset ${REPL_NESTING_VARS.join(' ')};`
+
 export function cleanClaudeEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...extra,
   }
 
-  delete env['CLAUDECODE']
-  delete env['CLAUDE_CODE_ENTRYPOINT']
-  delete env['AIWCLI_INTERNAL_CALL']
+  for (const key of REPL_NESTING_VARS) {
+    delete env[key]
+  }
   return env
 }

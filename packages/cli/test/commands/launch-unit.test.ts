@@ -1,5 +1,5 @@
 /* eslint-disable import/order -- vi.mock must precede mocked module import */
-import {beforeEach, describe, expect, it, vi} from 'vitest'
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 import type {LaunchDependencies, LaunchRequest} from '../../src/capabilities/launch/contracts.js'
 import {EXIT_CODES} from '../../src/types/exit-codes.js'
 
@@ -24,6 +24,13 @@ const platformMocks = vi.hoisted(() => ({
   quoteForSh: vi.fn((s: string) => `'${s}'`),
   readSentinelExitCode: vi.fn(() => 0),
   spawnProcess: vi.fn(async () => 0),
+  REPL_NESTING_VARS: [
+    'CLAUDECODE',
+    'CLAUDE_CODE_ENTRYPOINT',
+    'CLAUDE_SESSION_ID',
+    'CODEX_THREAD_ID',
+    'AIWCLI_INTERNAL_CALL',
+  ],
   waitForSentinelFile: vi.fn(async () => true),
 }))
 
@@ -99,11 +106,11 @@ function makeDeps(overrides: Partial<LaunchDependencies> = {}): LaunchDependenci
 }
 
 function createMux(overrides: Partial<{
-  backend: 'psmux' | 'tmux'
+  backend: 'psmux' | 'tmux' | 'wezterm'
   createSession: (options: unknown) => Promise<{exitCode: number; reason?: string; usedMux: boolean}>
   isInsideSession: () => boolean
   kill: (paneId: string) => Promise<void>
-  splitPane: (options: unknown) => Promise<{backend: 'psmux' | 'tmux'; exitCode?: number; launched: boolean; paneId?: string; reason?: string; sentinelPath?: string}>
+  splitPane: (options: unknown) => Promise<{backend: 'psmux' | 'tmux' | 'wezterm'; exitCode?: number; launched: boolean; paneId?: string; reason?: string; sentinelPath?: string}>
 }> = {}) {
   return {
     backend: 'tmux' as const,
@@ -518,6 +525,65 @@ describe('executeLaunch', () => {
       await executeLaunch(request, deps)
 
       expect(deps.host.exit).toHaveBeenCalledWith(0)
+    })
+  })
+
+  describe('wezterm REPL-context gating', () => {
+    afterEach(() => {
+      delete process.env.CLAUDECODE
+      delete process.env.CLAUDE_CODE_ENTRYPOINT
+      delete process.env.CLAUDE_SESSION_ID
+      delete process.env.CODEX_THREAD_ID
+    })
+
+    it('launches inline when wezterm detected but NOT in REPL', async () => {
+      const mux = createMux({
+        backend: 'wezterm',
+        isInsideSession: vi.fn(() => true),
+        splitPane: vi.fn(async () => ({backend: 'wezterm' as const, launched: true, paneId: '42'})),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      const request = makeRequest()
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(mux.splitPane).not.toHaveBeenCalled()
+      expect(platformMocks.spawnProcess).toHaveBeenCalled()
+      const infoMessages = deps.host.logInfo.mock.calls.map((c: unknown[]) => String(c[0])).join('\n')
+      expect(infoMessages).toContain('WezTerm shell')
+    })
+
+    it('splits pane when wezterm detected AND inside REPL', async () => {
+      process.env.CLAUDECODE = '1'
+      const mux = createMux({
+        backend: 'wezterm',
+        isInsideSession: vi.fn(() => true),
+        splitPane: vi.fn(async () => ({backend: 'wezterm' as const, launched: true, paneId: '42'})),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      const request = makeRequest()
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(mux.splitPane).toHaveBeenCalled()
+    })
+
+    it('passes holdPane: true for wezterm splits', async () => {
+      process.env.CLAUDECODE = '1'
+      const mux = createMux({
+        backend: 'wezterm',
+        isInsideSession: vi.fn(() => true),
+        splitPane: vi.fn(async () => ({backend: 'wezterm' as const, launched: true, paneId: '42'})),
+      })
+      platformMocks.detectMultiplexer.mockResolvedValueOnce(mux)
+      const request = makeRequest()
+      const deps = makeDeps()
+
+      await executeLaunch(request, deps)
+
+      expect(mux.splitPane).toHaveBeenCalledWith(expect.objectContaining({holdPane: true}))
     })
   })
 
