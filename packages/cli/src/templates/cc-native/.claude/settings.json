@@ -79,16 +79,6 @@
         ]
       },
       {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun .aiwcli/_core/scripts/resolve-run.ts .aiwcli/_core/hooks-ts/lint_after_edit.ts",
-            "timeout": 10000
-          }
-        ]
-      },
-      {
         "matcher": "AskUserQuestion",
         "hooks": [
           {

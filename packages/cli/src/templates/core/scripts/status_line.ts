@@ -401,7 +401,7 @@ interface GitStatus {
 
 function runGit(args: string[], cwd: string, timeout = 2000): string | null {
 	try {
-		const result = execFileSync("git", args, {
+		const result = execFileSync("git", ["--no-optional-locks", ...args], {
 			cwd,
 			timeout,
 			encoding: "utf8",
