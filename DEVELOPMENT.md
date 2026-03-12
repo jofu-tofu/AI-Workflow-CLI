@@ -1,4 +1,4 @@
-# Development Guide - AI Workflow CLI
+# Development Guide
 
 ## Before Starting Development
 
@@ -51,7 +51,7 @@ npm test
 | Location | Purpose | When to Modify |
 |----------|---------|----------------|
 | `.aiwcli/` | Core runtime hooks and libraries | During development for shared/core code |
-| `packages/cli/src/templates/` | Distribution templates and canonical method templates | During template/method development |
+| `packages/cli/src/templates/` | Canonical template source (installed by `aiw init`) | During template/method development |
 
 **Synchronization Rule:** Changes to `.aiwcli/_core` must be synchronized to `packages/cli/src/templates/core/`. Method templates such as `packages/cli/src/templates/cc-native/` are edited directly in template source.
 
@@ -61,7 +61,7 @@ npm test
 
 Runtime files execute from `.aiwcli/_core/` in this repo. Template source lives under `packages/cli/src/templates/core/` and is normalized to `_core` during install.
 
-CC-native is different: `packages/cli/src/templates/cc-native/_cc-native` is the canonical source for the packaged method runtime. Do not treat repo-root `.aiwcli/_cc-native` as a build input.
+CC-native is different: `packages/cli/src/templates/cc-native/_cc-native` is the canonical source for the method runtime. Do not treat repo-root `.aiwcli/_cc-native` as a build input.
 
 **Files that need synchronization:**
 - `.aiwcli/_core/hooks-ts/*.ts` → `packages/cli/src/templates/core/hooks-ts/`
@@ -308,4 +308,4 @@ Current extracted modules: `tmux-preflight.ts`, `executable-policy.ts`, `platfor
 | Environment | AIW_DIR Value | Purpose |
 |-------------|---------------|---------|
 | Development | `$(pwd)` (worktree root) | Isolated testing in development branch |
-| Production | `~/.aiw` or `$HOME\.aiw` | Deployed global AI Workflow CLI |
+| Production | `~/.aiw` or `$HOME\.aiw` | Global AIW CLI installation |
