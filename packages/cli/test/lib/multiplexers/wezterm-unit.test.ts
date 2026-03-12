@@ -87,6 +87,25 @@ describe('wezterm multiplexer unit', () => {
       if (name === 'bash') return 'C:\\Git\\bin\\bash.exe'
       return null
     })
+
+    // Default arg-matching mock for execFileAsync — dispatches by command args
+    // to avoid fragile sequential mockResolvedValueOnce ordering.
+    mocks.execFileAsync.mockImplementation((_file: string, args?: string[]) => {
+      // BashAdapter.resolveToolPath on win32: bash -lc 'command -v ...'
+      if (args?.[0] === '-lc') return Promise.resolve(okExec('/usr/bin/claude'))
+      // wezterm cli list (for auto-split resolution)
+      if (args?.includes('list')) return Promise.resolve(okExec(JSON.stringify([
+        {pane_id: 5, size: {cols: 200, rows: 50}},
+      ])))
+      // wezterm cli split-pane
+      if (args?.includes('split-pane')) return Promise.resolve(okExec('42\n'))
+      // wezterm cli spawn
+      if (args?.includes('spawn')) return Promise.resolve(okExec('99\n'))
+      // wezterm cli kill-pane
+      if (args?.includes('kill-pane')) return Promise.resolve(okExec())
+      // Default
+      return Promise.resolve(okExec())
+    })
   })
 
   afterEach(() => {
@@ -185,14 +204,14 @@ describe('wezterm multiplexer unit', () => {
     process.env.WEZTERM_PANE = '5'
     const mux = WeztermMultiplexer.create()
 
-    // resolveToolForBash
-    mocks.execFileAsync.mockResolvedValueOnce(okExec('/usr/bin/claude'))
-    // wezterm cli list for auto-split
-    mocks.execFileAsync.mockResolvedValueOnce(okExec(JSON.stringify([
-      {pane_id: 5, size: {cols: 200, rows: 50}},
-    ])))
-    // wezterm cli split-pane
-    mocks.execFileAsync.mockResolvedValueOnce(okExec('42\n'))
+    mocks.execFileAsync.mockImplementation((_file: string, args?: string[]) => {
+      if (args?.[0] === '-lc') return Promise.resolve(okExec('/usr/bin/claude'))
+      if (args?.includes('list')) return Promise.resolve(okExec(JSON.stringify([
+        {pane_id: 5, size: {cols: 200, rows: 50}},
+      ])))
+      if (args?.includes('split-pane')) return Promise.resolve(okExec('42\n'))
+      return Promise.resolve(okExec())
+    })
 
     const result = await mux!.split(defaultSplitOptions)
 
@@ -205,11 +224,14 @@ describe('wezterm multiplexer unit', () => {
     process.env.WEZTERM_PANE = '5'
     const mux = WeztermMultiplexer.create()
 
-    mocks.execFileAsync.mockResolvedValueOnce(okExec('/usr/bin/claude'))
-    mocks.execFileAsync.mockResolvedValueOnce(okExec(JSON.stringify([
-      {pane_id: 5, size: {cols: 200, rows: 50}},
-    ])))
-    mocks.execFileAsync.mockResolvedValueOnce(okExec('42\n'))
+    mocks.execFileAsync.mockImplementation((_file: string, args?: string[]) => {
+      if (args?.[0] === '-lc') return Promise.resolve(okExec('/usr/bin/claude'))
+      if (args?.includes('list')) return Promise.resolve(okExec(JSON.stringify([
+        {pane_id: 5, size: {cols: 200, rows: 50}},
+      ])))
+      if (args?.includes('split-pane')) return Promise.resolve(okExec('42\n'))
+      return Promise.resolve(okExec())
+    })
 
     await mux!.split(defaultSplitOptions)
 
@@ -222,8 +244,11 @@ describe('wezterm multiplexer unit', () => {
     process.env.WEZTERM_PANE = '5'
     const mux = WeztermMultiplexer.create()
 
-    mocks.execFileAsync.mockResolvedValueOnce(okExec('/usr/bin/claude'))
-    mocks.execFileAsync.mockResolvedValueOnce(okExec('42\n'))
+    mocks.execFileAsync.mockImplementation((_file: string, args?: string[]) => {
+      if (args?.[0] === '-lc') return Promise.resolve(okExec('/usr/bin/claude'))
+      if (args?.includes('split-pane')) return Promise.resolve(okExec('42\n'))
+      return Promise.resolve(okExec())
+    })
 
     await mux!.split({
       ...defaultSplitOptions,
@@ -238,8 +263,11 @@ describe('wezterm multiplexer unit', () => {
     process.env.WEZTERM_PANE = '5'
     const mux = WeztermMultiplexer.create()
 
-    mocks.execFileAsync.mockResolvedValueOnce(okExec('/usr/bin/claude'))
-    mocks.execFileAsync.mockResolvedValueOnce(okExec('42\n'))
+    mocks.execFileAsync.mockImplementation((_file: string, args?: string[]) => {
+      if (args?.[0] === '-lc') return Promise.resolve(okExec('/usr/bin/claude'))
+      if (args?.includes('split-pane')) return Promise.resolve(okExec('42\n'))
+      return Promise.resolve(okExec())
+    })
 
     await mux!.split({
       ...defaultSplitOptions,
@@ -254,14 +282,17 @@ describe('wezterm multiplexer unit', () => {
     process.env.WEZTERM_PANE = '5'
     const mux = WeztermMultiplexer.create()
 
-    mocks.execFileAsync.mockResolvedValueOnce(okExec('/usr/bin/claude'))
-    mocks.execFileAsync.mockResolvedValueOnce(okExec(JSON.stringify([])))
-    mocks.execFileAsync.mockResolvedValueOnce({
-      stdout: '',
-      stderr: 'split failed',
-      exitCode: 1,
-      killed: false,
-      signal: null,
+    mocks.execFileAsync.mockImplementation((_file: string, args?: string[]) => {
+      if (args?.[0] === '-lc') return Promise.resolve(okExec('/usr/bin/claude'))
+      if (args?.includes('list')) return Promise.resolve(okExec(JSON.stringify([])))
+      if (args?.includes('split-pane')) return Promise.resolve({
+        stdout: '',
+        stderr: 'split failed',
+        exitCode: 1,
+        killed: false,
+        signal: null,
+      })
+      return Promise.resolve(okExec())
     })
 
     const result = await mux!.split(defaultSplitOptions)
@@ -274,13 +305,11 @@ describe('wezterm multiplexer unit', () => {
     process.env.WEZTERM_PANE = '0'
     const mux = WeztermMultiplexer.create()
 
-    // On Windows, createSession first resolves tool path from bash's perspective
-    if (process.platform === 'win32') {
-      mocks.execFileAsync.mockResolvedValueOnce(okExec('/usr/bin/claude'))
-    }
-
-    // wezterm cli spawn
-    mocks.execFileAsync.mockResolvedValueOnce(okExec('99\n'))
+    mocks.execFileAsync.mockImplementation((_file: string, args?: string[]) => {
+      if (args?.[0] === '-lc') return Promise.resolve(okExec('/usr/bin/claude'))
+      if (args?.includes('spawn')) return Promise.resolve(okExec('99\n'))
+      return Promise.resolve(okExec())
+    })
 
     const result = await mux!.createSession({
       sessionName: 'aiw-test',
@@ -303,17 +332,16 @@ describe('wezterm multiplexer unit', () => {
     process.env.WEZTERM_PANE = '0'
     const mux = WeztermMultiplexer.create()
 
-    // On Windows, createSession first resolves tool path from bash's perspective
-    if (process.platform === 'win32') {
-      mocks.execFileAsync.mockResolvedValueOnce(okExec('/usr/bin/claude'))
-    }
-
-    mocks.execFileAsync.mockResolvedValueOnce({
-      stdout: '',
-      stderr: 'spawn error',
-      exitCode: 1,
-      killed: false,
-      signal: null,
+    mocks.execFileAsync.mockImplementation((_file: string, args?: string[]) => {
+      if (args?.[0] === '-lc') return Promise.resolve(okExec('/usr/bin/claude'))
+      if (args?.includes('spawn')) return Promise.resolve({
+        stdout: '',
+        stderr: 'spawn error',
+        exitCode: 1,
+        killed: false,
+        signal: null,
+      })
+      return Promise.resolve(okExec())
     })
 
     const result = await mux!.createSession({

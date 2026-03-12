@@ -1,4 +1,28 @@
-import {describe, expect, it} from 'vitest'
+import {afterEach, describe, expect, it, vi} from 'vitest'
+
+const mocks = vi.hoisted(() => ({
+  execFileAsync: vi.fn(),
+  findExecutable: vi.fn(),
+  toMsysPosixPath: vi.fn((input: string) => input),
+  wrapSentinelSh: vi.fn(({command}: {command: string}) => `WRAP(${command})`),
+}))
+
+vi.mock('../../../src/lib/runtime/subprocess-utils.js', () => ({
+  execFileAsync: mocks.execFileAsync,
+  findExecutable: mocks.findExecutable,
+}))
+
+vi.mock('../../../src/lib/tmux-primitives.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/lib/tmux-primitives.js')>()
+  return {
+    ...actual,
+    toMsysPosixPath: mocks.toMsysPosixPath,
+  }
+})
+
+vi.mock('../../../src/lib/sentinel-wrapper.js', () => ({
+  wrapSentinelSh: mocks.wrapSentinelSh,
+}))
 
 import {BashAdapter} from '../../../src/lib/shell-adapters/bash-adapter.js'
 
@@ -101,6 +125,116 @@ describe('BashAdapter', () => {
   describe('encodeForExecution', () => {
     it('returns command unchanged (no encoding for bash)', () => {
       expect(adapter.encodeForExecution('some command')).toBe('some command')
+    })
+  })
+
+  describe('resolveToolPath', () => {
+    let platformSpy: ReturnType<typeof vi.spyOn>
+
+    afterEach(() => {
+      platformSpy?.mockRestore()
+      mocks.findExecutable.mockReset()
+      mocks.execFileAsync.mockReset()
+    })
+
+    it('returns nativePath unchanged on non-win32 platform', async () => {
+      platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+      const result = await adapter.resolveToolPath('claude', '/usr/bin/claude')
+      expect(result).toBe('/usr/bin/claude')
+      expect(mocks.findExecutable).not.toHaveBeenCalled()
+    })
+
+    it('returns null on win32 when bash is not found', async () => {
+      platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+      mocks.findExecutable.mockReturnValue(null)
+      const result = await adapter.resolveToolPath('claude', 'C:\\Program Files\\claude.exe')
+      expect(result).toBeNull()
+      expect(mocks.findExecutable).toHaveBeenCalledWith('bash')
+      expect(mocks.execFileAsync).not.toHaveBeenCalled()
+    })
+
+    it('returns resolved path on win32 when command -v succeeds', async () => {
+      platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+      mocks.findExecutable.mockReturnValue('/usr/bin/bash')
+      mocks.execFileAsync.mockResolvedValue({
+        exitCode: 0,
+        stdout: '  /usr/bin/claude  \n',
+        stderr: '',
+        killed: false,
+        signal: null,
+      })
+      const result = await adapter.resolveToolPath('claude', 'C:\\Program Files\\claude.exe')
+      expect(result).toBe('/usr/bin/claude')
+      expect(mocks.execFileAsync).toHaveBeenCalledWith(
+        '/usr/bin/bash',
+        ['-lc', 'command -v claude'],
+        expect.objectContaining({
+          timeout: 3000,
+          env: expect.objectContaining({MSYS_NO_PATHCONV: '1'}),
+        }),
+      )
+    })
+
+    it('returns null on win32 when command -v fails', async () => {
+      platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+      mocks.findExecutable.mockReturnValue('/usr/bin/bash')
+      mocks.execFileAsync.mockResolvedValue({
+        exitCode: 1,
+        stdout: '',
+        stderr: 'bash: command not found',
+        killed: false,
+        signal: null,
+      })
+      const result = await adapter.resolveToolPath('claude', 'C:\\Program Files\\claude.exe')
+      expect(result).toBeNull()
+    })
+
+    it('returns null on win32 when command -v returns empty stdout', async () => {
+      platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+      mocks.findExecutable.mockReturnValue('/usr/bin/bash')
+      mocks.execFileAsync.mockResolvedValue({
+        exitCode: 0,
+        stdout: '   \n',
+        stderr: '',
+        killed: false,
+        signal: null,
+      })
+      const result = await adapter.resolveToolPath('claude', 'C:\\Program Files\\claude.exe')
+      expect(result).toBeNull()
+    })
+  })
+
+  describe('normalizeCwd', () => {
+    afterEach(() => {
+      mocks.toMsysPosixPath.mockReset()
+      mocks.toMsysPosixPath.mockImplementation((input: string) => input)
+    })
+
+    it('delegates to toMsysPosixPath', () => {
+      mocks.toMsysPosixPath.mockReturnValue('/c/Users/test')
+      const result = adapter.normalizeCwd('C:\\Users\\test')
+      expect(mocks.toMsysPosixPath).toHaveBeenCalledWith('C:\\Users\\test')
+      expect(result).toBe('/c/Users/test')
+    })
+  })
+
+  describe('wrapSentinel', () => {
+    afterEach(() => {
+      mocks.wrapSentinelSh.mockReset()
+      mocks.wrapSentinelSh.mockImplementation(({command}: {command: string}) => `WRAP(${command})`)
+    })
+
+    it('delegates to wrapSentinelSh', () => {
+      const params = {
+        command: 'run-tool',
+        sentinelPath: '/tmp/sentinel',
+        autoClose: false,
+        holdPane: false,
+        holdMessage: 'Done',
+      }
+      const result = adapter.wrapSentinel(params)
+      expect(mocks.wrapSentinelSh).toHaveBeenCalledWith(params)
+      expect(result).toBe('WRAP(run-tool)')
     })
   })
 })

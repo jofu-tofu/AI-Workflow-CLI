@@ -32,16 +32,16 @@ export function resolveToolModeDebugMessage(toolMode: ToolMode): string | undefi
  * Format version check results into debug lines and an optional warning.
  */
 export function formatVersionCheckMessages(versionCheck: {
-  version?: string
   compatible: boolean
+  version?: null | string
   warning?: string
-}): {debugLines: string[]; warning?: string} {
+}): {debugLines: string[]; warning?: string | undefined} {
   return {
     debugLines: [
       `Claude Code version: ${versionCheck.version ?? 'unknown'}`,
       `Compatibility status: ${versionCheck.compatible ? 'compatible' : 'incompatible'}`,
     ],
-    warning: versionCheck.warning,
+    ...(versionCheck.warning ? {warning: versionCheck.warning} : {}),
   }
 }
 
@@ -168,13 +168,13 @@ export function buildInlineArgs(
  */
 export function buildSplitRequest(params: {
   cliArgs: readonly string[]
-  toolMode: ToolMode
+  cwd: string
   effectivePromptPath: string | undefined
   extraEnv: Record<string, string>
-  cwd: string
-  split: 'auto' | 'horizontal' | 'vertical'
-  sentinelPath: string
   retryOnQuickExit: boolean
+  sentinelPath: string
+  split: 'auto' | 'horizontal' | 'vertical'
+  toolMode: ToolMode
 }): SplitRequestParams {
   let toolArgs: string[]
   let splitPromptPath: string | undefined
@@ -205,13 +205,13 @@ export function buildSplitRequest(params: {
  */
 export function buildSessionRequest(params: {
   cliArgs: readonly string[]
-  toolMode: ToolMode
-  promptPath: string | undefined
-  promptText: string | undefined
-  tmuxSessionFlag: string | undefined
   cwd: string
   now: number
   pid: number
+  promptPath: string | undefined
+  promptText: string | undefined
+  tmuxSessionFlag: string | undefined
+  toolMode: ToolMode
 }): SessionRequestParams {
   const sessionFromFlag = params.tmuxSessionFlag?.trim()
   const reattach = Boolean(sessionFromFlag && sessionFromFlag.length > 0)

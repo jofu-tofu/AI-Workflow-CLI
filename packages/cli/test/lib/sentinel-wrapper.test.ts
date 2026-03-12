@@ -29,7 +29,7 @@ describe('sentinel-wrapper', () => {
 
       expect(result).toContain("claude; code=$?; printf '%s' \"$code\" > '/tmp/sentinel.txt'")
       expect(result).not.toContain('kill-pane')
-      expect(result).not.toContain('exec bash')
+      expect(result).not.toContain('"$BASH" -li')
       expect(result).toContain('; exit $code')
     })
 
@@ -42,7 +42,7 @@ describe('sentinel-wrapper', () => {
         sentinelPath: '/tmp/sentinel.txt',
       })
 
-      expect(result).toContain("; echo; echo 'Press q'; exec bash")
+      expect(result).toContain("; echo; echo 'Press q'; \"$BASH\" -li")
     })
 
     it('prioritizes autoClose over holdPane', () => {
@@ -55,7 +55,7 @@ describe('sentinel-wrapper', () => {
       })
 
       expect(result).toContain('kill-pane')
-      expect(result).not.toContain('exec bash')
+      expect(result).not.toContain('"$BASH" -li')
     })
   })
 

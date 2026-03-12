@@ -121,7 +121,7 @@ describe('launch command', () => {
 
     it('defines --split enum options', () => {
       const splitFlag = LaunchCommand.flags.split as {options?: readonly string[]}
-      expect(splitFlag.options).to.deep.equal(['auto', 'h', 'v'])
+      expect(splitFlag.options).to.deep.equal(['auto', 'horizontal', 'vertical'])
     })
 
     it('--split has no default so psmux skips splitting unless explicit', () => {
