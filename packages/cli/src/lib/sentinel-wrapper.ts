@@ -11,7 +11,10 @@ export interface SentinelWrapParams {
 
 export function wrapSentinelSh(params: SentinelWrapParams): string {
   const {command, sentinelPath, autoClose, holdPane, holdMessage} = params
-  const base = `${command}; code=$?; printf '%s' "$code" > ${quoteForSh(sentinelPath)}`
+  const quoted = quoteForSh(sentinelPath)
+  // Trap HUP/INT/TERM so the sentinel is written even if the pane is killed.
+  const trap = `trap 'printf "%s" "130" > ${quoted}; exit 130' HUP INT TERM`
+  const base = `${trap}; ${command}; code=$?; printf '%s' "$code" > ${quoted}`
 
   if (autoClose) {
     const killCmd = params.autoCloseCommand

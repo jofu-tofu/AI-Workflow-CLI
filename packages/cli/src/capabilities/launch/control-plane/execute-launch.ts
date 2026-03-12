@@ -190,6 +190,11 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
   const sentinelMgr = new SentinelManager()
   const promptMgr = new PromptFileManager({tempDir, now, pid})
 
+  // When --json is used without --wait, sentinel ownership transfers to the
+  // JSON caller (e.g. skill scripts).  The CLI must NOT clean up the sentinel
+  // directory because the caller polls for sentinel.txt to detect pane close.
+  let sentinelOwnershipTransferred = false
+
   let exitCode = 0
 
   try {
@@ -235,6 +240,13 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
         const jsonExitCode = wantWait && splitResult.launched && splitResult.sentinelPath
           ? await sentinelMgr.waitForExit(splitResult.sentinelPath)
           : splitResult.exitCode ?? null
+
+        // When returning sentinel path to caller without waiting, transfer
+        // ownership so the finally block does not delete the directory.
+        if (!wantWait && splitResult.launched && splitResult.sentinelPath) {
+          sentinelOwnershipTransferred = true
+        }
+
         host.log(JSON.stringify(toJsonLaunchResult(splitResult, jsonExitCode)))
         host.exit(jsonExitCode ?? 0)
       }
@@ -310,7 +322,10 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
 
     host.error('Unexpected launch failure.', {exit: EXIT_CODES.GENERAL_ERROR})
   } finally {
-    sentinelMgr.cleanupAll()
+    if (!sentinelOwnershipTransferred) {
+      sentinelMgr.cleanupAll()
+    }
+
     promptMgr.cleanup()
   }
 

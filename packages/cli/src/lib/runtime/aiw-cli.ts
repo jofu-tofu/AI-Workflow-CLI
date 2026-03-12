@@ -90,7 +90,7 @@ function parseJsonResult(result: ExecResult): AiwLaunchResult {
     return {
       launched: Boolean(parsed.launched),
       backend: String(parsed.backend ?? "exec"),
-      paneId: parsed.paneId ?? null,
+      paneId: parsed.handle ?? parsed.paneId ?? null,
       sentinelPath: parsed.sentinelPath ?? null,
       exitCode: typeof parsed.exitCode === "number" ? parsed.exitCode : null,
       reason: parsed.reason ?? null,
