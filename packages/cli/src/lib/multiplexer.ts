@@ -61,6 +61,24 @@ export interface Multiplexer {
 }
 
 /**
+ * Resolve the priority order of multiplexer backends for a given platform.
+ * Pure function — no I/O, no PATH checks. Used by detectMultiplexer().
+ */
+export function resolveMultiplexerPriority(
+  platform: NodeJS.Platform,
+  env: Record<string, string | undefined> = {},
+): string[] {
+  if (platform === 'win32') {
+    // Prefer WezTerm if we detect a WezTerm environment
+    if (env.WEZTERM_PANE || env.TERM_PROGRAM === 'WezTerm') {
+      return ['wezterm', 'psmux']
+    }
+    return ['psmux']
+  }
+  return ['tmux']
+}
+
+/**
  * Detect the best available multiplexer for the current platform.
  * Windows → WeztermMultiplexer (if inside WezTerm) → PsmuxMultiplexer (fallback)
  * Unix → TmuxMultiplexer (if tmux binary on PATH)

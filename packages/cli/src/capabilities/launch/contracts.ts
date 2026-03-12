@@ -1,5 +1,44 @@
 import type {LaunchResult} from '../../platform/launch.js'
 
+export type ToolMode = 'claude' | 'codex' | 'devin'
+
+export interface ToolConfig {
+  cliCommand: string
+  cliArgs: string[]
+  launchFlag: string
+  toolMode: ToolMode
+  retryOnQuickExit: boolean
+  needsLspPatch: boolean
+  skipVersionCheck: boolean
+}
+
+export interface InlineFallbackContext {
+  disableMux: boolean
+  hasMux: boolean
+  interactiveTty: boolean
+  platform: NodeJS.Platform
+  resolvedReason?: string
+}
+
+export interface SplitRequestParams {
+  toolArgs: string[]
+  splitPromptPath: string | undefined
+  env: Record<string, string>
+  cwd: string
+  mode: 'repl'
+  split: 'auto' | 'horizontal' | 'vertical'
+  sentinelPath: string
+  holdPane: boolean
+  retryOnQuickExit: boolean
+}
+
+export interface SessionRequestParams {
+  sessionName: string
+  reattach: boolean
+  toolArgs: string[]
+  promptText: string | undefined
+}
+
 export interface LaunchFlags {
   codex: boolean
   devin: boolean
@@ -40,6 +79,8 @@ export interface LaunchDependencies {
   pid: number
   tempDir: string
   writePromptFile(filePath: string, content: string): void
+  isCalledFromRepl?: () => boolean
+  clearNestingVars?: () => void
 }
 
 export interface JsonLaunchResult {

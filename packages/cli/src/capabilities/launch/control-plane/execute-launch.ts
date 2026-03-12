@@ -11,31 +11,32 @@ import {
   ProcessSpawnError,
   quoteForSh,
   spawnProcess,
-  type LaunchResult,
 } from '../../../platform/launch.js'
 import {EXIT_CODES} from '../../../types/index.js'
 import {clearProcessNestingVars, isCalledFromRepl} from '../../../lib/env-sanitizer.js'
 import {PromptFileManager} from '../../../lib/prompt-file-manager.js'
 import {SentinelManager} from '../../../lib/sentinel-manager.js'
-import type {JsonLaunchResult, LaunchDependencies, LaunchRequest} from '../contracts.js'
+import type {LaunchDependencies, LaunchRequest} from '../contracts.js'
 import {
   buildSpawnedWindowArgs,
-  buildUniqueSessionName,
   parseExtraEnv,
   resolvePromptText,
-  sanitizeSessionName,
 } from '../runtime-core/launch-options.js'
-
-function buildCodexArgs(platform: NodeJS.Platform): string[] {
-  if (platform !== 'win32') return ['--yolo']
-  return ['-c', 'shell_type="bash"', '--yolo']
-}
-
-function buildDevinArgs(): string[] {
-  return ['--permission-mode', 'dangerous']
-}
-
-const QUICK_EXIT_THRESHOLD_MS = 10_000
+import {
+  buildInlineArgs,
+  buildSessionRequest,
+  buildSplitRequest,
+  formatSessionLaunchMessage,
+  formatSplitSuccessMessage,
+  formatVersionCheckMessages,
+  QUICK_EXIT_THRESHOLD_MS,
+  resolveInlineFallbackMessage,
+  resolveSessionFallbackWarning,
+  resolveToolConfig,
+  resolveToolModeDebugMessage,
+  shouldRetry,
+  toJsonLaunchResult,
+} from '../runtime-core/launch-decisions.js'
 
 async function runPreflightWarmup(command: string, host: LaunchDependencies['host']): Promise<void> {
   try {
@@ -58,7 +59,7 @@ async function spawnInlineWithRetry(
 
   const start = Date.now()
   let exitCode = await spawnProcess(command, args)
-  if (retryOnQuickExit && Date.now() - start < QUICK_EXIT_THRESHOLD_MS) {
+  if (retryOnQuickExit && shouldRetry(Date.now() - start)) {
     host.debug(`${command} exited in <${QUICK_EXIT_THRESHOLD_MS}ms — retrying (first-run init behavior)`)
     exitCode = await spawnProcess(command, args)
   }
@@ -66,29 +67,23 @@ async function spawnInlineWithRetry(
   return exitCode
 }
 
-function toJsonLaunchResult(result: LaunchResult, exitCode: null | number): JsonLaunchResult {
-  return {
-    launched: result.launched,
-    backend: result.backend,
-    handle: result.handle ?? null,
-    sentinelPath: result.sentinelPath ?? null,
-    exitCode,
-    reason: result.reason ?? null,
-  }
-}
-
 export async function executeLaunch(request: LaunchRequest, dependencies: LaunchDependencies): Promise<void> {
   const {cwd, flags, interactiveTty, platform, readPromptFile} = request
   const {host, now, pid, tempDir, writePromptFile} = dependencies
 
-  // 1. Capture REPL context BEFORE clearing env vars
-  const calledFromRepl = isCalledFromRepl()
-  clearProcessNestingVars()
+  // 1. Capture REPL context BEFORE clearing env vars (injectable for testing)
+  const calledFromRepl = (dependencies.isCalledFromRepl ?? isCalledFromRepl)()
+  ;(dependencies.clearNestingVars ?? clearProcessNestingVars)()
 
-  const useCodex = flags.codex
-  const useDevin = flags.devin
+  // Pure decision: resolve tool config
+  const toolConfig = resolveToolConfig(flags, platform)
+  const {cliCommand, cliArgs, launchFlag, toolMode} = toolConfig
 
-  if (platform === 'win32' && !useCodex && !useDevin) {
+  const disableMux = flags['no-tmux']
+  const wantJson = flags.json
+  const wantWait = flags.wait
+
+  if (toolConfig.needsLspPatch) {
     await ensureLspPatch({
       debugLog: (message) => host.debug(message),
       warn(message) {
@@ -96,13 +91,6 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
       },
     })
   }
-
-  const cliCommand = useDevin ? 'devin' : useCodex ? 'codex' : 'claude'
-  const cliArgs = useDevin ? buildDevinArgs() : useCodex ? buildCodexArgs(platform) : ['--dangerously-skip-permissions']
-  const launchFlag = useDevin ? '--devin' : useCodex ? '--codex' : ''
-  const disableMux = flags['no-tmux']
-  const wantJson = flags.json
-  const wantWait = flags.wait
 
   let extraEnv: Record<string, string> = {}
   try {
@@ -116,7 +104,7 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
   const promptPath = flags['prompt-path']?.trim() || undefined
   const promptText = resolvePromptText(flags.prompt, flags['prompt-file'], readPromptFile)
 
-  // 2. Handle --new (terminal window) — unchanged
+  // 2. Handle --new (terminal window)
   if (flags.new) {
     host.debug(`Launching new terminal in: ${cwd}`)
 
@@ -127,8 +115,8 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
     }
 
     const launchArgs = buildSpawnedWindowArgs({
-      useCodex,
-      useDevin,
+      useCodex: flags.codex,
+      useDevin: flags.devin,
       disableTmux: disableMux,
       ...(promptPath ? {promptPath} : {}),
       ...(promptFilePath ? {promptFilePath} : {}),
@@ -152,26 +140,21 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
     return
   }
 
-  if (useCodex) {
-    host.debug('Launching Codex with --yolo flag')
-  } else if (useDevin) {
-    host.debug('Launching Devin with --permission-mode dangerous')
-  }
+  const toolDebugMsg = resolveToolModeDebugMessage(toolMode)
+  if (toolDebugMsg) host.debug(toolDebugMsg)
 
-  // 3. Detect multiplexer
+  // 3. Detect multiplexer + version check
   const [versionCheck, mux] = await Promise.all([
-    useCodex || useDevin
+    toolConfig.skipVersionCheck
       ? null
       : getClaudeCodeVersion().then((v) => checkVersionCompatibility(v)),
     disableMux ? null : detectMultiplexer(platform),
   ])
 
   if (versionCheck) {
-    host.debug(`Claude Code version: ${versionCheck.version ?? 'unknown'}`)
-    host.debug(`Compatibility status: ${versionCheck.compatible ? 'compatible' : 'incompatible'}`)
-    if (versionCheck.warning) {
-      host.warn(versionCheck.warning)
-    }
+    const msgs = formatVersionCheckMessages(versionCheck)
+    for (const line of msgs.debugLines) host.debug(line)
+    if (msgs.warning) host.warn(msgs.warning)
   }
 
   // 4. Resolve strategy — backend decides
@@ -179,25 +162,19 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
     ?? {strategy: 'inline' as const, reason: 'No multiplexer available'}
 
   if (!mux || resolved.strategy === 'inline' || resolved.strategy === 'unavailable') {
-    if (!mux) {
-      if (disableMux) {
-        host.logInfo('Multiplexer disabled via --no-tmux — launching inline')
-      } else if (!interactiveTty) {
-        host.logInfo('Non-interactive terminal — launching inline')
-      } else if (platform === 'win32') {
-        host.logInfo('No multiplexer found — launching inline. Run inside WezTerm or install psmux for session management.')
-      } else {
-        host.logInfo('No multiplexer found — launching inline. Install tmux for session management.')
-      }
-    } else {
-      host.logInfo(resolved.reason)
-    }
+    // Pure decision: resolve fallback message
+    host.logInfo(resolveInlineFallbackMessage({
+      disableMux,
+      hasMux: Boolean(mux),
+      interactiveTty,
+      platform,
+      resolvedReason: resolved.reason,
+    }))
 
     try {
-      const inlineArgs = useDevin && promptPath
-        ? [...cliArgs, '--prompt-file', promptPath]
-        : promptText ? [...cliArgs, promptText] : cliArgs
-      const exitCode = await spawnInlineWithRetry(cliCommand, inlineArgs, useDevin, host)
+      // Pure decision: build inline args
+      const inlineArgs = buildInlineArgs(cliArgs, toolMode, promptText, promptPath)
+      const exitCode = await spawnInlineWithRetry(cliCommand, inlineArgs, toolConfig.retryOnQuickExit, host)
       host.exit(exitCode)
     } catch (error) {
       if (error instanceof ProcessSpawnError) {
@@ -206,7 +183,7 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
       host.error('Unexpected launch failure.', {exit: EXIT_CODES.GENERAL_ERROR})
     }
 
-    return // unreachable but narrows mux to non-null below
+    return
   }
 
   // Lifecycle managers
@@ -229,24 +206,29 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
         effectivePromptPath = promptMgr.materialize(promptText)
       }
 
-      // Devin CLI uses --prompt-file <path> instead of trailing positional prompt text
-      let splitPromptPath = effectivePromptPath
-      if (useDevin && effectivePromptPath) {
-        cliArgs.push('--prompt-file', effectivePromptPath)
-        splitPromptPath = undefined
-      }
+      // Pure decision: build split request (fixes cliArgs mutation bug)
+      const splitParams = buildSplitRequest({
+        cliArgs,
+        toolMode,
+        effectivePromptPath,
+        extraEnv,
+        cwd,
+        split: flags.split ?? 'auto',
+        sentinelPath,
+        retryOnQuickExit: toolConfig.retryOnQuickExit,
+      })
 
       const splitResult = await mux.split({
         toolName: cliCommand,
-        args: cliArgs,
-        env: extraEnv,
-        cwd,
-        mode: 'repl',
-        split: flags.split ?? 'auto',
-        promptPath: splitPromptPath,
-        sentinelPath,
-        holdPane: false,
-        retryOnQuickExit: useDevin,
+        args: splitParams.toolArgs,
+        env: splitParams.env,
+        cwd: splitParams.cwd,
+        mode: splitParams.mode,
+        split: splitParams.split,
+        promptPath: splitParams.splitPromptPath,
+        sentinelPath: splitParams.sentinelPath,
+        holdPane: splitParams.holdPane,
+        retryOnQuickExit: splitParams.retryOnQuickExit,
       })
 
       if (wantJson) {
@@ -258,11 +240,7 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
       }
 
       if (splitResult.launched) {
-        if (splitResult.handle) {
-          host.logInfo(`Launched in ${mux.backend} pane: ${splitResult.handle}`)
-        } else {
-          host.logInfo(`Launched in ${mux.backend}`)
-        }
+        host.logInfo(formatSplitSuccessMessage(mux.backend, splitResult.handle))
 
         if (wantWait && splitResult.sentinelPath) {
           const waitedExitCode = await sentinelMgr.waitForExit(splitResult.sentinelPath)
@@ -273,69 +251,56 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
       }
 
       host.logWarning(`Pane split failed (${splitResult.reason}), launching directly`)
-      exitCode = await spawnInlineWithRetry(cliCommand, promptText ? [...cliArgs, promptText] : cliArgs, useDevin, host)
+      // Pure decision: build inline args for fallback
+      const fallbackArgs = buildInlineArgs(cliArgs, toolMode, promptText, promptPath)
+      exitCode = await spawnInlineWithRetry(cliCommand, fallbackArgs, toolConfig.retryOnQuickExit, host)
     } else {
       // 5b. Create session
       const resolvedPath = findToolPath(cliCommand) ?? findExecutable(cliCommand)
       if (resolvedPath) {
-        const sessionFromFlag = flags['tmux-session']?.trim()
-        const reattach = Boolean(sessionFromFlag && sessionFromFlag.length > 0)
-        const sessionName = reattach
-          ? sanitizeSessionName(sessionFromFlag!)
-          : buildUniqueSessionName(`aiw-${path.basename(cwd)}`, now(), pid)
+        // Pure decision: build session request
+        const sessionParams = buildSessionRequest({
+          cliArgs,
+          toolMode,
+          promptPath,
+          promptText,
+          tmuxSessionFlag: flags['tmux-session'],
+          cwd,
+          now: now(),
+          pid,
+        })
 
-        if (reattach) {
-          host.logInfo(`Launching in ${mux.backend} session: ${sessionName} (reuse/attach)`)
-        } else {
-          host.logInfo(`Launching in new ${mux.backend} session: ${sessionName}`)
-        }
-
-        const sessionToolArgs = useDevin && promptPath
-          ? [...cliArgs, '--prompt-file', promptPath]
-          : cliArgs
-        const sessionPromptText = useDevin ? undefined : promptText
+        host.logInfo(formatSessionLaunchMessage(mux.backend, sessionParams.sessionName, sessionParams.reattach))
 
         const result = await mux.createSession({
-          sessionName,
-          reattach,
+          sessionName: sessionParams.sessionName,
+          reattach: sessionParams.reattach,
           toolPath: resolvedPath,
-          toolArgs: sessionToolArgs,
+          toolArgs: sessionParams.toolArgs,
           cwd,
-          promptText: sessionPromptText,
+          promptText: sessionParams.promptText,
         })
 
         if (result.launched) {
           exitCode = result.exitCode ?? 0
 
           if (wantJson) {
-            host.log(JSON.stringify({
-              launched: true,
-              backend: mux.backend,
-              handle: null,
-              sentinelPath: null,
-              exitCode,
-              reason: null,
-            }))
+            host.log(JSON.stringify(toJsonLaunchResult(result, exitCode)))
             host.exit(exitCode)
           }
         } else {
+          // Pure decision: resolve fallback warning
           if (result.reason) {
-            if (result.reason.includes('not found') || result.reason.includes('unavailable')) {
-              host.logWarning(`${mux.backend} unavailable — launching inline. ${mux.backend === 'psmux' ? 'Install with: winget install psmux' : ''}`)
-            } else if (result.reason.includes('too old')) {
-              host.logWarning(`${result.reason} — launching inline. ${mux.backend === 'psmux' ? 'Update with: winget upgrade psmux' : ''}`)
-            } else if (mux.backend === 'psmux' && result.reason.includes('attach failed')) {
-              host.logWarning(`${result.reason} — launching inline. Recovery: run "psmux kill-server" and relaunch if this persists.`)
-            } else {
-              host.logWarning(`${result.reason} — launching inline`)
-            }
+            host.logWarning(resolveSessionFallbackWarning(mux.backend, result.reason))
           }
 
-          exitCode = await spawnInlineWithRetry(cliCommand, promptText ? [...cliArgs, promptText] : cliArgs, useDevin, host)
+          const fallbackArgs = buildInlineArgs(cliArgs, toolMode, promptText, promptPath)
+          exitCode = await spawnInlineWithRetry(cliCommand, fallbackArgs, toolConfig.retryOnQuickExit, host)
         }
       } else {
         host.logWarning(`${cliCommand} not found on PATH (install from https://claude.ai/download)`)
-        exitCode = await spawnInlineWithRetry(cliCommand, promptText ? [...cliArgs, promptText] : cliArgs, useDevin, host)
+        const fallbackArgs = buildInlineArgs(cliArgs, toolMode, promptText, promptPath)
+        exitCode = await spawnInlineWithRetry(cliCommand, fallbackArgs, toolConfig.retryOnQuickExit, host)
       }
     }
   } catch (error) {
