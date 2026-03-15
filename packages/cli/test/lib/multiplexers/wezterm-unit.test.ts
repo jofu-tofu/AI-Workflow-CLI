@@ -19,6 +19,7 @@ vi.mock('../../../src/lib/env-sanitizer.js', () => ({
 }))
 
 vi.mock('../../../src/lib/mux-utils.js', () => ({
+  PANE_HOLD_MESSAGE: '[aiwcli] Driver exited. Pane held open.',
   getLastLine: mocks.getLastLine,
   splitFlagFromDimensions: mocks.splitFlagFromDimensions,
 }))

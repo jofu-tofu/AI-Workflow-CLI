@@ -99,3 +99,15 @@ export async function runHookSubprocess(
     child.stdin.end()
   })
 }
+
+/**
+ * Extract additionalContext from a hook subprocess result.
+ */
+export function readAdditionalContext(result: SubprocessHookResult): null | string {
+  const parsed = result.parsedOutput
+  if (!parsed) return null
+  const {hookSpecificOutput} = parsed
+  if (!hookSpecificOutput || typeof hookSpecificOutput !== 'object') return null
+  const {additionalContext} = (hookSpecificOutput as Record<string, unknown>)
+  return typeof additionalContext === 'string' ? additionalContext : null
+}

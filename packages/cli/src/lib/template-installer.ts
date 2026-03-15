@@ -209,18 +209,18 @@ export async function copyDir(src: string, dest: string, excludeIdeFolders: bool
  * @param src - Source directory path
  * @param dest - Destination directory path
  */
-async function mergeDirectory(src: string, dest: string): Promise<void> {
+export async function mergeDirectory(src: string, dest: string, options?: {exclude?: (name: string) => boolean}): Promise<void> {
   await fs.mkdir(dest, {recursive: true})
   const entries = await fs.readdir(src, {withFileTypes: true})
 
   const ops = entries
-    .filter((entry) => !shouldExclude(entry.name))
+    .filter((entry) => !(options?.exclude?.(entry.name)))
     .map(async (entry) => {
       const srcPath = join(src, entry.name)
       const destPath = join(dest, entry.name)
 
       if (entry.isDirectory()) {
-        await mergeDirectory(srcPath, destPath)
+        await mergeDirectory(srcPath, destPath, options)
       } else if (!(await pathExists(destPath))) {
         await fs.copyFile(srcPath, destPath)
       }
@@ -328,7 +328,7 @@ export async function installTemplate(
           await copyDir(methodChildSrc, methodChildDest)
         } else {
           // No method-namespaced child — copy the entire subdirectory, merging with existing
-          await mergeDirectory(subdirSrc, subdirDest)
+          await mergeDirectory(subdirSrc, subdirDest, {exclude: shouldExclude})
         }
       })
     await Promise.all(subdirOps)

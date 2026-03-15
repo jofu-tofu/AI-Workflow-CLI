@@ -27,7 +27,6 @@ packages/cli/src/templates/
 │       ├── runtime/                  #   Core runtime helpers
 │       ├── context/                  #   Context CRUD, selection, formatting, plans, tasks
 │       ├── hooks/                    #   Hook utility APIs
-│       ├── agent-exec/               #   Agent execution backends
 │       └── templates/                #   Output formatters, plan context templates
 │
 ├── cc-native/                        # CC-Native method template

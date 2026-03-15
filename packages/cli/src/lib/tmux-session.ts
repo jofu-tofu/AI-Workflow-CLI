@@ -3,6 +3,7 @@ import {writeFileSync} from 'node:fs'
 import * as os from 'node:os'
 import path from 'node:path'
 
+import {buildBootstrapPrompt} from './mux-utils.js'
 import {resolveExecutable} from './runtime/executable-policy.js'
 import {
   isNonWindowsPlatform,
@@ -81,7 +82,7 @@ export function buildShellCommand(opts: TmuxSessionOptions): string {
   if (promptText) {
     const tmpFile = path.join(os.tmpdir(), `aiwcli-prompt-${Date.now()}-${process.pid}.txt`)
     writeFileSync(tmpFile, promptText, {encoding: 'utf8', mode: 0o600})
-    const bootstrap = `Read startup instructions from this file path before taking action: ${tmpFile}. Use that file as the initial context.`
+    const bootstrap = buildBootstrapPrompt(tmpFile)
     cmdParts.push(quoteForSh(bootstrap))
   }
 

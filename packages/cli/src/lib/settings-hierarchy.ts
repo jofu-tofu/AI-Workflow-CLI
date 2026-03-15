@@ -1,9 +1,9 @@
-import {promises as fs} from 'node:fs'
 import {homedir} from 'node:os'
 import {join} from 'node:path'
 
 import type {ClaudeSettings, SettingsLocation} from './claude-settings-types.js'
 import {IdePathResolver} from './ide-path-resolver.js'
+import {readJsonFile, writeJsonFile} from './json-io.js'
 import {pathExists} from './paths.js'
 
 /**
@@ -54,13 +54,7 @@ export async function discoverSettingsFiles(projectDir: string): Promise<Setting
  * @returns Parsed settings or undefined if file doesn't exist or is invalid
  */
 export async function readClaudeSettings(path: string): Promise<ClaudeSettings | undefined> {
-  try {
-    const content = await fs.readFile(path, 'utf8')
-    return JSON.parse(content) as ClaudeSettings
-  } catch {
-    // File doesn't exist or invalid JSON
-    return undefined
-  }
+  return readJsonFile<ClaudeSettings>(path)
 }
 
 /**
@@ -74,19 +68,7 @@ export async function readClaudeSettings(path: string): Promise<ClaudeSettings |
  * @throws Error if write fails
  */
 export async function writeClaudeSettings(path: string, settings: ClaudeSettings): Promise<void> {
-  // Create parent directory if it doesn't exist
-  const dir = join(path, '..')
-  await fs.mkdir(dir, {recursive: true})
-
-  // Backup existing file if it exists
-  if (await pathExists(path)) {
-    const backupPath = `${path}.backup`
-    await fs.copyFile(path, backupPath)
-  }
-
-  // Write settings with pretty formatting
-  const content = JSON.stringify(settings, null, 2)
-  await fs.writeFile(path, content, 'utf8')
+  return writeJsonFile(path, settings, {backup: true})
 }
 
 /**

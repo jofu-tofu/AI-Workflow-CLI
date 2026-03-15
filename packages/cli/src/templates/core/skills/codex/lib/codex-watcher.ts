@@ -10,10 +10,13 @@ import { execFileAsync } from "../../../lib-ts/runtime/subprocess-utils.js";
 // Re-export shared symbols that consumers import from this module
 export {
   type PaneWatchTarget,
+  looksLikeBadSummary,
   persistSummary,
   sleep,
   waitForPaneClose,
 } from "../../../lib-ts/runtime/agent-launcher.js";
+
+import { looksLikeBadSummary } from "../../../lib-ts/runtime/agent-launcher.js";
 
 export const SUMMARY_TIMEOUT_SEC = 8;
 export const RESUME_TIMEOUT_MS = 45_000;
@@ -123,16 +126,6 @@ export function collectTranscriptLines(sessionFile: string): string[] {
   }
 
   return out.slice(-MAX_TRANSCRIPT_LINES);
-}
-
-export function looksLikeBadSummary(output: string): boolean {
-  const normalized = output.toLowerCase();
-  return (
-    normalized.includes("don't see") ||
-    normalized.includes("no output") ||
-    normalized.includes("could you provide") ||
-    normalized.includes("paste")
-  );
 }
 
 export async function summarizeViaSessionFile(sessionFile: string): Promise<string | null> {

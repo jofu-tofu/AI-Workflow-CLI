@@ -1,7 +1,7 @@
 #!/bin/bash
 # Check if all phases in task_plan.md are complete
 # Exit 0 if complete, exit 1 if incomplete
-# Used by post_write_code hook to verify task completion
+# Used by hooks to verify task completion
 
 OUTPUT_DIR="_output/planning-with-files"
 PLAN_FILE="${1:-$OUTPUT_DIR/task_plan.md}"

@@ -1,7 +1,7 @@
 import {expect} from 'chai'
 import {describe, it} from 'vitest'
 
-import {createSpinner, withSpinner} from '../../src/lib/spinner.js'
+import {createSpinner} from '../../src/lib/spinner.js'
 
 describe('Spinner Utilities', () => {
   describe('createSpinner()', () => {
@@ -26,21 +26,4 @@ describe('Spinner Utilities', () => {
     })
   })
 
-  describe('withSpinner()', () => {
-    it('executes operation and returns result', async () => {
-      const result = await withSpinner('Loading...', async () => 'success')
-      expect(result).to.equal('success')
-    })
-
-    it('propagates errors from operation', async () => {
-      try {
-        await withSpinner('Loading...', async () => {
-          throw new Error('Test error')
-        })
-        expect.fail('Should have thrown error')
-      } catch (error) {
-        expect((error as Error).message).to.equal('Test error')
-      }
-    })
-  })
 })

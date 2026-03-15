@@ -15,27 +15,7 @@ import {
   loadHookInput, logDebug, logError, logInfo, logWarn, requireBoundSession, runHookAsync,
 } from "../lib-ts/hooks/hook-utils.js";
 import { getContextDir } from "../lib-ts/runtime/constants.js";
-
-/** Find the most recent .md file in a directory */
-function mostRecentMd(dir: string): null | string {
-  try {
-    if (!fs.existsSync(dir)) return null;
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    let best: null | { mtime: number; path: string; } = null;
-    for (const e of entries) {
-      if (!e.isFile() || !e.name.endsWith(".md")) continue;
-      const fullPath = path.join(dir, e.name);
-      const stat = fs.statSync(fullPath);
-      if (!best || stat.mtimeMs > best.mtime) {
-        best = { path: fullPath, mtime: stat.mtimeMs };
-      }
-    }
-
-    return best?.path ?? null;
-  } catch {
-    return null;
-  }
-}
+import { mostRecentMd } from "../lib-ts/runtime/utils.js";
 
 /** Multi-strategy plan path discovery */
 function findPlanPath(payload: Record<string, unknown>, projectRoot: string): null | string {

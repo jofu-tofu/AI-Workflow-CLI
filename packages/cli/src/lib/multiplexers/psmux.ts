@@ -17,11 +17,10 @@ import type {
   SplitOptions,
   StrategyContext,
 } from '../multiplexer.js'
-import {getLastLine, spawnAttached, splitFlagFromDimensions} from '../mux-utils.js'
+import {PANE_HOLD_MESSAGE, buildBootstrapPrompt, getLastLine, spawnAttached, splitFlagFromDimensions} from '../mux-utils.js'
 import {execFileAsync, findExecutable} from '../runtime/subprocess-utils.js'
 import {PowerShellAdapter} from '../shell-adapters/powershell-adapter.js'
 import type {ShellAdapter} from '../shell-adapters/shell-adapter.js'
-import {quoteForPowerShell} from '../shell-quoting.js'
 
 /** @internal */
 export interface PsmuxVersion {
@@ -145,21 +144,8 @@ export class PsmuxMultiplexer implements Multiplexer {
       encodedCommand: this.shell.encodeForExecution(commandWithEnv),
     })
 
-    if (reattach) {
-      const exists = await this.hasSession(sessionName)
-      if (!exists) {
-        const detachedCreate = await execFileAsync(this.psmuxPath, psmuxArgs, {timeout: 5000})
-        if (detachedCreate.exitCode !== 0) {
-          const stderr = detachedCreate.stderr.trim()
-          return {
-            launched: false,
-            exitCode: detachedCreate.exitCode ?? 1,
-            backend: this.backend,
-            reason: stderr ? `psmux new-session failed: ${stderr}` : 'psmux new-session failed',
-          }
-        }
-      }
-    } else {
+    const shouldCreate = !reattach || !(await this.hasSession(sessionName))
+    if (shouldCreate) {
       const detachedCreate = await execFileAsync(this.psmuxPath, psmuxArgs, {timeout: 5000})
       if (detachedCreate.exitCode !== 0) {
         const stderr = detachedCreate.stderr.trim()
@@ -224,7 +210,7 @@ export class PsmuxMultiplexer implements Multiplexer {
         ...(options.promptPath ? {promptPath: options.promptPath} : {}),
       })
 
-      const holdMessage = '[aiwcli] Driver exited. Pane held open.'
+      const holdMessage = PANE_HOLD_MESSAGE
       const wrappedCommand = this.shell.wrapSentinel({
         command: baseCommand,
         sentinelPath,
@@ -383,7 +369,7 @@ export function buildPsmuxShellCommand(shell: ShellAdapter, opts: CreateSessionO
     const formatted = process.platform === 'win32'
       ? promptFilePath.replaceAll('\\', '/')
       : promptFilePath
-    const bootstrap = `Read startup instructions from this file path before taking action: ${formatted}. Use that file as the initial context.`
+    const bootstrap = buildBootstrapPrompt(formatted)
     cmdParts.push(shell.quote(bootstrap))
   }
 

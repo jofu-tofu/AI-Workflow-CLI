@@ -7,7 +7,7 @@
 import { execFileSync } from "node:child_process";
 
 import { logDebug, logWarn } from "./logger.js";
-import { STOP_WORDS } from "./stop-words.js";
+import { filterStopWords } from "./stop-words.js";
 import type { InferenceResult } from "../types.js";
 import {
   buildCliInvocation,
@@ -143,7 +143,7 @@ export function generateSemanticSummary(
   summary = summary.replace(/[.!?]+$/, "");
 
   // Filter stop words
-  summary = filterStopWords(summary);
+  summary = filterStopWords(summary).toLowerCase();
 
   const words = summary.split(/\s+/);
   if (words.length < 6 || words.length > 12) return null;
@@ -339,18 +339,6 @@ export async function codexInferAsync(
     output: result.stdout.trim(),
     latency_ms: latencyMs,
   };
-}
-
-/**
- * Filter stop words from text.
- * See SPEC.md §6.4
- */
-function filterStopWords(text: string): string {
-  return text
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((w) => !STOP_WORDS.has(w) && w.length > 1)
-    .join(" ");
 }
 
 

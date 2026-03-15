@@ -6,16 +6,10 @@ import {afterEach, describe, expect, it} from 'vitest'
 
 import {type ContextFixture, createContextFixture} from './fixtures/context-fixture.js'
 import {runHookSubprocess} from './harness/hook-subprocess.js'
+import {hookEnv} from './harness/hook-env.js'
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))
 const SESSION_END_HOOK = resolve(TEST_DIR, '../../../../.aiwcli/_core/hooks-ts/session_end.ts')
-
-function hookEnv(fixture: ContextFixture, sessionId: string): Record<string, string> {
-  return {
-    CLAUDE_PROJECT_DIR: fixture.projectRoot,
-    CLAUDE_SESSION_ID: sessionId,
-  }
-}
 
 function sessionEndInput(
   sessionId: string,

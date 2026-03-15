@@ -2,7 +2,7 @@ import {Args, Flags} from '@oclif/core'
 
 import {createBranchCommandDependencies} from '../capabilities/branch/adapters.js'
 import {executeBranchCommand} from '../capabilities/branch/control-plane.js'
-import BaseCommand from '../lib/base-command.js'
+import BaseCommand from '../cli/base-command.js'
 
 /**
  * Manage git branch operations: launch in main/master or delete branch and worktree.

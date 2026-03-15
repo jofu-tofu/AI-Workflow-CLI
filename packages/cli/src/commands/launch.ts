@@ -5,9 +5,8 @@ import {Flags} from '@oclif/core'
 
 import type {LaunchFlags} from '../capabilities/launch/contracts.js'
 import {executeLaunch} from '../capabilities/launch/control-plane/execute-launch.js'
-import {buildUniqueSessionName, sanitizeSessionName} from '../capabilities/launch/runtime-core/launch-options.js'
+
 import BaseCommand from '../cli/base-command.js'
-import {quoteForSh, readSentinelExitCode, type LaunchResult, waitForSentinelFile} from '../platform/launch.js'
 
 /**
  * Launch Claude Code, Codex, or Devin with AIW configuration.
@@ -164,44 +163,5 @@ export default class LaunchCommand extends BaseCommand {
         },
       },
     )
-  }
-
-  // Compatibility wrappers kept on the command prototype while launch
-  // orchestration now lives in the capability control-plane.
-  private buildUniqueSessionName(base: string): string {
-    return buildUniqueSessionName(base)
-  }
-
-  private async handleJsonOutput(result: LaunchResult, wait: boolean): Promise<void> {
-    let {exitCode} = result
-
-    if (wait && result.launched && result.sentinelPath) {
-      const finished = await waitForSentinelFile(result.sentinelPath, 14_400_000)
-      exitCode = finished ? readSentinelExitCode(result.sentinelPath, 1) : -1
-    }
-
-    this.log(JSON.stringify({
-      launched: result.launched,
-      backend: result.backend,
-      handle: result.handle ?? null,
-      sentinelPath: result.sentinelPath ?? null,
-      exitCode: exitCode ?? null,
-      reason: result.reason ?? null,
-    }))
-    this.exit(exitCode ?? 0)
-  }
-
-  private sanitizeSessionName(input: string): string {
-    return sanitizeSessionName(input)
-  }
-
-  private shellQuote(input: string): string {
-    return quoteForSh(input)
-  }
-
-  private async waitForSentinel(result: LaunchResult): Promise<void> {
-    if (!result.sentinelPath) return
-    const finished = await waitForSentinelFile(result.sentinelPath, 14_400_000)
-    this.exit(finished ? readSentinelExitCode(result.sentinelPath, 1) : 1)
   }
 }

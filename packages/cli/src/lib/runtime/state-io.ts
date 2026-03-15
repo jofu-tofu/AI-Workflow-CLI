@@ -145,8 +145,6 @@ export function writeStateJson(
   projectRoot?: string,
 ): [boolean, string | null] {
   const sp = statePath(contextId, projectRoot);
-  const dir = path.dirname(sp);
-  fs.mkdirSync(dir, { recursive: true });
 
   const content = JSON.stringify(toDict(state), null, 2);
   // fsync: false — state.json is reconstructable from context folder contents

@@ -1,10 +1,10 @@
 import {promises as fs} from 'node:fs'
-import {dirname, join} from 'node:path'
-import {fileURLToPath} from 'node:url'
+import {join} from 'node:path'
 
 import {IdePathResolver} from './ide-path-resolver.js'
 import {pathExists} from './paths.js'
-import {copyDir} from './template-installer.js'
+import {copyDir, mergeDirectory} from './template-installer.js'
+import {getTemplatePath} from './template-resolver.js'
 
 /**
  * Install core runtime assets into .aiwcli/_core.
@@ -16,7 +16,7 @@ export async function installCoreAssets(targetDir: string, ides: string[]): Prom
 
   await fs.mkdir(containerDir, {recursive: true})
 
-  const sourceRoot = getCoreAssetSource()
+  const sourceRoot = await getTemplatePath('core')
   if (!(await pathExists(sourceRoot))) {
     throw new Error(`Core assets not found at ${sourceRoot}. This indicates a corrupted installation.`)
   }
@@ -35,33 +35,6 @@ export async function installCoreAssets(targetDir: string, ides: string[]): Prom
   return ['_core']
 }
 
-export function getCoreResolverSourcePath(): string {
-  return join(getCoreAssetSource(), 'scripts', 'resolve-run.ts')
-}
-
-function getCoreAssetSource(): string {
-  const currentFilePath = fileURLToPath(import.meta.url)
-  const currentDir = dirname(currentFilePath)
-  return join(currentDir, '..', 'templates', 'core')
-}
-
-async function mergeDirectory(src: string, dest: string): Promise<void> {
-  await fs.mkdir(dest, {recursive: true})
-  const entries = await fs.readdir(src, {withFileTypes: true})
-
-  const operations = entries.map(async (entry) => {
-    const srcPath = join(src, entry.name)
-    const destPath = join(dest, entry.name)
-
-    if (entry.isDirectory()) {
-      await mergeDirectory(srcPath, destPath)
-      return
-    }
-
-    if (!(await pathExists(destPath))) {
-      await fs.copyFile(srcPath, destPath)
-    }
-  })
-
-  await Promise.all(operations)
+export async function getCoreResolverSourcePath(): Promise<string> {
+  return join(await getTemplatePath('core'), 'scripts', 'resolve-run.ts')
 }

@@ -137,18 +137,3 @@ export class ProcessSpawnError extends AiwError {
   }
 }
 
-/**
- * Format error message following AI Workflow CLI convention.
- * @param what - Description of what went wrong
- * @param howToFix - Actionable steps to fix the problem
- * @returns Formatted error message in format: "{what}. {howToFix}."
- * @example
- * formatErrorMessage(
- *   'AIW_DIR directory not found',
- *   'Set AIW_DIR env var or run "aiw setup"'
- * )
- * // Returns: "AIW_DIR directory not found. Set AIW_DIR env var or run \"aiw setup\"."
- */
-export function formatErrorMessage(what: string, howToFix: string): string {
-  return `${what}. ${howToFix}.`
-}

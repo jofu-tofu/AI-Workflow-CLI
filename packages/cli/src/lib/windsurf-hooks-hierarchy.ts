@@ -1,7 +1,5 @@
-import {promises as fs} from 'node:fs'
-import {join} from 'node:path'
-
-import {pathExists} from './paths.js'
+import {IdePathResolver} from './ide-path-resolver.js'
+import {readJsonFile, writeJsonFile} from './json-io.js'
 import type {WindsurfHooks} from './windsurf-hooks-types.js'
 
 /**
@@ -11,13 +9,7 @@ import type {WindsurfHooks} from './windsurf-hooks-types.js'
  * @returns Parsed hooks or undefined if file doesn't exist or is invalid
  */
 export async function readWindsurfHooks(path: string): Promise<undefined | WindsurfHooks> {
-  try {
-    const content = await fs.readFile(path, 'utf8')
-    return JSON.parse(content) as WindsurfHooks
-  } catch {
-    // File doesn't exist or invalid JSON
-    return undefined
-  }
+  return readJsonFile<WindsurfHooks>(path)
 }
 
 /**
@@ -31,19 +23,7 @@ export async function readWindsurfHooks(path: string): Promise<undefined | Winds
  * @throws Error if write fails
  */
 export async function writeWindsurfHooks(path: string, hooks: WindsurfHooks): Promise<void> {
-  // Create parent directory if it doesn't exist
-  const dir = join(path, '..')
-  await fs.mkdir(dir, {recursive: true})
-
-  // Backup existing file if it exists
-  if (await pathExists(path)) {
-    const backupPath = `${path}.backup`
-    await fs.copyFile(path, backupPath)
-  }
-
-  // Write hooks with pretty formatting
-  const content = JSON.stringify(hooks, null, 2)
-  await fs.writeFile(path, content, 'utf8')
+  return writeJsonFile(path, hooks, {backup: true})
 }
 
 /**
@@ -57,5 +37,6 @@ export async function writeWindsurfHooks(path: string, hooks: WindsurfHooks): Pr
  * @returns Path to target hooks file
  */
 export function getTargetHooksFile(projectDir: string): string {
-  return join(projectDir, '.windsurf', 'hooks.json')
+  const resolver = new IdePathResolver(projectDir)
+  return resolver.getWindsurfHooks()
 }

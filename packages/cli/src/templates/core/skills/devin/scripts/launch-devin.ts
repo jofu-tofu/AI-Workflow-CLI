@@ -12,6 +12,8 @@ import path from "node:path";
 
 import { findLatestPlan } from "../../../lib-ts/context/plan-manager.js";
 import {
+  cleanupSentinel,
+  eprint,
   findLatestPlanByMtime,
   getWellKnownSummaryPath,
   resolveContextForLaunch,
@@ -31,22 +33,6 @@ const DEVIN_ALIASES: Record<string, string> = {
   gpt: DEVIN_MODELS.gpt,
   opus: DEVIN_MODELS.opus,
 };
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function eprint(...args: unknown[]): void {
-  process.stderr.write(args.map(String).join(" ") + "\n");
-}
-
-function cleanupSentinel(sentinelPath: string | null | undefined): void {
-  if (!sentinelPath) return;
-  try {
-    const dir = path.dirname(sentinelPath);
-    fs.rmSync(dir, { recursive: true, force: true });
-  } catch { /* best-effort */ }
-}
 
 // ---------------------------------------------------------------------------
 // Arg parsing

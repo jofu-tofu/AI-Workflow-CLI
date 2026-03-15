@@ -44,6 +44,49 @@ export function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Print to stderr (shared by agent launch scripts).
+ */
+export function eprint(...args: unknown[]): void {
+  process.stderr.write(args.map(String).join(" ") + "\n");
+}
+
+/**
+ * Best-effort cleanup of a sentinel directory.
+ */
+export function cleanupSentinel(sentinelPath: string | null | undefined): void {
+  if (!sentinelPath) return;
+  try {
+    const dir = path.dirname(sentinelPath);
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch { /* best-effort */ }
+}
+
+/**
+ * Case-sensitive (or case-insensitive on Windows) path comparison.
+ */
+export function samePath(a: string, b: string): boolean {
+  const left = path.resolve(a);
+  const right = path.resolve(b);
+  if (process.platform === "win32") {
+    return left.toLowerCase() === right.toLowerCase();
+  }
+  return left === right;
+}
+
+/**
+ * Heuristic check for LLM output that isn't a real summary.
+ */
+export function looksLikeBadSummary(output: string): boolean {
+  const normalized = output.toLowerCase();
+  return (
+    normalized.includes("don't see") ||
+    normalized.includes("no output") ||
+    normalized.includes("could you provide") ||
+    normalized.includes("paste")
+  );
+}
+
+/**
  * Return a deterministic summary file path for a given agent prefix + task ID.
  * Callers can advertise this path before the session finishes so consumers
  * know where to look for the summary once it's written.

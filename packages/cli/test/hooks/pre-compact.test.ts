@@ -5,16 +5,10 @@ import {afterEach, describe, expect, it} from 'vitest'
 
 import {type ContextFixture, createContextFixture} from './fixtures/context-fixture.js'
 import {runHookSubprocess} from './harness/hook-subprocess.js'
+import {hookEnv} from './harness/hook-env.js'
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))
 const PRE_COMPACT_HOOK = resolve(TEST_DIR, '../../../../.aiwcli/_core/hooks-ts/pre_compact.ts')
-
-function hookEnv(fixture: ContextFixture, sessionId: string): Record<string, string> {
-  return {
-    CLAUDE_PROJECT_DIR: fixture.projectRoot,
-    CLAUDE_SESSION_ID: sessionId,
-  }
-}
 
 describe('pre_compact hook integration', () => {
   const fixtures: ContextFixture[] = []

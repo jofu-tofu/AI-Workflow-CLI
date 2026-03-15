@@ -5,6 +5,7 @@ import {afterEach, describe, expect, it} from 'vitest'
 
 import {type ContextFixture, createContextFixture} from './fixtures/context-fixture.js'
 import {runHookSubprocess} from './harness/hook-subprocess.js'
+import {hookEnv} from './harness/hook-env.js'
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))
 const TASK_CREATE_HOOK = resolve(
@@ -15,13 +16,6 @@ const TASK_UPDATE_HOOK = resolve(
   TEST_DIR,
   '../../../../.aiwcli/_core/hooks-ts/task_update_capture.ts',
 )
-
-function hookEnv(fixture: ContextFixture, sessionId: string): Record<string, string> {
-  return {
-    CLAUDE_PROJECT_DIR: fixture.projectRoot,
-    CLAUDE_SESSION_ID: sessionId,
-  }
-}
 
 function readTasks(fixture: ContextFixture): Array<Record<string, unknown>> {
   const state = fixture.getState()

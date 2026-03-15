@@ -6,7 +6,7 @@ import {
   parseExtraEnv,
   resolvePromptText,
   sanitizeSessionName,
-} from '../../src/lib/launch-options.js'
+} from '../../src/capabilities/launch/runtime-core/launch-options.js'
 
 describe('launch-options', () => {
   describe('parseExtraEnv', () => {

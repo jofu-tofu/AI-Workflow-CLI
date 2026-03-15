@@ -41,3 +41,9 @@ export function spawnAttached(
 export function splitFlagFromDimensions(width: number, height: number): '-h' | '-v' {
   return width >= height * CELL_ASPECT_RATIO ? '-h' : '-v'
 }
+
+export const PANE_HOLD_MESSAGE = '[aiwcli] Driver exited. Pane held open.'
+
+export function buildBootstrapPrompt(filePath: string): string {
+  return `Read startup instructions from this file path before taking action: ${filePath}. Use that file as the initial context.`
+}

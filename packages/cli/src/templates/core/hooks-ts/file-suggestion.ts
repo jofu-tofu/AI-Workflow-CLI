@@ -9,26 +9,8 @@ import path from "node:path";
 import { getAllContexts, getContextBySessionId } from "../lib-ts/context/context-store.js";
 import { loadHookInput, logDebug, logError, runHook } from "../lib-ts/hooks/hook-utils.js";
 import { getContextFilePath, getContextHandoffsDir, getContextPlansDir, getContextReviewsDir, getProjectRoot } from "../lib-ts/runtime/constants.js";
+import { getMdFilesByMtime } from "../lib-ts/runtime/utils.js";
 import type { ContextState } from "../lib-ts/types.js";
-
-/** Get .md files sorted by mtime descending */
-function getMdFilesByMtime(dir: string): string[] {
-  try {
-    if (!fs.existsSync(dir)) return [];
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    const mdFiles = entries
-      .filter(e => e.isFile() && e.name.endsWith(".md"))
-      .map(e => {
-        const fullPath = path.join(dir, e.name);
-        const stat = fs.statSync(fullPath);
-        return { path: fullPath, mtime: stat.mtimeMs };
-      })
-      .sort((a, b) => b.mtime - a.mtime);
-    return mdFiles.map(f => f.path);
-  } catch {
-    return [];
-  }
-}
 
 /** Find latest folder-based document (subdirectory with index.md) */
 function getLatestFolderDoc(dir: string): null | string {

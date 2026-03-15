@@ -36,9 +36,13 @@ const mocks = vi.hoisted(() => ({
   wrapSentinelSh: vi.fn(({command}: {command: string}) => `WRAP(${command})`),
   wrapSentinelPowerShell: vi.fn(({command}: {command: string}) => `WRAP(${command})`),
 
+  // Mux-utils additions
+  buildBootstrapPrompt: vi.fn((filePath: string) => `Read startup instructions from this file path before taking action: ${filePath}. Use that file as the initial context.`),
+
   // Tmux helpers
   buildShellCommand: vi.fn(() => 'bootstrap command'),
   buildTmuxRuntimeBootstrapCommands: vi.fn(() => []),
+  configureTmuxSession: vi.fn(),
   findBestSplit: vi.fn(),
   listPanes: vi.fn(async () => []),
   toMsysPosixPath: vi.fn((input: string) => input),
@@ -80,6 +84,8 @@ vi.mock('../../../src/lib/env-sanitizer.js', () => ({
 }))
 
 vi.mock('../../../src/lib/mux-utils.js', () => ({
+  PANE_HOLD_MESSAGE: '[aiwcli] Driver exited. Pane held open.',
+  buildBootstrapPrompt: mocks.buildBootstrapPrompt,
   getLastLine: mocks.getLastLine,
   spawnAttached: mocks.spawnAttached,
   splitFlagFromDimensions: mocks.splitFlagFromDimensions,
@@ -119,6 +125,7 @@ vi.mock('../../../src/lib/tmux-primitives.js', () => ({
 vi.mock('../../../src/lib/tmux-session.js', () => ({
   buildShellCommand: mocks.buildShellCommand,
   buildTmuxRuntimeBootstrapCommands: mocks.buildTmuxRuntimeBootstrapCommands,
+  configureTmuxSession: mocks.configureTmuxSession,
 }))
 
 /* ── Imports (after mocks) ── */

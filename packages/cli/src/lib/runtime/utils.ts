@@ -3,6 +3,9 @@
  * See SPEC.md §14.2, §14.3
  */
 
+import * as fs from "node:fs";
+import path from "node:path";
+
 import { sanitizeTitle } from "./constants.js";
 import { logDebug, logError, logWarn } from "./logger.js";
 import { STOP_WORDS } from "./stop-words.js";
@@ -189,5 +192,31 @@ export function generateContextId(
   }
 
   return `${baseId}-${counter}`;
+}
+
+/**
+ * Get .md files in a directory sorted by mtime (newest first).
+ */
+export function getMdFilesByMtime(dir: string): string[] {
+  try {
+    if (!fs.existsSync(dir)) return [];
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    return entries
+      .filter(e => e.isFile() && e.name.endsWith(".md"))
+      .map(e => {
+        const fullPath = path.join(dir, e.name);
+        const stat = fs.statSync(fullPath);
+        return { path: fullPath, mtime: stat.mtimeMs };
+      })
+      .sort((a, b) => b.mtime - a.mtime)
+      .map(f => f.path);
+  } catch { return []; }
+}
+
+/**
+ * Get the most recently modified .md file in a directory.
+ */
+export function mostRecentMd(dir: string): string | null {
+  return getMdFilesByMtime(dir)[0] ?? null;
 }
 

@@ -1,5 +1,6 @@
 import * as crypto from "node:crypto";
 
+import { determineArtifactType } from "../context/context-store.js";
 import {
   extractPlanAnchors,
   generatePlanId,
@@ -16,18 +17,6 @@ function formatArchiveTimestamp(date: Date): string {
     `${String(date.getHours()).padStart(2, "0")}` +
     `${String(date.getMinutes()).padStart(2, "0")}`
   );
-}
-
-function resolveArtifactType(state: ContextState): "plan" | "handoff" | null {
-  if (state.next_artifact_type) return state.next_artifact_type;
-
-  const hasPlan = Boolean(state.plan_path && state.plan_hash);
-  const hasHandoff = Boolean(state.handoff_path);
-
-  if (hasPlan && hasHandoff) return "plan";
-  if (hasPlan) return "plan";
-  if (hasHandoff) return "handoff";
-  return null;
 }
 
 export function computePlanFallback(
@@ -54,7 +43,7 @@ export function shouldStage(
   state: ContextState,
   permissionMode: string,
 ): boolean {
-  const artifactType = resolveArtifactType(state);
+  const artifactType = determineArtifactType(state);
   const canStage = state.mode === "active" || permissionMode === "plan";
   return Boolean(artifactType && canStage && !state.work_consumed);
 }

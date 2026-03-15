@@ -15,11 +15,10 @@ import type {
   SplitOptions,
   StrategyContext,
 } from '../multiplexer.js'
-import {getLastLine, splitFlagFromDimensions} from '../mux-utils.js'
+import {PANE_HOLD_MESSAGE, getLastLine, splitFlagFromDimensions} from '../mux-utils.js'
 import {execFileAsync, findExecutable} from '../runtime/subprocess-utils.js'
 import {BashAdapter} from '../shell-adapters/bash-adapter.js'
 import type {ShellAdapter} from '../shell-adapters/shell-adapter.js'
-import {quoteForSh} from '../shell-quoting.js'
 
 type WeztermSplitFlag = '--bottom' | '--right'
 
@@ -178,7 +177,7 @@ export class WeztermMultiplexer implements Multiplexer {
       const gitBash = process.platform === 'win32' ? resolveGitBash() ?? undefined : undefined
 
       // WezTerm always holds pane and uses auto-close via wezterm kill-pane
-      const holdMessage = '[aiwcli] Driver exited. Pane held open.'
+      const holdMessage = PANE_HOLD_MESSAGE
       let paneCommand = this.shell.wrapSentinel({
         command: baseCommand,
         sentinelPath,

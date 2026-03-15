@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/skills/planning-with-files/scripts/init-session.sh",
+            "command": "bash scripts/init-session.sh",
             "timeout": 30000
           }
         ]
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/skills/planning-with-files/scripts/check-complete.sh",
+            "command": "bash scripts/check-complete.sh",
             "timeout": 10000
           }
         ]

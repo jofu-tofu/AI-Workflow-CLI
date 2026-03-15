@@ -1,4 +1,4 @@
-import {existsSync, promises as fs} from 'node:fs'
+import {promises as fs} from 'node:fs'
 import {dirname, join, resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
 
@@ -6,38 +6,11 @@ import {afterEach, describe, expect, it} from 'vitest'
 
 import {type ContextFixture, createContextFixture} from './fixtures/context-fixture.js'
 import {runHookSubprocess} from './harness/hook-subprocess.js'
+import {hookEnv} from './harness/hook-env.js'
+import {bunOnlyPathEnv} from './harness/path-env.js'
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))
 const ARCHIVE_PLAN_HOOK = resolve(TEST_DIR, '../../../../.aiwcli/_core/hooks-ts/archive_plan.ts')
-
-function hookEnv(
-  fixture: ContextFixture,
-  sessionId: string,
-  overrides: Record<string, string> = {},
-): Record<string, string> {
-  return {
-    CLAUDE_PROJECT_DIR: fixture.projectRoot,
-    CLAUDE_SESSION_ID: sessionId,
-    ...overrides,
-  }
-}
-
-function bunOnlyPathEnv(): Record<string, string> {
-  const rawPath = process.env.PATH ?? process.env.Path ?? ''
-  const separator = process.platform === 'win32' ? ';' : ':'
-  const bunBinaryName = process.platform === 'win32' ? 'bun.exe' : 'bun'
-  const bunDir = rawPath
-    .split(separator)
-    .find((entry) => entry.length > 0 && existsSync(join(entry, bunBinaryName)))
-
-  if (!bunDir) return {}
-
-  if (process.platform === 'win32') {
-    return {PATH: bunDir, Path: bunDir}
-  }
-
-  return {PATH: bunDir}
-}
 
 function archiveInput(
   sessionId: string,

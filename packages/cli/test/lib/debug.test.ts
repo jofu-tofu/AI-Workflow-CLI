@@ -1,7 +1,7 @@
 import {expect} from 'chai'
 import {type SinonStub, stub} from 'sinon'
 
-import {debug, debugConfig, debugSpawn, debugVersion, isDebugEnabled, setDebugEnabled} from '../../src/lib/debug.js'
+import {debug, debugSpawn, debugVersion, isDebugEnabled, setDebugEnabled} from '../../src/lib/debug.js'
 
 describe('debug', () => {
   let stderrStub: SinonStub
@@ -88,38 +88,6 @@ describe('debug', () => {
       debug(String.raw`path: C:\Users\test\.aiw`)
       const output = stderrStub.firstCall.args[0]
       expect(output).to.include(String.raw`C:\Users\test\.aiw`)
-    })
-  })
-
-  describe('debugConfig', () => {
-    it('should log AIW_DIR path in debug mode', () => {
-      setDebugEnabled(true)
-      debugConfig({aiwDir: '/home/user/.aiw'})
-      expect(stderrStub.called).to.be.true
-      const output = stderrStub.firstCall.args[0]
-      expect(output).to.include('AIW_DIR')
-      expect(output).to.include('/home/user/.aiw')
-    })
-
-    it('should not log when debug is disabled', () => {
-      setDebugEnabled(false)
-      debugConfig({aiwDir: '/home/user/.aiw'})
-      expect(stderrStub.called).to.be.false
-    })
-
-    it('should NOT log full config object (security)', () => {
-      setDebugEnabled(true)
-      debugConfig({aiwDir: '/home/user/.aiw', secretApiKey: 'should-not-appear'})
-      expect(stderrStub.called).to.be.true
-      const allOutput = stderrStub
-        .getCalls()
-        .map((call) => call.args[0])
-        .join('')
-      // Should log AIW_DIR
-      expect(allOutput).to.include('/home/user/.aiw')
-      // Should NOT log other config properties (security fix)
-      expect(allOutput).to.not.include('secretApiKey')
-      expect(allOutput).to.not.include('should-not-appear')
     })
   })
 

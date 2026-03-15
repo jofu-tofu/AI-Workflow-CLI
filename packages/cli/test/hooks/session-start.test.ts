@@ -6,19 +6,13 @@ import {afterEach, describe, expect, it} from 'vitest'
 
 import {type ContextFixture, createContextFixture} from './fixtures/context-fixture.js'
 import {
+  readAdditionalContext,
   runHookSubprocess,
-  type SubprocessHookResult,
 } from './harness/hook-subprocess.js'
+import {hookEnv} from './harness/hook-env.js'
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))
 const SESSION_START_HOOK = resolve(TEST_DIR, '../../../../.aiwcli/_core/hooks-ts/session_start.ts')
-
-function hookEnv(fixture: ContextFixture, sessionId: string): Record<string, string> {
-  return {
-    CLAUDE_PROJECT_DIR: fixture.projectRoot,
-    CLAUDE_SESSION_ID: sessionId,
-  }
-}
 
 function sessionStartInput(
   sessionId: string,
@@ -31,15 +25,6 @@ function sessionStartInput(
     session_id: sessionId,
     ...overrides,
   }
-}
-
-function readAdditionalContext(result: SubprocessHookResult): null | string {
-  const parsed = result.parsedOutput
-  if (!parsed) return null
-  const {hookSpecificOutput} = parsed
-  if (!hookSpecificOutput || typeof hookSpecificOutput !== 'object') return null
-  const {additionalContext} = (hookSpecificOutput as Record<string, unknown>)
-  return typeof additionalContext === 'string' ? additionalContext : null
 }
 
 function readMode(state: Record<string, unknown>): string {

@@ -4,9 +4,10 @@ import {fileURLToPath} from 'node:url'
 import {afterEach, describe, expect, it} from 'vitest'
 
 import {type ContextFixture, createContextFixture} from './fixtures/context-fixture.js'
+import {hookEnv} from './harness/hook-env.js'
 import {
+  readAdditionalContext,
   runHookSubprocess,
-  type SubprocessHookResult,
 } from './harness/hook-subprocess.js'
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))
@@ -14,13 +15,6 @@ const CONTEXT_MONITOR_HOOK = resolve(
   TEST_DIR,
   '../../../../.aiwcli/_core/hooks-ts/context_monitor.ts',
 )
-
-function hookEnv(fixture: ContextFixture, sessionId: string): Record<string, string> {
-  return {
-    CLAUDE_PROJECT_DIR: fixture.projectRoot,
-    CLAUDE_SESSION_ID: sessionId,
-  }
-}
 
 function monitorInput(
   sessionId: string,
@@ -43,15 +37,6 @@ function monitorInput(
       },
     },
   }
-}
-
-function readAdditionalContext(result: SubprocessHookResult): null | string {
-  const parsed = result.parsedOutput
-  if (!parsed) return null
-  const {hookSpecificOutput} = parsed
-  if (!hookSpecificOutput || typeof hookSpecificOutput !== 'object') return null
-  const {additionalContext} = (hookSpecificOutput as Record<string, unknown>)
-  return typeof additionalContext === 'string' ? additionalContext : null
 }
 
 function readWarnings(state: Record<string, unknown>): number[] {

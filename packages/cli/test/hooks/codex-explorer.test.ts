@@ -6,9 +6,11 @@ import {afterEach, describe, expect, it} from 'vitest'
 
 import {type ContextFixture, createContextFixture} from './fixtures/context-fixture.js'
 import {
+  readAdditionalContext,
   runHookSubprocess,
-  type SubprocessHookResult,
 } from './harness/hook-subprocess.js'
+import {hookEnv} from './harness/hook-env.js'
+import {withPathPrefix} from './harness/path-env.js'
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))
 const CODEX_EXPLORER_HOOK = resolve(
@@ -17,18 +19,6 @@ const CODEX_EXPLORER_HOOK = resolve(
 )
 
 type FakeCodexMode = 'failure' | 'success'
-
-function hookEnv(
-  fixture: ContextFixture,
-  sessionId: string,
-  overrides: Record<string, string> = {},
-): Record<string, string> {
-  return {
-    CLAUDE_PROJECT_DIR: fixture.projectRoot,
-    CLAUDE_SESSION_ID: sessionId,
-    ...overrides,
-  }
-}
 
 function userPromptInput(
   sessionId: string,
@@ -43,17 +33,6 @@ function userPromptInput(
     prompt,
     'permission_mode': permissionMode,
   }
-}
-
-function readAdditionalContext(result: SubprocessHookResult): null | string {
-  const parsed = result.parsedOutput
-  if (!parsed) return null
-
-  const {hookSpecificOutput} = parsed
-  if (!hookSpecificOutput || typeof hookSpecificOutput !== 'object') return null
-
-  const {additionalContext} = hookSpecificOutput as Record<string, unknown>
-  return typeof additionalContext === 'string' ? additionalContext : null
 }
 
 async function createFakeCodex(
@@ -80,18 +59,6 @@ async function createFakeCodex(
   await fs.writeFile(scriptPath, body, 'utf8')
   await fs.chmod(scriptPath, 0o755)
   return {binDir, logPath}
-}
-
-function withPathPrefix(binDir: string): Record<string, string> {
-  const basePath = process.env.PATH ?? process.env.Path ?? ''
-  const sep = process.platform === 'win32' ? ';' : ':'
-  const combined = basePath ? `${binDir}${sep}${basePath}` : binDir
-
-  if (process.platform === 'win32') {
-    return {PATH: combined, Path: combined}
-  }
-
-  return {PATH: combined}
 }
 
 async function readLoggedArgs(logPath: string): Promise<string[]> {

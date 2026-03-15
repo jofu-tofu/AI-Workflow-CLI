@@ -6,6 +6,7 @@
 import path from 'node:path'
 
 import {REPL_NESTING_VARS} from '../env-sanitizer.js'
+import {buildBootstrapPrompt} from '../mux-utils.js'
 import {wrapSentinelPowerShell} from '../sentinel-wrapper.js'
 import {quoteForPowerShell, toEncodedPowerShell} from '../shell-quoting.js'
 import type {SentinelWrapOptions, ShellAdapter, ToolCommandParams} from './shell-adapter.js'
@@ -71,7 +72,7 @@ export class PowerShellAdapter implements ShellAdapter {
     const formatted = process.platform === 'win32'
       ? absolutePromptPath.replaceAll('\\', '/')
       : absolutePromptPath
-    const bootstrap = `Read startup instructions from this file path before taking action: ${formatted}. Use that file as the initial context.`
+    const bootstrap = buildBootstrapPrompt(formatted)
     return [...args, bootstrap]
   }
 }

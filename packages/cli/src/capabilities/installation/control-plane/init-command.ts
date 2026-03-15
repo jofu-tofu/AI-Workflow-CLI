@@ -285,7 +285,7 @@ export default class Init extends BaseCommand {
    */
   private async installGlobalResolver(): Promise<void> {
     try {
-      const resolverSrc = getCoreResolverSourcePath()
+      const resolverSrc = await getCoreResolverSourcePath()
 
       const globalBinDir = join(homedir(), '.aiwcli', 'bin')
       const resolverDest = join(globalBinDir, 'resolve-run.ts')

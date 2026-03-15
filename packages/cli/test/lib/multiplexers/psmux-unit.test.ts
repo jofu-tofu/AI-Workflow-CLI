@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   readdirSync: vi.fn(() => []),
   sanitizedProcessEnv: vi.fn(() => ({})),
   spawnAttached: vi.fn(async () => ({launched: true, exitCode: 0, backend: 'psmux'})),
+  buildBootstrapPrompt: vi.fn((filePath: string) => `Read startup instructions from this file path before taking action: ${filePath}. Use that file as the initial context.`),
   splitFlagFromDimensions: vi.fn(() => '-h'),
   tmpdir: vi.fn(() => 'C:\\tmp'),
   toEncodedPowerShell: vi.fn((command: string) => `ENC(${command})`),
@@ -34,6 +35,8 @@ vi.mock('../../../src/lib/env-sanitizer.js', () => ({
 }))
 
 vi.mock('../../../src/lib/mux-utils.js', () => ({
+  PANE_HOLD_MESSAGE: '[aiwcli] Driver exited. Pane held open.',
+  buildBootstrapPrompt: mocks.buildBootstrapPrompt,
   getLastLine: mocks.getLastLine,
   spawnAttached: mocks.spawnAttached,
   splitFlagFromDimensions: mocks.splitFlagFromDimensions,

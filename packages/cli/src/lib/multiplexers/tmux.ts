@@ -16,16 +16,14 @@ import type {
   SplitOptions,
   StrategyContext,
 } from '../multiplexer.js'
-import {getLastLine, spawnAttached, splitFlagFromDimensions} from '../mux-utils.js'
+import {PANE_HOLD_MESSAGE, getLastLine, spawnAttached, splitFlagFromDimensions} from '../mux-utils.js'
 import {isNonWindowsPlatform, isWindowsPlatform} from '../runtime/platform-adapter.js'
 import {execFileAsync, findExecutable} from '../runtime/subprocess-utils.js'
 import {BashAdapter} from '../shell-adapters/bash-adapter.js'
 import type {ShellAdapter} from '../shell-adapters/shell-adapter.js'
-import {findBestSplit, listPanes} from '../tmux-pane-placement.js'
+import {findBestSplit, listPanes, type TmuxSplitFlag} from '../tmux-pane-placement.js'
 import {toMsysPosixPath} from '../tmux-primitives.js'
-import {buildShellCommand, buildTmuxRuntimeBootstrapCommands} from '../tmux-session.js'
-
-type TmuxSplitFlag = '-h' | '-v'
+import {buildShellCommand, buildTmuxRuntimeBootstrapCommands, configureTmuxSession} from '../tmux-session.js'
 
 /** @internal — translate unified SplitDirection to tmux flag. */
 export function toTmuxSplitFlag(direction: 'horizontal' | 'vertical'): TmuxSplitFlag {
@@ -97,33 +95,6 @@ async function resolveAutoSplit(
   return {
     splitFlag: placement.splitFlag,
     splitTarget: placement.targetPane,
-  }
-}
-
-/**
- * Configure tmux session defaults: mouse, scrollback, 256-color, truecolor.
- * Called internally by split() — orchestrator no longer needs to call this.
- */
-function configureTmuxDefaults(): void {
-  if (!isNonWindowsPlatform()) return
-  try {
-    execSync(
-      'tmux set-option -g mouse on \\; ' +
-      'set-option -g history-limit 50000 \\; ' +
-      'set -g default-terminal "tmux-256color" \\; ' +
-      'set -a terminal-overrides ",xterm*:Tc,alacritty:Tc"',
-      {stdio: 'ignore', timeout: 3000},
-    )
-  } catch {
-    try {
-      execSync(
-        'tmux set-option -g mouse on \\; ' +
-        'set-option -g history-limit 50000 \\; ' +
-        'set -g default-terminal "screen-256color" \\; ' +
-        'set -a terminal-overrides ",xterm*:Tc,alacritty:Tc"',
-        {stdio: 'ignore', timeout: 3000},
-      )
-    } catch { /* best-effort */ }
   }
 }
 
@@ -202,7 +173,7 @@ export class TmuxMultiplexer implements Multiplexer {
     const {toolName, args, env, cwd, mode, sentinelPath} = options
 
     // Configure tmux session defaults (mouse, scrollback, color)
-    configureTmuxDefaults()
+    configureTmuxSession()
 
     // Resolve tool path
     const nativePath = findExecutable(toolName)
@@ -236,7 +207,7 @@ export class TmuxMultiplexer implements Multiplexer {
         baseCommand = this.shell.wrapQuickExitRetry(baseCommand, this.shell.quote(effectiveToolPath))
       }
 
-      const holdMessage = '[aiwcli] Driver exited. Pane held open.'
+      const holdMessage = PANE_HOLD_MESSAGE
       const paneCommand = this.shell.wrapSentinel({
         command: baseCommand,
         sentinelPath,

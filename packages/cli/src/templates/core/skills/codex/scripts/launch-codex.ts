@@ -13,9 +13,12 @@ import path from "node:path";
 
 import { findLatestPlan } from "../../../lib-ts/context/plan-manager.js";
 import {
+  cleanupSentinel,
+  eprint,
   findLatestPlanByMtime,
   getWellKnownSummaryPath,
   resolveContextForLaunch,
+  samePath,
   sleep,
   writeFileRefPromptFile,
   writeInlinePromptFile,
@@ -41,18 +44,6 @@ const SESSION_MTIME_WINDOW_MS = 120_000;
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function eprint(...args: unknown[]): void {
-  process.stderr.write(args.map(String).join(" ") + "\n");
-}
-
-function cleanupSentinel(sentinelPath: string | null | undefined): void {
-  if (!sentinelPath) return;
-  try {
-    const dir = path.dirname(sentinelPath);
-    fs.rmSync(dir, { recursive: true, force: true });
-  } catch { /* best-effort */ }
-}
 
 function collectSessionJsonlFiles(rootDir: string): string[] {
   if (!fs.existsSync(rootDir)) return [];
@@ -80,15 +71,6 @@ function collectSessionJsonlFiles(rootDir: string): string[] {
   }
 
   return files;
-}
-
-function samePath(a: string, b: string): boolean {
-  const left = path.resolve(a);
-  const right = path.resolve(b);
-  if (process.platform === "win32") {
-    return left.toLowerCase() === right.toLowerCase();
-  }
-  return left === right;
 }
 
 function readSessionMeta(sessionFile: string): { sessionId: string; cwd: string; startedAtMs: number } | null {

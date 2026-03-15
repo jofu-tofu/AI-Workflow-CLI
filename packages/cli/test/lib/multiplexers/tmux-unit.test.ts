@@ -3,6 +3,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 const mocks = vi.hoisted(() => ({
   buildShellCommand: vi.fn(),
   buildTmuxRuntimeBootstrapCommands: vi.fn(() => []),
+  configureTmuxSession: vi.fn(),
   execFileAsync: vi.fn(),
   execSync: vi.fn(),
   findBestSplit: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock('../../../src/lib/env-sanitizer.js', () => ({
 }))
 
 vi.mock('../../../src/lib/mux-utils.js', () => ({
+  PANE_HOLD_MESSAGE: '[aiwcli] Driver exited. Pane held open.',
   getLastLine: mocks.getLastLine,
   spawnAttached: mocks.spawnAttached,
   splitFlagFromDimensions: mocks.splitFlagFromDimensions,
@@ -70,6 +72,7 @@ vi.mock('../../../src/lib/tmux-primitives.js', () => ({
 vi.mock('../../../src/lib/tmux-session.js', () => ({
   buildShellCommand: mocks.buildShellCommand,
   buildTmuxRuntimeBootstrapCommands: mocks.buildTmuxRuntimeBootstrapCommands,
+  configureTmuxSession: mocks.configureTmuxSession,
 }))
 
 import {TmuxMultiplexer} from '../../../src/lib/multiplexers/tmux.js'

@@ -3,7 +3,6 @@ import {homedir} from 'node:os'
 import {join} from 'node:path'
 
 import {debug} from './debug.js'
-import {getAiwDir as getAiwDirFromEnv} from './env-compat.js'
 import {ConfigNotFoundError} from './errors.js'
 
 /**
@@ -22,7 +21,7 @@ export interface AiwcliConfig {
  */
 export function getAiwDir(): string {
   // Try env var first, then default
-  const envHome = getAiwDirFromEnv()
+  const envHome = process.env['AIW_DIR']
   if (envHome) {
     return envHome
   }

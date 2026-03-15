@@ -1,4 +1,4 @@
-import {existsSync, promises as fs} from 'node:fs'
+import {promises as fs} from 'node:fs'
 import {dirname, join, resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
 
@@ -6,9 +6,11 @@ import {afterEach, describe, expect, it} from 'vitest'
 
 import {type ContextFixture, createContextFixture} from './fixtures/context-fixture.js'
 import {
+  readAdditionalContext,
   runHookSubprocess,
-  type SubprocessHookResult,
 } from './harness/hook-subprocess.js'
+import {hookEnv} from './harness/hook-env.js'
+import {bunOnlyPathEnv, withPathPrefix} from './harness/path-env.js'
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))
 const LINT_AFTER_EDIT_HOOK = resolve(
@@ -17,18 +19,6 @@ const LINT_AFTER_EDIT_HOOK = resolve(
 )
 
 type FakeRuffMode = 'clean' | 'errors'
-
-function hookEnv(
-  fixture: ContextFixture,
-  sessionId: string,
-  overrides: Record<string, string> = {},
-): Record<string, string> {
-  return {
-    CLAUDE_PROJECT_DIR: fixture.projectRoot,
-    CLAUDE_SESSION_ID: sessionId,
-    ...overrides,
-  }
-}
 
 function lintInput(cwd: string, filePath: string): Record<string, unknown> {
   return {
@@ -39,17 +29,6 @@ function lintInput(cwd: string, filePath: string): Record<string, unknown> {
       file_path: filePath,
     },
   }
-}
-
-function readAdditionalContext(result: SubprocessHookResult): null | string {
-  const parsed = result.parsedOutput
-  if (!parsed) return null
-
-  const {hookSpecificOutput} = parsed
-  if (!hookSpecificOutput || typeof hookSpecificOutput !== 'object') return null
-
-  const {additionalContext} = (hookSpecificOutput as Record<string, unknown>)
-  return typeof additionalContext === 'string' ? additionalContext : null
 }
 
 async function createFakeRuff(projectRoot: string, mode: FakeRuffMode): Promise<string> {
@@ -72,35 +51,6 @@ async function createFakeRuff(projectRoot: string, mode: FakeRuffMode): Promise<
   await fs.writeFile(scriptPath, body, 'utf8')
   await fs.chmod(scriptPath, 0o755)
   return binDir
-}
-
-function withPathPrefix(binDir: string): Record<string, string> {
-  const basePath = process.env.PATH ?? process.env.Path ?? ''
-  const sep = process.platform === 'win32' ? ';' : ':'
-  const combined = basePath ? `${binDir}${sep}${basePath}` : binDir
-
-  if (process.platform === 'win32') {
-    return {PATH: combined, Path: combined}
-  }
-
-  return {PATH: combined}
-}
-
-function bunOnlyPathEnv(): Record<string, string> {
-  const rawPath = process.env.PATH ?? process.env.Path ?? ''
-  const separator = process.platform === 'win32' ? ';' : ':'
-  const bunBinaryName = process.platform === 'win32' ? 'bun.exe' : 'bun'
-  const bunDir = rawPath
-    .split(separator)
-    .find((entry) => entry.length > 0 && existsSync(join(entry, bunBinaryName)))
-
-  if (!bunDir) return {}
-
-  if (process.platform === 'win32') {
-    return {PATH: bunDir, Path: bunDir}
-  }
-
-  return {PATH: bunDir}
 }
 
 describe('lint_after_edit hook integration', () => {

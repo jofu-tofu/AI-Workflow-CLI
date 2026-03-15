@@ -1,4 +1,3 @@
-import {existsSync} from 'node:fs'
 import {dirname, resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
 
@@ -6,44 +5,18 @@ import {afterEach, describe, expect, it} from 'vitest'
 
 import {type ContextFixture, createContextFixture} from './fixtures/context-fixture.js'
 import {
+  readAdditionalContext,
   runHookSubprocess,
   type SubprocessHookResult,
 } from './harness/hook-subprocess.js'
+import {hookEnv} from './harness/hook-env.js'
+import {bunOnlyPathEnv} from './harness/path-env.js'
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))
 const USER_PROMPT_SUBMIT_HOOK = resolve(
   TEST_DIR,
   '../../../../.aiwcli/_core/hooks-ts/user_prompt_submit.ts',
 )
-
-function hookEnv(
-  fixture: ContextFixture,
-  sessionId: string,
-  overrides: Record<string, string> = {},
-): Record<string, string> {
-  return {
-    CLAUDE_PROJECT_DIR: fixture.projectRoot,
-    CLAUDE_SESSION_ID: sessionId,
-    ...overrides,
-  }
-}
-
-function bunOnlyPathEnv(): Record<string, string> {
-  const rawPath = process.env.PATH ?? process.env.Path ?? ''
-  const separator = process.platform === 'win32' ? ';' : ':'
-  const bunBinaryName = process.platform === 'win32' ? 'bun.exe' : 'bun'
-  const bunDir = rawPath
-    .split(separator)
-    .find((entry) => entry.length > 0 && existsSync(resolve(entry, bunBinaryName)))
-
-  if (!bunDir) return {}
-
-  if (process.platform === 'win32') {
-    return {PATH: bunDir, Path: bunDir}
-  }
-
-  return {PATH: bunDir}
-}
 
 function userPromptInput(
   sessionId: string,
@@ -58,17 +31,6 @@ function userPromptInput(
     prompt,
     ...overrides,
   }
-}
-
-function readAdditionalContext(result: SubprocessHookResult): null | string {
-  const parsed = result.parsedOutput
-  if (!parsed) return null
-
-  const {hookSpecificOutput} = parsed
-  if (!hookSpecificOutput || typeof hookSpecificOutput !== 'object') return null
-
-  const {additionalContext} = (hookSpecificOutput as Record<string, unknown>)
-  return typeof additionalContext === 'string' ? additionalContext : null
 }
 
 function readDecision(result: SubprocessHookResult): null | string {

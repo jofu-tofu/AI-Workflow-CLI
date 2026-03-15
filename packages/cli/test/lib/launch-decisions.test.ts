@@ -14,8 +14,8 @@ import {
   resolveToolModeDebugMessage,
   shouldRetry,
   toJsonLaunchResult,
-  type InlineFallbackContext,
-} from '../../src/lib/launch-decisions.js'
+} from '../../src/capabilities/launch/runtime-core/launch-decisions.js'
+import {type InlineFallbackContext} from '../../src/capabilities/launch/contracts.js'
 
 describe('launch-decisions', () => {
   // --- resolveToolConfig ---

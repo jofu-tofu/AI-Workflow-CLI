@@ -20,8 +20,15 @@ import { execFileAsync, findExecutable } from "../../../lib-ts/runtime/subproces
 // Re-export shared symbols for consumers
 export {
   type PaneWatchTarget,
+  looksLikeBadSummary,
   persistSummary,
+  samePath,
   waitForPaneClose,
+} from "../../../lib-ts/runtime/agent-launcher.js";
+
+import {
+  looksLikeBadSummary,
+  samePath,
 } from "../../../lib-ts/runtime/agent-launcher.js";
 
 export const SUMMARY_UNAVAILABLE_MESSAGE = "Devin session completed. Summary unavailable.";
@@ -79,15 +86,6 @@ async function getDevinSessions(): Promise<DevinSession[]> {
     logDebug("devin-watcher", `devin list parse failed: ${String(error)}`);
     return [];
   }
-}
-
-function samePath(a: string, b: string): boolean {
-  const left = path.resolve(a);
-  const right = path.resolve(b);
-  if (process.platform === "win32") {
-    return left.toLowerCase() === right.toLowerCase();
-  }
-  return left === right;
 }
 
 async function findDevinSessionViaList(
@@ -237,16 +235,6 @@ async function capturePaneScrollback(paneId: string | null | undefined): Promise
 // ---------------------------------------------------------------------------
 // Summarization
 // ---------------------------------------------------------------------------
-
-function looksLikeBadSummary(output: string): boolean {
-  const normalized = output.toLowerCase();
-  return (
-    normalized.includes("don't see") ||
-    normalized.includes("no output") ||
-    normalized.includes("could you provide") ||
-    normalized.includes("paste")
-  );
-}
 
 async function summarizeTranscript(transcript: string): Promise<string | null> {
   const result = inference(
