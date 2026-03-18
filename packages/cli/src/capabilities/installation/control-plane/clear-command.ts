@@ -35,7 +35,7 @@ interface IdeFolderConfig {
 interface IdeFoldersConfig {
   claude: IdeFolderConfig
   codex: IdeFolderConfig
-  cognition: IdeFolderConfig
+  devin: IdeFolderConfig
   windsurf: IdeFolderConfig
 }
 
@@ -51,8 +51,8 @@ const IDE_FOLDERS: IdeFoldersConfig = {
   codex: {
     root: '.codex',
   },
-  cognition: {
-    root: '.cognition',
+  devin: {
+    root: '.devin',
   },
   windsurf: {
     root: '.windsurf',
@@ -893,10 +893,10 @@ export default class ClearCommand extends BaseCommand {
     }
 
     // Check if IDE folders might be removed after clearing
-    const [willClaudeFolderBeEmpty, willCodexFolderBeEmpty, willCognitionFolderBeEmpty, willWindsurfFolderBeEmpty] = await Promise.all([
+    const [willClaudeFolderBeEmpty, willCodexFolderBeEmpty, willDevinFolderBeEmpty, willWindsurfFolderBeEmpty] = await Promise.all([
       checkIdeRemovalEligibility(targetDir, IDE_FOLDERS.claude, ideMethodFolders),
       checkIdeRemovalEligibility(targetDir, IDE_FOLDERS.codex, ideMethodFolders),
-      checkIdeRemovalEligibility(targetDir, IDE_FOLDERS.cognition, ideMethodFolders),
+      checkIdeRemovalEligibility(targetDir, IDE_FOLDERS.devin, ideMethodFolders),
       checkIdeRemovalEligibility(targetDir, IDE_FOLDERS.windsurf, ideMethodFolders),
     ])
 
@@ -910,8 +910,8 @@ export default class ClearCommand extends BaseCommand {
       this.log('')
     }
 
-    if (willCognitionFolderBeEmpty) {
-      this.logInfo(`${IDE_FOLDERS.cognition.root}/ folder will be removed (will be empty)`)
+    if (willDevinFolderBeEmpty) {
+      this.logInfo(`${IDE_FOLDERS.devin.root}/ folder will be removed (will be empty)`)
       this.log('')
     }
 
@@ -1177,7 +1177,7 @@ export default class ClearCommand extends BaseCommand {
     removedAiwcliContainer: boolean
     removedClaudeDir: boolean
     removedCodexDir: boolean
-    removedCognitionDir: boolean
+    removedDevinDir: boolean
     removedCoreIdeFiles: number
     removedOutputDir: boolean
     removedWindsurfDir: boolean
@@ -1231,7 +1231,7 @@ export default class ClearCommand extends BaseCommand {
 
     const removedCodexDir = await this.tryRemoveIdeFolder(targetDir, IDE_FOLDERS.codex)
 
-    const removedCognitionDir = await this.tryRemoveIdeFolder(targetDir, IDE_FOLDERS.cognition)
+    const removedDevinDir = await this.tryRemoveIdeFolder(targetDir, IDE_FOLDERS.devin)
 
     const removedWindsurfDir = await this.tryRemoveIdeFolder(targetDir, IDE_FOLDERS.windsurf)
     if (removedWindsurfDir) updatedWindsurfSettings = false
@@ -1241,7 +1241,7 @@ export default class ClearCommand extends BaseCommand {
 
     return {
       removedCoreIdeFiles,
-      removedOutputDir, removedAiwcliContainer, removedClaudeDir, removedCodexDir, removedCognitionDir, removedWindsurfDir,
+      removedOutputDir, removedAiwcliContainer, removedClaudeDir, removedCodexDir, removedDevinDir, removedWindsurfDir,
       updatedClaudeSettings, updatedWindsurfSettings, gitExcludeUpdated,
     }
   }
@@ -1330,7 +1330,7 @@ export default class ClearCommand extends BaseCommand {
    * @param cleanup.removedAiwcliContainer - Whether .aiwcli dir was removed
    * @param cleanup.removedClaudeDir - Whether .claude dir was removed
    * @param cleanup.removedCodexDir - Whether .codex dir was removed
-   * @param cleanup.removedCognitionDir - Whether .cognition dir was removed
+   * @param cleanup.removedDevinDir - Whether .devin dir was removed
    * @param cleanup.removedWindsurfDir - Whether .windsurf dir was removed
    * @param cleanup.removedCoreIdeFiles - Number of core IDE files removed
    * @param cleanup.updatedClaudeSettings - Whether Claude settings were updated
@@ -1343,7 +1343,7 @@ export default class ClearCommand extends BaseCommand {
       removedAiwcliContainer: boolean
       removedClaudeDir: boolean
       removedCodexDir: boolean
-      removedCognitionDir: boolean
+      removedDevinDir: boolean
       removedCoreIdeFiles: number
       removedOutputDir: boolean
       removedWindsurfDir: boolean
@@ -1362,7 +1362,7 @@ export default class ClearCommand extends BaseCommand {
     if (cleanup.removedAiwcliContainer) parts.push(`${AIWCLI_CONTAINER}/ folder`)
     if (cleanup.removedClaudeDir) parts.push(`${IDE_FOLDERS.claude.root}/ folder`)
     if (cleanup.removedCodexDir) parts.push(`${IDE_FOLDERS.codex.root}/ folder`)
-    if (cleanup.removedCognitionDir) parts.push(`${IDE_FOLDERS.cognition.root}/ folder`)
+    if (cleanup.removedDevinDir) parts.push(`${IDE_FOLDERS.devin.root}/ folder`)
     if (cleanup.removedWindsurfDir) parts.push(`${IDE_FOLDERS.windsurf.root}/ folder`)
 
     this.logSuccess(`Cleared: ${parts.join(', ')}.`)

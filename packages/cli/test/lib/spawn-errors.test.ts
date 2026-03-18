@@ -1,7 +1,12 @@
 import {describe, expect, it} from 'vitest'
 
 import {ProcessSpawnError} from '../../src/lib/errors.js'
-import {classifySpawnError, resolveWindowsSpawnArgs} from '../../src/lib/spawn-errors.js'
+import {
+  classifySpawnError,
+  formatCommandNotFoundMessage,
+  formatPathWarning,
+  resolveWindowsSpawnArgs,
+} from '../../src/lib/spawn-errors.js'
 
 describe('spawn-errors', () => {
   describe('classifySpawnError', () => {
@@ -30,6 +35,30 @@ describe('spawn-errors', () => {
       expect(classified).toBeInstanceOf(ProcessSpawnError)
       expect(classified.code).toBe('EOTHER')
       expect(classified.message).toContain('Failed to spawn claude: boom')
+    })
+
+    it('uses provider-specific install text for devin', () => {
+      const original = Object.assign(new Error('spawn ENOENT'), {code: 'ENOENT'}) as NodeJS.ErrnoException
+      const classified = classifySpawnError('devin', original)
+
+      expect(classified).toBeInstanceOf(ProcessSpawnError)
+      expect(classified.code).toBe('ENOENT')
+      expect(classified.message).toContain('Command not found: devin')
+      expect(classified.message).toContain('https://cli.devin.ai')
+    })
+  })
+
+  describe('message formatters', () => {
+    it('formats command-not-found message for codex', () => {
+      expect(formatCommandNotFoundMessage('codex')).toBe(
+        'Command not found: codex. Install Codex from npm.',
+      )
+    })
+
+    it('formats PATH warning for devin', () => {
+      expect(formatPathWarning('devin')).toBe(
+        'devin not found on PATH (Install Devin from https://cli.devin.ai)',
+      )
     })
   })
 

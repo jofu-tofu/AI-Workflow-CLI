@@ -16,6 +16,7 @@ import {EXIT_CODES} from '../../../types/index.js'
 import {clearProcessNestingVars, isCalledFromRepl} from '../../../lib/env-sanitizer.js'
 import {PromptFileManager} from '../../../lib/prompt-file-manager.js'
 import {SentinelManager} from '../../../lib/sentinel-manager.js'
+import {formatPathWarning} from '../../../lib/spawn-errors.js'
 import type {LaunchDependencies, LaunchRequest} from '../contracts.js'
 import {
   buildSpawnedWindowArgs,
@@ -310,7 +311,7 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
           exitCode = await spawnInlineWithRetry(cliCommand, fallbackArgs, toolConfig.retryOnQuickExit, host)
         }
       } else {
-        host.logWarning(`${cliCommand} not found on PATH (install from https://claude.ai/download)`)
+        host.logWarning(formatPathWarning(cliCommand))
         const fallbackArgs = buildInlineArgs(cliArgs, toolMode, promptText, promptPath)
         exitCode = await spawnInlineWithRetry(cliCommand, fallbackArgs, toolConfig.retryOnQuickExit, host)
       }

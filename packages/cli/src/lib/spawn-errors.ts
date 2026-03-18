@@ -1,14 +1,29 @@
 import {ProcessSpawnError} from './errors.js'
 
+const INSTALL_INSTRUCTIONS: Record<string, string> = {
+  claude: 'Install Claude Code from https://claude.ai/download.',
+  codex: 'Install Codex from npm.',
+  devin: 'Install Devin from https://cli.devin.ai.',
+}
+
+export function getInstallInstruction(command: string): string {
+  return INSTALL_INSTRUCTIONS[command] ?? 'Check that the command exists and is executable.'
+}
+
+export function formatCommandNotFoundMessage(command: string): string {
+  return `Command not found: ${command}. ${getInstallInstruction(command)}`
+}
+
+export function formatPathWarning(command: string): string {
+  return `${command} not found on PATH (${getInstallInstruction(command).replace(/\.$/, '')})`
+}
+
 export function classifySpawnError(
   command: string,
   error: NodeJS.ErrnoException,
 ): ProcessSpawnError {
   if (error.code === 'ENOENT') {
-    return new ProcessSpawnError(
-      `Command not found: ${command}. Install Claude Code from https://claude.ai/download.`,
-      'ENOENT',
-    )
+    return new ProcessSpawnError(formatCommandNotFoundMessage(command), 'ENOENT')
   }
 
   if (error.code === 'EACCES') {

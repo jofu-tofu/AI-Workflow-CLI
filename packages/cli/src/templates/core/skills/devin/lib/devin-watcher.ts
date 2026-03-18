@@ -40,7 +40,7 @@ const MAX_LINE_LENGTH = 500;
 const MAX_TRANSCRIPT_LINES = 220;
 
 const SESSIONS_DB_PATH = path.join(
-  os.homedir(), ".local", "share", "cognition", "cli", "sessions.db",
+  os.homedir(), ".local", "share", "devin", "cli", "sessions.db",
 );
 
 const TRANSCRIPT_SUMMARY_PROMPT = `Summarize this Devin session transcript excerpt.
@@ -120,7 +120,7 @@ async function findDevinSessionViaList(
 
 /**
  * Extract user and assistant message text from the Devin session's
- * `message_nodes` table in `~/.local/share/cognition/cli/sessions.db`.
+ * `message_nodes` table in `~/.local/share/devin/cli/sessions.db`.
  *
  * Uses `python3 -c` to query SQLite (avoids native module dependency).
  * Returns tagged transcript lines like `collectTranscriptLines` in

@@ -211,14 +211,14 @@ describe('install-state ownership', () => {
     const excludePath = join(testDir, '.git', 'info', 'exclude')
     const initialExclude = await fs.readFile(excludePath, 'utf8')
     expect(initialExclude).to.include('.claude/')
-    expect(initialExclude).to.include('.cognition/')
+    expect(initialExclude).to.include('.devin/')
 
     await quietClear(new ClearCommand([], {} as never)).run()
 
     const exclude = await fs.readFile(excludePath, 'utf8')
     expect(exclude).to.not.include('.aiwcli/')
     expect(exclude).to.not.include('.claude/')
-    expect(exclude).to.not.include('.cognition/')
+    expect(exclude).to.not.include('.devin/')
     expect(exclude).to.not.include('.codex/')
     expect(exclude).to.not.include('.windsurf/')
   })

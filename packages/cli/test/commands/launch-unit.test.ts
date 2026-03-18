@@ -416,13 +416,14 @@ describe('executeLaunch', () => {
       platformMocks.findToolPath.mockReturnValueOnce(null)
       platformMocks.findExecutable.mockReturnValueOnce(null)
       platformMocks.spawnProcess.mockResolvedValueOnce(0)
-      const request = makeRequest()
+      const request = makeRequest({flags: {devin: true}})
       const deps = makeDeps()
 
       await executeLaunch(request, deps)
 
       const warningText = deps.host.logWarning.mock.calls.map((call: unknown[]) => String(call[0])).join('\n')
       expect(warningText).toContain('not found on PATH')
+      expect(warningText).toContain('https://cli.devin.ai')
     })
   })
 

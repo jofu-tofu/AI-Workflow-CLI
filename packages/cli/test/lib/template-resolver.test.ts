@@ -32,7 +32,7 @@ describe('Template Resolver', () => {
     const sharedPath = await getTemplatePath('core')
     const ides = await getTemplateIdeNamesByPath(sharedPath)
     expect(ides).to.include('codex')
-    expect(ides).to.include('cognition')
+    expect(ides).to.include('devin')
     expect(ides).to.include('windsurf')
   })
 

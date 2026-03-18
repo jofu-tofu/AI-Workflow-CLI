@@ -28,7 +28,7 @@ describe('Git Exclude Manager', () => {
       expect(AIW_EXCLUDE_ENTRIES).to.include('.claude')
       expect(AIW_EXCLUDE_ENTRIES).to.include('.codex')
       expect(AIW_EXCLUDE_ENTRIES).to.include('.windsurf')
-      expect(AIW_EXCLUDE_ENTRIES).to.include('.cognition')
+      expect(AIW_EXCLUDE_ENTRIES).to.include('.devin')
     })
 
     it('should create exclude file when it does not exist', async () => {

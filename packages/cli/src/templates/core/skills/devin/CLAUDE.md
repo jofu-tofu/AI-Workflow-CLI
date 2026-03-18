@@ -17,7 +17,7 @@ devin/
 ## Devin CLI Contract (verified 2026-03-08)
 
 **Always re-verify against the real CLI before changing assumptions.**
-Run `devin list --format json`, `devin --help`, and inspect `~/.local/share/cognition/cli/sessions.db` to confirm.
+Run `devin list --format json`, `devin --help`, and inspect `~/.local/share/devin/cli/sessions.db` to confirm.
 
 ### `devin list --format json` output schema
 
@@ -37,12 +37,12 @@ Fields that do **NOT** exist: `cwd`, `created_at`, `status`, `model`, `session_i
 
 ### Session data storage
 
-- **SQLite DB:** `~/.local/share/cognition/cli/sessions.db`
+- **SQLite DB:** `~/.local/share/devin/cli/sessions.db`
   - `sessions` table: `id`, `working_directory`, `model`, `created_at` (integer), `last_activity_at`, `title`, `main_chain_id`, `cogs_json`
   - `message_nodes` table: `session_id`, `node_id`, `chat_message` (JSON with `{role, content}`)
   - Full conversation transcript (user, assistant, system, tool messages) stored in `message_nodes`
-- **Summary files:** `~/.local/share/cognition/cli/summaries/history_<hex>.md` — full session transcripts, NOT Devin-specific (shared with Claude Code sessions). No reliable session-to-file mapping exists.
-- **NOT stored at:** `~/.config/cognition/cli/` (only has `config.json`, no session data)
+- **Summary files:** `~/.local/share/devin/cli/summaries/history_<hex>.md` — full session transcripts, NOT Devin-specific (shared with Claude Code sessions). No reliable session-to-file mapping exists.
+- **NOT stored at:** `~/.config/devin/cli/` (only has `config.json`, no session data)
 
 ### Devin CLI flags
 

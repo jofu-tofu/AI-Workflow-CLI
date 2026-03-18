@@ -1,4 +1,5 @@
 import {expect} from 'chai'
+import {describe, it} from 'vitest'
 
 import {
   AiwError,
@@ -122,6 +123,13 @@ describe('errors', () => {
 
     it('preserves message with error code', () => {
       const message = 'Command not found: claude. Install Claude Code from https://claude.ai/download.'
+      const error = new ProcessSpawnError(message, 'ENOENT')
+      expect(error.message).to.equal(message)
+      expect(error.code).to.equal('ENOENT')
+    })
+
+    it('preserves provider-specific install message for devin', () => {
+      const message = 'Command not found: devin. Install Devin from https://cli.devin.ai.'
       const error = new ProcessSpawnError(message, 'ENOENT')
       expect(error.message).to.equal(message)
       expect(error.code).to.equal('ENOENT')
