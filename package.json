@@ -3,6 +3,9 @@
     "test": "npm --prefix packages/cli test",
     "prepare": "node scripts/install-hooks.mjs"
   },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.4.3",
     "@types/node": "^25.3.3",
