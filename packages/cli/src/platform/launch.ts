@@ -1,5 +1,4 @@
 export {ProcessSpawnError} from '../lib/errors.js'
-export {ensureLspPatch} from '../lib/lsp-patch.js'
 export {detectMultiplexer, type LaunchResult, type SplitDirection} from '../lib/multiplexer.js'
 export {REPL_NESTING_VARS} from '../lib/env-sanitizer.js'
 export {readSentinelExitCode, waitForSentinelFile} from '../lib/runtime/sentinel-ipc.js'

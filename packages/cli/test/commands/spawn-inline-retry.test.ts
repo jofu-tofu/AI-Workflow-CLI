@@ -25,7 +25,6 @@ const platformMocks = vi.hoisted(() => ({
   checkVersionCompatibility: vi.fn(() => ({compatible: true, version: '1.2.3'})),
   configureTmuxSession: vi.fn(),
   detectMultiplexer: vi.fn(async () => null),
-  ensureLspPatch: vi.fn(async () => {}),
   findExecutable: vi.fn((name: string) => `/usr/bin/${name}`),
   findToolPath: vi.fn((name: string) => `/usr/bin/${name}`),
   getClaudeCodeVersion: vi.fn(async () => '1.2.3'),

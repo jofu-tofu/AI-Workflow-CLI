@@ -8,7 +8,6 @@ export interface ToolConfig {
   launchFlag: string
   toolMode: ToolMode
   retryOnQuickExit: boolean
-  needsLspPatch: boolean
   skipVersionCheck: boolean
 }
 

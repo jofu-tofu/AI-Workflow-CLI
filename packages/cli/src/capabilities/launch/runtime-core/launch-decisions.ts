@@ -90,7 +90,6 @@ export function resolveToolConfig(
       launchFlag: '--devin',
       toolMode: 'devin',
       retryOnQuickExit: true,
-      needsLspPatch: false,
       skipVersionCheck: true,
     }
   }
@@ -102,7 +101,6 @@ export function resolveToolConfig(
       launchFlag: '--codex',
       toolMode: 'codex',
       retryOnQuickExit: false,
-      needsLspPatch: false,
       skipVersionCheck: true,
     }
   }
@@ -113,7 +111,6 @@ export function resolveToolConfig(
     launchFlag: '',
     toolMode: 'claude',
     retryOnQuickExit: false,
-    needsLspPatch: platform === 'win32',
     skipVersionCheck: false,
   }
 }

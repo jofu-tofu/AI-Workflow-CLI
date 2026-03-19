@@ -28,19 +28,14 @@ describe('launch-decisions', () => {
       expect(config.launchFlag).toBe('')
       expect(config.toolMode).toBe('claude')
       expect(config.retryOnQuickExit).toBe(false)
-      expect(config.needsLspPatch).toBe(false)
       expect(config.skipVersionCheck).toBe(false)
     })
 
-    it('returns claude config on win32 with needsLspPatch', () => {
+    it('returns claude config on win32 without special patching', () => {
       const config = resolveToolConfig({codex: false, devin: false}, 'win32')
       expect(config.cliCommand).toBe('claude')
-      expect(config.needsLspPatch).toBe(true)
-    })
-
-    it('returns claude config on darwin without needsLspPatch', () => {
-      const config = resolveToolConfig({codex: false, devin: false}, 'darwin')
-      expect(config.needsLspPatch).toBe(false)
+      expect(config.cliArgs).toEqual(['--dangerously-skip-permissions'])
+      expect(config.skipVersionCheck).toBe(false)
     })
 
     it('returns codex config on linux', () => {
@@ -50,7 +45,6 @@ describe('launch-decisions', () => {
       expect(config.launchFlag).toBe('--codex')
       expect(config.toolMode).toBe('codex')
       expect(config.retryOnQuickExit).toBe(false)
-      expect(config.needsLspPatch).toBe(false)
       expect(config.skipVersionCheck).toBe(true)
     })
 
@@ -66,7 +60,6 @@ describe('launch-decisions', () => {
       expect(config.launchFlag).toBe('--devin')
       expect(config.toolMode).toBe('devin')
       expect(config.retryOnQuickExit).toBe(true)
-      expect(config.needsLspPatch).toBe(false)
       expect(config.skipVersionCheck).toBe(true)
     })
 

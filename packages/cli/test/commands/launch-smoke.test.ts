@@ -25,7 +25,6 @@ const platformMocks = vi.hoisted(() => ({
   checkVersionCompatibility: vi.fn(() => ({compatible: true, version: '1.2.3'})),
   configureTmuxSession: vi.fn(),
   detectMultiplexer: vi.fn(async () => null),
-  ensureLspPatch: vi.fn(async () => {}),
   findExecutable: vi.fn((name: string) => `/usr/bin/${name}`),
   findToolPath: vi.fn((name: string) => `/usr/bin/${name}`),
   getClaudeCodeVersion: vi.fn(async () => '1.2.3'),
@@ -327,7 +326,7 @@ describe('executeLaunch smoke tests', () => {
   })
 
   describe('codex mode on Windows', () => {
-    it('includes shell_type bash arg, skips LSP patch, and spawns inline', async () => {
+    it('includes shell_type bash arg and spawns inline', async () => {
       platformMocks.detectMultiplexer.mockResolvedValueOnce(null)
       platformMocks.spawnProcess.mockResolvedValueOnce(0)
       const request = makeRequest({
@@ -337,9 +336,6 @@ describe('executeLaunch smoke tests', () => {
       const deps = makeDeps()
 
       await executeLaunch(request, deps)
-
-      // LSP patch NOT called (skipVersionCheck is true for codex, needsLspPatch is false)
-      expect(platformMocks.ensureLspPatch).not.toHaveBeenCalled()
 
       // Version check NOT called (skipVersionCheck is true for codex)
       expect(platformMocks.getClaudeCodeVersion).not.toHaveBeenCalled()

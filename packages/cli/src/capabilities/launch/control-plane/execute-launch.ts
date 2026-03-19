@@ -3,7 +3,6 @@ import path from 'node:path'
 import {
   checkVersionCompatibility,
   detectMultiplexer,
-  ensureLspPatch,
   findExecutable,
   findToolPath,
   getClaudeCodeVersion,
@@ -83,15 +82,6 @@ export async function executeLaunch(request: LaunchRequest, dependencies: Launch
   const disableMux = flags['no-tmux']
   const wantJson = flags.json
   const wantWait = flags.wait
-
-  if (toolConfig.needsLspPatch) {
-    await ensureLspPatch({
-      debugLog: (message) => host.debug(message),
-      warn(message) {
-        host.warn(message)
-      },
-    })
-  }
 
   let extraEnv: Record<string, string> = {}
   try {
