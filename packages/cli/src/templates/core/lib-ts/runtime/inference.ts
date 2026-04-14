@@ -513,7 +513,7 @@ async function executeCodexStep(
     provider: "codex",
     model: step.model,
     mode: "print" as const,
-    sandbox: step.sandbox,
+    ...(step.sandbox ? { sandbox: step.sandbox } : {}),
     extraArgs: ["--json"],
   });
 
