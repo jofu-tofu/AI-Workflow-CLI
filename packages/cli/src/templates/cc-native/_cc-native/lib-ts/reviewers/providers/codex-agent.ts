@@ -6,6 +6,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { buildCliInvocation, type CodexSandbox } from "../../../../_core/lib-ts/runtime/cli-args.js";
 import { logDebug, logWarn } from "../../../../_core/lib-ts/runtime/logger.js";
 import { getInternalSubprocessEnv, execFileAsync } from "../../../../_core/lib-ts/runtime/subprocess-utils.js";
 import { parseJsonMaybe, coerceToReview } from "../../json-parser.js";
@@ -14,9 +15,6 @@ import type { ReviewerResult } from "../../types.js";
 import { AGENT_REVIEW_PROMPT_PREFIX } from "../schemas.js";
 import { makeResult } from "../types.js";
 import { BaseCliAgent, type ExecResult } from "../base/base-agent.js";
-
-/** Temp directory for Codex schema/output files */
-let tmpDir: string | null = null;
 
 /**
  * Codex CLI-based agent reviewer.
@@ -54,12 +52,21 @@ export class CodexAgent extends BaseCliAgent<ReviewerResult> {
     const outPath = path.join(this.tempDir, "output.json");
     fs.writeFileSync(schemaPath, JSON.stringify(this.schema, null, 2), "utf-8");
 
-    const cmdArgs = ["exec", "--sandbox", "read-only"];
-    if (this.agent.model) cmdArgs.push("--model", this.agent.model);
-    if (this.agent.reasoning_effort) cmdArgs.push("-c", `model_reasoning_effort="${this.agent.reasoning_effort}"`);
-    cmdArgs.push("--output-schema", schemaPath, "-o", outPath, "-");
+    const extraArgs: string[] = [];
+    if (this.agent.reasoning_effort) {
+      extraArgs.push("-c", `model_reasoning_effort="${this.agent.reasoning_effort}"`);
+    }
 
-    return cmdArgs;
+    const invocation = buildCliInvocation({
+      provider: "codex",
+      model: this.agent.model,
+      mode: "structured" as const,
+      sandbox: "read-only" as CodexSandbox,
+      outputSchemaPath: schemaPath,
+      outputFilePath: outPath,
+      extraArgs,
+    });
+    return invocation.args;
   }
 
   /**

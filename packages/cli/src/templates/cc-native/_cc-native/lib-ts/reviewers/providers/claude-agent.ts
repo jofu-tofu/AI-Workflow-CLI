@@ -3,7 +3,7 @@
  * Uses claude CLI with --json-schema and --system-prompt flags.
  */
 
-import { shellQuoteWin } from "../../../../_core/lib-ts/runtime/subprocess-utils.js";
+import { buildCliInvocation, reviewSpec } from "../../../../_core/lib-ts/runtime/cli-args.js";
 import { parseCliOutput } from "../../cli-output-parser.js";
 import { coerceToReview } from "../../json-parser.js";
 import type { ReviewerResult } from "../../types.js";
@@ -32,23 +32,12 @@ ${plan}
   }
 
   protected buildCliArgs(): string[] {
-    const schemaJson = JSON.stringify(this.schema);
-    const cmdArgs = [
-      "--model", this.agent.model,
-      "--output-format", "json",
-      "--json-schema", shellQuoteWin(schemaJson),
-      "--max-turns", "3",
-      "--setting-sources", process.platform === "win32" ? '""' : "",
-      "-p",
-      "--no-session-persistence", // Prevent subprocess from creating session records
-    ];
+    const fullPrompt = this.agent.system_prompt
+      ? AGENT_REVIEW_PROMPT_PREFIX + "\n\n---\n\n" + this.agent.system_prompt
+      : undefined;
 
-    if (this.agent.system_prompt) {
-      const fullPrompt = AGENT_REVIEW_PROMPT_PREFIX + "\n\n---\n\n" + this.agent.system_prompt;
-      cmdArgs.push("--system-prompt", shellQuoteWin(fullPrompt));
-    }
-
-    return cmdArgs;
+    const invocation = buildCliInvocation(reviewSpec("claude", this.agent.model, this.schema, fullPrompt));
+    return invocation.args;
   }
 
   protected parseOutput(raw: string, _result: unknown): Record<string, unknown> | null {

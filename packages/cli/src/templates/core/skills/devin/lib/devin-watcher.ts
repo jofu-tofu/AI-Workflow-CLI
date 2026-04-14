@@ -13,7 +13,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import path from "node:path";
 
-import { inference } from "../../../lib-ts/runtime/inference.js";
+import { inferChain, FAST_CHAIN } from "../../../lib-ts/runtime/inference.js";
 import { logDebug, logWarn } from "../../../lib-ts/runtime/logger.js";
 import { execFileAsync, findExecutable } from "../../../lib-ts/runtime/subprocess-utils.js";
 
@@ -237,18 +237,15 @@ async function capturePaneScrollback(paneId: string | null | undefined): Promise
 // ---------------------------------------------------------------------------
 
 async function summarizeTranscript(transcript: string): Promise<string | null> {
-  const result = inference(
-    TRANSCRIPT_SUMMARY_PROMPT,
-    `Session transcript excerpt:\n\n${transcript}`,
-    "fast",
-    SUMMARY_TIMEOUT_SEC,
+  const result = await inferChain(
+    { system: TRANSCRIPT_SUMMARY_PROMPT, user: `Session transcript excerpt:\n\n${transcript}` },
+    FAST_CHAIN,
+    { timeout: SUMMARY_TIMEOUT_SEC, validate: (out) => !looksLikeBadSummary(out) },
   );
 
-  if (result.success && result.output?.trim() && !looksLikeBadSummary(result.output)) {
-    return result.output.trim();
-  }
+  if (result.success && result.output?.trim()) return result.output.trim();
 
-  logWarn("devin-watcher", `Transcript summary failed: ${result.error ?? "empty or low-signal output"}`);
+  logWarn("devin-watcher", `Transcript summary failed: ${result.error ?? "empty output"}`);
   return null;
 }
 

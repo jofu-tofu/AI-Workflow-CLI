@@ -55,6 +55,22 @@ export interface CliInvocation {
   env: Record<string, string | undefined>;
 }
 
+/** One step in a multi-provider inference fallback chain. */
+export interface InferChainStep {
+  provider: CliProvider;
+  model: string;
+  timeout?: number;       // seconds; per-step override
+  sandbox?: CodexSandbox; // codex only; ignored for claude
+}
+
+/** Options for inferChain(). */
+export interface InferChainOptions {
+  /** If provided, called on successful output. Return false to reject and try next step. */
+  validate?: (output: string) => boolean;
+  /** Default per-step timeout (seconds) when step.timeout is absent. */
+  timeout?: number;
+}
+
 // ---------------------------------------------------------------------------
 // Model Tier Resolution
 // ---------------------------------------------------------------------------
@@ -203,11 +219,12 @@ function buildCodexInvocation(
     args.push("-o", spec.outputFilePath);
   }
 
-  args.push("-");
-
+  // extraArgs before `-` (stdin marker) — flags after `-` are treated as stdin content
   if (spec.extraArgs) {
     args.push(...spec.extraArgs);
   }
+
+  args.push("-");
 
   return { cliName: "codex", args, needsShell: false, env };
 }

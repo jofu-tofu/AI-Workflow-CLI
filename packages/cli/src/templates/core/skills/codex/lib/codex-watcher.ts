@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import path from "node:path";
 
-import { inference } from "../../../lib-ts/runtime/inference.js";
+import { inferChain, FAST_CHAIN } from "../../../lib-ts/runtime/inference.js";
 import { logWarn } from "../../../lib-ts/runtime/logger.js";
 import { CODEX_MODELS } from "../../../lib-ts/runtime/models.js";
 import { execFileAsync } from "../../../lib-ts/runtime/subprocess-utils.js";
@@ -133,37 +133,16 @@ export async function summarizeViaSessionFile(sessionFile: string): Promise<stri
   if (transcriptLines.length === 0) return null;
 
   const transcript = transcriptLines.join("\n");
-  const fullPrompt = `${TRANSCRIPT_SUMMARY_PROMPT}\n\nSession transcript excerpt:\n\n${transcript}`;
 
-  const codexResult = await execFileAsync(
-    "codex",
-    ["exec", fullPrompt, "--model", CODEX_MODELS.spark, "--json"],
-    { timeout: SUMMARY_TIMEOUT_SEC * 1000 },
-  );
-  if (codexResult.exitCode === 0 && codexResult.stdout.trim()) {
-    const output = codexResult.stdout.trim();
-    if (!looksLikeBadSummary(output)) return output;
-  }
-  logWarn(
-    "codex-capture",
-    `Codex Spark transcript summary failed (exit=${codexResult.exitCode}), falling back to Haiku`,
+  const result = await inferChain(
+    { system: TRANSCRIPT_SUMMARY_PROMPT, user: `Session transcript excerpt:\n\n${transcript}` },
+    FAST_CHAIN,
+    { timeout: SUMMARY_TIMEOUT_SEC, validate: (out) => !looksLikeBadSummary(out) },
   );
 
-  const result = inference(
-    TRANSCRIPT_SUMMARY_PROMPT,
-    `Session transcript excerpt:\n\n${transcript}`,
-    "fast",
-    SUMMARY_TIMEOUT_SEC,
-  );
+  if (result.success && result.output?.trim()) return result.output.trim();
 
-  if (result.success && result.output && result.output.trim() && !looksLikeBadSummary(result.output)) {
-    return result.output.trim();
-  }
-
-  logWarn(
-    "codex-capture",
-    `Session-file Spark summary failed: ${result.error ?? "empty or low-signal output"}`,
-  );
+  logWarn("codex-capture", `summarizeViaSessionFile failed: ${result.error ?? "empty output"}`);
   return null;
 }
 
