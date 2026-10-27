@@ -144,6 +144,7 @@ _bmad-output/
 .aiwcli/
 /.codex/
 /.cognition/
+/packages/cli/.cognition/
 /_gsd/
 /_GSD_OUTPUT/
 /_cc-native/
